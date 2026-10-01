@@ -1,0 +1,776 @@
+@import "tailwindcss";
+
+/* =========================================================
+   NEXUS UI DESIGN SYSTEM
+   Next.js + Tailwind CSS v4
+
+   layout.tsx cần có:
+   --font-geist-sans
+   --font-geist-mono
+========================================================= */
+
+
+/* =========================================================
+   ROOT DESIGN TOKENS
+========================================================= */
+
+:root {
+  /* =========================
+     BASE
+  ========================== */
+
+  --white: #ffffff;
+  --black: #000000;
+
+
+  /* =========================
+     BRAND - ORANGE
+  ========================== */
+
+  --orange-100: #fff3ee;
+  --orange-200: #ffe5da;
+  --orange-300: #ffd3c1;
+  --orange-400: #ffb89a;
+  --orange-500: #ff936f;
+  --orange-600: #ff7145;
+  --orange-700: #ee4f22;
+  --orange-800: #d2401a;
+  --orange-900: #b8360f;
+  --orange-1000: #641d0b;
+
+
+  /* =========================
+     GRAY
+  ========================== */
+
+  --gray-100: #f7f7f7;
+  --gray-200: #eeeeee;
+  --gray-300: #e0e0e0;
+  --gray-400: #d4d4d4;
+  --gray-500: #c4c4c4;
+  --gray-600: #ababab;
+  --gray-700: #979797;
+  --gray-800: #767676;
+  --gray-900: #4a4a4a;
+  --gray-1000: #171717;
+
+
+  /* =========================
+     BLUE
+  ========================== */
+
+  --blue-100: #f0f7ff;
+  --blue-200: #e0efff;
+  --blue-300: #cfe7ff;
+  --blue-400: #aad7ff;
+  --blue-500: #7fc1ff;
+  --blue-600: #49a8ff;
+  --blue-700: #006bff;
+  --blue-800: #0059db;
+  --blue-900: #0051c2;
+  --blue-1000: #002c69;
+
+
+  /* =========================
+     RED
+  ========================== */
+
+  --red-100: #fff0f3;
+  --red-200: #ffe1e7;
+  --red-300: #ffd4dd;
+  --red-400: #ffb8c5;
+  --red-500: #ff93a6;
+  --red-600: #ff5f76;
+  --red-700: #fc0035;
+  --red-800: #e00031;
+  --red-900: #c9002c;
+  --red-1000: #47000e;
+
+
+  /* =========================
+     AMBER
+  ========================== */
+
+  --amber-100: #fff8e6;
+  --amber-200: #fff0c7;
+  --amber-300: #ffe7a0;
+  --amber-400: #ffda73;
+  --amber-500: #ffc94a;
+  --amber-600: #ffba00;
+  --amber-700: #ffae00;
+  --amber-800: #f99200;
+  --amber-900: #ba5c00;
+  --amber-1000: #651e00;
+
+
+  /* =========================
+     GREEN
+  ========================== */
+
+  --green-100: #ecfdec;
+  --green-200: #def7e7;
+  --green-300: #cdf5d6;
+  --green-400: #bdf5c6;
+  --green-500: #82e68d;
+  --green-600: #4ddc5e;
+  --green-700: #28a948;
+  --green-800: #278143;
+  --green-900: #1f7c32;
+  --green-1000: #003a00;
+
+
+  /* =========================
+     TEAL
+  ========================== */
+
+  --teal-100: #ddfffb;
+  --teal-200: #d0f8f1;
+  --teal-300: #c0f3ea;
+  --teal-400: #a7eee4;
+  --teal-500: #52e0d0;
+  --teal-600: #00ccb9;
+  --teal-700: #00a999;
+  --teal-800: #008c7f;
+  --teal-900: #007f73;
+  --teal-1000: #003f34;
+
+
+  /* =========================
+     PURPLE
+  ========================== */
+
+  --purple-100: #faf1ff;
+  --purple-200: #f3e7ff;
+  --purple-300: #ecdfff;
+  --purple-400: #e3cdfd;
+  --purple-500: #d797ff;
+  --purple-600: #c379ff;
+  --purple-700: #a600ff;
+  --purple-800: #8d00db;
+  --purple-900: #7700cc;
+  --purple-1000: #270046;
+
+
+  /* =========================
+     PINK
+  ========================== */
+
+  --pink-100: #fff0f5;
+  --pink-200: #ffe1ed;
+  --pink-300: #ffd1e5;
+  --pink-400: #ffb8d7;
+  --pink-500: #ff92c1;
+  --pink-600: #ff5ca8;
+  --pink-700: #ff2079;
+  --pink-800: #e1006e;
+  --pink-900: #c50061;
+  --pink-1000: #440023;
+
+
+  /* =========================================================
+     SEMANTIC COLORS
+  ========================================================= */
+
+  --background: var(--white);
+  --foreground: var(--gray-1000);
+
+
+  /* Primary */
+
+  --primary: var(--orange-700);
+  --primary-hover: var(--orange-800);
+  --primary-active: var(--orange-900);
+  --primary-foreground: var(--white);
+
+
+  /* Secondary */
+
+  --secondary: var(--gray-200);
+  --secondary-hover: var(--gray-300);
+  --secondary-active: var(--gray-400);
+  --secondary-foreground: var(--gray-1000);
+
+
+  /* Muted */
+
+  --muted: var(--gray-100);
+  --muted-foreground: var(--gray-800);
+
+
+  /* Card */
+
+  --card: var(--white);
+  --card-foreground: var(--gray-1000);
+
+
+  /* Popover */
+
+  --popover: var(--white);
+  --popover-foreground: var(--gray-1000);
+
+
+  /* Form */
+
+  --border: var(--gray-300);
+  --input: var(--gray-300);
+
+
+  /* Status */
+
+  --success: var(--green-700);
+  --success-foreground: var(--white);
+
+  --warning: var(--amber-700);
+  --warning-foreground: var(--gray-1000);
+
+  --danger: var(--red-700);
+  --danger-foreground: var(--white);
+
+  --info: var(--blue-700);
+  --info-foreground: var(--white);
+
+
+  /* Focus */
+
+  --ring: var(--blue-700);
+
+
+  /* =========================================================
+     RADIUS
+  ========================================================= */
+
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 12px;
+  --ds-radius-lg: 16px;
+  --ds-radius-full: 9999px;
+
+
+  /* =========================================================
+     SHADOW / ELEVATION
+  ========================================================= */
+
+  --ds-shadow-raised:
+    0 1px 2px rgb(0 0 0 / 0.06);
+
+  --ds-shadow-popover:
+    0 4px 12px rgb(0 0 0 / 0.08);
+
+  --ds-shadow-modal:
+    0 12px 32px rgb(0 0 0 / 0.12);
+}
+
+
+/* =========================================================
+   TAILWIND THEME
+========================================================= */
+
+@theme inline {
+
+  /* =========================================================
+     FONT FAMILY
+  ========================================================= */
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+
+  /* =========================================================
+     SEMANTIC COLORS
+  ========================================================= */
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+
+  /* Primary */
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-foreground);
+
+
+  /* Secondary */
+
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-active: var(--secondary-active);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+
+  /* Muted */
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+
+  /* Card */
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+
+  /* Popover */
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+
+  /* Border / Input */
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+
+
+  /* Status */
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+
+  /* Focus */
+
+  --color-ring: var(--ring);
+
+
+  /* =========================================================
+     ORANGE
+  ========================================================= */
+
+  --color-orange-100: var(--orange-100);
+  --color-orange-200: var(--orange-200);
+  --color-orange-300: var(--orange-300);
+  --color-orange-400: var(--orange-400);
+  --color-orange-500: var(--orange-500);
+  --color-orange-600: var(--orange-600);
+  --color-orange-700: var(--orange-700);
+  --color-orange-800: var(--orange-800);
+  --color-orange-900: var(--orange-900);
+  --color-orange-1000: var(--orange-1000);
+
+
+  /* =========================================================
+     GRAY
+  ========================================================= */
+
+  --color-gray-100: var(--gray-100);
+  --color-gray-200: var(--gray-200);
+  --color-gray-300: var(--gray-300);
+  --color-gray-400: var(--gray-400);
+  --color-gray-500: var(--gray-500);
+  --color-gray-600: var(--gray-600);
+  --color-gray-700: var(--gray-700);
+  --color-gray-800: var(--gray-800);
+  --color-gray-900: var(--gray-900);
+  --color-gray-1000: var(--gray-1000);
+
+
+  /* =========================================================
+     BLUE
+  ========================================================= */
+
+  --color-blue-100: var(--blue-100);
+  --color-blue-200: var(--blue-200);
+  --color-blue-300: var(--blue-300);
+  --color-blue-400: var(--blue-400);
+  --color-blue-500: var(--blue-500);
+  --color-blue-600: var(--blue-600);
+  --color-blue-700: var(--blue-700);
+  --color-blue-800: var(--blue-800);
+  --color-blue-900: var(--blue-900);
+  --color-blue-1000: var(--blue-1000);
+
+
+  /* =========================================================
+     RED
+  ========================================================= */
+
+  --color-red-100: var(--red-100);
+  --color-red-200: var(--red-200);
+  --color-red-300: var(--red-300);
+  --color-red-400: var(--red-400);
+  --color-red-500: var(--red-500);
+  --color-red-600: var(--red-600);
+  --color-red-700: var(--red-700);
+  --color-red-800: var(--red-800);
+  --color-red-900: var(--red-900);
+  --color-red-1000: var(--red-1000);
+
+
+  /* =========================================================
+     AMBER
+  ========================================================= */
+
+  --color-amber-100: var(--amber-100);
+  --color-amber-200: var(--amber-200);
+  --color-amber-300: var(--amber-300);
+  --color-amber-400: var(--amber-400);
+  --color-amber-500: var(--amber-500);
+  --color-amber-600: var(--amber-600);
+  --color-amber-700: var(--amber-700);
+  --color-amber-800: var(--amber-800);
+  --color-amber-900: var(--amber-900);
+  --color-amber-1000: var(--amber-1000);
+
+
+  /* =========================================================
+     GREEN
+  ========================================================= */
+
+  --color-green-100: var(--green-100);
+  --color-green-200: var(--green-200);
+  --color-green-300: var(--green-300);
+  --color-green-400: var(--green-400);
+  --color-green-500: var(--green-500);
+  --color-green-600: var(--green-600);
+  --color-green-700: var(--green-700);
+  --color-green-800: var(--green-800);
+  --color-green-900: var(--green-900);
+  --color-green-1000: var(--green-1000);
+
+
+  /* =========================================================
+     TEAL
+  ========================================================= */
+
+  --color-teal-100: var(--teal-100);
+  --color-teal-200: var(--teal-200);
+  --color-teal-300: var(--teal-300);
+  --color-teal-400: var(--teal-400);
+  --color-teal-500: var(--teal-500);
+  --color-teal-600: var(--teal-600);
+  --color-teal-700: var(--teal-700);
+  --color-teal-800: var(--teal-800);
+  --color-teal-900: var(--teal-900);
+  --color-teal-1000: var(--teal-1000);
+
+
+  /* =========================================================
+     PURPLE
+  ========================================================= */
+
+  --color-purple-100: var(--purple-100);
+  --color-purple-200: var(--purple-200);
+  --color-purple-300: var(--purple-300);
+  --color-purple-400: var(--purple-400);
+  --color-purple-500: var(--purple-500);
+  --color-purple-600: var(--purple-600);
+  --color-purple-700: var(--purple-700);
+  --color-purple-800: var(--purple-800);
+  --color-purple-900: var(--purple-900);
+  --color-purple-1000: var(--purple-1000);
+
+
+  /* =========================================================
+     PINK
+  ========================================================= */
+
+  --color-pink-100: var(--pink-100);
+  --color-pink-200: var(--pink-200);
+  --color-pink-300: var(--pink-300);
+  --color-pink-400: var(--pink-400);
+  --color-pink-500: var(--pink-500);
+  --color-pink-600: var(--pink-600);
+  --color-pink-700: var(--pink-700);
+  --color-pink-800: var(--pink-800);
+  --color-pink-900: var(--pink-900);
+  --color-pink-1000: var(--pink-1000);
+
+
+  /* =========================================================
+     RADIUS
+  ========================================================= */
+
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-full: var(--ds-radius-full);
+
+
+  /* =========================================================
+     SHADOW / ELEVATION
+  ========================================================= */
+
+  --shadow-raised: var(--ds-shadow-raised);
+  --shadow-popover: var(--ds-shadow-popover);
+  --shadow-modal: var(--ds-shadow-modal);
+
+
+  /* =========================================================
+     HEADING TYPOGRAPHY
+  ========================================================= */
+
+  --text-heading-72: 72px;
+  --text-heading-72--line-height: 72px;
+  --text-heading-72--font-weight: 600;
+  --text-heading-72--letter-spacing: -0.03em;
+
+
+  --text-heading-64: 64px;
+  --text-heading-64--line-height: 64px;
+  --text-heading-64--font-weight: 600;
+  --text-heading-64--letter-spacing: -0.03em;
+
+
+  --text-heading-56: 56px;
+  --text-heading-56--line-height: 60px;
+  --text-heading-56--font-weight: 600;
+  --text-heading-56--letter-spacing: -0.03em;
+
+
+  --text-heading-48: 48px;
+  --text-heading-48--line-height: 56px;
+  --text-heading-48--font-weight: 600;
+  --text-heading-48--letter-spacing: -0.03em;
+
+
+  --text-heading-40: 40px;
+  --text-heading-40--line-height: 48px;
+  --text-heading-40--font-weight: 600;
+  --text-heading-40--letter-spacing: -0.03em;
+
+
+  --text-heading-32: 32px;
+  --text-heading-32--line-height: 40px;
+  --text-heading-32--font-weight: 600;
+  --text-heading-32--letter-spacing: -0.03em;
+
+
+  --text-heading-24: 24px;
+  --text-heading-24--line-height: 32px;
+  --text-heading-24--font-weight: 600;
+  --text-heading-24--letter-spacing: -0.02em;
+
+
+  --text-heading-20: 20px;
+  --text-heading-20--line-height: 26px;
+  --text-heading-20--font-weight: 600;
+  --text-heading-20--letter-spacing: -0.02em;
+
+
+  --text-heading-16: 16px;
+  --text-heading-16--line-height: 24px;
+  --text-heading-16--font-weight: 600;
+  --text-heading-16--letter-spacing: -0.01em;
+
+
+  --text-heading-14: 14px;
+  --text-heading-14--line-height: 20px;
+  --text-heading-14--font-weight: 600;
+  --text-heading-14--letter-spacing: -0.01em;
+
+
+  /* =========================================================
+     LABEL TYPOGRAPHY
+  ========================================================= */
+
+  --text-label-20: 20px;
+  --text-label-20--line-height: 28px;
+  --text-label-20--font-weight: 500;
+
+
+  --text-label-18: 18px;
+  --text-label-18--line-height: 24px;
+  --text-label-18--font-weight: 500;
+
+
+  --text-label-16: 16px;
+  --text-label-16--line-height: 20px;
+  --text-label-16--font-weight: 500;
+
+
+  --text-label-14: 14px;
+  --text-label-14--line-height: 20px;
+  --text-label-14--font-weight: 500;
+
+
+  --text-label-13: 13px;
+  --text-label-13--line-height: 16px;
+  --text-label-13--font-weight: 500;
+
+
+  --text-label-12: 12px;
+  --text-label-12--line-height: 16px;
+  --text-label-12--font-weight: 500;
+
+
+  /* =========================================================
+     COPY / BODY TYPOGRAPHY
+  ========================================================= */
+
+  --text-copy-24: 24px;
+  --text-copy-24--line-height: 36px;
+  --text-copy-24--font-weight: 400;
+
+
+  --text-copy-20: 20px;
+  --text-copy-20--line-height: 30px;
+  --text-copy-20--font-weight: 400;
+
+
+  --text-copy-18: 18px;
+  --text-copy-18--line-height: 28px;
+  --text-copy-18--font-weight: 400;
+
+
+  --text-copy-16: 16px;
+  --text-copy-16--line-height: 24px;
+  --text-copy-16--font-weight: 400;
+
+
+  --text-copy-14: 14px;
+  --text-copy-14--line-height: 20px;
+  --text-copy-14--font-weight: 400;
+
+
+  --text-copy-13: 13px;
+  --text-copy-13--line-height: 18px;
+  --text-copy-13--font-weight: 400;
+}
+
+
+/* =========================================================
+   GLOBAL BASE STYLE
+========================================================= */
+
+@layer base {
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+
+
+  html {
+    scroll-behavior: smooth;
+    background: var(--background);
+  }
+
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+
+    background: var(--background);
+    color: var(--foreground);
+
+    font-family:
+      var(--font-geist-sans),
+      Arial,
+      Helvetica,
+      sans-serif;
+
+    font-size: 16px;
+    line-height: 24px;
+
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    text-rendering: optimizeLegibility;
+  }
+
+
+  /* =========================
+     RESET TEXT
+  ========================== */
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p {
+    margin: 0;
+  }
+
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 600;
+  }
+
+
+  /* =========================
+     FORM
+  ========================== */
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+
+  button {
+    cursor: pointer;
+  }
+
+
+  input,
+  textarea,
+  select {
+    color: inherit;
+    background: transparent;
+  }
+
+
+  /* =========================
+     LINK
+  ========================== */
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+
+  /* =========================
+     MEDIA
+  ========================== */
+
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+
+  /* =========================
+     TEXT SELECTION
+  ========================== */
+
+  ::selection {
+    background: var(--orange-200);
+    color: var(--gray-1000);
+  }
+
+
+  /* =========================
+     ACCESSIBILITY FOCUS
+  ========================== */
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
