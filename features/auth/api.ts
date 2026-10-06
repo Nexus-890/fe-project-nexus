@@ -3,9 +3,10 @@ import type { ApiResult, LoginRequest, LoginResponse, RegisterRequest, UserRespo
 
 const REGISTER_PATH = "/api/v1/auth/register";
 const LOGIN_PATH = "/api/v1/auth/login";
-const ME_PATH = "/api/v1/users/me";
+export const ME_PATH = "/api/v1/users/me";
 
 export interface AuthApi {
+  readonly client: ApiClient;
   register(input: RegisterRequest, signal?: AbortSignal): Promise<ApiResult<UserResponse>>;
   login(input: LoginRequest, signal?: AbortSignal): Promise<ApiResult<LoginResponse>>;
   me(signal?: AbortSignal): Promise<ApiResult<UserResponse>>;
@@ -13,6 +14,7 @@ export interface AuthApi {
 
 export function createAuthApi(client: ApiClient): AuthApi {
   return {
+    client,
     async register(input, signal) {
       const result = await client.post<unknown>(REGISTER_PATH, input, { auth: false, signal });
       return validateResult(result, isUserResponse, "register response must be a UserResponse");
@@ -59,7 +61,7 @@ function isLoginResponse(value: unknown): value is LoginResponse {
     && value.tokenType === "Bearer";
 }
 
-function isUserResponse(value: unknown): value is UserResponse {
+export function isUserResponse(value: unknown): value is UserResponse {
   return isRecord(value)
     && typeof value.id === "string"
     && typeof value.email === "string"

@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { useMutation, useQueryClient, type Query } from "@tanstack/react-query";
-import { apiQueryOptions } from "../../hooks/api-query-options";
 import { createApiClient } from "../../lib/api-client";
 import { canceledSignIn, isApiError, unwrapApiResult } from "../../lib/api-result";
 import type { ApiError, ApiResult, LoginRequest, RegisterRequest, UserResponse } from "../../types/api";
@@ -93,7 +92,7 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
       if (!isCurrent()) throw canceledSignIn();
       token.set(response.accessToken);
       setSession({ accessToken: response.accessToken, id, signingIn: true });
-      const user = await queryClient.fetchQuery(apiQueryOptions(meQueryOptions(api, id)));
+      const user = await queryClient.fetchQuery(meQueryOptions(api, id));
       if (!isCurrent()) throw canceledSignIn();
       pending.current = null;
       setSession({ accessToken: response.accessToken, id, signingIn: false });
