@@ -236,3 +236,89 @@ test("auth API validates malformed login and user success bodies", async () => {
     assert.equal(badMeResult.error.kind, "invalid-response");
   }
 });
+
+test("Axios config keeps source defaults and copies caller headers without retaining tokens", async () => {
+  const { AxiosHeaders } = await import("axios");
+  const { default: anonymous } = await import("../configs/api");
+  assert.equal(anonymous.defaults.timeout, 15_000);
+  assert.equal(anonymous.defaults.headers.Accept, "application/json");
+  assert.equal(anonymous.defaults.headers.Authorization, undefined);
+
+  let token: string | null = "first";
+  const authorization: Array<string | null> = [];
+  const callerHeaders = new AxiosHeaders({ Authorization: "caller-value", "X-Trace": "test" });
+  const client = createApiClient({ getAccessToken: () => token, fetch: async (_, init) => {
+    authorization.push(new Headers(init?.headers).get("Authorization"));
+    return new Response("{}", { status: 200 });
+  } });
+  await client.get("/me", { config: { headers: callerHeaders } });
+  token = "second";
+  await client.get("/me");
+  await client.post("/login", {}, { auth: false, config: { headers: callerHeaders } });
+  token = null;
+  await client.get("/me", { config: { headers: callerHeaders } });
+  assert.deepEqual(authorization, ["Bearer first", "Bearer second", null, null]);
+  assert.equal(callerHeaders.get("Authorization"), "caller-value");
+});
+
+test("Axios timeout becomes a typed network failure; explicit cancellation stays AbortError", async () => {
+  const client = createApiClient({ fetch: createAuthStub({ delayMs: 100 }) });
+  const timeout = await client.get("/api/v1/users/me", { config: { timeout: 10 } });
+  assert.equal(timeout.ok, false);
+  if (!timeout.ok) {
+    assert.equal(timeout.error.kind, "network");
+    assert.equal(timeout.error.status, 0);
+    assert.match(timeout.error.detail ?? "", /timeout/i);
+  }
+  const controller = new AbortController();
+  const pending = client.get("/api/v1/users/me", { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(pending, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+});
+
+test("request config cannot override URL, origin, method, signal or authentication", async () => {
+  const seen: Array<{ url: string; method?: string; authorization: string | null }> = [];
+  const client = createApiClient({
+    baseUrl: "https://api.example.test", getAccessToken: () => "private-token",
+    fetch: async (input, init) => {
+      seen.push({ url: String(input), method: init?.method, authorization: new Headers(init?.headers).get("Authorization") });
+      return new Response("{}", { status: 200 });
+    },
+  });
+  // Simulate an untyped JS caller; TypeScript callers cannot supply owned fields.
+  const config = {
+    baseURL: "https://evil.example", url: "https://evil.example", method: "DELETE",
+    auth: { username: "override", password: "override" },
+    headers: { Authorization: "override" }, adapter: () => { throw new Error("Must not use caller adapter"); },
+  };
+  const result = await client.get("/api/v1/users/me", { config });
+  assert.equal(result.ok, true);
+  assert.deepEqual(seen, [{ url: "https://api.example.test/api/v1/users/me", method: "GET", authorization: "Bearer private-token" }]);
+});
+
+test("native Axios HTTP adapter supports real GET/POST without the fixture", async () => {
+  const { createServer } = await import("node:http");
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({
+      url: request.url, method: request.method,
+      authorization: request.headers.authorization ?? null,
+      body: Buffer.concat(chunks).toString() || null,
+    }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const client = createApiClient({ baseUrl: `http://127.0.0.1:${address.port}`, getAccessToken: () => "native-token" });
+  try {
+    const get = await client.get("/products", { params: { page: 2 }, config: { proxy: false } });
+    assert.deepEqual(get, { ok: true, data: { url: "/products?page=2", method: "GET", authorization: "Bearer native-token", body: null } });
+    const post = await client.post("/login", { email: "native@example.test" }, { auth: false, config: { proxy: false } });
+    assert.deepEqual(post, { ok: true, data: { url: "/login", method: "POST", authorization: null, body: '{"email":"native@example.test"}' } });
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});

@@ -1,2 +1,13 @@
-// Keep the old module path without creating a second, token-less singleton.
-export { createApiClient, type ApiClient } from "../lib/api-client";
+import axios, { type CreateAxiosDefaults } from "axios";
+
+/** Anonymous by default. AuthProvider creates its own token-scoped transport. */
+export function createAxiosClient(config: CreateAxiosDefaults = {}) {
+  return axios.create({
+    baseURL: process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    timeout: 15_000,
+    headers: { Accept: "application/json" },
+    ...config,
+  });
+}
+
+export default createAxiosClient();

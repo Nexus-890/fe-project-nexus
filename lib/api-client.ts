@@ -1,74 +1,92 @@
+import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse, type RawAxiosHeaders } from "axios";
+import { createAxiosClient } from "../configs/api";
 import type { ApiError, ApiRequestOptions, ApiResult, FieldErrors } from "../types/api";
 
+/** Per-request configuration; transport, URL and auth stay owned by the client. */
+export type ApiRequestConfig = Omit<AxiosRequestConfig,
+  "headers" | "data" | "method" | "params" | "signal" | "url" | "baseURL" | "adapter" | "env"
+  | "auth" | "transformRequest" | "transformResponse" | "responseType" | "validateStatus"
+> & { headers?: RawAxiosHeaders | AxiosHeaders };
+
+export interface ApiClientRequestOptions extends ApiRequestOptions {
+  params?: Readonly<Record<string, unknown>>;
+  config?: ApiRequestConfig;
+}
+
 export interface ApiClient {
-  get<T>(path: string, options?: ApiRequestOptions): Promise<ApiResult<T>>;
-  post<T>(path: string, body?: unknown, options?: ApiRequestOptions): Promise<ApiResult<T>>;
+  get<T>(path: string, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
+  post<T>(path: string, body?: unknown, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
 }
 
 export interface CreateApiClientOptions {
   /** Origin only, for example https://api.example.com. Paths include /api/v1. */
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  /** Optional fetch adapter, used by the fixture and integration tests. */
   fetch?: typeof globalThis.fetch;
 }
 
 const JSON_CONTENT_TYPE = "application/json";
 
 export function createApiClient(options: CreateApiClientOptions = {}): ApiClient {
-  const transport = options.fetch ?? globalThis.fetch?.bind(globalThis);
-
-  if (!transport) {
-    throw new Error("fetch is not available in this runtime");
-  }
-
   const baseUrl = normalizeBaseUrl(
-    options.baseUrl ?? getPublicApiBaseUrl(),
+    options.baseUrl ?? process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
   );
   const getAccessToken = options.getAccessToken ?? (() => null);
+  const transport = createAxiosClient({
+    baseURL: baseUrl,
+    // Axios supports custom fetch with Request/Response disabled for relative URLs.
+    ...(options.fetch ? {
+      adapter: "fetch",
+      // Runtime supports null; Axios declarations currently omit it.
+      env: { fetch: options.fetch, Request: null, Response: null } as unknown as AxiosRequestConfig["env"],
+    } : {}),
+  });
 
   async function request<T>(
     method: "GET" | "POST",
     path: string,
     body: unknown,
-    requestOptions: ApiRequestOptions = {},
+    requestOptions: ApiClientRequestOptions = {},
   ): Promise<ApiResult<T>> {
     const safePath = normalizeApiPath(path);
+    if (!safePath.ok) return { ok: false, error: safePath.error };
 
-    if (!safePath.ok) {
-      return { ok: false, error: safePath.error };
-    }
-
-    const headers = new Headers({ Accept: JSON_CONTENT_TYPE });
-
-    if (method === "POST") {
-      headers.set("Content-Type", JSON_CONTENT_TYPE);
-    }
-
+    const headers = new AxiosHeaders(requestOptions.config?.headers);
+    headers.set("Accept", JSON_CONTENT_TYPE);
+    headers.delete("Authorization");
+    if (method === "POST") headers.set("Content-Type", JSON_CONTENT_TYPE);
     if (requestOptions.auth !== false) {
       const token = getAccessToken();
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
+      if (token) headers.set("Authorization", `Bearer ${token}`);
     }
 
-    const init: RequestInit = {
+    // Pin security-sensitive settings even if an untyped caller supplies them.
+    const config: AxiosRequestConfig = {
+      ...requestOptions.config,
+      baseURL: baseUrl,
+      adapter: transport.defaults.adapter,
+      env: transport.defaults.env,
+      auth: undefined,
       method,
+      url: safePath.path,
+      params: requestOptions.params,
       headers,
       signal: requestOptions.signal,
+      data: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+      transformRequest: [],
+      transformResponse: [],
+      responseType: "text",
+      validateStatus: () => true,
     };
 
-    if (method === "POST") {
-      init.body = JSON.stringify(body ?? {});
-    }
-
     try {
-      const response = await transport(`${baseUrl}${safePath.path}`, init);
-      return await readApiResponse<T>(response);
+      const response = await transport.request<string>(config);
+      return readApiResponse<T>(response);
     } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
+      if (axios.isCancel(error) || isAbortError(error)) {
+        throw new DOMException("Request canceled", "AbortError");
       }
-
       return {
         ok: false,
         error: {
@@ -82,8 +100,8 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
   }
 
   return {
-    get: <T>(path: string, requestOptions?: ApiRequestOptions) => request<T>("GET", path, undefined, requestOptions),
-    post: <T>(path: string, body?: unknown, requestOptions?: ApiRequestOptions) => request<T>("POST", path, body, requestOptions),
+    get: <T>(path: string, requestOptions?: ApiClientRequestOptions) => request<T>("GET", path, undefined, requestOptions),
+    post: <T>(path: string, body?: unknown, requestOptions?: ApiClientRequestOptions) => request<T>("POST", path, body, requestOptions),
   };
 }
 
@@ -94,10 +112,6 @@ export function createInvalidResponseError(detail: string): ApiError {
     title: "Invalid API response",
     detail,
   };
-}
-
-function getPublicApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -143,27 +157,19 @@ function hasUnsafeUrlCharacters(value: string): boolean {
   return /[\\\u0000-\u001F\u007F]/.test(value);
 }
 
-async function readApiResponse<T>(response: Response): Promise<ApiResult<T>> {
-  const parsed = await readJsonValue(response);
-
-  if (!response.ok) {
+function readApiResponse<T>(response: AxiosResponse<string>): ApiResult<T> {
+  const parsed = readJsonValue(response.data);
+  if (response.status < 200 || response.status >= 300) {
     return { ok: false, error: normalizeHttpError(response, parsed.ok ? parsed.value : undefined) };
   }
-
   if (!parsed.ok) {
-    return { ok: false, error: createInvalidResponseError(`Expected JSON response from ${response.url || "API"}`) };
+    return { ok: false, error: createInvalidResponseError("Expected JSON response from API") };
   }
-
   return { ok: true, data: parsed.value as T };
 }
 
-async function readJsonValue(response: Response): Promise<{ ok: true; value: unknown } | { ok: false }> {
-  const text = await response.text();
-
-  if (!text) {
-    return { ok: true, value: null };
-  }
-
+function readJsonValue(text: string): { ok: true; value: unknown } | { ok: false } {
+  if (!text) return { ok: true, value: null };
   try {
     return { ok: true, value: JSON.parse(text) as unknown };
   } catch {
@@ -171,7 +177,7 @@ async function readJsonValue(response: Response): Promise<{ ok: true; value: unk
   }
 }
 
-function normalizeHttpError(response: Response, value: unknown): ApiError {
+function normalizeHttpError(response: AxiosResponse<string>, value: unknown): ApiError {
   if (isRecord(value)) {
     const title = (readString(value.title) ?? response.statusText) || "HTTP error";
 
