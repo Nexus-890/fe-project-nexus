@@ -2,15 +2,16 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Auth client
 
-Xem [Auth client và phiên trong memory](docs/auth-client.md) cho contract,
-vai trò từng file, TanStack Query flow, stub và hướng dẫn kiểm thử.
+See [Auth client and in-memory session](docs/auth-client.md) for API contracts,
+file responsibilities, TanStack Query flows, the stub, and testing instructions.
 
 ```bash
 npm run test:auth
 NEXT_PUBLIC_AUTH_STUB=true npm run dev
 ```
 
-Access token chỉ ở memory; reload không khôi phục phiên trong Sprint 1.
+The access token is kept in memory only; a page reload does not restore the
+session in Sprint 1.
 
 ## Development
 
