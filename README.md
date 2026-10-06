@@ -1,6 +1,18 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Auth client
+
+Xem [Auth client và phiên trong memory](docs/auth-client.md) cho contract,
+vai trò từng file, TanStack Query flow, stub và hướng dẫn kiểm thử.
+
+```bash
+npm run test:auth
+NEXT_PUBLIC_AUTH_STUB=true npm run dev
+```
+
+Access token chỉ ở memory; reload không khôi phục phiên trong Sprint 1.
+
+## Development
 
 First, run the development server:
 
