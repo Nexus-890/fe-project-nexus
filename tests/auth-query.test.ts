@@ -9,11 +9,15 @@ import { unwrapApiResult } from "../lib/api-result";
 import { AppProviders } from "../providers/AppProviders";
 import { createAuthApi } from "../features/auth/api";
 import { meQueryOptions } from "../features/auth/useMeQuery";
-import type { ApiError } from "../types/api";
+import type { ApiError, ProblemDetails } from "../types/api";
 
-const fieldError: ApiError = {
-  kind: "http", status: 400, title: "Validation failed",
+const backendProblem: ProblemDetails = {
+  status: 400, title: "Validation Failed",
   detail: "Email is invalid", traceId: "test-trace",
+  errors: [{ field: "email", message: "Invalid email" }],
+};
+const fieldError: ApiError = {
+  ...backendProblem, kind: "http",
   fieldErrors: { email: ["Invalid email"] },
 };
 
@@ -22,7 +26,7 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 test("GET rejects with a typed field-error object and does not retry 400", async () => {
   const client = new QueryClient();
   let calls = 0;
-  const api = createApiClient({ fetch: async () => { calls++; return json(fieldError, 400); } });
+  const api = createApiClient({ fetch: async () => { calls++; return json(backendProblem, 400); } });
   try {
     let returnedError: unknown;
     await assert.rejects(client.fetchQuery(apiQueryOptions({

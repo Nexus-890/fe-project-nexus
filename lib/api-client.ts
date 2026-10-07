@@ -1,6 +1,6 @@
 import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse, type RawAxiosHeaders } from "axios";
 import { createAxiosClient } from "../configs/api";
-import type { ApiError, ApiRequestOptions, ApiResult, FieldErrors } from "../types/api";
+import type { ApiError, ApiRequestOptions, ApiResult, FieldErrors, ValidationError } from "../types/api";
 
 /** Per-request configuration; transport, URL and auth stay owned by the client. */
 export type ApiRequestConfig = Omit<AxiosRequestConfig,
@@ -180,6 +180,7 @@ function readJsonValue(text: string): { ok: true; value: unknown } | { ok: false
 function normalizeHttpError(response: AxiosResponse<string>, value: unknown): ApiError {
   if (isRecord(value)) {
     const title = (readString(value.title) ?? response.statusText) || "HTTP error";
+    const errors = readValidationErrors(value.errors);
 
     return {
       kind: "http",
@@ -189,7 +190,8 @@ function normalizeHttpError(response: AxiosResponse<string>, value: unknown): Ap
       detail: readString(value.detail),
       instance: readString(value.instance),
       traceId: readString(value.traceId),
-      fieldErrors: readFieldErrors(value.fieldErrors) ?? readFieldErrors(value.errors),
+      errors,
+      fieldErrors: readFieldErrors(errors) ?? readFieldErrors(value.fieldErrors) ?? readFieldErrors(value.errors),
     };
   }
 
@@ -200,28 +202,43 @@ function normalizeHttpError(response: AxiosResponse<string>, value: unknown): Ap
   };
 }
 
+function readValidationErrors(value: unknown): ValidationError[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const errors = value.filter((entry): entry is ValidationError =>
+    isRecord(entry) && typeof entry.field === "string" && typeof entry.message === "string");
+  return errors.length > 0 ? errors : undefined;
+}
+
 function readFieldErrors(value: unknown): FieldErrors | undefined {
+  if (Array.isArray(value)) {
+    const result = new Map<string, string[]>();
+    for (const { field, message } of readValidationErrors(value) ?? []) {
+      result.set(field, [...(result.get(field) ?? []), message]);
+    }
+    return result.size > 0 ? Object.fromEntries(result) : undefined;
+  }
+
   if (!isRecord(value)) {
     return undefined;
   }
 
-  const result: FieldErrors = {};
+  const result = new Map<string, string[]>();
 
   for (const [field, messages] of Object.entries(value)) {
     if (Array.isArray(messages)) {
       const strings = messages.filter((message): message is string => typeof message === "string");
       if (strings.length > 0) {
-        result[field] = strings;
+        result.set(field, strings);
       }
       continue;
     }
 
     if (typeof messages === "string") {
-      result[field] = [messages];
+      result.set(field, [messages]);
     }
   }
 
-  return Object.keys(result).length > 0 ? result : undefined;
+  return result.size > 0 ? Object.fromEntries(result) : undefined;
 }
 
 function readString(value: unknown): string | undefined {

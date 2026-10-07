@@ -6,6 +6,12 @@
 
 export type FieldErrors = Record<string, string[]>;
 
+/** Validation entry emitted by common-web's GlobalExceptionHandler. */
+export interface ValidationError {
+  field: string;
+  message: string;
+}
+
 export interface RegisterRequest {
   email: string;
   phone: string;
@@ -51,14 +57,16 @@ export interface ProblemDetails {
   detail?: string;
   instance?: string;
   traceId?: string;
-  /** Provisional backend extension for validation errors. */
-  fieldErrors?: FieldErrors;
+  /** Backend validation extension; common-web emits one message per field. */
+  errors?: ValidationError[];
 }
 
 export type ApiErrorKind = "http" | "network" | "invalid-response" | "aborted";
 
 export interface ApiError extends ProblemDetails {
   kind: ApiErrorKind;
+  /** Frontend lookup derived from errors; not part of the backend wire contract. */
+  fieldErrors?: FieldErrors;
 }
 
 export type ApiResult<T> =
