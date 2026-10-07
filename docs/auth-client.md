@@ -9,7 +9,7 @@ persist, or a TanStack cache persister. A full page refresh returns the app to
 the anonymous state; the refresh-token flow and server-side token revocation
 are outside the scope of this issue.
 
-Sprint 1 contracts are temporary handwritten types based on the issue and API
+Sprint 1 auth request/success contracts are temporary handwritten types based on the issue and API
 catalogue. This is an exception to the OpenAPI type-generation rule in
 CONTRIBUTING.md. When the backend publishes OpenAPI, reconcile or regenerate
 the types and update the fixtures in the same change.
@@ -26,12 +26,40 @@ The frontend does not select or send a default role. The gender, roles, and
 status enums are not finalized, so wire values remain strings rather than
 assuming database enum values.
 
-`fieldErrors: Record<string, string[]>` is a provisional RFC 7807 extension used
-by the fixture. The parser also normalizes an `errors` record if the backend
-uses that name; it does not assume every backend has the same error shape.
+Validation errors follow the shared backend contract in
+[GlobalExceptionHandler](../../be-project-nexus/lib/common-web/src/main/java/com/group5/common_web/exception/GlobalExceptionHandler.java).
+The handler resolves annotation messages through
+[ErrorCode](../../be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/constant/ErrorCode.java) and emits an
+RFC 7807 problem with `errors: Array<{field: string; message: string}>`, keeping
+one message per field:
+
+```json
+{
+  "type": "urn:problem:validation-error",
+  "title": "Validation Failed",
+  "status": 400,
+  "detail": "The request data is invalid",
+  "instance": "/api/v1/auth/register",
+  "errors": [{ "field": "email", "message": "cannot be blank!" }]
+}
+```
+
+`ProblemDetails.errors` describes this wire contract. The client retains valid
+entries and derives `ApiError.fieldErrors: Record<string, string[]>` for form
+consumers; the example becomes `{email: ["cannot be blank!"]}`. `fieldErrors`
+is a frontend lookup, not a property emitted by the current backend. Older
+`fieldErrors`/`errors` records remain accepted as a compatibility fallback;
+the current backend array takes precedence. Malformed entries are ignored.
+Domain and malformed-body errors can provide form-level `detail` without an
+`errors` array.
+
 Core error fields are `type`, `title`, `status`, `detail`, and `instance`, with
-`traceId` as an extension. The actual HTTP response status determines the error
-status.
+optional `traceId` when backend tracing is available. The actual HTTP response
+status determines the error status, even if the body contains a different value.
+The stub emits the same validation array, message from `FIELD_REQUIRED`, and
+request-path `instance`; its trace identifier is fixture-only, not a real span.
+Success payloads remain draft auth contracts; this change does not introduce
+the generic `APIResponse<T>` success wrapper without implemented auth endpoints.
 
 Sources:
 - [Catalogue](https://drive.google.com/file/d/1KIJsr87F-6TWieBbie9CVzgCBTPsM4Zk/view)
@@ -241,11 +269,13 @@ after signOut, no session resurrection after logout during pending login/me
 requests, no old profile cache when switching users, session clearing on 401,
 and the anonymous state after a full page refresh.
 
-### Recorded verification (2026-10-06)
+### Recorded verification (2026-10-07)
 
-- `npm run test:auth`: 24/24 tests passed; strict auth typecheck passed.
+- `npm run test:auth`: 30/30 tests passed; strict auth typecheck passed.
   Includes native Axios GET/POST, defaults/timeout, current-token headers, protected request
   configuration, encoded path/query params, select, cancellation and profile validation.
+  Also covers the common-web validation array, field lookup normalization, malformed
+  entries, HTTP-status precedence, legacy compatibility, and the stub wire contract.
 - ESLint on all changed auth files: passed.
 - Playwright: 14 checks passed with no browser console/page errors, including
   logout during pending requests, account switching, 401, and recovery after 503.
