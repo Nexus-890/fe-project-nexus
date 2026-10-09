@@ -78,3 +78,22 @@ export interface ApiRequestOptions {
   auth?: boolean;
   signal?: AbortSignal;
 }
+
+export interface CategoryNode {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  level: number;
+  path: string;
+  children: CategoryNode[];
+}
+
+export interface ProductSummary {
+  id: string;
+  name: string;
+  slug: string;
+  minPrice: string | null;
+  categoryId?: string;
+  status?: string;
+}
