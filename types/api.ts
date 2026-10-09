@@ -97,3 +97,10 @@ export interface ProductSummary {
   categoryId?: string;
   status?: string;
 }
+
+export interface Page<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+}
