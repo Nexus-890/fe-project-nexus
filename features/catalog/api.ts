@@ -1,15 +1,27 @@
 export const CATEGORY_TREE_PATH = "/api/v1/categories/tree";
-export const PRODUCTS_PATH = "api/v1/products";
+export const PRODUCTS_PATH = "/api/v1/products";
+
+export function categoryTreeRequest() {
+    return {
+        queryKey: ["catalog", "category-tree"] as const,
+        url: CATEGORY_TREE_PATH,
+    };
+}
 
 export function formatVND(price: string | null): string | null {
-  if (price === null || price === undefined) return null;
-  const num = Number(price);
-  if (!Number.isFinite(num)) return null;
-  // Intl.NumberFormat giữ nguyên phần thập phân không bị cắt gọt sai
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 2,
-  }).format(num);
+  if (price === null) return null;
+
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(price);
+  if (!match) return null;
+
+  const integer = match[1].replace(/^0+(?=\d)/, "");
+  const fraction = match[2];
+
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+  const decimal =
+    fraction === undefined ? "" : `,${fraction.padEnd(2, "0")}`;
+
+  return `${grouped}${decimal} ₫`;
 }
 
