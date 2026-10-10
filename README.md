@@ -56,6 +56,11 @@ Home is `app/(shop)/page.tsx`; category listings are
 Each page feature has its own folder: `features/home`, `features/category`,
 `features/search`, and `features/shop`. Shared catalog parsing and tree helpers
 live in `lib/catalog-model.ts`; shared UI lives under `ui/components`.
+
+Authentication pages live outside the shop chrome under `app/(auth)`: sign-up is
+`/sign-up` and sign-in is `/sign-in`. Both forms use the shared `AuthProvider`,
+`react-hook-form`, and Zod. Draft auth paths are kept in `service/auth.ts`,
+alongside the other auth endpoint paths.
 The home feature currently renders the API-backed category tree only. Product
 listing and paging stay in the category and search features until the products
 endpoint is available. The shared header owns search navigation and renders the

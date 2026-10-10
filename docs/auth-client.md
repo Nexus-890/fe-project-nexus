@@ -211,7 +211,12 @@ in-memory fixture, not a second HTTP implementation.
 The reference's Next.js-internal `ApiError` import is replaced by this project's
 RFC 7807 error type. Its unfinished demo components/routes, missing imports,
 `.env`, Git metadata and unused dependencies are not copied. This change does
-not add refresh tokens, a generic mutation wrapper, or auth pages.
+The auth UI is implemented at `app/(auth)/sign-up/page.tsx` and
+`app/(auth)/sign-in/page.tsx` with React Hook Form + Zod validation. The forms
+submit through `useAuth().register/signIn`, map typed backend errors next to
+inputs, and route successful registration to `/sign-in` or sign-in to `/`.
+Endpoint paths remain colocated in `service/auth.ts`; this does not add refresh
+tokens or a generic mutation wrapper.
 
 ## Configuration and stub
 

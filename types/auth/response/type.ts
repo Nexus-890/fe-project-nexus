@@ -4,6 +4,8 @@ export interface LoginResponse {
   tokenType: "Bearer";
 }
 
+export type SignInResponse = LoginResponse;
+
 export interface UserResponse {
   id: string;
   email: string;
@@ -19,3 +21,4 @@ export interface UserResponse {
 }
 
 export type RegisterResponse = UserResponse;
+export type SignUpResponse = RegisterResponse;

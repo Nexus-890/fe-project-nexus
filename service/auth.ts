@@ -3,8 +3,10 @@ import { createApiClient, createInvalidResponseError, type ApiClient } from "../
 import type { ApiResult } from "../types/common/response/type";
 import type { LoginResponse, UserResponse } from "../types/auth/response/type";
 
-const REGISTER_PATH = "/api/v1/auth/register";
-const LOGIN_PATH = "/api/v1/auth/login";
+/** Keep endpoint paths beside the service; update this draft path when the backend is available. */
+export const REGISTER_PATH = "/api/v1/auth/register";
+/** Replace this draft path when the final login endpoint is available. */
+export const LOGIN_PATH = "/api/v1/auth/login";
 export const ME_PATH = "/api/v1/users/me";
 
 import type { AuthApi } from "../types/auth/type";

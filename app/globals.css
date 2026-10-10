@@ -226,6 +226,10 @@
   --danger: var(--red-700);
   --danger-foreground: var(--white);
 
+  /* shadcn semantic aliases */
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
   --info: var(--blue-700);
   --info-foreground: var(--white);
 
@@ -332,6 +336,8 @@
 
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);

@@ -1,10 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/ui/type";
 
 export default function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
+  const router = useRouter();
+
+  function signOut() {
+    onSignOut();
+    router.push("/sign-in");
+  }
 
   return (
     <div className="border-b border-border">
@@ -19,8 +26,8 @@ export default function HeaderTopBar({ user, authenticating, onSignOut }: Header
             <span className="inline-flex min-h-11 lg:min-h-9 items-center px-2" role="status">Signing in…</span>
           ) : (
             <>
-              <Link href="/login" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign in</Link>
-              <Link href="/register" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign up</Link>
+              <Link href="/sign-in" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign in</Link>
+              <Link href="/sign-up" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign up</Link>
             </>
           )}
           <span className="hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
@@ -29,7 +36,7 @@ export default function HeaderTopBar({ user, authenticating, onSignOut }: Header
           <Link href="/#live-auctions" className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary md:inline-flex">Live Auctions</Link>
           <Link href="/#help" className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary lg:inline-flex">Help &amp; Contact</Link>
           {user && (
-            <button type="button" onClick={onSignOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
+            <button type="button" onClick={signOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
               Sign out
             </button>
           )}
