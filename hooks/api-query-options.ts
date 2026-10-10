@@ -1,26 +1,9 @@
-import type { QueryKey, UseQueryOptions } from "@tanstack/react-query";
-import { createApiClient, createInvalidResponseError, type ApiClient, type ApiRequestConfig } from "../lib/api-client";
+import { createApiClient, createInvalidResponseError } from "../lib/api-client";
 import { unwrapApiResult } from "../lib/api-result";
-import type { ApiError } from "../types/api";
+import type { ApiError } from "../types/common/response/type";
 
-export type ApiParams = Readonly<Record<string, unknown>>;
-export type { ApiRequestConfig } from "../lib/api-client";
-
-export interface ApiQueryRequest<TPathParams extends object = ApiParams, TQueryParams extends object = ApiParams> {
-  queryKey: QueryKey;
-  url: string;
-  pathParams?: TPathParams;
-  query?: TQueryParams;
-  config?: ApiRequestConfig;
-  /** Pass the provider-scoped client for authenticated endpoints. */
-  client?: ApiClient;
-}
-
-export type ApiQueryOptions<TResponse, TSelected = TResponse> = Omit<
-  UseQueryOptions<TResponse, ApiError, TSelected, QueryKey>, "queryFn" | "queryKey"
-> & {
-  validateResponse?: (value: unknown) => value is TResponse;
-};
+import type { ApiParams, ApiQueryRequest, ApiQueryOptions, ApiServiceRequest } from "../types/query/type";
+export type { ApiParams, ApiQueryRequest, ApiQueryOptions, ApiServiceRequest, ApiRequestConfig } from "../types/query/type";
 
 const anonymousClient = createApiClient();
 
@@ -39,7 +22,7 @@ export function resolveApiUrl(url: string, pathParams?: object): string {
 export function apiQueryOptions<
   TResponse = unknown, TSelected = TResponse,
   TPathParams extends object = ApiParams, TQueryParams extends object = ApiParams,
->(request: ApiQueryRequest<TPathParams, TQueryParams>, options: ApiQueryOptions<TResponse, TSelected> = {}) {
+>(request: ApiQueryRequest<TPathParams, TQueryParams> | ApiServiceRequest<TResponse>, options: ApiQueryOptions<TResponse, TSelected> = {}) {
   const { validateResponse, ...queryOptions } = options;
   return {
     // One retry for transient failures; never repeat rejected 4xx requests.
@@ -48,7 +31,7 @@ export function apiQueryOptions<
     ...queryOptions,
     queryKey: request.queryKey,
     queryFn: async ({ signal }: { signal: AbortSignal }): Promise<TResponse> => {
-      const data = unwrapApiResult(await (request.client ?? anonymousClient).get<TResponse>(
+      const data = unwrapApiResult("service" in request ? await request.service(signal) : await (request.client ?? anonymousClient).get<TResponse>(
         resolveApiUrl(request.url, request.pathParams),
         { params: request.query as ApiParams | undefined, config: request.config, signal },
       ));

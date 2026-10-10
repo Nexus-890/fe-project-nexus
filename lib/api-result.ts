@@ -1,4 +1,4 @@
-import type { ApiError, ApiResult } from "../types/api";
+import type { ApiError, ApiResult } from "../types/common/response/type";
 
 /** Convert the transport result to the rejected-Promise contract TanStack expects. */
 export function unwrapApiResult<T>(result: ApiResult<T>): T {

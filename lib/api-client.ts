@@ -1,36 +1,15 @@
-import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse, type RawAxiosHeaders } from "axios";
-import { createAxiosClient } from "../configs/api";
-import type { ApiError, ApiRequestOptions, ApiResult, FieldErrors, ValidationError } from "../types/api";
+import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from "axios";
+import { API_BASE_URL, createAxiosClient } from "../configs/api";
+import type { ApiError, ApiResult, FieldErrors, ValidationError } from "../types/common/response/type";
 
-/** Per-request configuration; transport, URL and auth stay owned by the client. */
-export type ApiRequestConfig = Omit<AxiosRequestConfig,
-  "headers" | "data" | "method" | "params" | "signal" | "url" | "baseURL" | "adapter" | "env"
-  | "auth" | "transformRequest" | "transformResponse" | "responseType" | "validateStatus"
-> & { headers?: RawAxiosHeaders | AxiosHeaders };
-
-export interface ApiClientRequestOptions extends ApiRequestOptions {
-  params?: Readonly<Record<string, unknown>>;
-  config?: ApiRequestConfig;
-}
-
-export interface ApiClient {
-  get<T>(path: string, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
-  post<T>(path: string, body?: unknown, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
-}
-
-export interface CreateApiClientOptions {
-  /** Origin only, for example https://api.example.com. Paths include /api/v1. */
-  baseUrl?: string;
-  getAccessToken?: () => string | null;
-  /** Optional fetch adapter, used by the fixture and integration tests. */
-  fetch?: typeof globalThis.fetch;
-}
+import type { ApiClientRequestOptions, ApiClient, CreateApiClientOptions } from "../types/api/type";
+export type { ApiRequestConfig, ApiClientRequestOptions, ApiClient, CreateApiClientOptions } from "../types/api/type";
 
 const JSON_CONTENT_TYPE = "application/json";
 
 export function createApiClient(options: CreateApiClientOptions = {}): ApiClient {
   const baseUrl = normalizeBaseUrl(
-    options.baseUrl ?? process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    options.baseUrl ?? API_BASE_URL,
   );
   const getAccessToken = options.getAccessToken ?? (() => null);
   const transport = createAxiosClient({

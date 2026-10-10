@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { AuthProvider } from "../../features/auth/AuthProvider";
-import { createAuthStub } from "../../features/auth/testing/stub";
-import { useAuth } from "../../features/auth/useAuth";
-import type { ApiError, FieldErrors, RegisterRequest } from "../../types/api";
+import { AuthProvider } from "../../providers/AuthProvider";
+import { createAuthStub } from "../fixtures/auth-stub";
+import { useAuth } from "../../hooks/auth/useAuth";
+import type { ApiError, FieldErrors } from "../../types/common/response/type";
+import type { RegisterRequest } from "../../types/auth/request/type";
 
 type DelayRule = {
   method: string;

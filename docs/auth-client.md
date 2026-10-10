@@ -70,19 +70,19 @@ Sources:
 
 | File | Responsibility |
 | --- | --- |
-| `types/api.ts` | Request/response contracts, RFC 7807, typed errors, and `ApiResult<T>` |
+| `types/auth/{request,response}/type.ts` and `types/common/{request,response}/type.ts` | Request/response contracts, RFC 7807, typed errors, and `ApiResult<T>` |
 | `lib/api-client.ts` | Scoped Axios GET/POST adapter; reads the latest token and returns typed results/errors |
-| `configs/api.ts` | Axios factory and anonymous client; API origin, 15-second timeout, JSON Accept header |
+| `configs/api.ts` | Sole env URL source and Axios factory and anonymous client; API origin, 15-second timeout, JSON Accept header |
 | `lib/api-result.ts` | Converts failure results into rejected Promises for TanStack |
 | `hooks/api-query-options.ts` | GET request/options types, path interpolation, typed errors and shared `fetchQuery` configuration |
 | `hooks/useApiQuery.ts` | Source-shaped custom GET hook with request/options, four generics and `select` |
-| `features/auth/api.ts` | `register`, `login`, and `me`; validates responses at runtime |
-| `features/auth/useMeQuery.ts` | Profile query keyed by session generation; does not fetch automatically without a token |
-| `features/auth/AuthProvider.tsx` | Owns the token and login/register mutations; clears the session and cache on logout |
-| `features/auth/useAuth.ts` | Exposes auth context to components and reports a missing provider |
+| `service/auth.ts` | `register`, `login`, and `me`; validates responses at runtime |
+| `hooks/auth/useMeQuery.ts` | Profile query keyed by session generation; does not fetch automatically without a token |
+| `providers/AuthProvider.tsx` | Owns the token and login/register mutations; clears the session and cache on logout |
+| `hooks/auth/useAuth.ts` | Exposes auth context to components and reports a missing provider |
 | `providers/AppProviders.tsx` | Creates a stable QueryClient with source defaults and composes both providers |
 | `app/layout.tsx` | Mounts the provider without adding fetch/state logic to the route |
-| `features/auth/testing/stub.ts` | In-memory fake backend for building UI before the real API is available |
+| `tests/fixtures/auth-stub.ts` | In-memory fake backend for building UI before the real API is available |
 | `tests/auth-api.test.ts` | Transport, endpoint, fixture, and typed-error regression tests |
 | `tests/auth-query.test.ts` | Query cache, enable/disable, cancellation, and error-adapter tests |
 | `tests/browser/AuthProbe.tsx` | React consumer for browser session testing, not a production auth page |
@@ -95,7 +95,7 @@ Sources:
 ```text
 Root layout → AppProviders → QueryClientProvider → AuthProvider → feature
 
-GET: useMeQuery → useApiQuery → useQuery → apiClient.get → Axios
+GET: useMeQuery → useApiQuery → useQuery → service/auth.me → apiClient.get → Axios
      → typed result → runtime profile validation → user in query cache
 
 Login: useAuth.signIn → useMutation → authApi.login
@@ -128,8 +128,8 @@ credentials when the mutation is no longer in use.
 
 ```tsx
 "use client";
-import { useAuth } from "@/features/auth/useAuth";
-import type { LoginRequest } from "@/types/api";
+import { useAuth } from "@/hooks/auth/useAuth";
+import type { LoginRequest } from "@/types/auth/request/type";
 
 export function useSignInForm() {
   const { signIn, status, user, signOut } = useAuth();

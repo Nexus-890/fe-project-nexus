@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { createApiClient } from "../lib/api-client";
-import { createAuthApi } from "../features/auth/api";
-import { createAuthStub } from "../features/auth/testing/stub";
-import type { ProblemDetails, RegisterRequest } from "../types/api";
+import { createAuthApi } from "../service/auth";
+import { createAuthStub } from "./fixtures/auth-stub";
+import type { ProblemDetails } from "../types/common/response/type";
+import type { RegisterRequest } from "../types/auth/request/type";
 
 const registerInput: RegisterRequest = {
   email: "buyer@example.test",
@@ -19,7 +20,7 @@ const registerInput: RegisterRequest = {
 
 test("auth stub cannot be enabled in production, including injected transports", () => {
   const result = spawnSync(process.execPath, [
-    "-e", `require(${JSON.stringify(require.resolve("../features/auth/testing/stub"))}).createAuthStub()`,
+    "-e", `require(${JSON.stringify(require.resolve("./fixtures/auth-stub"))}).createAuthStub()`,
   ], { env: { ...process.env, NODE_ENV: "production" }, encoding: "utf8" });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /auth stub is disabled in production/);

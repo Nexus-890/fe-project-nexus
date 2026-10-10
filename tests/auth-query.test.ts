@@ -7,9 +7,9 @@ import { apiQueryOptions, resolveApiUrl } from "../hooks/api-query-options";
 import { createApiClient } from "../lib/api-client";
 import { unwrapApiResult } from "../lib/api-result";
 import { AppProviders } from "../providers/AppProviders";
-import { createAuthApi } from "../features/auth/api";
-import { meQueryOptions } from "../features/auth/useMeQuery";
-import type { ApiError, ProblemDetails } from "../types/api";
+import { createAuthApi } from "../service/auth";
+import { meQueryOptions } from "../hooks/auth/useMeQuery";
+import type { ApiError, ProblemDetails } from "../types/common/response/type";
 
 const backendProblem: ProblemDetails = {
   status: 400, title: "Validation Failed",

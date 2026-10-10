@@ -14,8 +14,8 @@ try {
   const program = ts.createProgram({
     rootNames: [
       ...tests.map((name) => path.join(root, "tests", name)),
-      path.join(root, "features/auth/AuthProvider.tsx"),
-      path.join(root, "features/auth/useAuth.ts"),
+      path.join(root, "providers/AuthProvider.tsx"),
+      path.join(root, "hooks/auth/useAuth.ts"),
       path.join(root, "providers/AppProviders.tsx"),
       path.join(root, "tests/browser/AuthProbe.tsx"),
     ],
@@ -43,7 +43,7 @@ try {
     process.exitCode = 1;
   } else {
     program.emit();
-    symlinkSync(path.join(root, "node_modules"), path.join(output, "node_modules"), "dir");
+    symlinkSync(path.join(root, "node_modules"), path.join(output, "node_modules"), process.platform === "win32" ? "junction" : "dir");
     const result = spawnSync(process.execPath, [
       "--test",
       ...tests.map((name) => path.join(output, "tests", name.replace(/\.ts$/, ".js"))),

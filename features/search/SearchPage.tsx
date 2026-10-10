@@ -1,0 +1,128 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ChevronRight, House } from "lucide-react";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useCategoryTree } from "@/hooks/catalog/useCategoryTree";
+import { getProducts } from "@/service/catalog";
+import { queryKeys } from "@/configs/query-keys";
+import { ProductGrid } from "@/ui/components/organisms/ProductGrid";
+import { CategoryFilterSidebar } from "@/ui/components/organisms/CategoryFilterSidebar";
+import { Pagination } from "@/ui/components/molecules/Pagination";
+import { searchHref } from "@/lib/catalog-url";
+import { CATALOG_PAGE_SIZE, findCategory, parsePage, readQueryValue } from "@/lib/catalog-model";
+
+interface SearchPageClientProps {
+  query: Record<string, string | string[] | undefined>;
+}
+
+export default function SearchPage({ query: rawQuery }: SearchPageClientProps) {
+  const router = useRouter();
+  const query = readQueryValue(rawQuery.q);
+  const categorySlug = readQueryValue(rawQuery.category);
+  const sort = readQueryValue(rawQuery.sort) || "relevance";
+  const page = parsePage(rawQuery.page);
+  const categoryTree = useCategoryTree();
+  const selectedCategory = categorySlug && categoryTree.data
+    ? findCategory(categoryTree.data, categorySlug)
+    : undefined;
+  const filters = {
+    ...(selectedCategory ? { categoryId: selectedCategory.id } : {}),
+    ...(query ? { q: query } : {}),
+    ...(sort !== "relevance" ? { sort } : {}),
+    page: page - 1,
+    size: CATALOG_PAGE_SIZE,
+  };
+  const products = useApiQuery({
+    queryKey: queryKeys.catalog.products(filters),
+    service: (signal) => getProducts(filters, signal),
+  }, {
+    enabled: !categorySlug || categoryTree.isSuccess || categoryTree.isError,
+  });
+  const totalPages = products.data ? Math.ceil(products.data.totalElements / products.data.size) : 0;
+  const hrefForPage = (next: number) => searchHref({ q: query, category: categorySlug, sort: sort === "relevance" ? "" : sort, page: next });
+  const clearHref = "/search";
+
+  return (
+    <div className="mx-auto w-full max-w-[1248px] px-4 pt-6 pb-12 sm:px-6 lg:pb-16">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-gray-900">
+        <Link href="/" className="inline-flex min-h-11 min-w-11 items-center gap-1.5 hover:text-primary">
+          <House size={16} aria-hidden="true" />Home
+        </Link>
+        <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-gray-700" />
+        <span aria-current="page">Search</span>
+      </nav>
+
+      <div className="mt-3 mb-5 space-y-1">
+        <h1 className="text-heading-32">{query ? `Results for “${query}”` : "Browse products"}</h1>
+        <p className="min-h-5 text-sm text-gray-900" aria-live="polite">
+          {products.isSuccess ? `${products.data.totalElements} results` : products.isPending ? "Loading products…" : "Search the catalog to find products."}
+        </p>
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8">
+        <CategoryFilterSidebar
+          categories={categoryTree.data ?? []}
+          selectedSlug={categorySlug}
+          basePath="/search"
+          clearHref={clearHref}
+          searchQuery={query}
+          loading={categoryTree.isPending}
+          error={categoryTree.isError}
+          retrying={categoryTree.isFetching}
+          onRetry={() => void categoryTree.refetch()}
+        />
+
+        <section aria-label="Search results" className="min-w-0 space-y-5">
+          <div className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {query ? <span className="inline-flex min-h-9 max-w-full items-center rounded-full border border-primary bg-orange-100 px-3 py-1.5 text-sm text-primary">{query}</span> : null}
+              {selectedCategory ? <span className="inline-flex min-h-9 max-w-full items-center rounded-full border border-border px-3 py-1.5 text-sm">{selectedCategory.name}</span> : null}
+            </div>
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <span>Sort by</span>
+              <select
+                aria-label="Sort by"
+                value={sort}
+                onChange={(event) => router.push(searchHref({ q: query, category: categorySlug, sort: event.target.value === "relevance" ? "" : event.target.value }))}
+                className="min-h-11 min-w-36 rounded-md border border-border bg-card px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="relevance">Relevance</option>
+                <option value="createdAt,desc">Newest</option>
+                <option value="price,asc">Price: low to high</option>
+                <option value="price,desc">Price: high to low</option>
+              </select>
+            </label>
+          </div>
+
+          {products.isSuccess && page > Math.max(1, totalPages) ? (
+            <div role="status" className="space-y-3 rounded-md border border-border p-6">
+              <h2 className="text-heading-20">No products on this page</h2>
+              <Link className="inline-flex min-h-11 min-w-11 items-center text-primary" href={searchHref({ q: query, category: categorySlug, sort: sort === "relevance" ? "" : sort, page: 1 })}>Go to first page</Link>
+            </div>
+          ) : (
+            <>
+              <ProductGrid
+                products={products.data?.content ?? []}
+                loading={products.isPending}
+                error={products.isError}
+                onRetry={() => void products.refetch()}
+                retrying={products.isFetching}
+              />
+              {products.isSuccess && products.data.content.length > 0 ? (
+                <div className="flex min-w-0 flex-col items-start justify-between gap-4 text-sm sm:flex-row sm:items-center">
+                  <p className="text-gray-900">
+                    Showing {(page - 1) * products.data.size + 1}–{(page - 1) * products.data.size + products.data.content.length} of {products.data.totalElements} results
+                  </p>
+                  <Pagination page={page} totalPages={totalPages} hrefForPage={hrefForPage} />
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
