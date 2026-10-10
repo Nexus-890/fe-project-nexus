@@ -85,7 +85,6 @@ export interface CategoryNode {
   name: string;
   slug: string;
   level: number;
-  path: string;
   children: CategoryNode[];
 }
 
