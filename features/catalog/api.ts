@@ -17,7 +17,7 @@ export function categoryTreeRequest() {
 
 export function productsRequest(filters: ProductFilters = {}) {
   return {
-    queryKey: ["catalogs", "products", filters] as const,
+    queryKey: ["catalog", "products", filters] as const,
     url: PRODUCTS_PATH,
     query: filters,
   };
