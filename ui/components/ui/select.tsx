@@ -41,29 +41,38 @@ const SelectValue = React.forwardRef<
 ));
 SelectValue.displayName = "SelectValue";
 
-const SelectContent = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Popup>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Positioner
-      sideOffset={4}
-      className="z-50 outline-none"
-    >
-      <SelectPrimitive.Popup
-        ref={ref}
-        data-slot="select-content"
-        className={cn(
-          "max-h-[min(20rem,var(--available-height))] min-w-[var(--anchor-width)] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none data-open:animate-in data-closed:animate-out",
-          className,
-        )}
-        {...props}
+type SelectContentProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> & {
+  /**
+   * Keep the popup anchored to the trigger instead of moving it to align the
+   * selected item with the trigger's value text. This is useful for compact
+   * header selects where the list should reopen at a stable position.
+   */
+  alignItemWithTrigger?: boolean;
+};
+
+const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
+  ({ className, children, alignItemWithTrigger = true, ...props }, ref) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Positioner
+        sideOffset={4}
+        alignItemWithTrigger={alignItemWithTrigger}
+        className="z-50 outline-none"
       >
-        <SelectPrimitive.List>{children}</SelectPrimitive.List>
-      </SelectPrimitive.Popup>
-    </SelectPrimitive.Positioner>
-  </SelectPrimitive.Portal>
-));
+        <SelectPrimitive.Popup
+          ref={ref}
+          data-slot="select-content"
+          className={cn(
+            "max-h-[min(20rem,var(--available-height))] min-w-[var(--anchor-width)] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none data-open:animate-in data-closed:animate-out",
+            className,
+          )}
+          {...props}
+        >
+          <SelectPrimitive.List>{children}</SelectPrimitive.List>
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
+    </SelectPrimitive.Portal>
+  ),
+);
 SelectContent.displayName = "SelectContent";
 
 const SelectItem = React.forwardRef<

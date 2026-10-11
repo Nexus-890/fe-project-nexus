@@ -58,7 +58,7 @@ function SearchBar({ categories, categoriesLoading, categoriesError }: SearchBar
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="w-52">
+            <SelectContent className="w-52" alignItemWithTrigger={false}>
               {categoryOptions.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}

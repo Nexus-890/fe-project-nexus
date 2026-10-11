@@ -151,10 +151,10 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen bg-white text-foreground">
-      <header className="mx-auto w-full max-w-[1200px] px-6 py-6 sm:px-10">
+      <header className="mx-auto w-full max-w-[720px] px-10 py-6">
         <Logo />
       </header>
-      <main className="mx-auto flex w-full max-w-[720px] flex-col px-6 pb-10 sm:px-10">
+      <main className="mx-auto flex w-full max-w-[720px] flex-col px-10 pb-10">
         <section aria-labelledby="sign-up-title" className="w-full">
           <h1 id="sign-up-title" className="text-heading-24">Create your account</h1>
           <Button type="button" variant="outline" size="lg" className="mt-4 h-11 w-full gap-2 rounded-md bg-card px-4 text-xs">
@@ -223,7 +223,7 @@ export default function SignUpPage() {
           <p className="mt-4 text-center text-xs text-muted-foreground">Already have an account? <Link href="/sign-in" className="text-primary hover:underline">Sign In</Link></p>
         </section>
       </main>
-      <footer className="mx-auto w-full max-w-[720px] px-6 pb-6 text-xs text-muted-foreground sm:px-10">© 2026 Nexus · Terms · Privacy</footer>
+      <footer className="mx-auto w-full max-w-[720px] px-10 pb-6 text-xs text-muted-foreground">© 2026 Nexus · Terms · Privacy</footer>
     </div>
   );
 }
