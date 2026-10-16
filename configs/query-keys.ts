@@ -5,6 +5,7 @@ export const queryKeys = {
   catalog: {
     tree: ["catalog", "category-tree"] as const,
     products: (filters: ProductFilters) => ["catalog", "products", filters] as const,
+    product: (productId: string) => ["catalog", "product", productId] as const,
   },
   auth: {
     me: (sessionId: number) => ["auth", sessionId, "me"] as const,

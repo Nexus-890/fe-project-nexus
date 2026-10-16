@@ -20,7 +20,7 @@ export interface HeaderProps {
 }
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "minPrice">;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice">;
 };
 
 export type ProductGridProps = {
