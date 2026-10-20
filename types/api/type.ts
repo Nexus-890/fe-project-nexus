@@ -16,6 +16,8 @@ export interface ApiClientRequestOptions extends ApiRequestOptions {
 export interface ApiClient {
   get<T>(path: string, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
   post<T>(path: string, body?: unknown, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
+  put<T>(path: string, body?: unknown, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
+  delete<T>(path: string, options?: ApiClientRequestOptions): Promise<ApiResult<T>>;
 }
 
 export interface CreateApiClientOptions {

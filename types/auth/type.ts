@@ -3,6 +3,7 @@ import type { ApiClient } from "../api/type";
 import type { ApiError, ApiResult } from "../common/response/type";
 import type { RegisterRequest, LoginRequest } from "./request/type";
 import type { UserResponse, LoginResponse } from "./response/type";
+import type { UpdateProfileRequest } from "../account/type";
 
 export interface AuthApi {
   readonly client: ApiClient;
@@ -13,6 +14,8 @@ export interface AuthApi {
 
 export interface AuthContextValue {
   accessToken: string | null;
+  sessionId: number;
+  isCurrentSession(sessionId: number): boolean;
   user: UserResponse | null;
   status: "anonymous" | "authenticating" | "authenticated" | "error";
   error: ApiError | null;
@@ -20,6 +23,7 @@ export interface AuthContextValue {
   signIn(payload: LoginRequest): Promise<ApiResult<UserResponse>>;
   register(payload: RegisterRequest): Promise<ApiResult<UserResponse>>;
   retryProfile(): Promise<ApiResult<UserResponse>>;
+  updateProfile(payload: UpdateProfileRequest): Promise<ApiResult<UserResponse>>;
   signOut(): void;
 }
 

@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { ChevronRight, House } from "lucide-react";
 import { useAuth } from "@/hooks/auth/useAuth";
 import { useProduct } from "@/features/catalog/useProduct";
-import { unwrapApiResult } from "@/lib/api-result";
+import { useCart } from "@/hooks/cart/useCart";
 import { formatVND } from "@/lib/format-price";
-import { createCartService } from "@/service/cart";
 import { mockProductDetail, USE_PRODUCT_DETAIL_MOCK } from "@/mocks/product-detail";
-import type { AddCartItemRequest } from "@/types/cart/request/type";
 import type { ProductSku } from "@/types/catalog/response/type";
 import SKUSelector from "@/ui/components/molecules/SKUSelector";
 import QuantityPicker from "@/ui/components/molecules/QuantityPicker";
@@ -44,20 +41,7 @@ export default function ProductDetailPage({ slug, productId }: ProductDetailPage
   const [signInPrompt, setSignInPrompt] = useState(false);
   const [cartMessage, setCartMessage] = useState<string | null>(null);
 
-  const cartService = useMemo(() => createCartService({
-    getAccessToken: () => accessToken,
-  }), [accessToken]);
-
-  const addToCart = useMutation({
-    mutationFn: async (input: AddCartItemRequest) => unwrapApiResult(await cartService.addCartItem(input)),
-    onSuccess: () => {
-      setCartMessage("Added to cart.");
-      setSignInPrompt(false);
-    },
-    onError: (error: unknown) => {
-      setCartMessage(error instanceof Error ? error.message : "Unable to add this item to cart.");
-    },
-  });
+  const { addItem: addToCart } = useCart();
 
   if (!id) {
     return <ProductError message="This product link does not include a product id." />;
@@ -84,7 +68,13 @@ export default function ProductDetailPage({ slug, productId }: ProductDetailPage
     }
     if (!sku) return;
     setCartMessage(null);
-    addToCart.mutate({ skuId: sku.id, quantity });
+    addToCart.mutate({ skuId: sku.id, quantity }, {
+      onSuccess: () => {
+        setCartMessage("Added to cart.");
+        setSignInPrompt(false);
+      },
+      onError: (error) => setCartMessage(error.detail ?? error.title ?? "Unable to add this item to cart."),
+    });
   };
 
   return (

@@ -220,12 +220,16 @@ tokens or a generic mutation wrapper.
 
 ## Configuration and stub
 
-`NEXT_PUBLIC_API_URL` (as in the reference source) is the API **origin**, for example
-`http://localhost:8080`. Endpoint paths already contain `/api/v1`; do not add
-that prefix twice. The previous `NEXT_PUBLIC_API_BASE_URL` remains a fallback.
-Requests use the same origin by default. If the frontend
-and backend have different origins, the backend must configure CORS for the
-Authorization header.
+For a backend without browser CORS, leave `NEXT_PUBLIC_API_URL` empty and set
+`API_PROXY_TARGET=http://localhost:8080` in `.env.local`. Next proxies browser
+`/api/v1/...` requests to this target; server-side catalog calls use the target
+directly. Set `NEXT_PUBLIC_AUTH_STUB=false` to use real login and profile data.
+Restart Next after changing configuration.
+
+Alternatively, `NEXT_PUBLIC_API_URL` is the API **origin** for direct requests
+when the backend allows CORS, including Authorization and JSON preflight.
+Endpoint paths already contain `/api/v1`; do not add that prefix twice.
+The previous `NEXT_PUBLIC_API_BASE_URL` remains a fallback.
 
 To build UI before the real API is available:
 

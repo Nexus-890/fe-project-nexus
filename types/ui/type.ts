@@ -10,6 +10,7 @@ export interface CategoryNavigationProps {
 }
 
 export interface HeaderProps {
+  cartCount?: number;
   user: UserResponse | null;
   authenticating: boolean;
   onSignOut: () => void;

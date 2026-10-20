@@ -2,6 +2,13 @@ import type { CategoryNode } from "../types/catalog/response/type";
 
 export const CATALOG_PAGE_SIZE = 12;
 
+/** Local QA fixture categories do not belong in the buyer navigation. */
+export function navigationCategories(nodes: CategoryNode[]): CategoryNode[] {
+  return nodes
+    .filter((node) => node.name.trim().toLowerCase() !== "qa catalog")
+    .map((node) => ({ ...node, children: navigationCategories(node.children) }));
+}
+
 export function parsePage(value: string | string[] | undefined): number {
   if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return 1;
   const page = Number(value);

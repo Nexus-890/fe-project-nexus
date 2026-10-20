@@ -40,13 +40,10 @@ Then open
 This URL uses the fixture directly, so it does not need a seeded catalog
 database.
 
-Remove or set both values to `false` to call the real endpoints. The temporary
-cart URL is declared at the top of `service/cart.ts` and should be replaced
-when the commerce route lands. If you prefer a code-only switch, comment the
-`MOCK START` branch in `service/catalog.ts` and `service/cart.ts`; leave the
-real `GET`/`POST` immediately below it unchanged. The fixture is not imported
-by the injected-client tests, so those tests still verify the real request paths
-and payload shape.
+Remove or set both values to `false` to call the real endpoints through the
+common API origin/proxy. Cart operations use the shared hook described in
+[Cart hooks and header count](cart-flow.md), including the buyer's seeded fixture.
+Injected-client tests keep mocks disabled and verify real request paths/payloads.
 
 ## BE hand-off checklist
 
@@ -55,7 +52,7 @@ When the BE is ready, use the following two URLs:
 | UI flow | URL to point at | Change |
 | --- | --- | --- |
 | Product detail | `NEXT_PUBLIC_API_URL` + `/api/v1/products/{id}` | Set `NEXT_PUBLIC_API_URL` to the gateway origin. No service code change. |
-| Add to cart | `http://localhost:4010` + `/api/v1/carts/me/items` | Replace `TEMP_COMMERCE_API_URL` in `service/cart.ts` with the deployed commerce/gateway origin. |
+| Add to cart | `NEXT_PUBLIC_API_URL` + `/api/v1/carts/me/items` | Set the common gateway origin or use `API_PROXY_TARGET` for the Next proxy. No service code change. |
 
 Then remove or set `NEXT_PUBLIC_PRODUCT_DETAIL_MOCK` and
 `NEXT_PUBLIC_CART_MOCK` to `false`. The payload remains

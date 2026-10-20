@@ -1,0 +1,10 @@
+version: 1
+name: profile-gateway
+slug: profile-gateway
+protocol: http
+port: 3912
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

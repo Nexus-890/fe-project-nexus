@@ -6,6 +6,11 @@ export interface CartItem {
   quantity: number;
   unitPrice: string;
   lineTotal: string;
+  sellerId?: string;
+  sellerName?: string;
+  imageUrl?: string | null;
+  color?: string | null;
+  size?: string | null;
 }
 
 export interface Cart {

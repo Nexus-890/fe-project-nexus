@@ -16,6 +16,14 @@ function clientFor(values: Record<string, unknown>) {
       calls.push({ method: "POST", path, body, options });
       return { ok: true, data: values[path] as T };
     },
+    put: async <T>(path: string, body?: unknown, options?: unknown): Promise<ApiResult<T>> => {
+      calls.push({ method: "PUT", path, body, options });
+      return { ok: true, data: values[path] as T };
+    },
+    delete: async <T>(path: string, options?: unknown): Promise<ApiResult<T>> => {
+      calls.push({ method: "DELETE", path, options });
+      return { ok: true, data: values[path] as T };
+    },
   };
   return { calls, client };
 }

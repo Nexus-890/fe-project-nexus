@@ -6,17 +6,20 @@ export interface LoginResponse {
 
 export type SignInResponse = LoginResponse;
 
+export type UserGender = "MALE" | "FEMALE" | "OTHER";
+export type UserStatus = "ACTIVE" | "LOCKED" | "DELETED";
+
 export interface UserResponse {
   id: string;
   email: string;
   phone: string;
   fullName: string;
-  gender: string | null;
+  gender: UserGender | null;
   address: string | null;
   dateOfBirth: string | null;
-  /** Draft catalogue exposes roles as open backend strings. */
+  /** Role codes are defined by backend data, rather than a Java enum. */
   roles: string[];
-  status: string;
+  status: UserStatus;
   createdAt: string;
 }
 

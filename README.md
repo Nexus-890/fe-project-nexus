@@ -2,6 +2,9 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Auth client
 
+Cart hook, shared header count, buyer seed and verification:
+[Cart flow](docs/cart-flow.md).
+
 See [Auth client and in-memory session](docs/auth-client.md) for API contracts,
 file responsibilities, TanStack Query flows, the stub, and testing instructions.
 
