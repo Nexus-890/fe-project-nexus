@@ -68,13 +68,25 @@ authenticated or anonymous actions.
 The public catalog uses the existing anonymous Axios/TanStack adapters.
 The shop layout feature consumes `useAuth()`; browsing does not require authentication.
 
-Set `NEXT_PUBLIC_API_URL` in your local env to the common backend origin.
-`.env.example` leaves it empty for you to configure. `configs/api.ts` is the
-only module reading the API URL; `NEXT_PUBLIC_API_BASE_URL` is retained as a
-legacy fallback. There is no catalog-specific origin. Service modules append
-their endpoint paths to this configuration. For server-side category slug
-resolution, configure an absolute common API origin accessible to Next and the
-browser. Restart Next after changing env.
+For the real backend running at `http://localhost:8080`, copy `.env.example` to
+`.env.local`: leave `NEXT_PUBLIC_API_URL` empty, set
+`API_PROXY_TARGET=http://localhost:8080`, and keep `NEXT_PUBLIC_AUTH_STUB=false`.
+The browser calls `/api/v1/...` on Next, which proxies requests to the backend;
+this also works when the backend does not allow browser CORS. Server-side calls
+use the proxy target directly. Service modules keep relative endpoint paths.
+Restart Next after changing env.
+
+When a deployed backend supports browser CORS, `NEXT_PUBLIC_API_URL` can instead
+point to its common origin and `API_PROXY_TARGET` can be left empty.
+`NEXT_PUBLIC_API_BASE_URL` remains a legacy fallback. Do not append `/api/v1`
+to either origin, because service paths already include it.
+
+Sign in at `/sign-in` using the demo buyer account in
+`../be-project-nexus/infra/staging/.env.example`, then click the header name to
+open `/profile`. Login, GET profile, and Save Changes use the real backend.
+The PUT sends only supported edited fields; phone remains read-only. Keep the
+demo password in that local file rather than adding it to frontend public env
+or source code.
 
 Architecture:
 

@@ -25,6 +25,7 @@ function fixtureClient(values: Record<string, unknown>): { client: ApiClient; ca
         return { ok: true, data: values[path] as T };
       },
       post: async () => ({ ok: false, error: { kind: "network", status: 0, title: "unused" } }),
+      put: async () => ({ ok: false, error: { kind: "network", status: 0, title: "unused" } }),
     },
   } as { client: ApiClient; calls: Array<{ path: string; options?: unknown }> };
 }

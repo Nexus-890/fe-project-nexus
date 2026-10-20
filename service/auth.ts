@@ -3,9 +3,8 @@ import { createApiClient, createInvalidResponseError, type ApiClient } from "../
 import type { ApiResult } from "../types/common/response/type";
 import type { LoginResponse, UserResponse } from "../types/auth/response/type";
 
-/** Keep endpoint paths beside the service; update this draft path when the backend is available. */
+/** Backend auth endpoints; the common origin/proxy comes from configs/api.ts. */
 export const REGISTER_PATH = "/api/v1/auth/register";
-/** Replace this draft path when the final login endpoint is available. */
 export const LOGIN_PATH = "/api/v1/auth/login";
 export const ME_PATH = "/api/v1/users/me";
 
@@ -67,12 +66,12 @@ export function isUserResponse(value: unknown): value is UserResponse {
     && typeof value.email === "string"
     && typeof value.phone === "string"
     && typeof value.fullName === "string"
-    && isNullableString(value.gender)
+    && (value.gender === null || value.gender === "MALE" || value.gender === "FEMALE" || value.gender === "OTHER")
     && isNullableString(value.address)
     && isNullableString(value.dateOfBirth)
     && Array.isArray(value.roles)
     && value.roles.every((role) => typeof role === "string")
-    && typeof value.status === "string"
+    && (value.status === "ACTIVE" || value.status === "LOCKED" || value.status === "DELETED")
     && typeof value.createdAt === "string";
 }
 
