@@ -23,7 +23,7 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
   });
 
   async function request<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT",
     path: string,
     body: unknown,
     requestOptions: ApiClientRequestOptions = {},
@@ -34,7 +34,7 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
     const headers = new AxiosHeaders(requestOptions.config?.headers);
     headers.set("Accept", JSON_CONTENT_TYPE);
     headers.delete("Authorization");
-    if (method === "POST") headers.set("Content-Type", JSON_CONTENT_TYPE);
+    if (method !== "GET") headers.set("Content-Type", JSON_CONTENT_TYPE);
     if (requestOptions.auth !== false) {
       const token = getAccessToken();
       if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -52,7 +52,7 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
       params: requestOptions.params,
       headers,
       signal: requestOptions.signal,
-      data: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+      data: method !== "GET" ? JSON.stringify(body ?? {}) : undefined,
       transformRequest: [],
       transformResponse: [],
       responseType: "text",
@@ -81,6 +81,7 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
   return {
     get: <T>(path: string, requestOptions?: ApiClientRequestOptions) => request<T>("GET", path, undefined, requestOptions),
     post: <T>(path: string, body?: unknown, requestOptions?: ApiClientRequestOptions) => request<T>("POST", path, body, requestOptions),
+    put: <T>(path: string, body?: unknown, requestOptions?: ApiClientRequestOptions) => request<T>("PUT", path, body, requestOptions),
   };
 }
 

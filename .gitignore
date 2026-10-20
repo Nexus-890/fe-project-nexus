@@ -43,5 +43,10 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /.next-catalog-*/
+/.next-profile-*/
+/profile-simulation.ndjson
+/profile-simulation.err
+!/postman/
+!/postman/**
 
 !.env.example

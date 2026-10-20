@@ -1,15 +1,9 @@
 import Link from "next/link";
 import type { CategoryNode } from "@/types/catalog/response/type";
 import { categoryHref } from "@/lib/catalog-url";
+import { HEADER_CATEGORY_SHORTCUTS } from "@/route";
 
 type HeaderNavItem = { label: string; href: string; active?: boolean };
-
-const shortcuts: HeaderNavItem[] = [
-  { label: "Nexus Live", href: "/#nexus-live", active: true },
-  { label: "Saved", href: "/#saved" },
-  { label: "Deals", href: "/#deals" },
-  { label: "Refurbished", href: "/#refurbished" },
-];
 
 interface HeaderCategoryNavProps {
   categories: CategoryNode[];
@@ -19,9 +13,9 @@ export default function HeaderCategoryNav({
   categories,
 }: HeaderCategoryNavProps) {
   const navigation: HeaderNavItem[] = [
-    ...shortcuts.slice(0, 2),
+    ...HEADER_CATEGORY_SHORTCUTS.slice(0, 2),
     ...categories.map((category) => ({ label: category.name, href: categoryHref(category.slug) })),
-    ...shortcuts.slice(2),
+    ...HEADER_CATEGORY_SHORTCUTS.slice(2),
   ];
 
   return (
