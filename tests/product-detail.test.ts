@@ -16,6 +16,10 @@ function clientFor(values: Record<string, unknown>) {
       calls.push({ method: "POST", path, body, options });
       return { ok: true, data: values[path] as T };
     },
+    put: async <T>(path: string, body?: unknown, options?: unknown): Promise<ApiResult<T>> => {
+      calls.push({ method: "PUT", path, body, options });
+      return { ok: true, data: values[path] as T };
+    },
   };
   return { calls, client };
 }
@@ -49,19 +53,56 @@ test("product detail keeps the UUID path and normalizes numeric SKU prices", asy
   }]);
 });
 
-test("adding a cart item sends exactly skuId and quantity to the draft endpoint", async () => {
+test("adding a cart item accepts the commerce response and normalizes numeric unit prices", async () => {
   const fixture = clientFor({
     "/api/v1/carts/me/items": {
-      id: "cart-1", status: "ACTIVE", items: [], subtotal: "0.00", currency: "VND", updatedAt: "2026-10-15T08:00:00Z",
+      id: "cart-1",
+      userId: "buyer-1",
+      status: "ACTIVE",
+      items: [{ id: "item-1", productId: "product-1", skuId: "sku-1", quantity: 2, unitPrice: 150000.5 }],
     },
   });
 
   const result = await createCartService({ client: fixture.client }).addCartItem({ skuId: "sku-1", quantity: 2 });
-  assert.equal(result.ok, true);
+  assert.deepEqual(result, {
+    ok: true,
+    data: {
+      id: "cart-1",
+      userId: "buyer-1",
+      status: "ACTIVE",
+      items: [{ id: "item-1", productId: "product-1", skuId: "sku-1", quantity: 2, unitPrice: "150000.50" }],
+    },
+  });
   assert.deepEqual(fixture.calls, [{
     method: "POST",
     path: "/api/v1/carts/me/items",
     body: { skuId: "sku-1", quantity: 2 },
     options: { auth: true, signal: undefined },
   }]);
+});
+
+test("commerce cart supports an empty cart and string-encoded prices", async () => {
+  for (const items of [[], [{ id: "item-1", productId: "product-1", skuId: "sku-1", quantity: 1, unitPrice: "0.00" }]]) {
+    const cart = { id: "cart-1", userId: "buyer-1", status: "ACTIVE", items };
+    const fixture = clientFor({ "/api/v1/carts/me/items": cart });
+    assert.deepEqual(
+      await createCartService({ client: fixture.client }).addCartItem({ skuId: "sku-1", quantity: 1 }),
+      { ok: true, data: cart },
+    );
+  }
+});
+
+test("commerce cart rejects malformed item quantities, prices, and missing owner ids", async () => {
+  const item = { id: "item-1", productId: "product-1", skuId: "sku-1", quantity: 1, unitPrice: 10 };
+  for (const cart of [
+    { id: "cart-1", status: "ACTIVE", items: [item] },
+    { id: "cart-1", userId: "buyer-1", status: "ACTIVE", items: [{ ...item, quantity: 0 }] },
+    { id: "cart-1", userId: "buyer-1", status: "ACTIVE", items: [{ ...item, unitPrice: -1 }] },
+    { id: "cart-1", userId: "buyer-1", status: "ACTIVE", items: [{ ...item, unitPrice: "invalid" }] },
+  ]) {
+    const fixture = clientFor({ "/api/v1/carts/me/items": cart });
+    const result = await createCartService({ client: fixture.client }).addCartItem({ skuId: "sku-1", quantity: 1 });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.kind, "invalid-response");
+  }
 });

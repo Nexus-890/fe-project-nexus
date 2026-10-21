@@ -12,9 +12,7 @@ export default function Header(props: HeaderProps) {
         categoriesLoading={props.categoriesLoading}
         categoriesError={props.categoriesError}
       />
-      <HeaderCategoryNav
-        categories={props.categories}
-      />
+      <HeaderCategoryNav />
     </header>
   );
 }

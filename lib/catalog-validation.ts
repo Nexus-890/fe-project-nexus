@@ -35,6 +35,7 @@ export function parseProductPage(value: unknown): Page<ProductSummary> | null {
         name: item.name as string,
         slug: item.slug as string,
         minPrice: item.minPrice === null ? null : normalizeMoney(item.minPrice)!,
+        imageUrl: typeof item.imageUrl === "string" && item.imageUrl.trim() ? item.imageUrl.trim() : null,
         categoryId: typeof item.categoryId === "string" ? item.categoryId : undefined,
         sellerId: typeof item.sellerId === "string" ? item.sellerId : undefined,
         status: typeof item.status === "string" ? item.status : undefined,

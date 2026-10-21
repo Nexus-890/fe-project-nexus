@@ -17,7 +17,6 @@ try {
       path.join(root, "providers/AuthProvider.tsx"),
       path.join(root, "hooks/auth/useAuth.ts"),
       path.join(root, "providers/AppProviders.tsx"),
-      path.join(root, "tests/browser/AuthProbe.tsx"),
     ],
     options: {
       target: ts.ScriptTarget.ES2022,

@@ -2,16 +2,17 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Auth client
 
-See [Auth client and in-memory session](docs/auth-client.md) for API contracts,
-file responsibilities, TanStack Query flows, the stub, and testing instructions.
+See [Auth client and persisted session](docs/auth-client.md) for API contracts,
+file responsibilities, TanStack Query flows, and testing instructions.
 
 ```bash
 npm run test:auth
-NEXT_PUBLIC_AUTH_STUB=true npm run dev
+npm run dev
 ```
 
-The access token is kept in memory only; a page reload does not restore the
-session in Sprint 1.
+The current access token is held in memory and saved as `nexus.accessToken` in
+localStorage. Reload restores it and fetches `/api/v1/users/me`; sign-out or a
+401 for the current session clears it. Passwords are not saved in localStorage.
 
 ## Development
 
@@ -68,13 +69,25 @@ authenticated or anonymous actions.
 The public catalog uses the existing anonymous Axios/TanStack adapters.
 The shop layout feature consumes `useAuth()`; browsing does not require authentication.
 
-Set `NEXT_PUBLIC_API_URL` in your local env to the common backend origin.
-`.env.example` leaves it empty for you to configure. `configs/api.ts` is the
-only module reading the API URL; `NEXT_PUBLIC_API_BASE_URL` is retained as a
-legacy fallback. There is no catalog-specific origin. Service modules append
-their endpoint paths to this configuration. For server-side category slug
-resolution, configure an absolute common API origin accessible to Next and the
-browser. Restart Next after changing env.
+For the real backend running at `http://localhost:8080`, copy `.env.example` to
+`.env.local`: leave `NEXT_PUBLIC_API_URL` empty, set
+`API_PROXY_TARGET=http://localhost:8080`.
+The browser calls `/api/v1/...` on Next, which proxies requests to the backend;
+this also works when the backend does not allow browser CORS. Server-side calls
+use the proxy target directly. Service modules keep relative endpoint paths.
+Restart Next after changing env.
+
+When a deployed backend supports browser CORS, `NEXT_PUBLIC_API_URL` can instead
+point to its common origin and `API_PROXY_TARGET` can be left empty.
+`NEXT_PUBLIC_API_BASE_URL` remains a legacy fallback. Do not append `/api/v1`
+to either origin, because service paths already include it.
+
+Sign in at `/sign-in` using the demo buyer account in
+`../be-project-nexus/infra/staging/.env.example`, then click the header name to
+open `/profile`. Login, GET profile, and Save Changes use the real backend.
+The PUT sends only supported edited fields; phone remains read-only. Keep the
+demo password in that local file rather than adding it to frontend public env
+or source code.
 
 Architecture:
 
@@ -148,30 +161,25 @@ with Next 16.3's `retry()`. Category and product loading/errors are rendered
 independently. The category and search pagers preserve other query parameters
 and browser history; Clear All returns the default listing state.
 
-### Catalog verification
+### Kiểm tra API thật
 
 ```bash
-npm run test:auth       # 34 auth + catalog model/transport checks
-npm run test:catalog    # 8 browser scenarios using an isolated test API
+npm run test:auth       # Unit/transport contract checks
+npm run test:profile    # Browser -> Next proxy -> Spring -> PostgreSQL
 npm run lint
 npx tsc --noEmit --incremental false
 npm run build
 ```
 
-The Playwright suite uses installed Google Chrome, ports 3911/3102 and a
-temporary test build directory. Screenshots appear under `test-results/`.
-Test servers start with the configuration in
-`playwright.config.ts`; do not point these tests at a real backend.
+`test:profile` yêu cầu BE và FE đang chạy tại `http://localhost:3000`, không tự
+khởi động server thay thế. Ngày 21/10/2026, 44 unit test và 5 browser test thật
+đều pass. Browser test kiểm tra chuyển hướng khi chưa đăng nhập, đọc/sửa/khôi
+phục profile, thêm sản phẩm vào giỏ thật, giữ phiên sau reload/xóa khi sign-out,
+và xóa token không hợp lệ khi backend trả 401.
+Chi tiết dữ liệu và cách chạy service thủ công nằm trong
+[hướng dẫn database và API thật](../be-project-nexus/infra/demo/README.md).
 
-Verified on 2026-10-10: build, lint, typecheck, 34 unit/integration checks and
-8 browser scenarios passed. Mobile checks cover 375x812, horizontal overflow,
-and 44x44 application controls. Real V3 seed acceptance and independent
-reviewer verification remain pending: the checked-out backend has category
-controllers but no products controller. The older baseline-failure note in
-`docs/auth-client.md` describes its earlier verification date.
-
-The provided MockAPI resources were checked with read-only requests (three
-root categories and 34 product rows). A temporary array adapter passed three
-browser scenarios before removal, as requested. The final service uses only
-the task's backend endpoints and paginated product response; it does not adapt
-MockAPI arrays. Set `NEXT_PUBLIC_API_URL` to a backend providing that contract.
+Ứng dụng đã bỏ các nhánh dữ liệu giả và cờ bật auth/product/cart mock.
+`npm run dev` luôn sử dụng backend được cấu hình trong `.env.local`.
+`test:catalog` là bộ kiểm thử fixture cũ dành riêng cho unit/browser regression;
+không dùng kết quả của nó làm bằng chứng kết nối backend.

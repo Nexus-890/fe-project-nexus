@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parsePage, findCategory } from "../lib/catalog-model";
-import { isCategoryTree, isProductPage } from "../lib/catalog-validation";
+import { isCategoryTree, isProductPage, parseProductPage } from "../lib/catalog-validation";
 import { categoryHref } from "../lib/catalog-url";
 import { createCatalogService } from "../service/catalog";
 import type { ApiClient } from "../types/api/type";
@@ -25,6 +25,7 @@ function fixtureClient(values: Record<string, unknown>): { client: ApiClient; ca
         return { ok: true, data: values[path] as T };
       },
       post: async () => ({ ok: false, error: { kind: "network", status: 0, title: "unused" } }),
+      put: async () => ({ ok: false, error: { kind: "network", status: 0, title: "unused" } }),
     },
   } as { client: ApiClient; calls: Array<{ path: string; options?: unknown }> };
 }
@@ -48,6 +49,20 @@ test("wire validation rejects malformed data before render", () => {
   assert.equal(isProductPage({ content: [], page: 0, size: 12, totalElements: 0 }), true);
   assert.equal(isProductPage({ content: [], page: 0, size: 0, totalElements: 0 }), false);
   assert.equal(isProductPage({ content: [{}], page: 0, size: 12, totalElements: 1 }), false);
+});
+
+test("product pages preserve backend thumbnails for cards and accept products without photos", () => {
+  const result = parseProductPage({
+    content: [
+      { id: "with-photo", name: "Watch", slug: "watch", minPrice: 4299000, imageUrl: "https://example.com/watch.jpg" },
+      { id: "without-photo", name: "Book", slug: "book", minPrice: null, imageUrl: null },
+    ],
+    page: 0, size: 12, totalElements: 2,
+  });
+  assert.ok(result);
+  assert.equal(result.content[0].imageUrl, "https://example.com/watch.jpg");
+  assert.equal(result.content[0].minPrice, "4299000.00");
+  assert.equal(result.content[1].imageUrl, null);
 });
 
 test("backend catalog service keeps endpoint and query parameters unchanged", async () => {

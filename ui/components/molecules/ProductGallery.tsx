@@ -13,9 +13,8 @@ interface ProductGalleryProps {
 /**
  * Product image gallery used by the detail page.
  *
- * Images are kept as a list from the API so replacing the mock fixture with
- * the real response does not require changing this component. The selected
- * image only lives in the client state; changing it never triggers a request.
+ * Images come from the product API. The selected image lives in client state;
+ * changing it never triggers a request.
  */
 export default function ProductGallery({ images, productName }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);

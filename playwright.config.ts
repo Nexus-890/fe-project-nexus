@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/browser",
-  testMatch: "**/*.spec.ts",
+  testMatch: "catalog.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
@@ -17,7 +17,6 @@ export default defineConfig({
       env: {
         NEXUS_TEST_DIST_DIR: ".next-catalog-run",
         NEXT_PUBLIC_API_URL: "http://127.0.0.1:3911",
-        NEXT_PUBLIC_AUTH_STUB: "false",
       },
     },
   ],

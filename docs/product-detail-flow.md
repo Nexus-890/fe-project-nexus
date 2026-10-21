@@ -1,7 +1,7 @@
 # Product detail flow
 
-The task's detail page uses the backend contract already present in the catalog
-service and keeps the unfinished commerce contract behind a small adapter.
+The detail page uses the real catalog and commerce endpoints through the shared
+API origin or Next gateway proxy.
 
 ```text
 ProductCard (id + slug)
@@ -19,45 +19,51 @@ authenticated click, the selected `skuId` and the current quantity are sent in
 one POST. The selected SKU is local React state, which is why changing it only
 changes the displayed price and does not trigger another GET.
 
-The Java backend serializes SKU `BigDecimal` values as numbers in a normal
-Jackson setup. `parseProductDetail` accepts either a number or a string once,
-then normalizes money to strings before the UI renders it. Cart money remains
-strings as required by `docs/api/commerce-service.yaml`.
+The Java backend serializes `BigDecimal` prices as JSON numbers. Both
+`parseProductDetail` and `parseCart` accept numeric or string prices and normalize
+them to strings before returning data to the UI.
 
-Commerce has database migrations but no cart controller/service or gateway
-route yet. Until that sprint lands, copy the following lines into `.env.local`
-to run the page with the nested fixture in `mocks/product-detail.ts`:
+The current commerce response is:
 
 ```text
-NEXT_PUBLIC_PRODUCT_DETAIL_MOCK=true
-NEXT_PUBLIC_CART_MOCK=true
-# Optional: use the existing in-memory auth flow to test an authenticated POST.
-NEXT_PUBLIC_AUTH_STUB=true
+CartResponse { id, userId, status, items[] }
+CartItemResponse { id, productId, skuId, quantity, unitPrice }
 ```
 
-Then open
-`http://localhost:3000/products/ipad-mini-2021-starlight-00000004-1111-4111-8111-111111111111`.
-This URL uses the fixture directly, so it does not need a seeded catalog
-database.
+The parser validates those fields and does not require additional product names,
+totals, currency, or timestamps that the backend does not return.
 
-Remove or set both values to `false` to call the real endpoints. The temporary
-cart URL is declared at the top of `service/cart.ts` and should be replaced
-when the commerce route lands. If you prefer a code-only switch, comment the
-`MOCK START` branch in `service/catalog.ts` and `service/cart.ts`; leave the
-real `GET`/`POST` immediately below it unchanged. The fixture is not imported
-by the injected-client tests, so those tests still verify the real request paths
-and payload shape.
+## Run against the real backend
 
-## BE hand-off checklist
+Start the backend services against the seeded databases, then run `npm run dev`
+in `fe-project-nexus`. See `be-project-nexus/infra/demo/README.md` for database
+setup and accounts. Product detail and cart always call the real backend.
 
-When the BE is ready, use the following two URLs:
+For a separately launched frontend, configure `.env.local` and restart Next:
 
-| UI flow | URL to point at | Change |
-| --- | --- | --- |
-| Product detail | `NEXT_PUBLIC_API_URL` + `/api/v1/products/{id}` | Set `NEXT_PUBLIC_API_URL` to the gateway origin. No service code change. |
-| Add to cart | `http://localhost:4010` + `/api/v1/carts/me/items` | Replace `TEMP_COMMERCE_API_URL` in `service/cart.ts` with the deployed commerce/gateway origin. |
+```text
+NEXT_PUBLIC_API_URL=
+API_PROXY_TARGET=http://localhost:8080
+```
 
-Then remove or set `NEXT_PUBLIC_PRODUCT_DETAIL_MOCK` and
-`NEXT_PUBLIC_CART_MOCK` to `false`. The payload remains
-`{ skuId, quantity }`, so the UI and cart service do not need to change when
-the real endpoint returns the documented `Cart` object.
+Both catalog and cart use `configs/api.ts`. With an empty public API URL, browser
+requests go through `/api/...` on the Next origin, which forwards them to the
+gateway. A gateway that supports browser CORS can instead be configured with
+`NEXT_PUBLIC_API_URL` and an empty `API_PROXY_TARGET`.
+
+Sign in, open the smartphone demo category, choose iPhone 15, select a variant,
+and click **Add to Cart**. A successful real POST returns HTTP 201 and displays
+"Added to cart." The access token is saved in localStorage under
+`nexus.accessToken` and restored after hydration, so a valid session survives a
+reload. Signing out or receiving a current-session 401 removes the saved token.
+
+The seeded product can also be opened directly:
+
+```text
+http://127.0.0.1:3000/products/demo-iphone-15-128gb?id=6d260021-0000-4000-8000-000000000201
+```
+
+Product cards include the real UUID in the `id` query parameter. Direct URLs can
+also include a UUID at the end of the slug. A link without either identifier
+shows a product-link error and does not generate data locally. Backend failures
+display the existing error/retry state.
