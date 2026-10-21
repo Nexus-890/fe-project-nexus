@@ -5,7 +5,6 @@ import type { CategoryNode, ProductDetail, ProductSummary } from "../types/catal
 import type { ProductFilters } from "../types/catalog/request/type";
 import type { ApiClient } from "../types/api/type";
 import { isCategoryTree, parseProductDetail, parseProductPage } from "../lib/catalog-validation";
-import { getMockProductDetail, USE_PRODUCT_DETAIL_MOCK } from "../mocks/product-detail";
 
 const CATEGORY_TREE_PATH = "/api/v1/categories/tree";
 const PRODUCTS_PATH = "/api/v1/products";
@@ -24,7 +23,6 @@ function validate<T>(result: ApiResult<unknown>, guard: (value: unknown) => valu
 
 export function createCatalogService(options: CatalogServiceOptions = {}) {
   const client = options.client ?? createApiClient({ baseUrl: API_BASE_URL });
-  const useProductMock = !options.client && USE_PRODUCT_DETAIL_MOCK;
 
   async function getCategoryTree(signal?: AbortSignal): Promise<ApiResult<CategoryNode[]>> {
     return validate(await client.get<unknown>(CATEGORY_TREE_PATH, { signal, auth: false }), isCategoryTree);
@@ -48,10 +46,6 @@ export function createCatalogService(options: CatalogServiceOptions = {}) {
     if (!productId.trim()) {
       return { ok: false, error: createInvalidResponseError("Product id is required") };
     }
-    // MOCK START: comment/remove this branch when the catalog API is available.
-    if (useProductMock) return { ok: true, data: getMockProductDetail(productId) };
-    // MOCK END: the real GET below already matches the BE contract.
-
     const result = await client.get<unknown>(PRODUCT_DETAIL_PATH(productId), {
       signal,
       auth: false,

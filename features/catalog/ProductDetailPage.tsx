@@ -9,7 +9,6 @@ import { useProduct } from "@/features/catalog/useProduct";
 import { unwrapApiResult } from "@/lib/api-result";
 import { formatVND } from "@/lib/format-price";
 import { createCartService } from "@/service/cart";
-import { mockProductDetail, USE_PRODUCT_DETAIL_MOCK } from "@/mocks/product-detail";
 import type { AddCartItemRequest } from "@/types/cart/request/type";
 import type { ProductSku } from "@/types/catalog/response/type";
 import SKUSelector from "@/ui/components/molecules/SKUSelector";
@@ -25,10 +24,7 @@ const UUID_SUFFIX = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 function resolveProductId(slug: string, productId?: string): string {
   if (productId?.trim()) return productId.trim();
-  return slug.match(UUID_SUFFIX)?.[0]
-    ?? (USE_PRODUCT_DETAIL_MOCK
-      ? (slug === mockProductDetail.slug ? mockProductDetail.id : slug)
-      : "");
+  return slug.match(UUID_SUFFIX)?.[0] ?? "";
 }
 
 function selectedSku(skus: ProductSku[], selectedId: string): ProductSku | undefined {

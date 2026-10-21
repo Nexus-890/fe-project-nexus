@@ -1,3 +1,9 @@
+"use client";
+
+/* eslint-disable @next/next/no-img-element */
+
+import { useState } from "react";
+import { ImageOff } from "lucide-react";
 import { formatVND } from "../../../lib/format-price";
 import Link from "next/link";
 
@@ -6,11 +12,23 @@ export type { ProductCardProps } from "@/types/ui/type";
 
 export function ProductCard({ product }: ProductCardProps) {
   const price = formatVND(product.minPrice);
+  const imageUrl = product.imageUrl?.trim();
+  const [failedImage, setFailedImage] = useState<string | null>(null);
 
   return (
     <article className="w-full min-w-0 overflow-hidden rounded-sm border border-border bg-card text-card-foreground" aria-label={product.name}>
       <Link href={`/products/${encodeURIComponent(product.slug)}?id=${encodeURIComponent(product.id)}`} className="block min-w-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring">
-      <div className="h-[232px] bg-muted" role="img" aria-label="Product image placeholder" />
+      <div className="flex h-[232px] items-center justify-center overflow-hidden bg-muted">
+        {imageUrl && failedImage !== imageUrl ? (
+          <img src={imageUrl} alt={product.name} loading="lazy" decoding="async"
+            onError={() => setFailedImage(imageUrl)} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground" role="img" aria-label={`${product.name}: image unavailable`}>
+            <ImageOff size={28} strokeWidth={1.5} aria-hidden="true" />
+            <span>Image unavailable</span>
+          </div>
+        )}
+      </div>
       <div className="flex flex-col gap-1.5 px-3 pt-3 pb-[14px]">
         <h3 className="m-0 text-sm font-normal leading-5 [overflow-wrap:anywhere]">
           {product.name}

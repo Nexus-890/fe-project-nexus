@@ -12,6 +12,7 @@ export interface ProductSummary {
   name: string;
   slug: string;
   minPrice: string | null;
+  imageUrl?: string | null;
   categoryId?: string;
   sellerId?: string;
   status?: string;

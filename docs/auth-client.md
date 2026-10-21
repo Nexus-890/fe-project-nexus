@@ -1,13 +1,14 @@
-# Auth client and in-memory session
+# Auth client and persisted session
 
 ## Scope and contracts
 
-This is the plumbing for the sign-up page, sign-in page, and signed-in header,
-not the implementation of those components. The access token is kept only in
-`AuthProvider` memory. It is not stored in localStorage, sessionStorage, Redux
-persist, or a TanStack cache persister. A full page refresh returns the app to
-the anonymous state; the refresh-token flow and server-side token revocation
-are outside the scope of this issue.
+This is the plumbing for the sign-up page, sign-in page, and signed-in header.
+`AuthProvider` holds the current access token in memory and saves it to
+localStorage as `nexus.accessToken`. After hydration, it restores a saved token
+and fetches `GET /api/v1/users/me` to restore the profile. Sign-out or a 401 for
+the current session removes the saved token and private query data. Passwords
+and profile records are not persisted in localStorage. Refresh tokens and
+server-side token revocation remain outside this scope.
 
 Sprint 1 auth request/success contracts are temporary handwritten types based on the issue and API
 catalogue. This is an exception to the OpenAPI type-generation rule in
@@ -56,8 +57,6 @@ Domain and malformed-body errors can provide form-level `detail` without an
 Core error fields are `type`, `title`, `status`, `detail`, and `instance`, with
 optional `traceId` when backend tracing is available. The actual HTTP response
 status determines the error status, even if the body contains a different value.
-The stub emits the same validation array, message from `FIELD_REQUIRED`, and
-request-path `instance`; its trace identifier is fixture-only, not a real span.
 Success payloads remain draft auth contracts; this change does not introduce
 the generic `APIResponse<T>` success wrapper without implemented auth endpoints.
 
@@ -78,17 +77,16 @@ Sources:
 | `hooks/useApiQuery.ts` | Source-shaped custom GET hook with request/options, four generics and `select` |
 | `service/auth.ts` | `register`, `login`, and `me`; validates responses at runtime |
 | `hooks/auth/useMeQuery.ts` | Profile query keyed by session generation; does not fetch automatically without a token |
-| `providers/AuthProvider.tsx` | Owns the token and login/register mutations; clears the session and cache on logout |
+| `providers/AuthProvider.tsx` | Owns the active token, restores saved sessions, and clears token/cache on sign-out or a current-session 401 |
+| `lib/auth-token-storage.ts` | Reads, saves, and removes only `nexus.accessToken`; handles unavailable browser storage |
 | `hooks/auth/useAuth.ts` | Exposes auth context to components and reports a missing provider |
 | `providers/AppProviders.tsx` | Creates a stable QueryClient with source defaults and composes both providers |
 | `app/layout.tsx` | Mounts the provider without adding fetch/state logic to the route |
-| `tests/fixtures/auth-stub.ts` | In-memory fake backend for building UI before the real API is available |
+| `tests/fixtures/auth-stub.ts` | Isolated unit-test transport; never imported by application runtime |
 | `tests/auth-api.test.ts` | Transport, endpoint, fixture, and typed-error regression tests |
 | `tests/auth-query.test.ts` | Query cache, enable/disable, cancellation, and error-adapter tests |
-| `tests/browser/AuthProbe.tsx` | React consumer for browser session testing, not a production auth page |
-| `tests/browser/auth-acceptance.mjs` | Playwright suite covering 14 session, storage, and race-condition checks |
+| `tests/auth-token-storage.test.ts` | Storage roundtrip, scoped removal, empty values, denied storage, and SSR behavior |
 | `scripts/test-auth.mjs` | Typechecks auth and runs Node tests without adding a test dependency |
-| `scripts/auth-smoke.mjs` | Creates/removes a temporary smoke route to reproduce acceptance tests |
 
 ## Execution flow
 
@@ -99,13 +97,15 @@ GET: useMeQuery → useApiQuery → useQuery → service/auth.me → apiClient.g
      → typed result → runtime profile validation → user in query cache
 
 Login: useAuth.signIn → useMutation → authApi.login
-       → Provider updates the token in memory → GET /me through QueryClient
+       → Provider updates memory and localStorage → GET /me through QueryClient
        → user in query cache → useAuth.user
+
+Reload: hydrate → read nexus.accessToken → GET /me → restore shared profile
 
 Register: useAuth.register → useMutation → authApi.register
           → ApiResult<UserResponse> returned to the caller; session unchanged
 
-Logout: invalidate generation → abort login → clear token/context
+Logout: invalidate generation → abort login → clear memory/localStorage/context
         → cancel/remove private queries → reset mutation observers
 ```
 
@@ -206,7 +206,7 @@ and parameter serialization. URL, origin, method, transport, authentication,
 cancellation and response parsing remain owned by the typed client. Caller
 headers cannot replace the provider's current token or add Bearer to the public
 auth endpoints. Axios uses its supported custom-fetch adapter for the existing
-in-memory fixture, not a second HTTP implementation.
+isolated transport tests, not a second application HTTP implementation.
 
 The reference's Next.js-internal `ApiError` import is replaced by this project's
 RFC 7807 error type. Its unfinished demo components/routes, missing imports,
@@ -218,12 +218,12 @@ inputs, and route successful registration to `/sign-in` or sign-in to `/`.
 Endpoint paths remain colocated in `service/auth.ts`; this does not add refresh
 tokens or a generic mutation wrapper.
 
-## Configuration and stub
+## Configuration
 
 For a backend without browser CORS, leave `NEXT_PUBLIC_API_URL` empty and set
 `API_PROXY_TARGET=http://localhost:8080` in `.env.local`. Next proxies browser
 `/api/v1/...` requests to this target; server-side catalog calls use the target
-directly. Set `NEXT_PUBLIC_AUTH_STUB=false` to use real login and profile data.
+directly. Login and profile always use the real configured backend.
 Restart Next after changing configuration.
 
 Alternatively, `NEXT_PUBLIC_API_URL` is the API **origin** for direct requests
@@ -231,17 +231,9 @@ when the backend allows CORS, including Authorization and JSON preflight.
 Endpoint paths already contain `/api/v1`; do not add that prefix twice.
 The previous `NEXT_PUBLIC_API_BASE_URL` remains a fallback.
 
-To build UI before the real API is available:
-
-```bash
-NEXT_PUBLIC_AUTH_STUB=true npm run dev
-```
-
-The stub has no default account: register first, then log in with the same form
-data. Fake tokens are generated at runtime. Stub data is kept in memory and
-removed on reload. The stub cannot be enabled in production; the provider
-reports an error instead of simulating a successful login. The provider's
-transport/baseUrl props are initialization settings; remount it to change them.
+There is no application mock switch. The provider's transport/baseUrl props
+are initialization settings; remount it to change them. Injected transports
+are used only by isolated tests.
 
 ## Testing
 
@@ -256,27 +248,16 @@ npm run build
 UI/Storybook code. A passing targeted suite does not establish that the whole
 repository builds successfully.
 
-Reproduce browser smoke checks with a temporary route:
+Run the real-backend browser suite with `npm run test:profile`; see
+[profile verification](profile-verification.md) for its setup and coverage.
 
-```bash
-node scripts/auth-smoke.mjs prepare
-npm run dev
-# Open /auth-smoke and inspect the controls and state/evidence JSON.
-# After testing:
-node scripts/auth-smoke.mjs cleanup
-```
+### Recorded verification (2026-10-21)
 
-To run the automated suite with an available Playwright runner, import
-`runAuthAcceptance` from `tests/browser/auth-acceptance.mjs`, then call
-`await runAuthAcceptance(page, "http://localhost:3101")` with a Playwright `Page`.
-Start the server on the matching port: `npm run dev -- --port 3101`.
-Playwright is not added to application dependencies solely for smoke testing.
-
-Acceptance checks cover unchanged web storage, the correct Bearer token on
-/me, no Bearer on public endpoints, typed 400 errors, cleared user/token/cache
-after signOut, no session resurrection after logout during pending login/me
-requests, no old profile cache when switching users, session clearing on 401,
-and the anonymous state after a full page refresh.
+- `npm run test:auth`: 44 tests passed, including the storage and SSR checks.
+- `npm run test:profile`: 5 real-backend scenarios passed in 13.6 seconds at
+  `http://localhost:3000`: anonymous redirect, profile GET/PUT with restoration
+  of edited data, catalog detail/cart persistence, reload/sign-out persistence,
+  and removal of an invalid saved token after a real 401.
 
 ### Recorded verification (2026-10-07)
 
@@ -286,11 +267,6 @@ and the anonymous state after a full page refresh.
   Also covers the common-web validation array, field lookup normalization, malformed
   entries, HTTP-status precedence, legacy compatibility, and the stub wire contract.
 - ESLint on all changed auth files: passed.
-- Playwright: 14 checks passed with no browser console/page errors, including
-  logout during pending requests, account switching, 401, and recovery after 503.
 - Whole-repository lint/typecheck/build still fail: stories have quote errors
   and UI/Storybook dependencies are missing in the baseline. Those unrelated
   issues were not changed as part of this issue.
-
-Keeping the token in memory avoids storing it in web storage; it does not mean
-page runtime JavaScript is inaccessible during an XSS attack.

@@ -29,7 +29,6 @@ export interface AuthProviderProps {
   children: ReactNode;
   /** API origin only; auth API paths already include /api/v1. */
   baseUrl?: string;
-  stub?: boolean;
   /** Inject a transport for integration tests. */
   fetch?: typeof globalThis.fetch;
 }

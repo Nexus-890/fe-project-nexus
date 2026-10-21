@@ -44,8 +44,11 @@ next-env.d.ts
 /playwright-report/
 /.next-catalog-*/
 /.next-profile-*/
+/.next-cart-*/
 /profile-simulation.ndjson
 /profile-simulation.err
+/cart-simulation.ndjson
+/cart-simulation.err
 !/postman/
 !/postman/**
 

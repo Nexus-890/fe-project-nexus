@@ -19,9 +19,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider
-        stub={process.env.NEXT_PUBLIC_AUTH_STUB === "true"}
-      >
+      <AuthProvider>
         {children}
       </AuthProvider>
     </QueryClientProvider>

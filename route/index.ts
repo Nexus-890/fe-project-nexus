@@ -17,12 +17,19 @@ export const HEADER_UTILITY_NAVIGATION = [
   { label: "Help & Contact", href: "/#help", visibility: "lg:inline-flex" },
 ] as const;
 
-export const HEADER_CATEGORY_SHORTCUTS = [
+export const HEADER_CATEGORY_SHORTCUTS: ReadonlyArray<{ label: string; href: string; active?: boolean }> = [
   { label: "Nexus Live", href: "/#nexus-live", active: true },
   { label: "Saved", href: "/#saved" },
+  { label: "Electronics", href: "/search" },
+  { label: "Cameras", href: "/categories/cameras" },
+  { label: "Watches", href: "/categories/watches" },
+  { label: "Fashion", href: "/categories/fashion" },
+  { label: "Sneakers", href: "/search?category=fashion" },
+  { label: "Collectibles", href: "/categories/collectibles" },
+  { label: "Home & Garden", href: "/categories/home" },
   { label: "Deals", href: "/#deals" },
   { label: "Refurbished", href: "/#refurbished" },
-] as const;
+];
 
 export interface AccountNavigationItem {
   id: string;

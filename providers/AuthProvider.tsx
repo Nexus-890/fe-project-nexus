@@ -10,6 +10,7 @@ import {
 import { useMutation, useQueryClient, type Query } from "@tanstack/react-query";
 import { createApiClient } from "../lib/api-client";
 import { canceledSignIn, isApiError, unwrapApiResult } from "../lib/api-result";
+import { readAccessToken, removeAccessToken, storeAccessToken } from "../lib/auth-token-storage";
 import type { ApiError, ApiResult } from "../types/common/response/type";
 import type { LoginRequest, RegisterRequest } from "../types/auth/request/type";
 import type { UserResponse } from "../types/auth/response/type";
@@ -17,7 +18,6 @@ import { createAuthApi } from "../service/auth";
 import { createAccountApi } from "../service/account";
 import type { UpdateProfileRequest } from "../types/account/type";
 import { queryKeys } from "../configs/query-keys";
-import { createAuthStub } from "../tests/fixtures/auth-stub";
 import { meQueryOptions, useMeQuery } from "../hooks/auth/useMeQuery";
 
 import type { AuthContextValue, AuthProviderProps } from "../types/auth/type";
@@ -30,7 +30,7 @@ export const AuthContext = createContext<AuthContextValue | undefined>(undefined
 const privateQuery = (query: Query) =>
   query.meta?.requiresAuth === true || query.queryKey[0] === "auth";
 
-export function AuthProvider({ children, baseUrl, stub = false, fetch: transport }: AuthProviderProps) {
+export function AuthProvider({ children, baseUrl, fetch: transport }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const [token] = useState(() => {
     let value: string | null = null;
@@ -42,18 +42,13 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
   const generation = useRef(0);
   const pending = useRef<AbortController | null>(null);
   const profileUpdates = useRef(new Set<AbortController>());
+  const [restoringSession, setRestoringSession] = useState(true);
   const [session, setSession] = useState({ accessToken: null as string | null, id: 0, signingIn: false });
-  const [api] = useState(() => {
-    if (stub && process.env.NODE_ENV === "production") {
-      throw new Error("The auth stub is disabled in production.");
-    }
-    if (stub && transport) throw new Error("Choose either the auth stub or an injected fetch.");
-    return createAuthApi(createApiClient({
-      baseUrl,
-      getAccessToken: token.get,
-      fetch: stub ? createAuthStub() : transport,
-    }));
-  });
+  const [api] = useState(() => createAuthApi(createApiClient({
+    baseUrl,
+    getAccessToken: token.get,
+    fetch: transport,
+  })));
   const profile = useMeQuery(api, session.id, Boolean(session.accessToken));
   const { refetch: refetchProfile } = profile;
 
@@ -65,6 +60,8 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
     profileUpdates.current.forEach((controller) => controller.abort());
     profileUpdates.current.clear();
     token.set(null);
+    removeAccessToken();
+    setRestoringSession(false);
     setSession({ accessToken: null, id: generation.current, signingIn: false });
     void queryClient.cancelQueries({ predicate: privateQuery });
     queryClient.removeQueries({ predicate: privateQuery });
@@ -83,6 +80,7 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
       const response = unwrapApiResult(await api.login(payload, controller.signal));
       if (!isCurrent()) throw canceledSignIn();
       token.set(response.accessToken);
+      storeAccessToken(response.accessToken);
       setSession({ accessToken: response.accessToken, id, signingIn: true });
       const user = await queryClient.fetchQuery(meQueryOptions(api, id));
       if (!isCurrent()) throw canceledSignIn();
@@ -147,19 +145,40 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
   }, [registerAsync, resetRegistration]);
 
   useEffect(() => {
-    if (profile.error?.kind === "http" && profile.error.status === 401 && session.accessToken) {
+    if (profile.error?.kind === "http" && profile.error.status === 401
+      && session.accessToken && session.id === generation.current && token.get() === session.accessToken) {
       signOut();
     }
-  }, [profile.error, session.accessToken, signOut]);
+  }, [profile.error, session.accessToken, session.id, signOut, token]);
 
-  useEffect(() => () => {
-    generation.current += 1;
-    pending.current?.abort();
-    profileUpdates.current.forEach((controller) => controller.abort());
-    profileUpdates.current.clear();
-    token.set(null);
-    void queryClient.cancelQueries({ predicate: privateQuery });
-    queryClient.removeQueries({ predicate: privateQuery });
+  useEffect(() => {
+    // Read after hydration so SSR and the first client render agree. Protected
+    // pages stay in "authenticating" until this check avoids a premature redirect.
+    let active = true;
+    const activeProfileUpdates = profileUpdates.current;
+    queueMicrotask(() => {
+      if (!active) return;
+      const savedToken = readAccessToken();
+      if (savedToken) {
+        generation.current += 1;
+        token.set(savedToken);
+        setSession({ accessToken: savedToken, id: generation.current, signingIn: false });
+      }
+      setRestoringSession(false);
+    });
+
+    return () => {
+      active = false;
+      generation.current += 1;
+      pending.current?.abort();
+      activeProfileUpdates.forEach((controller) => controller.abort());
+      activeProfileUpdates.clear();
+      token.set(null);
+      void queryClient.cancelQueries({ predicate: privateQuery });
+      queryClient.removeQueries({ predicate: privateQuery });
+      // Unmount/reload (including Strict Mode's effect replay) keeps persistence.
+      // Explicit sign-out and a current-session 401 remove the saved token.
+    };
   }, [queryClient, token]);
 
   const user = session.accessToken ? profile.data ?? null : null;
@@ -198,7 +217,7 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
       profileUpdates.current.delete(controller);
     }
   }, [api.client, queryClient, signOut, token]);
-  const status = session.signingIn
+  const status = restoringSession || session.signingIn
     ? "authenticating"
     : user ? "authenticated"
     : session.accessToken ? profile.isError ? "error" : "authenticating"

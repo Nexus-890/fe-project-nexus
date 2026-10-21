@@ -1,5 +1,0 @@
-simulation: profile-browser
-routing: path
-mocks:
-  - routeKey: api
-    path: ../mocks/profile-gateway/config.yaml

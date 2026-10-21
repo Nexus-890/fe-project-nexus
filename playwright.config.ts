@@ -17,7 +17,6 @@ export default defineConfig({
       env: {
         NEXUS_TEST_DIST_DIR: ".next-catalog-run",
         NEXT_PUBLIC_API_URL: "http://127.0.0.1:3911",
-        NEXT_PUBLIC_AUTH_STUB: "false",
       },
     },
   ],

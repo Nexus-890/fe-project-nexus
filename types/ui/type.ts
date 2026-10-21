@@ -1,14 +1,6 @@
 import type { CategoryNode, ProductSummary } from "../catalog/response/type";
 import type { UserResponse } from "../auth/response/type";
 
-export interface CategoryNavigationProps {
-  categories: CategoryNode[];
-  loading: boolean;
-  error: boolean;
-  retrying: boolean;
-  onRetry: () => void;
-}
-
 export interface HeaderProps {
   user: UserResponse | null;
   authenticating: boolean;
@@ -20,7 +12,7 @@ export interface HeaderProps {
 }
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice">;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "imageUrl">;
 };
 
 export type ProductGridProps = {

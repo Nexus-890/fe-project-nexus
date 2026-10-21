@@ -69,8 +69,10 @@ Backend validation errors use Problem Details with
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
 Missing or expired sessions redirect to `/sign-in`, including a 401 during save.
-The existing auth implementation holds tokens in memory, so a full browser
-refresh also returns to sign-in; persistent sessions are outside this change.
+The current token is held in memory and saved to localStorage as
+`nexus.accessToken`. A reload restores it and fetches `/users/me` before showing
+the profile. Sign-out or a current-session 401 clears the saved token and private
+cache. Passwords are not saved in localStorage.
 
 ## Backend dependencies
 
@@ -92,27 +94,28 @@ These constants do not trigger requests. Their methods and DTOs still need
 backend agreement. The UI does not show fabricated scores, trust levels,
 transaction statistics, or penalties.
 
-## Acceptance evidence for the merge request
+## Verification with the real backend
 
 | Requirement | Evidence / status |
 | --- | --- |
-| Profile populated from GET on entry | Browser test verifies authenticated GET and existing values in the form. |
-| Save updates values and header name | Browser test checks partial PUT body, returned form values, and header name. |
-| Field-level 400 errors | Error mapping associates an injected phone 400 with the phone input. This validates FE handling only; the current BE cannot produce that phone validation flow. |
+| Profile populated from GET on entry | Live browser GET returned 200 and populated the existing backend values. |
+| Save updates values and header name | Live browser PUT returned 200 and updated the shared profile state; temporary edits were restored. |
+| Field-level 400 errors | Client validation and Problem Details mapping remain supported. The backend has no phone update field, so phone validation is not a live acceptance scenario. |
 | Edit phone | Deferred by the agreed FE-only scope; phone is read-only and excluded from PUT. |
-| No session | Browser tests verify sign-in redirect and save-time 401 handling. |
-| Loading, failure, and cancellation | Skeleton, load retry, preserved edits after save failure, and Cancel are covered. |
-| 375×812 layout | Browser assertions check document width and visible text clipping; mobile screenshot attached below. |
+| No session | Check `/profile` while signed out and confirm the sign-in redirect. |
+| Reload and sign-out | A live browser check restored the profile after reload and confirmed sign-out removed `nexus.accessToken`. |
+| Invalid stored token | The live backend returned 401; the browser removed the saved token and returned to sign-in. |
+| Loading, failure, and cancellation | The UI supports Skeleton, retry, preserved edits after a failed save, and Cancel; verify these against actual responses when reproducing the flow. |
+| 375×812 layout | The recorded live browser profile check had no horizontal overflow. Recheck after layout changes. |
 
-Validation reported for this implementation: `npm run lint` and `npm run build`
-passed; `npm run test:auth` passed 38 tests after the develop integration. `npm run test:profile` runs the real
-Next.js frontend against a local stateful Postman HTTP simulation based on the
-repository's backend DTOs. See [profile verification](profile-verification.md)
-for the browser results and the subsequent successful login/GET/PUT check
-against the running backend using the staging demo buyer account.
+Start the backend and frontend manually, then run `npm run test:profile`
+against `http://localhost:3000`. On 21 October 2026, all 5 browser scenarios
+passed, and `npm run test:auth` passed 44 unit tests. The local business services
+use the seeded
+physical databases `nexus_demo_user_db`, `nexus_demo_catalog_db`, and
+`nexus_demo_commerce_db` through database-name settings in the existing backend
+local environment file. Profile reads and writes use `nexus_demo_user_db`.
 
-The screenshots use simulation data to demonstrate the layout:
-
-![Profile at a 375×812 viewport, full page](screenshots/profile-mobile-375x812.png)
-
-![Profile at a 1440px desktop viewport, full page](screenshots/profile-desktop-1440.png)
+See [profile verification](profile-verification.md) for startup ports, exact
+manual steps, and the recorded real login/GET/PUT evidence. The browser command
+does not need a separate backend fixture or services running on hidden ports.

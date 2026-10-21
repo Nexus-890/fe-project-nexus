@@ -1,53 +1,116 @@
-# Profile verification
+# Profile verification with the real backend
 
-Validated on 2026-10-20 with the real Next.js frontend and a local stateful
-Postman simulation based on this repository's backend DTOs. Run
-`npm run test:profile` to reproduce. All 9 browser tests passed.
+The profile page uses the running user-service through the API gateway and the
+Next.js proxy. Start these applications manually. The browser verification
+command connects to the running application; it must not start a replacement
+backend or silently launch services on other ports.
 
-- Signed-out access redirects to `/sign-in`.
-- Login followed by clicking the header name opens `/profile`.
-- An authenticated GET on entry populates all existing profile values.
-- PUT sends only changed fields supported by `UpdateProfileRequest`; phone
-  is read-only and omitted. Successful responses update the header and form.
-- Cancel restores saved values without submitting.
-- Blank names and future birth dates are rejected before making a PUT.
-- An injected phone 400 message is associated with the phone input.
-- A delayed GET displays the shadcn Skeleton loading state.
-- GET 503 can be retried; PUT 503 preserves edits and can be retried.
-- PUT 401 returns to sign-in.
-- At 375×812 the document has no horizontal overflow or clipped layout text.
+## Local configuration
 
-The phone error is deliberately injected to exercise FE validation mapping;
-the current backend does not support editing phone. Avatar upload, password,
-reputation, and penalty endpoints remain pending backend availability. This
-simulation run does not establish live backend connectivity.
+The current development environment selects these existing PostgreSQL databases
+in `be-project-nexus/infra/local-dev/.env`:
 
-## Real backend verification
+```properties
+USER_DB_NAME=nexus_demo_user_db
+CATALOG_DB_NAME=nexus_demo_catalog_db
+COMMERCE_DB_NAME=nexus_demo_commerce_db
+```
 
-On 2026-10-20, the running backend gateway at `http://localhost:8080` was tested
-with the demo buyer credentials read from
-`be-project-nexus/infra/staging/.env.example`. That directory supplies demo
-credentials; no remote staging host is configured there.
+They contain real persisted records loaded by Flyway and the SQL files in
+`be-project-nexus/infra/demo/`. The original `user_db`, `catalog_db`, and
+`commerce_db` remain separate. Profile writes go to `nexus_demo_user_db`.
+Do not change Flyway history to make the original catalog database start.
 
-The real browser flow at `http://localhost:3000` passed:
+The frontend's `fe-project-nexus/.env.local` uses:
 
-- POST `/api/v1/auth/login`: 200, followed by authenticated GET profile: 200.
-- Clicking the header name opened `/profile`; form name, email, and phone
-  matched the backend response.
-- Save Changes sent PUT `/api/v1/users/me`: 200. It resubmitted the existing
-  name, and the entire returned profile matched the original data.
-- Browser calls used the Next origin through `API_PROXY_TARGET`; direct
-  backend preflight currently returns 401 without CORS headers.
-- The loaded profile had no horizontal overflow at 375×812.
+```properties
+NEXT_PUBLIC_API_URL=
+API_PROXY_TARGET=http://localhost:8080
+```
 
-The local `.env.local` uses an empty public API URL,
-`API_PROXY_TARGET=http://localhost:8080`, and `NEXT_PUBLIC_AUTH_STUB=false`.
-No demo password or access token was added to frontend env or source.
+Browser requests stay on the Next.js origin and are forwarded to the gateway.
+No frontend password or bearer token belongs in these environment files.
 
-Mobile (375×812 viewport, full page):
+## Manual startup
 
-![Profile on mobile](screenshots/profile-mobile-375x812.png)
+1. Start the existing local Docker infrastructure and confirm PostgreSQL, Kafka,
+   and Redis are available. Keep the database credentials and JWT key paths in
+   the existing backend local environment file.
+2. If shared libraries changed, open `be-project-nexus/lib` and run
+   `.\mvnw.cmd '-Dmaven.test.skip=true' install` once.
+3. Open one terminal per backend service, with its working directory set to
+   `be-project-nexus/<service>`. Run
+   `.\mvnw.cmd '-Dmaven.test.skip=true' spring-boot:run`, or run the service's
+   application class from an IDE with that same working directory. Start Config
+   Server and Discovery first, then user-service, catalog-service,
+   commerce-service, and the gateway.
+4. Confirm the expected ports below. If a port is occupied, inspect the existing
+   process and use or stop it explicitly before starting another instance.
+5. In `fe-project-nexus`, run `npm run dev` in a visible terminal. Open
+   `http://localhost:3000` and keep that origin for the session.
 
-Desktop (1440px viewport, full page):
+| Application | Port |
+| --- | --- |
+| Config Server | 8888 |
+| Discovery | 8761 |
+| user-service | 8081 |
+| catalog-service | 8082 |
+| commerce-service | 8083 |
+| API gateway | 8080 |
+| Next.js | 3000 |
 
-![Profile on desktop](screenshots/profile-desktop-1440.png)
+The service working directory matters: each business service imports
+`../infra/local-dev/.env` and obtains its database-name setting there. Restart
+Config Server after changing its YAML resources, and restart the clients after
+changing their local environment.
+
+## Check the profile flow
+
+1. Open `/profile` while signed out and confirm navigation to `/sign-in`.
+2. Sign in with the seeded `buyer@nexus.local` account using the local demo
+   password documented with the seed. In browser Network, verify
+   `POST /api/v1/auth/login` returns 200 and the authenticated
+   `GET /api/v1/users/me` returns 200.
+3. Click the header account name to open `/profile`. Compare the displayed name,
+   email, phone, gender, address, and birth date with the GET response. Phone is
+   read-only because `UpdateProfileRequest` does not accept phone changes.
+4. Record the current profile values. Edit a supported field and save. Verify
+   `PUT /api/v1/users/me` returns 200, the form reflects the returned record,
+   and a name change also updates the header. Restore the original values and
+   save again after the check.
+5. Edit a field and cancel. Confirm no PUT is sent and the saved values return.
+6. Check a blank full name and a future birth date. Client validation should
+   prevent saving. Check the page at 375×812 for horizontal overflow.
+
+The current token is held in memory and saved as `nexus.accessToken` in
+localStorage. Reload fetches `/api/v1/users/me` with the saved token and restores
+the profile. Sign-out or a current-session 401 clears the token and private
+cache. Passwords are not saved in localStorage. Avatar upload, password changes,
+reputation, and penalties still await their backend contracts.
+
+With the application and real backend already running, execute
+`npm run test:profile` from `fe-project-nexus` for the current browser suite.
+Its results apply to that run and its configured application origin.
+
+## Recorded real API evidence
+
+The 21 October 2026 live browser check received login 200, profile GET 200, and
+profile PUT 200 through the gateway. The profile form populated from the backend
+and reflected the successful response; temporary profile edits were restored.
+All 5 real browser scenarios passed in 13.6 seconds at `http://localhost:3000`:
+
+1. Anonymous profile access redirects to sign-in.
+2. Login and profile GET/PUT persist real data; temporary edits are restored.
+3. Catalog detail and add-to-cart use persisted PostgreSQL data.
+4. Reload restores login from localStorage; sign-out removes the saved token.
+5. An invalid saved token receives a real 401 and is removed.
+
+`npm run test:auth` passed 45 unit tests after the thumbnail update, including storage and SSR checks.
+Direct HTTP verification also covered these endpoints as part of all 19 API
+rows marked TRUE in the workbook. These observations do not establish browser
+integration for APIs without a frontend screen.
+
+See [the API integration audit](api-integration-audit.md) for endpoint coverage
+and limitations. Detailed generated HTTP reports remain local and are excluded
+from Git. No previous browser-fixture result or
+historical screenshot is counted as evidence for this real backend flow.
