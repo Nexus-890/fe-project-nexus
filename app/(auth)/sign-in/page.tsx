@@ -1,5 +1,7 @@
-import SignInPage from "@/features/auth/sign-in/SignInPage";
+import SignInPage from "@/features/SignInPage";
 
-export default function Page() {
+function Page() {
   return <SignInPage />;
 }
+
+export default Page;

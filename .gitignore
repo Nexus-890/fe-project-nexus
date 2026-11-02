@@ -45,3 +45,8 @@ next-env.d.ts
 /.next-catalog-*/
 
 !.env.example
+
+/.next-typecheck/
+/.next-verify-build/
+.tsconfig-typecheck.json
+.tsconfig-build.json
