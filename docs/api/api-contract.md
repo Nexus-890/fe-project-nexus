@@ -79,12 +79,12 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | GET `/api/v1/products/{id}` | Product detail, public |
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
 | GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
-| PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; provisional #111 draft, BE pending |
-| DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; provisional #111 draft, BE pending |
+| PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
+| DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
 
-The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. Cart update/remove still lack BE implementations here. Their service calls are provisional integration points authorized for this task; confirm final paths/responses/permissions when BE lands. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
+The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. The #129 publication branch merged remote `e2411ea4`, which includes BE #111 update/remove source. Its DTO package imports, unresolved symbols/repository calls and authentication-principal binding need correction before a compatible build/runtime can be verified. PUT currently returns bare CartResponse instead of the required envelope; keep FE parsing strict. Confirm response/permissions and update delivered OpenAPI before regenerating wire types or claiming live integration. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
 
 ## Type generation and runtime checks
 

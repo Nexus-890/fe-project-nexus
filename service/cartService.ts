@@ -16,7 +16,7 @@ import type { Cart } from "../types/cartResponseType";
 export const CART_API_BASE_URL = "";
 export const GET_CART_PATH = "/api/v1/carts/me";
 export const ADD_CART_ITEM_PATH = "/api/v1/carts/me/items";
-/** Pending #111 draft: PUT quantity / DELETE line, not delivered by this BE revision. */
+/** #111 source routes; delivered OpenAPI/envelope/auth integration remains pending. */
 export const CART_ITEM_PATH = "/api/v1/carts/me/items/:lineId";
 
 const cartRequestOptions = (
@@ -99,7 +99,7 @@ export const addCartItem = async (
   return parseCart(data);
 };
 
-/** Pending #111: absolute quantity, with the full Cart envelope on success. */
+/** Expected contract: absolute quantity with a Cart envelope; #111 currently returns bare Cart. */
 export const updateCartItem = async (
   input: UpdateCartItemRequest,
   options: ServiceRequestOptions = {},
@@ -117,7 +117,7 @@ export const updateCartItem = async (
   return parseCart(data);
 };
 
-/** Pending #111: DELETE returns bodyless 204; callers update/refetch their cart. */
+/** #111 DELETE expects bodyless 204; callers update/refetch their cart. */
 export const removeCartItem = async (
   itemId: string,
   options: ServiceRequestOptions = {},

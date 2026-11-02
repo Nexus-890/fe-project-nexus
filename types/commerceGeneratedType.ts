@@ -104,6 +104,26 @@ export interface paths {
         patch: operations["changeOrderStatus"];
         trace?: never;
     };
+    "/api/v1/orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel an order
+         * @description Requires ORDER.CANCEL. The buyer who owns the order, ADMIN or SUPPORT_STAFF may cancel it. A PENDING order cancels its whole unpaid order group in one transaction: the group and every still-PENDING order become CANCELED, each with a history row, and the outbox gets one OrderGroupCancelled and one OrderCancelled per order. The items of the other orders go back to the buyer's ACTIVE cart, added to the same SKU if it is already there, so the buyer can place them again as a new group; the items of the cancelled order are not returned. A PAID order is cancelled on its own: its OrderCancelled carries the amount paid, and the other orders and the group stay PAID. Any other status returns 409. PAYMENT_DEADLINE_EXPIRED is reserved for payment expiry.
+         */
+        post: operations["cancelOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/history": {
         parameters: {
             query?: never;
@@ -252,6 +272,9 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             reason: string;
         };
+        CancelOrder: {
+            reason: string;
+        };
         OrderItem: {
             /** Format: uuid */
             orderItemId: string;
@@ -338,6 +361,13 @@ export interface components {
             /** @default response success */
             message: string;
             data: components["schemas"]["Order"];
+        };
+        CancelOrderResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["OrderGroup"];
         };
         OrderStatusHistoryListResponse: {
             /** @default 0 */
@@ -1381,6 +1411,210 @@ export interface operations {
                         status?: 409;
                         /** @enum {string} */
                         code?: "COMMERCE_ILLEGAL_TRANSITION";
+                    };
+                };
+            };
+            /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 415;
+                        /** @enum {string} */
+                        code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    cancelOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource UUID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "Changed my mind"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CancelOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelOrderResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `COMMERCE_RESERVED_CANCEL_REASON`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "COMMERCE_RESERVED_CANCEL_REASON";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: `COMMERCE_ORDER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "COMMERCE_ORDER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: `COMMERCE_ORDER_NOT_CANCELLABLE`, `COMMERCE_ILLEGAL_TRANSITION`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "COMMERCE_ORDER_NOT_CANCELLABLE" | "COMMERCE_ILLEGAL_TRANSITION";
                     };
                 };
             };

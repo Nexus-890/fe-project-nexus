@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 
-// These future update/remove responses are explicit browser stand-ins. They do
-// not establish that the checked-out backend implements those operations.
+// These expected update/remove responses are explicit browser stand-ins. They
+// do not establish live compatibility with #111's current auth/envelope code.
 const cartPath = "/api/v1/carts/me";
 const lineId = "10000000-0000-4000-8000-000000000001";
 const productId = "20000000-0000-4000-8000-000000000001";

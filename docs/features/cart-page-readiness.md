@@ -1,6 +1,6 @@
 # Cart page task readiness — 2026-11-02
 
-> Historical baseline before implementation. The user subsequently authorized frontend/service implementation with an empty Cart origin. See the [current implementation report](cart-page-implementation.md) and [Cart integration guide](cart.md). Backend update/remove and live-review limits still apply; statements below about absent FE files refer to the audited base revision.
+> Historical baseline before implementation at `2a2147d1`. The user subsequently authorized frontend/service implementation with an empty Cart origin. Publication preparation on #129 later merged remote `e2411ea4`, which contains BE update/remove source with build/auth/response compatibility blockers. See the [current implementation report](cart-page-implementation.md) and [Cart integration guide](cart.md). Statements below about absent FE files or BE operations describe the original audited revision, not the merged publication state. Source links resolve current paths and may show later changes.
 
 Reviewed branch: `fsa_ChungTQ/refactor/251-fe-rebuild-fe-project-nexus`, revision `2a2147d1`. The remote branch was fetched, the local branch checked out and fast-forward synchronization completed (`Already up to date`). This is a source/API/UI readiness review and documentation update; it does not implement the Cart page.
 
