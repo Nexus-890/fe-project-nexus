@@ -10,6 +10,10 @@ Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user
 
 `configs/api.ts` is the only API configuration module. Set `NEXT_PUBLIC_API_URL` to the common backend origin, such as `http://localhost:8080`, then restart Next. Paths supplied by services already include `/api/v1`. An absolute origin is required for server category lookup. The legacy `NEXT_PUBLIC_API_BASE_URL` is a fallback only while local configuration migrates.
 
+The Cart task explicitly requests an empty service origin. `service/cartService.ts` defines `CART_API_BASE_URL = ""` and passes it through the shared HTTP boundary (explicit context baseUrl wins). Blank means browser same-origin; fill only the origin then restart/rebuild. Auth/catalog origin and single-client ownership are preserved. See [Cart configuration](../features/cart.md#api-configuration).
+
+For same-origin local integration, leave NEXT_PUBLIC_API_URL blank and set server-only `API_PROXY_TARGET` to the gateway origin. Next rewrites `/api/v1/*` to it, while server-side catalog calls use it as their origin fallback. Public origins take precedence for common auth/catalog requests. Restart Next after changing this environment variable; the proxy is disabled when it is absent. Targets must be HTTP(S) origins without credentials, paths, query or hash.
+
 Axios uses a 15-second default timeout and JSON Accept header. Caller options cannot redirect a protected request to another origin or replace URL/method/auth/adapter/parser settings. Controlled headers, timeout and parameter serialization remain configurable. Public login/register/catalog calls do not send Bearer; private requests read the current token from the provider-scoped request context. Never put a token in singleton defaults, query keys, or server module state.
 
 Preserve endpoint status: reads/updates return 200, creation uses the endpoint's 201, and a 204 has no response body. Handle 204 before parsing JSON. Cancellation propagates separately from ordinary API errors.
@@ -74,8 +78,13 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | GET `/api/v1/products` | Category/search listing, public; delivered parameters categoryId/page/size |
 | GET `/api/v1/products/{id}` | Product detail, public |
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
+| GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
+| PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; provisional #111 draft, BE pending |
+| DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; provisional #111 draft, BE pending |
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
+
+The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. Cart update/remove still lack BE implementations here. Their service calls are provisional integration points authorized for this task; confirm final paths/responses/permissions when BE lands. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
 
 ## Type generation and runtime checks
 

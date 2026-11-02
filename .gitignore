@@ -48,5 +48,6 @@ next-env.d.ts
 
 /.next-typecheck/
 /.next-verify-build/
+/.next-cart-readiness-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json

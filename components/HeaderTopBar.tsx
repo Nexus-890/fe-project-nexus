@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 
-function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
+function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderProps) {
   const router = useRouter();
 
   function signOut() {
@@ -89,18 +89,18 @@ function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
 
         <nav
           aria-label="Account and shopping links"
-          className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2"
+          className="flex shrink-0 items-center gap-1 sm:gap-2"
         >
           <button
             type="button"
-            className="inline-flex min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary"
+            className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary sm:inline-flex"
           >
             <MapPin size={14} aria-hidden="true" />
             <span className="hidden md:inline">Ship to HCMC</span>
           </button>
           <Link
             href="/#sell"
-            className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
+            className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary sm:inline-flex"
           >
             Sell
           </Link>
@@ -119,17 +119,18 @@ function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
           <button
             type="button"
             aria-label="Notifications"
-            className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
+            className="relative hidden min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary sm:inline-flex"
           >
             <Bell size={17} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            aria-label="Shopping cart"
+          <Link
+            href="/cart"
+            aria-label={cartQuantity === undefined ? "Shopping cart" : `Shopping cart, ${cartQuantity} items`}
             className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
           >
             <ShoppingCart size={19} aria-hidden="true" />
-          </button>
+            {cartQuantity !== undefined && cartQuantity > 0 && <span aria-hidden="true" className="absolute right-0 top-0 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium leading-4 text-primary-foreground">{cartQuantity > 99 ? "99+" : cartQuantity}</span>}
+          </Link>
         </nav>
       </div>
     </div>

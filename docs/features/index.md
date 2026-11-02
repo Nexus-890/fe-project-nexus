@@ -4,7 +4,7 @@
 | --- | --- |
 | [Authentication](authentication.md) | Sign-up/sign-in forms, in-memory session, profile retry, logout and account isolation |
 | [Catalog](catalog.md) | Home/category navigation, listings, URL filters/paging, product/SKU/image presentation |
-| [Cart](cart.md) | Anonymous sign-in prompt and authenticated add-item request |
+| [Cart](cart.md) | Cart page/header count, snapshot prices, optimistic edit/remove and rollback; [implementation report](cart-page-implementation.md) separates prepared service calls from missing BE operations |
 
 These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Order checkout, payment, shipping, auction bidding, forgotten-password recovery and persistent/refresh-token login are outside the current frontend implementation scope.
 

@@ -1,6 +1,6 @@
 # Nexus frontend
 
-Next.js App Router frontend for the Nexus marketplace. The current UI includes registration/login, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, and add-to-cart feedback. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
+Next.js App Router frontend for the Nexus marketplace. The current UI includes registration/login, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
 
 ## Development
 
@@ -13,11 +13,13 @@ Copy-Item .env.example .env.local
 
 Set `NEXT_PUBLIC_API_URL` in `.env.local` to the common backend origin, normally `http://localhost:8080`, then run:
 
+For same-origin local integration, use `NEXT_PUBLIC_API_URL=` and `API_PROXY_TARGET=http://localhost:8080` instead. Next proxies browser `/api/v1/*` calls and uses the target for server catalog reads, avoiding browser cross-origin requirements. The Cart service base URL intentionally remains blank; see [Cart configuration](docs/features/cart.md#api-configuration).
+
 ```powershell
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000). Configure an absolute API origin accessible to Next and the browser for server category lookup. Service paths already contain `/api/v1`; do not add the version path to the origin. Restart Next after changing public environment values. Real cross-origin browser calls require backend CORS support.
+Open [localhost:3000](http://localhost:3000). Configure an absolute backend origin either through the proxy or the public direct origin. Service paths already contain `/api/v1`; do not add it to the origin. Restart Next after environment changes. Direct cross-origin browser calls require backend CORS support. The [existing UI/API inventory](docs/features/api-ui-integration.md) separates connected flows from missing backend operations or absent screens.
 
 For explicit local fixtures, use the documented `NEXT_PUBLIC_AUTH_STUB`, `NEXT_PUBLIC_PRODUCT_DETAIL_MOCK` and `NEXT_PUBLIC_CART_MOCK` flags in development. These are stand-ins, are blocked in production, and do not prove live API compatibility. The auth fixture has no default account; register first. Access tokens are kept only in memory; a full reload returns to anonymous. Refresh tokens/persistent login are outside current scope.
 
@@ -60,8 +62,8 @@ Verified rebuild on 2026-10-30: lint, regenerated-route typecheck, generated DTO
 
 ## Contracts and known limits
 
-Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart uses the shared gateway origin and delivered DTO fields. [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records approval and coordinated release as pending.
+Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart reuses the shared HTTP boundary and delivered DTO fields. Its `CART_API_BASE_URL` in `service/cartService.ts` is intentionally blank for the user to fill; PUT/DELETE are prepared provisional calls awaiting BE implementation. Read the [Cart handoff](docs/features/cart.md#api-configuration) and [implementation report](docs/features/cart-page-implementation.md). [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records coordinated release as pending.
 
-The products controller currently accepts categoryId/page/size; real q/sort search behavior remains a contract dependency even though the UI preserves those URL values. A full cart/checkout, payment, auction bidding and password-recovery UI are outside current implementation scope.
+The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still depend on BE delivery. Working checkout, payment, auction bidding and password-recovery UI remain outside scope. Full refresh requires signing back in because auth stays in memory.
 
 Read [architecture](docs/ai/architecture.md), [coding rules](docs/ai/coding-rules.md), [feature flows](docs/features/index.md) and the [design system](docs/ui/design-system.md) before extending the app.
