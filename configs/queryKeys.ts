@@ -1,4 +1,5 @@
 import type { ProductFilters } from "../types/catalogRequestType";
+import type { NotificationFilters } from "../types/notificationRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
@@ -13,5 +14,12 @@ export const queryKeys = {
   },
   cart: {
     me: (sessionId: number) => ["cart", sessionId, "me"] as const,
+  },
+  notification: {
+    all: (sessionId: number) => ["notification", sessionId] as const,
+    list: (sessionId: number, filters: NotificationFilters) =>
+      ["notification", sessionId, "list", filters] as const,
+    unreadCount: (sessionId: number) =>
+      ["notification", sessionId, "unread-count"] as const,
   },
 };

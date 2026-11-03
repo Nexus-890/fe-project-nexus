@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
+import { ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 
-function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
+function HeaderTopBar({
+  user,
+  authenticating,
+  onSignOut,
+  notificationBell,
+}: HeaderProps) {
   const router = useRouter();
 
   function signOut() {
@@ -87,50 +92,48 @@ function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
           )}
         </nav>
 
-        <nav
-          aria-label="Account and shopping links"
-          className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2"
-        >
-          <button
-            type="button"
-            className="inline-flex min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary"
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <nav
+            aria-label="Account and shopping links"
+            className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2"
           >
-            <MapPin size={14} aria-hidden="true" />
-            <span className="hidden md:inline">Ship to HCMC</span>
-          </button>
-          <Link
-            href="/#sell"
-            className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
-          >
-            Sell
-          </Link>
-          <button
-            type="button"
-            className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary md:inline-flex"
-          >
-            Watchlist <ChevronDown size={13} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary lg:inline-flex"
-          >
-            My Nexus <ChevronDown size={13} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
-          >
-            <Bell size={17} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="Shopping cart"
-            className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
-          >
-            <ShoppingCart size={19} aria-hidden="true" />
-          </button>
-        </nav>
+            <button
+              type="button"
+              className="inline-flex min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary"
+            >
+              <MapPin size={14} aria-hidden="true" />
+              <span className="hidden md:inline">Ship to HCMC</span>
+            </button>
+            <Link
+              href="/#sell"
+              className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
+            >
+              Sell
+            </Link>
+            <button
+              type="button"
+              className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary md:inline-flex"
+            >
+              Watchlist <ChevronDown size={13} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary lg:inline-flex"
+            >
+              My Nexus <ChevronDown size={13} aria-hidden="true" />
+            </button>
+          </nav>
+          {notificationBell}
+          <nav aria-label="Shopping cart" className="hidden sm:flex">
+            <button
+              type="button"
+              aria-label="Shopping cart"
+              className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
+            >
+              <ShoppingCart size={19} aria-hidden="true" />
+            </button>
+          </nav>
+        </div>
       </div>
     </div>
   );

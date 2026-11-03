@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const fixtureOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_API_PORT ?? 3911}`;
+
 async function layoutChecks(page: Page) {
   expect(
     await page.evaluate(
@@ -248,7 +250,7 @@ test("category API failure renders error instead of not-found and can recover", 
   page,
   request,
 }) => {
-  await request.get("http://127.0.0.1:3911/test/tree-failure?enabled=true");
+  await request.get(`${fixtureOrigin}/test/tree-failure?enabled=true`);
   try {
     await page.goto("/categories/electronics");
     await expect(
@@ -256,7 +258,7 @@ test("category API failure renders error instead of not-found and can recover", 
     ).toBeVisible();
     await expect(page.getByText("Category not found")).toHaveCount(0);
   } finally {
-    await request.get("http://127.0.0.1:3911/test/tree-failure?enabled=false");
+    await request.get(`${fixtureOrigin}/test/tree-failure?enabled=false`);
   }
   await page.getByRole("button", { name: "Retry category" }).click();
   await expect(page.getByRole("article")).toHaveCount(2);

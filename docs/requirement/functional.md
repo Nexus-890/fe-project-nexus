@@ -22,9 +22,11 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CART-02 | Authenticated add-item request sends skuId and quantity only | Implemented frontend mutation/service; real authorization/contract needs integration evidence |
 | CART-03 | Use current-session cache/feedback only; show request failures accurately | Implemented mutation/session policy; tested scenarios determine evidence |
 | CART-04 | Render a full cart, edit/remove items, checkout and pay | Outside current frontend scope |
+| NTF-01/02 | Header latest ten notifications and total unread count | Implemented frontend against delivered notification reads; authenticated sessions only |
+| NTF-03/04 | Open one / mark all as read and refresh count | Service/mutation flow prepared; URLs intentionally blank pending backend integration; no simulated state changes |
 | ROUTE-01 | Preserve `/login`, `/register` and `/category/[slug]` aliases | Implemented route redirects |
 | DEV-01 | Build UI with explicit auth/product/cart stand-ins | Development/test only, blocked in production |
-| OTHER-01 | Auction bidding, order management, payment, shipment and notification screens | Not implied by backend service existence; separate frontend features |
+| OTHER-01 | Auction bidding, order management, payment, shipment and full notification history/preferences screens | Not implied by backend service existence; separate frontend features |
 
 ## Rules preserved by the rebuild
 

@@ -2,13 +2,14 @@
 
 import type { ReactNode } from "react";
 import Header from "@/components/Header";
+import NotificationBellFeature from "@/features/NotificationBellFeature";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { getCategoryTree } from "@/service/catalogService";
 
 function ShopLayout({ children }: { children: ReactNode }) {
-  const { user, status, signOut } = useAuth();
+  const { user, status, signOut, sessionId } = useAuth();
   const categories = useApiQuery({
     queryKey: queryKeys.catalog.tree,
     service: (signal) => getCategoryTree({ signal }),
@@ -24,6 +25,11 @@ function ShopLayout({ children }: { children: ReactNode }) {
         categoriesLoading={categories.isPending}
         categoriesError={categories.isError}
         onRetryCategories={() => void categories.refetch()}
+        notificationBell={
+          status === "authenticated" ? (
+            <NotificationBellFeature key={sessionId} />
+          ) : null
+        }
       />
       <main className="min-w-0 flex-1">{children}</main>
     </div>

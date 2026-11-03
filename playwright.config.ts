@@ -1,22 +1,26 @@
 import { defineConfig } from "@playwright/test";
 
+const appPort = Number(process.env.NEXUS_TEST_APP_PORT ?? 3102);
+const apiPort = Number(process.env.NEXUS_TEST_API_PORT ?? 3911);
+const apiOrigin = `http://127.0.0.1:${apiPort}`;
+
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
-  use: { baseURL: "http://127.0.0.1:3102", channel: "chrome", viewport: { width: 375, height: 812 } },
+  use: { baseURL: `http://127.0.0.1:${appPort}`, channel: "chrome", viewport: { width: 375, height: 812 } },
   webServer: [
-    { command: "node tests/catalog-fixture.mjs", url: "http://127.0.0.1:3911/health", reuseExistingServer: false },
+    { command: "node tests/catalog-fixture.mjs", url: `${apiOrigin}/health`, reuseExistingServer: false },
     {
-      command: "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3102",
-      url: "http://127.0.0.1:3102",
+      command: `node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port ${appPort}`,
+      url: `http://127.0.0.1:${appPort}`,
       reuseExistingServer: false,
       timeout: 120_000,
       env: {
-        NEXUS_TEST_DIST_DIR: ".next-catalog-run",
-        NEXT_PUBLIC_API_URL: "http://127.0.0.1:3911",
+        NEXUS_TEST_DIST_DIR: process.env.NEXUS_TEST_DIST_DIR ?? ".next-catalog-run",
+        NEXT_PUBLIC_API_URL: apiOrigin,
         NEXT_PUBLIC_AUTH_STUB: "false",
         NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_CART_MOCK: "false",

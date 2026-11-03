@@ -2,7 +2,7 @@
 
 ## Canonical inputs and release status
 
-Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user-service.yaml), [catalog-service](../../../be-project-nexus/docs/api/openapi/catalog-service.yaml), and [commerce-service](../../../be-project-nexus/docs/api/openapi/commerce-service.yaml) OpenAPI files. Verify the owning controller/DTO when a discrepancy appears. The older API drafts outside `openapi` describe future behavior and do not override delivered responses.
+Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user-service.yaml), [catalog-service](../../../be-project-nexus/docs/api/openapi/catalog-service.yaml), [commerce-service](../../../be-project-nexus/docs/api/openapi/commerce-service.yaml), and [notification-service](../../../be-project-nexus/docs/api/openapi/notification-service.yaml) OpenAPI files. Verify the owning controller/DTO when a discrepancy appears. The older API drafts outside `openapi` describe future behavior and do not override delivered responses.
 
 [ADR-008](../../../be-project-nexus/docs/adr/ADR-008-api-contract.md) and the [backend API style guide](../../../be-project-nexus/docs/api/style-guide.md) still record approval and coordinated BE/FE release as pending. This frontend implements their delivered envelope. Deployment readiness needs an agreed compatible backend version and live checks; neither a checked-in spec nor a fixture pass grants that approval.
 
@@ -74,11 +74,15 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | GET `/api/v1/products` | Category/search listing, public; delivered parameters categoryId/page/size |
 | GET `/api/v1/products/{id}` | Product detail, public |
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
+| GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |
+| GET `/api/v1/notifications/unread-count` | Header total unread count, Bearer + NOTIFICATION.VIEW |
+
+Notification read/read-all mutation URLs are intentionally blank in `service/notificationService.ts` until the backend operations are available. Empty URLs reject locally without sending HTTP; the corresponding actions are disabled. Configured mutation URLs use the common origin, send bodyless PATCH requests, accept 204 and refresh the list/count. See [notifications](../features/notifications.md).
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
 
 ## Type generation and runtime checks
 
-Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, and `commerceGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
+Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, `commerceGeneratedType.ts`, and `notificationGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
 
 Generated types do not validate live JSON. Keep runtime guards/parsers for auth, trees, products, SKU/images, cart and paging. Update fixtures and parser tests in the same contract change. Do not keep a permissive dual wire-shape parser indefinitely to hide mismatched deployment versions.

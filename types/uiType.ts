@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CategoryNode } from "./catalogResponseType";
 import type { UserResponse } from "./authResponseType";
 
@@ -10,4 +11,5 @@ export type HeaderProps = {
   categoriesLoading: boolean;
   categoriesError: boolean;
   onRetryCategories: () => void;
+  notificationBell?: ReactNode;
 };
