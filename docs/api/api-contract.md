@@ -76,8 +76,10 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
 | GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |
 | GET `/api/v1/notifications/unread-count` | Header total unread count, Bearer + NOTIFICATION.VIEW |
+| PATCH `/api/v1/notifications/{id}/read` | Opening an unread notification, Bearer + NOTIFICATION.VIEW; bodyless 204 |
+| PATCH `/api/v1/notifications/read-all` | Header mark-all action, Bearer + NOTIFICATION.VIEW; bodyless 204 |
 
-Notification read/read-all mutation URLs are intentionally blank in `service/notificationService.ts` until the backend operations are available. Empty URLs reject locally without sending HTTP; the corresponding actions are disabled. Configured mutation URLs use the common origin, send bodyless PATCH requests, accept 204 and refresh the list/count. See [notifications](../features/notifications.md).
+Notification mutations use the common origin and the routes implemented by notification-service on `develop` (#109). After a successful bodyless PATCH/204, the feature refetches the list and unread count. The backend snapshot on this feature branch predates #109; run integration against a backend containing those operations. See [notifications](../features/notifications.md).
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
 

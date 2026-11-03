@@ -70,6 +70,7 @@ function NotificationBell({
   const readStatusUnavailable = !canMarkRead || !canMarkAllRead;
 
   function openNotification(notification: Notification) {
+    if (isUpdating && notification.readAt === null) return;
     const opening = expandedId !== notification.id;
     setExpandedId(opening ? notification.id : null);
     if (
@@ -192,6 +193,7 @@ function NotificationBell({
                   <li key={notification.id}>
                     <button
                       type="button"
+                      disabled={isUpdating && unread}
                       onClick={() => openNotification(notification)}
                       className={cn(
                         "flex w-full flex-col gap-1 px-4 py-3 text-left outline-none transition hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",

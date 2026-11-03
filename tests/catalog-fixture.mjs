@@ -39,7 +39,8 @@ const backendProducts = [
 ];
 
 let treeFailure = false;
-let notificationCase = { list: "default", count: "default" };
+const defaultNotificationCase = () => ({ list: "default", count: "default", read: "default", readAll: "default" });
+let notificationCase = defaultNotificationCase();
 let notificationRequests = [];
 let pendingNotifications = [];
 
@@ -66,6 +67,8 @@ const fixtureNotifications = (account) =>
     createdAt: new Date(Date.parse("2026-11-03T00:30:00Z") - index * 60_000).toISOString(),
   }));
 
+let notificationItems = { a: fixtureNotifications("a"), b: fixtureNotifications("b") };
+
 const success = (data) => ({ code: 0, message: "response success", data });
 const releaseNotifications = () => {
   const pending = pendingNotifications;
@@ -77,9 +80,9 @@ function json(res, value, status = 200) {
   res.statusCode = status;
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(value));
+  res.end(status === 204 ? undefined : JSON.stringify(value));
 }
 
 const server = createServer(async (req, res) => {
@@ -88,7 +91,8 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/health") return json(res, {});
   if (url.pathname === "/test/notifications/reset") {
     releaseNotifications();
-    notificationCase = { list: "default", count: "default" };
+    notificationCase = defaultNotificationCase();
+    notificationItems = { a: fixtureNotifications("a"), b: fixtureNotifications("b") };
     notificationRequests = [];
     return json(res, {});
   }
@@ -96,6 +100,8 @@ const server = createServer(async (req, res) => {
     notificationCase = {
       list: url.searchParams.get("list") ?? "default",
       count: url.searchParams.get("count") ?? "default",
+      read: url.searchParams.get("read") ?? "default",
+      readAll: url.searchParams.get("readAll") ?? "default",
     };
     return json(res, {});
   }
@@ -144,6 +150,27 @@ const server = createServer(async (req, res) => {
       if (!res.writableEnded) evidence.canceled = true;
     });
     if (!account) return json(res, { title: "Unauthorized", status: 401 }, 401);
+    if (req.method === "PATCH") {
+      const all = url.pathname === "/api/v1/notifications/read-all";
+      const match = url.pathname.match(/^\/api\/v1\/notifications\/([^/]+)\/read$/);
+      if (!all && !match)
+        return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
+      const mode = all ? notificationCase.readAll : notificationCase.read;
+      if (mode === "error")
+        return json(res, { title: "Unavailable", status: 503 }, 503);
+      const items = notificationItems[account];
+      const selected = all ? items : items.filter((item) => item.id === decodeURIComponent(match[1]));
+      if (!all && selected.length === 0)
+        return json(res, { title: "Not found", status: 404 }, 404);
+      const reply = () => {
+        if (res.destroyed) return;
+        selected.forEach((item) => { item.readAt ??= "2026-11-03T02:00:00Z"; });
+        json(res, null, 204);
+      };
+      if (mode === "delayed") pendingNotifications.push(reply);
+      else reply();
+      return;
+    }
     if (req.method !== "GET")
       return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
     const mode = url.pathname.endsWith("/unread-count")
@@ -152,12 +179,14 @@ const server = createServer(async (req, res) => {
     if (mode === "error")
       return json(res, { title: "Unavailable", status: 503 }, 503);
     if (url.pathname === "/api/v1/notifications/unread-count")
-      return json(res, success({ count: mode === "zero" ? 0 : mode === "large" ? 125 : 18 }));
+      return json(res, success({
+        count: mode === "zero" ? 0 : mode === "large" ? 125 : notificationItems[account].filter((item) => item.readAt === null).length,
+      }));
     if (url.pathname !== "/api/v1/notifications")
       return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
     const page = Number(url.searchParams.get("page") ?? 0);
     const size = Number(url.searchParams.get("size") ?? 10);
-    const items = mode === "empty" ? [] : fixtureNotifications(account);
+    const items = mode === "empty" ? [] : notificationItems[account];
     const response = {
       ...success(mode === "malformed" ? [{ invalid: true }] : items.slice(page * size, (page + 1) * size)),
       page: { number: page, size, totalElements: items.length, totalPages: Math.ceil(items.length / size) },

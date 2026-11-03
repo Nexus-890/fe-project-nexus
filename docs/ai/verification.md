@@ -76,3 +76,21 @@ Stop the simulation after the run. The probe calls the real `getProduct` service
 ## Pre-push verification — 2026-11-02
 
 The target branch was fetched and had no remote commits beyond the local base before publication. `npm run lint`, `npm run typecheck`, `npm run generate:types:check` and all 51 unit tests passed again. Browser, production-build and Postman results above remain the recorded 2026-10-30 evidence; those checks were not rerun for this publication-only step. No additional mock-isolation or hook-interface change is included in this commit.
+
+## Notification read-status fix (#196) — 2026-11-03
+
+Verified on `fsa_ChungTQ/chore/196-fe-notification-bell`, starting at `b7b2b945`, in an isolated worktree. Before the production fix, the new mutation regression tests reproduced the empty-URL failure (56 unit tests passed, two failed). The configured routes now match #109's implementation inspected on `origin/develop` (`6e92bbac`, controller last changed at `f449eeec`). No backend source or generated DTO was changed.
+
+| Check | Current result |
+| --- | --- |
+| `npm run generate:types:check` | Passed; generated DTOs match this branch's delivered specs |
+| `npm run lint` / `npm run typecheck` | Passed |
+| `npm run test:unit` | 58 passed |
+| `npm run test:browser` | 25 passed, including 12 notification scenarios: latest ten, single-read/count decrease, mark-all/count zero, pending writes, retry and logout/account isolation |
+| `$env:NEXUS_TEST_DIST_DIR='.next-verify-build'; npm run build` | Passed on retry; the first run stopped at the existing Next 16.4.0 security advisory reminder |
+| `node scripts/verify-notifications.mjs` against local Postman simulation | Passed: real service/Axios HTTP calls, empty 204, count 18 → 17 → 0, idempotency, timestamp preservation, scoped account and 400/401/403/404/503 handling; 28 request events included nine bodyless PATCH calls |
+| Visual and whitespace review | Mobile/desktop screenshots fit their viewports; `git diff --check` passed |
+
+Browser verification used ports 3116/3916 and `.next-catalog-notification`; the runner restored tsconfig and removed its temporary smoke route. The [Postman instructions](../../postman/README.md) and [context](../../postman/simulations/notification.context.yaml) document repeatable HTTP verification. The CLI was signed out, so the simulation was built from repository contracts/source without searching published owner mocks. CLI 1.73.0 does not support `postman status`.
+
+These are local fixture/simulation results. No live gateway or notification service was listening on the checked local ports (8080/8086), so real JWT/privilege enforcement and database persistence remain unverified. This feature branch's backend snapshot predates #109; live testing needs a backend containing those PATCH routes. Next's security advisory remains a separate dependency update.

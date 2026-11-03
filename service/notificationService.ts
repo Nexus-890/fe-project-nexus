@@ -13,10 +13,8 @@ import type { Notification } from "../types/notificationResponseType";
 export const NOTIFICATION_ENDPOINTS = {
   list: "/api/v1/notifications",
   unreadCount: "/api/v1/notifications/unread-count",
-  // Fill these when the backend endpoints are available on this branch.
-  // The single-notification route should contain :id for the notification ID.
-  read: "",
-  readAll: "",
+  read: "/api/v1/notifications/:id/read",
+  readAll: "/api/v1/notifications/read-all",
 };
 
 const isTimestamp = (value: unknown): value is string =>

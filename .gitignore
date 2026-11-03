@@ -46,6 +46,11 @@ next-env.d.ts
 
 !.env.example
 
+# Reusable local API simulations; generated dependencies and logs stay local.
+!/postman/
+/postman/.dependencies/
+/postman/**/*.ndjson
+
 /.next-typecheck/
 /.next-verify-build/
 .tsconfig-typecheck.json
