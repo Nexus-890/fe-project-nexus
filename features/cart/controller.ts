@@ -109,6 +109,12 @@ export function createCartController(options: {
 
   function setIdentity(next: CartIdentity): void {
     if (identity.status === next.status && identity.userId === next.userId && identity.accessToken === next.accessToken) return;
+    if (identity.status === "authenticated" && next.status === "authenticated" && identity.userId === next.userId) {
+      // A renewed token belongs to the same cart. Keep the count and any
+      // in-flight operation instead of reloading/merging on every rotation.
+      identity = next;
+      return;
+    }
     identity = next;
     generation += 1;
     const id = generation;

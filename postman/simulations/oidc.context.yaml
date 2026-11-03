@@ -10,6 +10,9 @@ purpose:
     fetch and navigation are configured with explicit local dependency origins.
     Also exercises guest-cart persistence and callback merge against the
     explicitly proposed guest contract recorded in docs/guest-cart.md.
+    Session restoration and renewal scenarios reuse these stand-ins with an
+    HttpOnly SSO cookie, prompt=none, rotating refresh grants and controlled
+    failure/expiry conditions. These do not establish deployed backend readiness.
 assumptions:
   - id: keycloak-code-pkce-contract
     status: supported
@@ -197,6 +200,126 @@ assumptions:
       docs/guest-cart.md; postman/mocks/oidc-api/default.js;
       tests/browser/guest-cart.spec.ts; features/cart/controller.ts
     updated_at: "2026-11-03"
+  - id: restore-input-readiness
+    status: supported
+    claim: >-
+      The current FE and realm supply the prerequisites for implementing session
+      restoration and renewal, while live backend integration remains blocked.
+    reason: >-
+      The existing code/PKCE client, memory token store, AuthProvider and API
+      client are present. The realm permits localhost wildcard callbacks. Its
+      access TTL is 3600 seconds, so the two-minute acceptance scenario needs a
+      separate override. Gateway/user/commerce still trust the old issuer/JWKS.
+    verification: >-
+      On 2026-11-03 fetched develop and the #239/#194 task branches. No newer
+      commits were available: develop stayed at 6e92bbac and the selected base
+      remained 726da961. Inspected realm client and lifetime settings and backend
+      JWT configuration. No live backend acceptance was claimed.
+    source: >-
+      docs/session-restore.md;
+      ../be-project-nexus/infra/local-dev/keycloak/realm-nexus.json;
+      ../be-project-nexus/config-service/src/main/resources/config/api-gateway.yml;
+      ../be-project-nexus/config-service/src/main/resources/config/user-service.yml;
+      ../be-project-nexus/config-service/src/main/resources/config/commerce-service.yml
+    updated_at: "2026-11-03"
+  - id: silent-protocol-and-memory-storage
+    status: supported
+    claim: >-
+      The installed oidc-client-ts 3.5.0 can restore through prompt=none and renew
+      using an in-memory refresh token or a silent iframe, with the configured
+      user store and persisted transaction state containing no auth tokens.
+    reason: >-
+      The SDK implementation and tests exercise its real request/response
+      processing. Explicit InMemoryWebStorage overrides the library default;
+      ID-token hints in silent transaction state are disabled.
+    verification: >-
+      On 2026-11-03 inspected the installed SDK and ran actual-SDK protocol unit
+      tests for prompt=none, PKCE, anonymous OIDC errors, refresh grant, iframe
+      fallback, nonce/claim checks, callback relay and stale response fencing.
+      The combined unit suite passed 100 tests including API one-retry and
+      coordinator concurrency/session-isolation behavior. Provider exceptions
+      never become UI errors or stored query data.
+    source: >-
+      node_modules/oidc-client-ts/dist/esm/oidc-client-ts.js;
+      features/auth/oidc.ts; features/auth/token-session.ts;
+      tests/oidc.test.ts; tests/session.test.ts; tests/token-retry.test.ts;
+      https://authts.github.io/oidc-client-ts/classes/UserManager.html
+    updated_at: "2026-11-03"
+  - id: deployed-silent-restore-cookie-availability
+    status: unknown
+    claim: >-
+      The deployed browser can use the Keycloak SSO cookie inside the silent
+      authorization iframe and the provider permits the configured callback.
+    reason: >-
+      This is required after reload because no authentication tokens persist.
+      Browser privacy and frame policy depend on the deployment. Official
+      Keycloak documentation explicitly describes third-party-cookie limits.
+    verification: >-
+      On 2026-11-03 inspected local realm redirect/web-origin settings and read
+      official Keycloak adapter documentation over HTTPS. It describes hidden
+      iframe check-sso, memory-only tokens and browser cookie restrictions.
+      Repository/fixture checks do not establish deployed cookie behavior. No
+      live realm or backend configuration was changed for this task.
+    source: >-
+      https://www.keycloak.org/securing-apps/javascript-adapter;
+      ../be-project-nexus/infra/local-dev/keycloak/realm-nexus.json;
+      docs/session-restore.md
+    updated_at: "2026-11-03"
+  - id: two-minute-session-five-real-minutes
+    status: supported
+    claim: >-
+      The real frontend stays authenticated as the same user for five wall-clock
+      minutes under the local fixture's 120-second access-token model, renewing
+      proactively while protected activity continues.
+    reason: >-
+      This run uses real elapsed time and browser/SDK HTTP, with no virtual-clock
+      acceleration. It verifies scheduling under the stand-in's contract,
+      not a live Keycloak realm or the current backend JWT configuration.
+    verification: >-
+      On 2026-11-03 ran NEXUS_TEST_SESSION_LONG=true with the auth Playwright
+      configuration. The test passed after at least 300 seconds of active
+      browser time (5.2 minutes including setup). The simulation log recorded
+      six successful token responses, each expires_in=120, including five refresh
+      grants. All 45 protected GETs returned 200. The user remained the same,
+      only one password submission occurred, and browser storage contained no
+      auth tokens. Playwright stopped the app/simulation child processes.
+    source: >-
+      tests/browser/session-long.spec.ts;
+      test-results/session-long-summary.json (ignored observed run counters);
+      docs/session-restore.md; fingerprint session-restore-implementation
+    updated_at: "2026-11-03"
+  - id: simulated-restore-and-401-browser-flow
+    status: supported
+    claim: >-
+      Under the local Keycloak/API model, reload restores the same user without
+      interactive navigation, parallel protected 401s share one renewal and one
+      replay per caller, and failed renewal or logout leaves anonymous state.
+    reason: >-
+      The real application and installed SDK run in Chrome against HTTP
+      stand-ins. Tests assert user/status, request counts, storage, replay
+      limits and delayed 401 behavior. The stand-ins do not establish live
+      backend token support.
+    verification: >-
+      On 2026-11-03 the final npm run test:auth:browser passed all 20 scenarios
+      in 47.1 seconds, including the previous sign-in and guest-cart coverage.
+      The six session scenarios verify a gated restoring status on reload,
+      prompt=none success with the same user, three parallel 401s plus a delayed
+      old-token response sharing exactly one refresh and one retry each, no
+      second retry after another 401, failed refresh clearing the session,
+      two-minute expiry scheduling under a controlled clock, and logout/reload
+      staying anonymous. Auth responses in this run use the delivered data
+      envelope. The SDK storage checks found no authentication-token parts.
+      Startup attempts affected by the existing Next.js security reminder were
+      retried; the final unchanged implementation completed. All child services
+      were stopped by the runner.
+    source: >-
+      tests/browser/session.spec.ts; tests/browser/oidc.spec.ts;
+      tests/browser/guest-cart.spec.ts;
+      postman/mocks/oidc-keycloak/default.js;
+      postman/mocks/oidc-api/default.js;
+      test-results/oidc-simulation.ndjson (ignored local final fast-run evidence);
+      fingerprint session-restore-implementation
+    updated_at: "2026-11-03"
 fingerprints:
   - id: oidc-browser-implementation
     date: "2026-11-03"
@@ -205,4 +328,8 @@ fingerprints:
   - id: guest-cart-implementation
     date: "2026-11-03"
     commit: "4c1139ab with uncommitted guest-cart frontend implementation on codex/guest-cart-merge"
+    cli: "1.73.0"
+  - id: session-restore-implementation
+    date: "2026-11-03"
+    commit: "726da961 with uncommitted session restore and silent renew on codex/keycloak-session-restore"
     cli: "1.73.0"

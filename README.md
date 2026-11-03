@@ -11,8 +11,10 @@ npm run test:auth:browser
 npm run dev
 ```
 
-The access token is kept in memory only; a page reload does not restore the
-session in Sprint 1.
+Access, ID and refresh tokens stay in memory. On reload, the client checks the
+Keycloak SSO session with `prompt=none`, then loads the profile. A shared
+coordinator renews before expiry and permits one retry after a protected 401.
+See [session restore readiness and verification](docs/session-restore.md).
 
 ## Guest cart
 

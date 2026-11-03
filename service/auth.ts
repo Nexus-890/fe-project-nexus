@@ -33,14 +33,17 @@ function validateResult<T>(
     return result;
   }
 
-  if (!validator(result.data)) {
+  // The delivered common-core ApiResponse wraps successful responses in data.
+  // Retain bare-body compatibility with older fixtures during the migration.
+  const data = isRecord(result.data) && "data" in result.data ? result.data.data : result.data;
+  if (!validator(data)) {
     return {
       ok: false,
       error: createInvalidResponseError(invalidDetail),
     };
   }
 
-  return { ok: true, data: result.data };
+  return { ok: true, data };
 }
 
 export function isUserResponse(value: unknown): value is UserResponse {

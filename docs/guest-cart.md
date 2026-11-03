@@ -79,7 +79,9 @@ serialize cooperating tabs where supported. Server idempotency is required
 regardless. Lock acquisition times out after 15 seconds. A stale response cannot
 delete a newer guest session. Signing out
 immediately hides the member count; a successfully consumed guest token is not
-restored. Session restoration after reload remains #184.
+restored. Session restoration after reload is handled by #184; token rotation
+within the same authenticated session preserves the cart and does not merge it
+again. Protected cart requests share the auth provider's renewal coordinator.
 
 ## Verification
 

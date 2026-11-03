@@ -3,6 +3,7 @@
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient, type Query } from "@tanstack/react-query";
 import { createOidcClient } from "../features/auth/oidc";
+import { createTokenSession, renewalDelay } from "../features/auth/token-session";
 import { createApiClient } from "../lib/api-client";
 import { canceledSignIn, isApiError, unwrapApiResult } from "../lib/api-result";
 import type { ApiError, ApiResult } from "../types/common/response/type";
@@ -22,38 +23,68 @@ const privateQuery = (query: Query) =>
 // Provider exceptions may include callback URLs or token responses. Never put
 // them into UI errors, logs, or TanStack's mutation cache.
 const redirectError = (title: string): ApiError => ({ kind: "network", status: 0, title });
+const LOGGED_OUT_KEY = "nexus.auth.logged-out";
+const emptySession = (id: number, restoring = false) => ({
+  accessToken: null as string | null, expiresAt: 0, id, signingIn: false, restoring,
+});
+
+function rememberLogout(loggedOut: boolean): void {
+  try {
+    if (loggedOut) window.sessionStorage.setItem(LOGGED_OUT_KEY, "1");
+    else window.sessionStorage.removeItem(LOGGED_OUT_KEY);
+  } catch { /* Remote end-session still runs if browser storage is blocked. */ }
+}
+
+function explicitlyLoggedOut(): boolean {
+  try { return window.sessionStorage.getItem(LOGGED_OUT_KEY) === "1"; }
+  catch { return false; }
+}
 
 export function AuthProvider({ children, baseUrl, stub = false, fetch: transport, oidc: injectedOidc }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const [oidc] = useState(() => injectedOidc ?? createOidcClient());
-  const [token] = useState(() => {
-    let value: string | null = null;
-    return { get: () => value, set: (next: string | null) => { value = next; } };
+  // An imperative transaction counter, shared with callbacks installed once
+  // in the token coordinator. It does not participate in rendering.
+  const [generation] = useState(() => {
+    let value = 0;
+    return { read: () => value, advance: () => ++value };
   });
-  const generation = useRef(0);
   const mounted = useRef(false);
+  const restoreStarted = useRef(false);
   const callback = useRef<{
     url: string;
     result: Promise<ApiResult<string>>;
     retry?: () => Promise<ApiResult<string>>;
   } | null>(null);
-  const [session, setSession] = useState({ accessToken: null as string | null, id: 0, signingIn: false });
+  const [session, setSession] = useState(() => emptySession(0, true));
+  const renewalFailed = useCallback(() => {
+    setSession(emptySession(generation.advance()));
+    void queryClient.cancelQueries({ predicate: privateQuery });
+    queryClient.removeQueries({ predicate: privateQuery });
+    void oidc.clearSession().catch(() => {});
+  }, [generation, oidc, queryClient]);
+  const [tokens] = useState(() => createTokenSession({
+    oidc,
+    onRenew: (next) => setSession((previous) => ({ ...previous, accessToken: next.accessToken, expiresAt: next.expiresAt })),
+    onFailure: renewalFailed,
+  }));
   const [api] = useState(() => {
     if (stub && process.env.NODE_ENV === "production") throw new Error("The auth stub is disabled in production.");
     if (stub && transport) throw new Error("Choose either the auth stub or an injected fetch.");
     return createAuthApi(createApiClient({
-      baseUrl, getAccessToken: token.get, fetch: stub ? createAuthStub() : transport,
+      baseUrl, getAccessToken: tokens.getAccessToken, renewAccessToken: tokens.renewAccessToken,
+      fetch: stub ? createAuthStub() : transport,
     }));
   });
-  const profile = useMeQuery(api, session.id, Boolean(session.accessToken));
+  const profile = useMeQuery(api, session.id, Boolean(session.accessToken) && !session.signingIn && !session.restoring);
 
   const clearSession = useCallback(() => {
-    generation.current += 1;
-    token.set(null);
-    setSession({ accessToken: null, id: generation.current, signingIn: false });
+    const id = generation.advance();
+    tokens.clear();
+    setSession(emptySession(id));
     void queryClient.cancelQueries({ predicate: privateQuery });
     queryClient.removeQueries({ predicate: privateQuery });
-  }, [queryClient, token]);
+  }, [generation, queryClient, tokens]);
 
   const registration = useMutation<UserResponse, ApiError, RegisterRequest>({
     mutationKey: ["auth", "register"], gcTime: 0, retry: false,
@@ -63,17 +94,18 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
 
   const signIn = useCallback(async (returnTo?: string): Promise<ApiResult<void>> => {
     clearSession();
+    rememberLogout(false);
     callback.current = null;
-    const id = generation.current;
-    setSession({ accessToken: null, id, signingIn: true });
+    const id = generation.read();
+    setSession({ ...emptySession(id), signingIn: true });
     try {
       await oidc.signIn(returnTo);
       return { ok: true, data: undefined };
     } catch {
-      if (generation.current === id) clearSession();
+      if (generation.read() === id) clearSession();
       return { ok: false, error: redirectError("Unable to open sign in. Please try again.") };
     }
-  }, [clearSession, oidc]);
+  }, [clearSession, generation, oidc]);
 
   const completeSignIn = useCallback((url: string): Promise<ApiResult<string>> => {
     // StrictMode replays the callback effect. Exchange each code once and
@@ -87,23 +119,23 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
       return callback.current.result;
     }
     clearSession();
-    const id = generation.current;
-    setSession({ accessToken: null, id, signingIn: true });
+    const id = generation.read();
+    setSession({ ...emptySession(id), signingIn: true });
     if (typeof window !== "undefined" && window.location.pathname === "/auth/callback") {
       window.history.replaceState(window.history.state, "", "/auth/callback");
     }
     let destination = "/";
     const loadProfile = async (): Promise<ApiResult<string>> => {
-      setSession({ accessToken: token.get(), id, signingIn: true });
+      setSession((previous) => ({ ...previous, accessToken: tokens.getAccessToken(), id, signingIn: true, restoring: false }));
       try {
         await queryClient.fetchQuery(meQueryOptions(api, id));
-        if (generation.current !== id) return { ok: false, error: canceledSignIn() };
-        setSession({ accessToken: token.get(), id, signingIn: false });
+        if (generation.read() !== id) return { ok: false, error: canceledSignIn() };
+        setSession((previous) => ({ ...previous, accessToken: tokens.getAccessToken(), id, signingIn: false, restoring: false }));
         return { ok: true, data: destination };
       } catch (error: unknown) {
-        if (generation.current !== id) return { ok: false, error: canceledSignIn() };
-        if (token.get() && !(isApiError(error) && error.status === 401)) {
-          setSession({ accessToken: token.get(), id, signingIn: false });
+        if (generation.read() !== id) return { ok: false, error: canceledSignIn() };
+        if (tokens.getAccessToken() && !(isApiError(error) && error.status === 401)) {
+          setSession((previous) => ({ ...previous, accessToken: tokens.getAccessToken(), id, signingIn: false, restoring: false }));
           if (callback.current?.url === url) callback.current.retry = loadProfile;
         } else {
           clearSession();
@@ -115,17 +147,17 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
     const result = (async (): Promise<ApiResult<string>> => {
       try {
         const response = await oidc.completeSignIn(url);
-        if (generation.current !== id) {
-          await oidc.clearSession();
+        if (generation.read() !== id) {
           return { ok: false, error: canceledSignIn() };
         }
-        token.set(response.accessToken);
+        tokens.start(response);
+        setSession((previous) => ({ ...previous, expiresAt: response.expiresAt }));
         destination = response.returnTo;
         // Fetch with the new token before enabling the profile observer. Tokens
         // and codes never enter query keys or mutation data/variables.
         return loadProfile();
       } catch (error: unknown) {
-        if (generation.current !== id) return { ok: false, error: canceledSignIn() };
+        if (generation.read() !== id) return { ok: false, error: canceledSignIn() };
         clearSession();
         await oidc.clearSession().catch(() => {});
         return { ok: false, error: isApiError(error) ? error : redirectError("Sign in could not be completed. Please try again.") };
@@ -133,9 +165,10 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
     })();
     callback.current = { url, result };
     return result;
-  }, [api, clearSession, oidc, queryClient, token]);
+  }, [api, clearSession, generation, oidc, queryClient, tokens]);
 
   const signOut = useCallback(async (): Promise<ApiResult<void>> => {
+    rememberLogout(true);
     clearSession();
     callback.current = null;
     resetRegistration();
@@ -159,11 +192,60 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
   }, [registerAsync, resetRegistration]);
 
   useEffect(() => {
+    if (restoreStarted.current) return;
+    restoreStarted.current = true;
+    // The silent callback only posts its URL to the parent frame. Starting
+    // another restore here would recursively open more hidden iframes.
+    if (window.location.pathname === "/auth/silent" || window.location.pathname === "/auth/callback") return;
+    const id = generation.read();
+    void (async () => {
+      try {
+        const restored = await (stub || explicitlyLoggedOut() ? Promise.resolve(null) : oidc.restoreSession());
+        if (generation.read() !== id) return;
+        if (!restored) {
+          setSession(emptySession(id));
+          return;
+        }
+        tokens.start(restored);
+        setSession({ ...emptySession(id, true), accessToken: restored.accessToken, expiresAt: restored.expiresAt });
+        await queryClient.fetchQuery(meQueryOptions(api, id));
+        if (generation.read() !== id) return;
+        setSession((previous) => ({ ...previous, accessToken: tokens.getAccessToken(), restoring: false }));
+      } catch {
+        if (generation.read() !== id) return;
+        clearSession();
+        await oidc.clearSession().catch(() => {});
+      }
+    })();
+  }, [api, clearSession, generation, oidc, queryClient, stub, tokens]);
+
+  useEffect(() => {
+    if (!session.accessToken || !session.expiresAt) return;
+    const timer = window.setTimeout(() => { void tokens.renew(); }, renewalDelay(session.expiresAt));
+    const checkExpiry = () => {
+      if (document.visibilityState !== "hidden" && session.expiresAt * 1000 - Date.now() <= 60_000) void tokens.renew();
+    };
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", checkExpiry);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", checkExpiry);
+    };
+  }, [session.accessToken, session.expiresAt, tokens]);
+
+  useEffect(() => {
     if (profile.error?.kind === "http" && profile.error.status === 401 && session.accessToken) {
-      clearSession();
-      void oidc.clearSession().catch(() => {});
+      const id = generation.read();
+      // Query observers notify during cache processing. Invalidate the session
+      // after that notification settles, and only if it is still the same one.
+      queueMicrotask(() => {
+        if (generation.read() !== id || tokens.getAccessToken() !== session.accessToken) return;
+        clearSession();
+        void oidc.clearSession().catch(() => {});
+      });
     }
-  }, [clearSession, oidc, profile.error, session.accessToken]);
+  }, [clearSession, generation, oidc, profile.error, session.accessToken, tokens]);
 
   useEffect(() => {
     mounted.current = true;
@@ -173,31 +255,32 @@ export function AuthProvider({ children, baseUrl, stub = false, fetch: transport
       // pending callback work and removes this provider's private cache.
       queueMicrotask(() => {
         if (mounted.current) return;
-        generation.current += 1;
-        token.set(null);
+        generation.advance();
+        tokens.clear();
         void oidc.clearSession().catch(() => {});
         void queryClient.cancelQueries({ predicate: privateQuery });
         queryClient.removeQueries({ predicate: privateQuery });
       });
     };
-  }, [oidc, queryClient, token]);
+  }, [generation, oidc, queryClient, tokens]);
 
   const retryProfile = async (): Promise<ApiResult<UserResponse>> => {
-    if (!token.get()) return { ok: false, error: canceledSignIn() };
-    const id = generation.current;
+    if (!tokens.getAccessToken()) return { ok: false, error: canceledSignIn() };
+    const id = generation.read();
     const result = await profile.refetch();
-    if (generation.current !== id) return { ok: false, error: canceledSignIn() };
+    if (generation.read() !== id) return { ok: false, error: canceledSignIn() };
     if (result.error) return { ok: false, error: result.error };
     if (!result.data) return { ok: false, error: canceledSignIn() };
     return { ok: true, data: result.data };
   };
   const user = session.accessToken ? profile.data ?? null : null;
-  const status = session.signingIn ? "authenticating"
+  const status = session.restoring ? "restoring" : session.signingIn ? "authenticating"
     : user ? "authenticated"
       : session.accessToken ? profile.isError ? "error" : "authenticating" : "anonymous";
 
   return <AuthContext.Provider value={{ accessToken: session.accessToken, user, status,
-    error: profile.error, api, signIn, completeSignIn, register, retryProfile, signOut }}>
+    error: profile.error, api, signIn, completeSignIn, register, retryProfile, signOut,
+    renewAccessToken: tokens.renewAccessToken }}>
     {children}
   </AuthContext.Provider>;
 }

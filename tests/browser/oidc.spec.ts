@@ -118,21 +118,15 @@ test("retries a temporary profile failure without exchanging the code again", as
   expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, pkceVerified: 1, logouts: 0 });
 });
 
-test("a rejected profile token clears local authentication without ending the provider session", async ({ page, request }) => {
+test("a persistently rejected profile is renewed and retried once before clearing local authentication", async ({ page, request }) => {
   await request.get(`${simulation}/api/test/reset?mode=profile-401`);
   await beginSignIn(page);
   await submitProvider(page);
   await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry loading account", exact: true })).toHaveCount(0);
   await assertNoPersistedTokens(page);
-  expect(await evidence(request, "api")).toMatchObject({ meRequests: 1, bearerRequests: 1 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, logouts: 0 });
-  await page.goto("/");
-  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(await evidence(request, "api")).toMatchObject({ meRequests: 1 });
+  expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 2, refreshRequests: 1, logouts: 0 });
 });
 
 test("registration alone posts the password to our API and sends the user to sign in", async ({ page, request }) => {

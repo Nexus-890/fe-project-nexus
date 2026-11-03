@@ -20,7 +20,10 @@ Run the realm using
 then run `npm run dev` and open **http://localhost:3000**. The imported `nexus-web`
 client permits that origin and its redirect paths. Another host or port requires
 matching redirect URI, web origin and post-logout redirect settings in Keycloak.
-Callback is `/auth/callback`; post-logout destination is `/`.
+Interactive callback is `/auth/callback`, hidden session callback is
+`/auth/silent`, and the post-logout destination is `/`. All must be allowed by
+the realm client. The supplied `http://localhost:3000/*` redirect already covers
+both callbacks.
 
 The #236 realm is present at develop `6e92bbac`. The committed backend defaults
 still validate the old user-service issuer/JWKS; #237 must switch gateway and
@@ -62,13 +65,36 @@ sessionStorage entries. Callback processing consumes the transaction; stale
 entries expire after ten minutes and are cleaned on later auth actions.
 Unrelated storage entries are preserved.
 
-Reloading starts anonymous. There is no automatic SSO check, refresh request,
-silent renew or session restore; those belong to #184. The ID token is used for
-logout only. The provider does not put tokens/codes into query keys or mutation
-variables/data. Profiles are keyed by session generation. A 401 clears local
-state. Transient profile errors offer retry without exchanging the code again.
-Generation checks and query cancellation prevent pending work restoring a session
-following logout. React StrictMode shares one code-exchange promise.
+On load the provider starts in `restoring`. A hidden `prompt=none` authorization
+checks the Keycloak SSO cookie and exchanges a new code; it never opens the
+interactive sign-in page. `/auth/silent` only relays the response URL to its
+parent. The parent validates state/nonce and owns all tokens. The iframe does
+not recursively start another restore or fetch profile/cart data.
+
+`features/auth/token-session.ts` shares one renewal between the proactive timer
+and every protected API caller. It uses Keycloak's refresh grant when a refresh
+token exists in memory, otherwise a silent authorization iframe. The first
+token-bearing 401 may renew and replay once; a second 401 returns immediately.
+A late 401 for an earlier token from the same session reuses the current token.
+Public requests and failures other than 401 do not trigger renewal. Refresh is
+sent directly to Keycloak; there is no Nexus refresh endpoint or auth cookie.
+
+Renewal failure clears memory and private query caches. A non-token
+`nexus.auth.logged-out=1` marker in sessionStorage suppresses restoration after
+explicit logout, including a failed end-session navigation. Explicit sign-in
+removes the marker. Browser storage contains no access, refresh or ID token, or
+token hint. The ID token is not included in persisted silent transaction state.
+
+Profiles remain keyed by session generation. Token rotation does not change
+that generation or reset/merge the cart again. Transient callback profile errors
+offer retry without exchanging the original code again. Session generation
+checks and cancellation reject late work after logout or a different login.
+StrictMode shares one interactive exchange and one initial restore.
+
+Silent restoration requires Keycloak SSO cookies to be available inside its
+iframe. Third-party-cookie or frame restrictions can prevent it; failure settles
+to anonymous. Real backend readiness and the two-minute-token verification are
+recorded in [session-restore.md](session-restore.md).
 
 ## Consumer API
 
@@ -81,7 +107,7 @@ await signOut(); // clears local state and navigates to end-session
 Redirect actions return `ApiResult<void>`; callback returns `ApiResult<string>`
 with the safe destination. UI error messages never expose raw provider exceptions.
 `retryProfile()` retains the existing typed result contract. `status` is
-`anonymous`, `authenticating`, `authenticated` or `error`.
+`restoring`, `anonymous`, `authenticating`, `authenticated` or `error`.
 
 Private queries must use `meta: { requiresAuth: true }` so logout removes them.
 `service/auth.ts` validates `UserResponse` at runtime. The shared Axios adapter
@@ -108,13 +134,15 @@ npm run build
 The browser suite requires Google Chrome and Postman CLI 1.73+ on PATH. It starts
 Next on `127.0.0.1:3103` and a local Postman simulation on port 3913; it requires
 neither Docker, real Keycloak, credentials nor Postman sign-in. The runner stops
-its child processes after the tests. Fixture accounts and unsigned ID tokens are
+its child processes after the tests. Fixture accounts and locally signed ID tokens are
 for local tests only. The production application is exercised over real HTTP;
 Keycloak and the backend API are stand-ins defined in `postman/mocks/`.
 
 `tests/oidc.test.ts` checks the actual OIDC library's state/nonce/PKCE protocol and
 storage behavior. `tests/browser/oidc.spec.ts` covers callback errors, redirects,
-Bearer profile requests, logout, anonymous reload and registration. Simulation
+Bearer profile requests, logout and registration. `session.spec.ts` covers
+restoration, shared 401 renewal, failed renewal, token-free storage and scheduling
+under a controlled clock. Simulation
 assumptions and remaining real-service gaps are recorded in
 `postman/simulations/oidc.context.yaml`. Browser traces/screenshots and simulation
 logs are written under ignored `test-results/`.

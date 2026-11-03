@@ -8,6 +8,7 @@ import type { ProblemDetails } from "../types/common/response/type";
 import type { RegisterRequest } from "../types/auth/request/type";
 import type { LoginRequest } from "../types/auth/request/type";
 import type { LoginResponse } from "../types/auth/response/type";
+import type { UserResponse } from "../types/auth/response/type";
 import type { AuthApi } from "../types/auth/type";
 
 // Keep regression coverage for the legacy backend fixture without exposing a
@@ -350,6 +351,47 @@ test("auth API exposes no password login and validates user success bodies", asy
   assert.equal(badMeResult.ok, false);
   if (!badMeResult.ok) {
     assert.equal(badMeResult.error.kind, "invalid-response");
+  }
+});
+
+test("profile and registration accept common-core success envelopes while preserving bare-body compatibility", async () => {
+  const user: UserResponse = {
+    id: "buyer-1", email: registerInput.email, phone: registerInput.phone,
+    fullName: registerInput.fullName, gender: "MALE", address: registerInput.address,
+    dateOfBirth: registerInput.dateOfBirth, roles: ["BUYER"], status: "ACTIVE",
+    createdAt: "2026-11-03T00:00:00Z",
+  };
+  for (const body of [user, { data: user, code: 0, message: "response success" }]) {
+    const calls: Array<{ path: string; method: string; authorization: string | null }> = [];
+    const auth = createAuthApi(createApiClient({
+      baseUrl: "https://api.nexus.test", getAccessToken: () => "memory-token",
+      fetch: async (input, init) => {
+        calls.push({ path: new URL(String(input)).pathname, method: init?.method ?? "GET",
+          authorization: new Headers(init?.headers).get("Authorization") });
+        return new Response(JSON.stringify(body), { status: init?.method === "POST" ? 201 : 200 });
+      },
+    }));
+    assert.deepEqual(await auth.me(), { ok: true, data: user });
+    assert.deepEqual(await auth.register(registerInput), { ok: true, data: user });
+    assert.deepEqual(calls, [
+      { path: "/api/v1/users/me", method: "GET", authorization: "Bearer memory-token" },
+      { path: "/api/v1/auth/register", method: "POST", authorization: null },
+    ]);
+  }
+});
+
+test("malformed nested success data cannot establish a profile or complete registration", async () => {
+  for (const data of [null, [], "invalid", { id: "buyer-1" }, {
+    id: "buyer-1", email: registerInput.email, phone: registerInput.phone, fullName: registerInput.fullName,
+    gender: null, address: null, dateOfBirth: null, roles: "BUYER", status: "ACTIVE", createdAt: "2026-11-03T00:00:00Z",
+  }]) {
+    const auth = createAuthApi(createApiClient({
+      fetch: async () => new Response(JSON.stringify({ data, code: 0, message: "response success" }), { status: 200 }),
+    }));
+    for (const result of [await auth.me(), await auth.register(registerInput)]) {
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.error.kind, "invalid-response");
+    }
   }
 });
 

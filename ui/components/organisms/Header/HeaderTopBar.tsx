@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/ui/type";
 
-export default function HeaderTopBar({ user, authenticating, onSignOut, cartCount = 0 }: HeaderProps) {
+export default function HeaderTopBar({ user, authenticating, restoring, onSignOut, cartCount = 0 }: HeaderProps) {
   const router = useRouter();
 
   return (
@@ -18,7 +18,7 @@ export default function HeaderTopBar({ user, authenticating, onSignOut, cartCoun
               <ChevronDown size={13} aria-hidden="true" />
             </span>
           ) : authenticating ? (
-            <span className="inline-flex min-h-11 lg:min-h-9 items-center px-2" role="status">Signing in…</span>
+            <span className="inline-flex min-h-11 lg:min-h-9 items-center px-2" role="status">{restoring ? "Restoring session…" : "Signing in…"}</span>
           ) : (
             <>
               <Link

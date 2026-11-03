@@ -12,6 +12,7 @@ export interface CategoryNavigationProps {
 export interface HeaderProps {
   user: UserResponse | null;
   authenticating: boolean;
+  restoring?: boolean;
   onSignOut: () => void;
   cartCount?: number;
   categories: CategoryNode[];

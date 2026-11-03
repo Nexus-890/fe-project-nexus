@@ -12,6 +12,7 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
     options.baseUrl ?? API_BASE_URL,
   );
   const getAccessToken = options.getAccessToken ?? (() => null);
+  let renewal: { token: string; result: Promise<string | null> } | null = null;
   const transport = createAxiosClient({
     baseURL: baseUrl,
     // Axios supports custom fetch with Request/Response disabled for relative URLs.
@@ -21,6 +22,19 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
       env: { fetch: options.fetch, Request: null, Response: null } as unknown as AxiosRequestConfig["env"],
     } : {}),
   });
+
+  function renew(failedToken: string): Promise<string | null> {
+    if (renewal?.token === failedToken) return renewal.result;
+    // The session provider owns lineage checks and sharing between different
+    // API clients. Never substitute a changed token without its approval.
+    const pending = Promise.resolve().then(() => options.renewAccessToken!(failedToken));
+    const operation = { token: failedToken, result: pending };
+    renewal = operation;
+    void pending.finally(() => {
+      if (renewal === operation) renewal = null;
+    }).catch(() => {});
+    return pending;
+  }
 
   async function request<T>(
     method: "GET" | "POST",
@@ -35,10 +49,8 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
     headers.set("Accept", JSON_CONTENT_TYPE);
     headers.delete("Authorization");
     if (method === "POST") headers.set("Content-Type", JSON_CONTENT_TYPE);
-    if (requestOptions.auth !== false) {
-      const token = getAccessToken();
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-    }
+    const sentToken = requestOptions.auth !== false ? getAccessToken() : null;
+    if (sentToken) headers.set("Authorization", `Bearer ${sentToken}`);
 
     // Pin security-sensitive settings even if an untyped caller supplies them.
     const config: AxiosRequestConfig = {
@@ -61,6 +73,25 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
 
     try {
       const response = await transport.request<string>(config);
+      if (response.status === 401 && sentToken && options.renewAccessToken && getAccessToken()) {
+        throwIfAborted(requestOptions.signal);
+        let replacement: string | null = null;
+        try {
+          replacement = await abortable(renew(sentToken), requestOptions.signal);
+        } catch {
+          // Renewal failures may contain identity-provider URLs or tokens.
+          // Return the original API error, never these exception details.
+          throwIfAborted(requestOptions.signal);
+        }
+        throwIfAborted(requestOptions.signal);
+        if (replacement && getAccessToken() === replacement) {
+          const retryHeaders = new AxiosHeaders(headers);
+          retryHeaders.set("Authorization", `Bearer ${replacement}`);
+          // Replay the captured request, including its serialized body. This
+          // direct transport call cannot enter the renewal branch again.
+          return readApiResponse<T>(await transport.request<string>({ ...config, headers: retryHeaders }));
+        }
+      }
       return readApiResponse<T>(response);
     } catch (error) {
       if (axios.isCancel(error) || isAbortError(error)) {
@@ -82,6 +113,26 @@ export function createApiClient(options: CreateApiClientOptions = {}): ApiClient
     get: <T>(path: string, requestOptions?: ApiClientRequestOptions) => request<T>("GET", path, undefined, requestOptions),
     post: <T>(path: string, body?: unknown, requestOptions?: ApiClientRequestOptions) => request<T>("POST", path, body, requestOptions),
   };
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("Request canceled", "AbortError");
+}
+
+function abortable<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return pending;
+  throwIfAborted(signal);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Request canceled", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then((value) => {
+      signal.removeEventListener("abort", abort);
+      resolve(value);
+    }, (error: unknown) => {
+      signal.removeEventListener("abort", abort);
+      reject(error);
+    });
+  });
 }
 
 export function createInvalidResponseError(detail: string): ApiError {

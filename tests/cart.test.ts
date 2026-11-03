@@ -237,6 +237,47 @@ test("callback identity replay merges once, publishes the merged total and clear
   assert.equal(calls.merges.length, 1);
 });
 
+test("same-user token renewal preserves the merged cart without resetting the badge or merging again", async () => {
+  const { controller, storage, calls } = controllerFixture({ stored: guestSession });
+  controller.setIdentity(member);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(storage.read(), null);
+  const changes: ReturnType<typeof controller.getSnapshot>[] = [];
+  const unsubscribe = controller.subscribe(() => { changes.push(controller.getSnapshot()); });
+  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
+  await flush();
+  unsubscribe();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1");
+  assert.equal(calls.merges.length, 1);
+  assert.equal(calls.memberReads, 0);
+  assert.deepEqual(changes, []);
+});
+
+test("same-user token renewal keeps an in-flight member addition active and publishes its result", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const { controller, calls } = controllerFixture({ service: {
+    addCartItem: async () => pending.promise,
+  } });
+  controller.setIdentity(member);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  await flush();
+  assert.equal(controller.getSnapshot().adding, true);
+  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
+  assert.equal(controller.getSnapshot().adding, true);
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  pending.resolve(ok(cart(6, "member-cart")));
+  assert.equal((await adding).ok, true);
+  assert.equal(controller.getSnapshot().itemCount, 6);
+  assert.equal(controller.getSnapshot().adding, false);
+  assert.equal(calls.memberReads, 1);
+  assert.equal(calls.merges.length, 0);
+});
+
 test("ambiguous merge failure retains the credential and key; explicit retry uses that key and clears only on success", async () => {
   const merges: GuestSession[] = [];
   const { controller, storage, calls } = controllerFixture({ stored: guestSession, service: {

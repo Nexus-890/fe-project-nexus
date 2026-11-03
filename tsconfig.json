@@ -30,7 +30,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".next-oidc-run/types/**/*.ts",
-    ".next-oidc-run/dev/types/**/*.ts"
+    ".next-oidc-run/dev/types/**/*.ts",
+    ".next-catalog-session-build/types/**/*.ts",
+    ".next-catalog-session-build/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

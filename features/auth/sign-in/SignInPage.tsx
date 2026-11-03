@@ -1,17 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { safeReturnTo } from "../oidc";
 import { Button } from "@/ui/components/ui/button";
 import Logo from "@/ui/components/atoms/Logo";
 import { useAuth } from "@/hooks/auth/useAuth";
 
 export default function SignInPage() {
   const searchParams = useSearchParams();
-  const { signIn } = useAuth();
+  const { signIn, status } = useAuth();
+  const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+
+  useEffect(() => {
+    if (status === "authenticated") router.replace(safeReturnTo(searchParams.get("returnTo")));
+  }, [status, router, searchParams]);
+
+  if (status === "restoring" || status === "authenticated") {
+    return <main className="mx-auto w-full max-w-[400px] px-6 py-12" role="status">
+      {status === "restoring" ? "Restoring your session…" : "Opening your account…"}
+    </main>;
+  }
 
   async function submit() {
     setFormError(null);

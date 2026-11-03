@@ -4,6 +4,7 @@ import { createContext, useEffect, useState, useSyncExternalStore, type ReactNod
 import { useAuth } from "../hooks/auth/useAuth";
 import { createCartController, identityOwner } from "../features/cart/controller";
 import { createGuestStorage, GUEST_CART_STORAGE_KEY } from "../features/cart/guest-storage";
+import { createCartService } from "../service/cart";
 
 type Controller = ReturnType<typeof createCartController>;
 interface CartContextValue {
@@ -30,10 +31,13 @@ async function withGuestLock<T>(action: () => Promise<T>): Promise<T> {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { status, user, accessToken } = useAuth();
+  const { status, user, accessToken, api } = useAuth();
   const guestEnabled = process.env.NEXT_PUBLIC_GUEST_CART_ENABLED === "true";
   const [controller] = useState(() => createCartController({
     guestEnabled, storage: createGuestStorage(() => window.localStorage), withLock: withGuestLock,
+    // All protected operations share the provider's synchronous token getter
+    // and renew coordinator. Public guest calls still use auth: false.
+    service: createCartService({ client: api.client }),
   }));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getServerSnapshot);
   const userId = user?.id ?? null;

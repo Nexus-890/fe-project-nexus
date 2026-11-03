@@ -10,7 +10,7 @@ const initial = () => ({
   meRequests: 0, bearerRequests: 0, passwordLeaks: 0, loginRequests: 0, registrations: 0,
   guestCreationRequests: 0, guestCreations: 0, guestReads: 0, guestAdds: 0,
   guestBearerLeaks: 0, cartReads: 0, cartAdds: 0, mergeRequests: 0, mergesApplied: 0,
-  mergeKeys: [], mergePaths: [],
+  mergeKeys: [], mergePaths: [], protectedRequests: 0, protectedRetries: 0, protectedCalls: [],
 });
 const user = {
   id: "68000000-0000-4000-8000-000000000003", email: "buyer@nexus.local", phone: "0901234567",
@@ -41,6 +41,7 @@ let mode = "success";
 let guests = {};
 let merged = {};
 let buyerCart = seededCart();
+let protectedAttempts = {};
 
 function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -62,7 +63,12 @@ const server = http.createServer(async (req, res) => {
     guests = {};
     merged = {};
     buyerCart = seededCart();
+    protectedAttempts = {};
     return json(res, {});
+  }
+  if (url.pathname === "/test/control") {
+    if (url.searchParams.has("mode")) mode = url.searchParams.get("mode");
+    return json(res, { mode });
   }
   if (url.pathname === "/test/evidence") return json(res, { ...evidence, buyerQuantity: total(buyerCart) });
   const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
@@ -71,9 +77,29 @@ const server = http.createServer(async (req, res) => {
   const authorization = req.headers.authorization || "";
   const validBearer = async () => {
     const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+    const expiry = await pm.state.get("oidc-keycloak:access-token-expiry");
+    const time = await pm.state.get("oidc-keycloak:clock-time") ?? Date.now();
     return Boolean(authorization.startsWith("Bearer ") && expectedHash
-      && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
+      && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash
+      && typeof expiry === "number" && expiry > Math.floor(time / 1000));
   };
+  if (url.pathname === "/v1/test/protected") {
+    const key = url.searchParams.get("key") || "request";
+    const attempt = (protectedAttempts[key] || 0) + 1;
+    protectedAttempts[key] = attempt;
+    evidence.protectedRequests += 1;
+    if (attempt > 1) evidence.protectedRetries += 1;
+    const bearer = await validBearer();
+    const reject = !bearer || mode === "protected-401-always"
+      || (mode === "protected-401-once" && attempt === 1);
+    evidence.protectedCalls.push({ key, attempt, status: reject ? 401 : 200, bearer });
+    // One first response deliberately arrives after the successful renewal.
+    // The client must reuse the newer token rather than renew a second time.
+    if (reject && attempt === 1 && mode === "protected-401-once") {
+      await new Promise((resolve) => setTimeout(resolve, key === "c" ? 350 : 30));
+    }
+    return reject ? problem(res, 401, "Unauthorized") : json(res, { accepted: true, key });
+  }
   if (url.pathname === "/v1/users/me") {
     evidence.meRequests += 1;
     const bearer = await validBearer();
@@ -82,7 +108,7 @@ const server = http.createServer(async (req, res) => {
       return problem(res, 503, "Profile temporarily unavailable");
     }
     if (mode === "profile-401") return problem(res, 401, "Unauthorized");
-    return bearer ? json(res, user) : problem(res, 401, "Unauthorized");
+    return bearer ? json(res, envelope(user)) : problem(res, 401, "Unauthorized");
   }
   if (url.pathname === "/v1/auth/register" && req.method === "POST") {
     const fields = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);

@@ -22,6 +22,12 @@ export interface CreateApiClientOptions {
   /** Origin only, for example https://api.example.com. Paths include /api/v1. */
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  /**
+   * Renew after a 401 for the token actually sent. Publish the replacement in
+   * getAccessToken before resolving. Return null after logout/session changes;
+   * implementations must share renewal across clients in the same session.
+   */
+  renewAccessToken?: (failedToken: string) => Promise<string | null>;
   /** Optional fetch adapter, used by the fixture and integration tests. */
   fetch?: typeof globalThis.fetch;
 }

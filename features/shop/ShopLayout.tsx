@@ -25,7 +25,8 @@ export default function ShopLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <Header
         user={user}
-        authenticating={status === "authenticating"}
+        authenticating={status === "authenticating" || status === "restoring"}
+        restoring={status === "restoring"}
         onSignOut={() => void endSession()}
         cartCount={cart.itemCount}
         categories={categories.data ?? []}
