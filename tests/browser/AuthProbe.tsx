@@ -283,8 +283,8 @@ function createProbeHarness(): AuthProbeHarness {
     const response = await stub(input, delay?.ignoreAbort ? stripSignal(init) : init);
 
     if (method === "POST" && path === LOGIN_PATH && response.ok) {
-      const body = await response.clone().json().catch(() => null) as { accessToken?: unknown } | null;
-      latestLoginToken = typeof body?.accessToken === "string" ? body.accessToken : latestLoginToken;
+      const body = await response.clone().json().catch(() => null) as { data?: { accessToken?: unknown } } | null;
+      latestLoginToken = typeof body?.data?.accessToken === "string" ? body.data.accessToken : latestLoginToken;
     }
 
     if (method === "GET" && path === ME_PATH && authorization) {

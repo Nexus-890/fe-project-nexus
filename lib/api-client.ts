@@ -145,7 +145,15 @@ function readApiResponse<T>(response: AxiosResponse<string>): ApiResult<T> {
   if (!parsed.ok) {
     return { ok: false, error: createInvalidResponseError("Expected JSON response from API") };
   }
-  return { ok: true, data: parsed.value as T };
+  const value = parsed.value;
+  // common-core wraps successful DTOs. Leave older bare responses compatible.
+  if (isRecord(value) && Object.hasOwn(value, "code") && Object.hasOwn(value, "message")) {
+    if (!Number.isInteger(value.code) || typeof value.message !== "string" || !Object.hasOwn(value, "data")) {
+      return { ok: false, error: createInvalidResponseError("Expected API success envelope with code, message and data") };
+    }
+    return { ok: true, data: value.data as T };
+  }
+  return { ok: true, data: value as T };
 }
 
 function readJsonValue(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -184,8 +192,13 @@ function normalizeHttpError(response: AxiosResponse<string>, value: unknown): Ap
 
 function readValidationErrors(value: unknown): ValidationError[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const errors = value.filter((entry): entry is ValidationError =>
-    isRecord(entry) && typeof entry.field === "string" && typeof entry.message === "string");
+  const errors: ValidationError[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.field !== "string") continue;
+    // Current common-web uses detail; message is the older wire format.
+    const message = readString(entry.detail) ?? readString(entry.message);
+    if (message !== undefined) errors.push({ field: entry.field, message });
+  }
   return errors.length > 0 ? errors : undefined;
 }
 

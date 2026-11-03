@@ -5,7 +5,7 @@ import { createApiClient } from "../lib/api-client";
 import { createAuthApi } from "../service/auth";
 import { createAccountApi } from "../service/account";
 import { createAuthStub } from "./fixtures/auth-stub";
-import type { ProblemDetails } from "../types/common/response/type";
+import type { BackendProblemDetails } from "../types/common/response/type";
 import type { RegisterRequest } from "../types/auth/request/type";
 import type { UserResponse } from "../types/auth/response/type";
 
@@ -19,6 +19,33 @@ const registerInput: RegisterRequest = {
   address: "1 Test Street",
   dateOfBirth: "1999-01-01",
 };
+
+test("transport unwraps backend success envelopes and preserves legacy bare payloads", async () => {
+  for (const data of [{ id: "user-1" }, ["BUYER"], null]) {
+    const client = createApiClient({ fetch: async () => new Response(JSON.stringify({
+      code: 0, message: "response success", data,
+    }), { status: 200 }) });
+    assert.deepEqual(await client.get("/api/v1/users/me"), { ok: true, data });
+  }
+
+  for (const data of [{ id: "legacy-user" }, { data: "a domain field" }]) {
+    const client = createApiClient({ fetch: async () => new Response(JSON.stringify(data), { status: 200 }) });
+    assert.deepEqual(await client.get("/legacy"), { ok: true, data });
+  }
+});
+
+test("malformed success envelopes are invalid responses", async () => {
+  for (const body of [
+    { code: 0, message: "response success" },
+    { code: "0", message: "response success", data: {} },
+    { code: 0, message: null, data: {} },
+  ]) {
+    const client = createApiClient({ fetch: async () => new Response(JSON.stringify(body), { status: 200 }) });
+    const result = await client.get("/api/v1/users/me");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.kind, "invalid-response");
+  }
+});
 
 test("auth stub cannot be enabled in production, including injected transports", () => {
   const result = spawnSync(process.execPath, [
@@ -59,8 +86,8 @@ test("common-web validation errors are returned as typed ApiError with form fiel
       instance: "/api/v1/auth/register",
       traceId: "trace-1",
       errors: [
-        { field: "email", message: "Invalid email address!" },
-        { field: "password", message: "cannot be blank!" },
+        { field: "email", code: "VALIDATION_EMAIL", detail: "Invalid email address!" },
+        { field: "password", code: "VALIDATION_NOT_BLANK", detail: "cannot be blank!" },
       ],
     }), { status: 400, headers: { "Content-Type": "application/problem+json" } }),
   });
@@ -110,7 +137,7 @@ test("validation normalization ignores malformed entries and groups repeated fie
 
 test("common-web errors array takes precedence over legacy field error records", async () => {
   const client = createApiClient({ fetch: async () => new Response(JSON.stringify({
-    title: "Validation Failed", errors: [{ field: "email", message: "Current backend message" }],
+    title: "Bad Request", errors: [{ field: "email", code: "VALIDATION_EMAIL", detail: "Current backend message", message: "Legacy message" }],
     fieldErrors: { email: ["Legacy message"] },
   }), { status: 400 }) });
   const result = await client.get("/validation");
@@ -195,6 +222,35 @@ test("stub register-login-me flow carries Authorization and stores no token in w
   assert.equal(afterSignOut.ok, false);
   if (!afterSignOut.ok) {
     assert.equal(afterSignOut.error.status, 401);
+  }
+});
+
+test("auth fixtures emit the backend envelope for register, login, GET and PUT profile", async () => {
+  const stub = createAuthStub();
+  const registered = await stub("/api/v1/auth/register", { method: "POST", body: JSON.stringify(registerInput) });
+  assert.equal(registered.status, 201);
+  const registration = await registered.json();
+  assert.equal(registration.code, 0);
+  assert.equal(registration.message, "response success");
+  assert.equal(registration.data.email, registerInput.email);
+
+  const loggedIn = await stub("/api/v1/auth/login", {
+    method: "POST", body: JSON.stringify({ email: registerInput.email, password: registerInput.password }),
+  });
+  const login = await loggedIn.json();
+  assert.equal(login.code, 0);
+  assert.equal(login.message, "response success");
+  assert.equal(typeof login.data.accessToken, "string");
+  for (const method of ["GET", "PUT"]) {
+    const response = await stub("/api/v1/users/me", {
+      method, headers: { Authorization: `Bearer ${login.data.accessToken}` },
+      ...(method === "PUT" ? { body: JSON.stringify({ fullName: "Updated Buyer" }) } : {}),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.code, 0);
+    assert.equal(body.message, "response success");
+    assert.equal(body.data.fullName, method === "PUT" ? "Updated Buyer" : registerInput.fullName);
   }
 });
 
@@ -373,7 +429,7 @@ test("stub emits common-web validation wire contract, not frontend fieldErrors",
     const response = await stub(path, {
       method: "POST", body: "{}", headers: { "Content-Type": "application/json" },
     });
-    const body: ProblemDetails = await response.json();
+    const body: BackendProblemDetails = await response.json();
     assert.equal(response.status, 400);
     assert.equal(response.headers.get("Content-Type"), "application/problem+json");
     assert.equal(body.type, "urn:problem:validation-error");
@@ -384,7 +440,8 @@ test("stub emits common-web validation wire contract, not frontend fieldErrors",
     assert.equal(Object.hasOwn(body, "fieldErrors"), false);
     assert.ok(body.errors && body.errors.length > 0);
     assert.equal(new Set(body.errors.map((error) => error.field)).size, body.errors.length);
-    assert.ok(body.errors.every((error) => error.message === "cannot be blank!"));
+    assert.ok(body.errors.every((error) => error.detail === "cannot be blank!" && typeof error.code === "string"));
+    assert.ok(body.errors.every((error) => !Object.hasOwn(error, "message")));
     assert.ok(body.errors.some((error) => error.field === "email"));
   }
 });
@@ -394,7 +451,7 @@ test("stub malformed bodies return common-web form-level errors without field er
   for (const path of ["/api/v1/auth/register", "/api/v1/auth/login"]) {
     for (const payload of ["not-json", "null", "[]"]) {
       const response = await stub(path, { method: "POST", body: payload });
-      const body: ProblemDetails = await response.json();
+      const body: BackendProblemDetails = await response.json();
       assert.equal(response.status, 400);
       assert.equal(body.type, "urn:problem:invalid-request-body");
       assert.equal(body.title, "Invalid Request Body");
@@ -407,7 +464,9 @@ test("stub malformed bodies return common-web form-level errors without field er
 
 test("auth API validates malformed login and user success bodies", async () => {
   const badLogin = createAuthApi(createApiClient({
-    fetch: async () => new Response(JSON.stringify({ accessToken: "token", expiresIn: 0, tokenType: "Bearer" }), { status: 200 }),
+    fetch: async () => new Response(JSON.stringify({
+      code: 0, message: "response success", data: { accessToken: "token", expiresIn: 0, tokenType: "Bearer" },
+    }), { status: 200 }),
   }));
   const badLoginResult = await badLogin.login({ email: "a@example.test", password: "password" });
   assert.equal(badLoginResult.ok, false);
@@ -418,16 +477,18 @@ test("auth API validates malformed login and user success bodies", async () => {
   const badMe = createAuthApi(createApiClient({
     getAccessToken: () => "token",
     fetch: async () => new Response(JSON.stringify({
-      id: "u1",
-      email: "a@example.test",
-      phone: "0900000000",
-      fullName: "A",
-      gender: null,
-      address: null,
-      dateOfBirth: null,
-      roles: "BUYER",
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
+      code: 0, message: "response success", data: {
+        id: "u1",
+        email: "a@example.test",
+        phone: "0900000000",
+        fullName: "A",
+        gender: null,
+        address: null,
+        dateOfBirth: null,
+        roles: "BUYER",
+        status: "ACTIVE",
+        createdAt: new Date().toISOString(),
+      },
     }), { status: 200 }),
   }));
   const badMeResult = await badMe.me();
@@ -435,6 +496,9 @@ test("auth API validates malformed login and user success bodies", async () => {
   if (!badMeResult.ok) {
     assert.equal(badMeResult.error.kind, "invalid-response");
   }
+  const badUpdate = await createAccountApi(badMe.client).updateProfile({ fullName: "Updated" });
+  assert.equal(badUpdate.ok, false);
+  if (!badUpdate.ok) assert.equal(badUpdate.error.kind, "invalid-response");
 });
 
 test("Axios config keeps source defaults and copies caller headers without retaining tokens", async () => {
@@ -504,7 +568,7 @@ test("native Axios HTTP adapter supports real GET/POST without the fixture", asy
       response.end(JSON.stringify({
         type: "urn:problem:validation-error", title: "Validation Failed", status: 400,
         detail: "The request data is invalid", instance: "/validation",
-        errors: [{ field: "email", message: "cannot be blank!" }],
+        errors: [{ field: "email", code: "VALIDATION_NOT_BLANK", detail: "cannot be blank!" }],
       }));
       return;
     }
@@ -512,9 +576,11 @@ test("native Axios HTTP adapter supports real GET/POST without the fixture", asy
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({
-      url: request.url, method: request.method,
-      authorization: request.headers.authorization ?? null,
-      body: Buffer.concat(chunks).toString() || null,
+      code: 0, message: "response success", data: {
+        url: request.url, method: request.method,
+        authorization: request.headers.authorization ?? null,
+        body: Buffer.concat(chunks).toString() || null,
+      },
     }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

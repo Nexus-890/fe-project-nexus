@@ -37,6 +37,11 @@ session's client. `service/account.ts` defines the relative endpoint path and
 sends `PUT /api/v1/users/me` with bearer authentication; the configured API base
 URL comes from the existing environment configuration.
 
+Success responses follow the `origin/develop` contract (`6e92bbac`, checked
+2026-11-03): `{code: 0, message: "response success", data: ...}`. The shared
+API client extracts `data` before the auth/profile services validate the DTO;
+the form and header only receive the validated `UserResponse`.
+
 The form submits only changed fields supported by the backend DTO. The service
 allowlists those fields and validates the returned `UserResponse` before updating
 the shared query. An earlier GET is cancelled before the saved response enters
@@ -65,7 +70,7 @@ clearing an existing birth date because the current API cannot clear it.
 the UI shows “Kept private” without inventing or exposing a value.
 
 Backend validation errors use Problem Details with
-`errors: [{ field, message }]`. The existing API client normalizes these errors;
+`errors: [{ field, code, detail }]`. The API client normalizes `detail` into form messages;
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
 Missing or expired sessions redirect to `/sign-in`, including a 401 during save.

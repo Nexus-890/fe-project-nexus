@@ -18,7 +18,11 @@ async function signIn(page: Page) {
   await page.goto("/sign-in");
   await page.getByLabel("Email", { exact: true }).fill("lan.nguyen@example.com");
   await page.getByLabel("Password", { exact: true }).fill("profile-password");
+  const loginResponse = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/v1/auth/login");
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  expect(await (await loginResponse).json()).toMatchObject({
+    code: 0, message: "response success", data: { tokenType: "Bearer" },
+  });
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
 }
@@ -58,7 +62,11 @@ test("anonymous visitors are redirected to sign in", async ({ page, request }) =
 
 test("header links to profile, GET populates, PUT updates the form and header, cancel restores", async ({ page, request }) => {
   await signIn(page);
+  const profileResponse = page.waitForResponse(response => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/v1/users/me");
   await openProfile(page);
+  expect(await (await profileResponse).json()).toMatchObject({
+    code: 0, message: "response success", data: { fullName: originalName },
+  });
   await populatedForm(page);
   await expect.poll(async () => (await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me").length).toBeGreaterThanOrEqual(2);
   await expect(page.getByLabel("Phone Number", { exact: true })).toHaveAttribute("readonly", "");
@@ -68,7 +76,11 @@ test("header links to profile, GET populates, PUT updates the form and header, c
   await page.getByLabel("Address", { exact: true }).fill("123 Nguyễn Huệ, Hồ Chí Minh City");
   const saved = page.waitForResponse(response => response.request().method() === "PUT" && new URL(response.url()).pathname === "/api/v1/users/me");
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
-  expect((await saved).status()).toBe(200);
+  const savedResponse = await saved;
+  expect(savedResponse.status()).toBe(200);
+  expect(await savedResponse.json()).toMatchObject({
+    code: 0, message: "response success", data: { fullName: "Lan Nguyễn Updated" },
+  });
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan Nguyễn Updated");
   await expect(page.locator("header").getByRole("link", { name: "Hi Lan Nguyễn Updated" })).toBeVisible();
   const puts = (await history(request)).filter(entry => entry.method === "PUT" && entry.path === "/v1/users/me");

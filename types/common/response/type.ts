@@ -1,7 +1,6 @@
 export type FieldErrors = Record<string, string[]>;
 
-/** Validation entry emitted by common-web's GlobalExceptionHandler. */
-
+/** Normalized validation entry consumed by frontend forms. */
 export interface ValidationError {
   field: string;
   message: string;
@@ -14,9 +13,20 @@ export interface ProblemDetails {
   detail?: string;
   instance?: string;
   traceId?: string;
-  /** Backend validation extension; common-web emits one message per field. */
+  /** Normalized field messages; see BackendProblemDetails for the wire format. */
   errors?: ValidationError[];
 }
+
+/** Validation entry emitted by common-web's GlobalExceptionHandler. */
+export interface BackendValidationError {
+  field: string;
+  code: string;
+  detail: string;
+}
+
+export type BackendProblemDetails = Omit<ProblemDetails, "errors"> & {
+  errors?: BackendValidationError[];
+};
 
 export type ApiErrorKind = "http" | "network" | "invalid-response" | "aborted";
 

@@ -1,4 +1,4 @@
-import type { FieldErrors, ProblemDetails } from "../../types/common/response/type";
+import type { BackendProblemDetails, FieldErrors } from "../../types/common/response/type";
 import type { LoginRequest, RegisterRequest } from "../../types/auth/request/type";
 import type { LoginResponse, UserResponse } from "../../types/auth/response/type";
 
@@ -83,7 +83,7 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
       nextUserId += 1;
       users.set(email, user);
 
-      return json(toUserResponse(user), 201);
+      return success(toUserResponse(user), 201);
     }
 
     if (method === "POST" && path === "/api/v1/auth/login") {
@@ -117,7 +117,7 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
         tokenType: "Bearer",
       };
 
-      return json(response);
+      return success(response);
     }
 
     if ((method === "GET" || method === "PUT") && path === "/api/v1/users/me") {
@@ -150,7 +150,7 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
         users.set(user.email, user);
       }
 
-      return json(toUserResponse(user));
+      return success(toUserResponse(user));
     }
 
     return json(problem(404, "Not found", `${method} ${path} is not implemented by auth stub`, path), 404);
@@ -278,7 +278,7 @@ function toUserResponse(user: StoredUser): UserResponse {
   };
 }
 
-function problem(status: number, title: string, detail: string, path: string, fieldErrors?: FieldErrors): ProblemDetails {
+function problem(status: number, title: string, detail: string, path: string, fieldErrors?: FieldErrors): BackendProblemDetails {
   return {
     type: fieldErrors ? "urn:problem:validation-error"
       : title === "Invalid Request Body" ? "urn:problem:invalid-request-body" : "urn:problem:domain-error",
@@ -287,8 +287,14 @@ function problem(status: number, title: string, detail: string, path: string, fi
     detail,
     instance: path,
     traceId: createRuntimeId(),
-    errors: fieldErrors ? Object.entries(fieldErrors).map(([field, messages]) => ({ field, message: messages[0] })) : undefined,
+    errors: fieldErrors ? Object.entries(fieldErrors).map(([field, messages]) => ({
+      field, code: "INVALID_VALUE", detail: messages[0],
+    })) : undefined,
   };
+}
+
+function success(data: unknown, status = 200): Response {
+  return json({ code: 0, message: "response success", data }, status);
 }
 
 function json(body: unknown, status = 200): Response {

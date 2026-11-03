@@ -9,15 +9,16 @@ import { unwrapApiResult } from "../lib/api-result";
 import { AppProviders } from "../providers/AppProviders";
 import { createAuthApi } from "../service/auth";
 import { meQueryOptions } from "../hooks/auth/useMeQuery";
-import type { ApiError, ProblemDetails } from "../types/common/response/type";
+import type { ApiError, BackendProblemDetails } from "../types/common/response/type";
 
-const backendProblem: ProblemDetails = {
+const backendProblem: BackendProblemDetails = {
   status: 400, title: "Validation Failed",
   detail: "Email is invalid", traceId: "test-trace",
-  errors: [{ field: "email", message: "Invalid email" }],
+  errors: [{ field: "email", code: "VALIDATION_EMAIL", detail: "Invalid email" }],
 };
 const fieldError: ApiError = {
   ...backendProblem, kind: "http",
+  errors: [{ field: "email", message: "Invalid email" }],
   fieldErrors: { email: ["Invalid email"] },
 };
 

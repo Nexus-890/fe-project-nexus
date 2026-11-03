@@ -1,6 +1,6 @@
 /* Postman loads mock handlers as CommonJS, including in ESM projects. */
 /* eslint-disable @typescript-eslint/no-require-imports */
-/** Local profile contract from this repository's UserController and IAM DTOs. */
+/** Local profile contract from origin/develop's ApiResponse, UserController and IAM DTOs. */
 const http = require("node:http");
 
 const initialUser = {
@@ -24,8 +24,15 @@ const headers = {
 };
 
 function json(res, value, status = 200) {
-  res.writeHead(status, headers);
+  res.writeHead(status, {
+    ...headers,
+    "Content-Type": status >= 400 ? "application/problem+json" : "application/json",
+  });
   res.end(JSON.stringify(value));
+}
+
+function success(res, data, status = 200) {
+  return json(res, { code: 0, message: "response success", data }, status);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -64,7 +71,7 @@ const server = http.createServer(async (req, res) => {
     if (req.body?.email !== initialUser.email || req.body?.password !== "profile-password") {
       return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
     }
-    return json(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
+    return success(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
   }
 
   // @endpoint GET /v1/users/me
@@ -73,7 +80,7 @@ const server = http.createServer(async (req, res) => {
     if (controls.getStatus) {
       return json(res, { title: "Profile unavailable", status: controls.getStatus, detail: "Unable to load your profile." }, controls.getStatus);
     }
-    return json(res, user);
+    return success(res, user);
   }
 
   // @endpoint PUT /v1/users/me
@@ -81,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     if (controls.putStatus === 400) {
       return json(res, {
         title: "Validation failed", status: 400,
-        errors: [{ field: "phone", message: "Phone number is invalid" }],
+        errors: [{ field: "phone", code: "VALIDATION_PATTERN", detail: "Phone number is invalid" }],
       }, 400);
     }
     if (controls.putStatus) {
@@ -96,7 +103,7 @@ const server = http.createServer(async (req, res) => {
     if (typeof next.address === "string") next.address = next.address.trim();
     if (typeof next.email === "string") next.email = next.email.trim().toLowerCase();
     await pm.state.set("profile-gateway:user", next);
-    return json(res, next);
+    return success(res, next);
   }
 
   // Shared shop shell dependencies; exact category and PageResponse shapes.

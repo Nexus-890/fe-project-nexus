@@ -1,0 +1,91 @@
+purpose:
+  stands_in_for: >-
+    The repository's auth and own-profile gateway HTTP endpoints, using the
+    origin/develop contract, plus minimal fixtures needed by the shared shop shell.
+  unblocks: >-
+    Running the real Next.js profile UI locally against deterministic responses
+    to check login, profile loading and saving, header updates, and error states.
+
+assumptions:
+  - id: auth-profile-success-envelope
+    status: supported
+    claim: >-
+      The backend contract at develop-contract-20261103 wraps successful login,
+      registration, and GET/PUT users/me DTOs in code, message, and data properties.
+    reason: >-
+      The controllers explicitly return ApiResponse.of, and ApiResponse defines
+      code 0 and message response success as defaults while retaining the DTO in data.
+    verification: >-
+      On 2026-11-03, read the backend source at origin/develop 6e92bbac using
+      git show. This establishes the source contract only. No live backend
+      requests were made. The local mock and auth stub were updated to model it.
+    source: >-
+      origin/develop:be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java:7-25;
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/AuthController.java:27-37;
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java:31-39;
+      postman/mocks/profile-gateway/default.js; tests/fixtures/auth-stub.ts
+    updated_at: "2026-11-03"
+  - id: validation-error-wire-shape
+    status: supported
+    claim: >-
+      The backend validation contract at develop-contract-20261103 returns
+      application/problem+json with errors entries containing field, code, and detail.
+    reason: >-
+      GlobalExceptionHandler constructs ValidationError records with these three
+      fields and sends ProblemDetail without the success envelope.
+    verification: >-
+      On 2026-11-03, read GlobalExceptionHandler at origin/develop 6e92bbac.
+      No live backend error response was requested. The local fixture now uses
+      the same wire field names; fixture codes are representative test values.
+    source: >-
+      origin/develop:be-project-nexus/lib/common-web/src/main/java/com/group5/common_web/exception/GlobalExceptionHandler.java:57-74,120-139;
+      postman/mocks/profile-gateway/default.js; tests/fixtures/auth-stub.ts
+    updated_at: "2026-11-03"
+  - id: caller-handles-current-contract
+    status: supported
+    claim: >-
+      The real Next.js frontend can sign in, populate the profile form, save a
+      changed name, update the shared header, and render field errors using the
+      current auth and profile wire contract in this simulation.
+    reason: >-
+      The real frontend passed all nine profile browser scenarios against the
+      updated local simulation. The success path asserts envelopes on the wire,
+      form and header values after saves, and field-error placement for detail.
+      Support is limited to the scenarios run against these local fixtures.
+    verification: >-
+      On 2026-11-03 at fixture-edit-20261103, npm run test:profile passed 9/9
+      browser tests and npm run test:auth passed 41/41 tests. Inspection of
+      profile-simulation.ndjson confirmed eight POST login 200, 23 GET me 200,
+      two PUT me 200, one PUT 400, one PUT 401, one PUT 503 and two GET 503
+      events. No live backend runtime behavior is established by this run.
+    source: >-
+      tests/browser/profile.spec.ts; playwright.profile.config.ts;
+      postman/simulations/profile.sim.yaml; postman/mocks/profile-gateway/default.js
+    updated_at: "2026-11-03"
+  - id: profile-phone-error-is-synthetic
+    status: supported
+    claim: >-
+      The injected phone validation response tests field-error placement only;
+      the backend update DTO at develop-contract-20261103 does not accept phone updates.
+    reason: >-
+      UpdateProfileRequest declares only fullName, dateOfBirth, gender, address,
+      and email, and ignores unknown fields. The mock's putStatus 400 control
+      deliberately supplies a phone error independently of submitted fields.
+    verification: >-
+      On 2026-11-03, inspected UpdateProfileRequest at origin/develop 6e92bbac
+      and the local profile-gateway handler. This is source evidence; it does not
+      demonstrate that a real backend rejects a profile update because of phone.
+    source: >-
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java:12-33;
+      postman/mocks/profile-gateway/default.js; tests/browser/profile.spec.ts
+    updated_at: "2026-11-03"
+
+fingerprints:
+  - id: develop-contract-20261103
+    date: "2026-11-03"
+    commit: "6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop; source inspected with git show)"
+    cli: "Postman CLI 1.73.0"
+  - id: fixture-edit-20261103
+    date: "2026-11-03"
+    commit: "d1521c1f81890c84fbf4dd7ad316e9a8d0fc5f04 plus uncommitted fixture and frontend integration edits in the isolated profile worktree"
+    cli: "Postman CLI 1.73.0"

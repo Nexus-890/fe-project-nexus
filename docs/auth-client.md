@@ -16,39 +16,45 @@ the types and update the fixtures in the same change.
 
 | Method/path | Result |
 | --- | --- |
-| POST `/api/v1/auth/register` | 201 `UserResponse`; does not sign in automatically |
-| POST `/api/v1/auth/login` | 200 `{accessToken, expiresIn, tokenType: "Bearer"}` |
-| GET `/api/v1/users/me` | 200 `UserResponse`; requires Bearer authentication |
+| POST `/api/v1/auth/register` | 201 envelope with `data: UserResponse`; does not sign in automatically |
+| POST `/api/v1/auth/login` | 200 envelope with `data: {accessToken, expiresIn, tokenType: "Bearer"}` |
+| GET `/api/v1/users/me` | 200 envelope with `data: UserResponse`; requires Bearer authentication |
+| PUT `/api/v1/users/me` | 200 envelope with `data: UserResponse`; requires Bearer authentication |
+
+The backend `origin/develop` contract (`6e92bbac`, checked 2026-11-03) wraps
+successful DTOs in `{code: 0, message: "response success", data: ...}`.
+The shared API client extracts `data` before the auth and account services
+validate their DTOs. Older bare payloads remain accepted for compatibility.
 
 `RegisterRequest` includes `identityNumber`, `address`, and the other required
 fields. Responses do not include password, passwordHash, or identityNumber.
-The frontend does not select or send a default role. The gender, roles, and
-status enums are not finalized, so wire values remain strings rather than
-assuming database enum values.
+The frontend does not select or send a default role. Gender and account status
+are validated against the backend enums; role codes remain backend-defined strings.
 
 Validation errors follow the shared backend contract in
 [GlobalExceptionHandler](../../be-project-nexus/lib/common-web/src/main/java/com/group5/common_web/exception/GlobalExceptionHandler.java).
-The handler resolves annotation messages through
-[ErrorCode](../../be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/constant/ErrorCode.java) and emits an
-RFC 7807 problem with `errors: Array<{field: string; message: string}>`, keeping
+The handler emits an RFC 7807 problem with
+`errors: Array<{field: string; code: string; detail: string}>`, keeping
 one message per field:
 
 ```json
 {
   "type": "urn:problem:validation-error",
-  "title": "Validation Failed",
+  "title": "Bad Request",
   "status": 400,
   "detail": "The request data is invalid",
   "instance": "/api/v1/auth/register",
-  "errors": [{ "field": "email", "message": "cannot be blank!" }]
+  "errors": [{ "field": "email", "code": "VALIDATION_NOT_BLANK", "detail": "cannot be blank!" }]
 }
 ```
 
-`ProblemDetails.errors` describes this wire contract. The client retains valid
-entries and derives `ApiError.fieldErrors: Record<string, string[]>` for form
+`BackendProblemDetails.errors` describes this wire contract. The client maps
+`detail` into normalized `ProblemDetails.errors[].message` and derives
+`ApiError.fieldErrors: Record<string, string[]>` for form
 consumers; the example becomes `{email: ["cannot be blank!"]}`. `fieldErrors`
 is a frontend lookup, not a property emitted by the current backend. Older
-`fieldErrors`/`errors` records remain accepted as a compatibility fallback;
+`{field, message}` arrays and `fieldErrors`/`errors` records remain accepted
+as a compatibility fallback;
 the current backend array takes precedence. Malformed entries are ignored.
 Domain and malformed-body errors can provide form-level `detail` without an
 `errors` array.
@@ -56,10 +62,10 @@ Domain and malformed-body errors can provide form-level `detail` without an
 Core error fields are `type`, `title`, `status`, `detail`, and `instance`, with
 optional `traceId` when backend tracing is available. The actual HTTP response
 status determines the error status, even if the body contains a different value.
-The stub emits the same validation array, message from `FIELD_REQUIRED`, and
+The stub emits the same validation array and
 request-path `instance`; its trace identifier is fixture-only, not a real span.
-Success payloads remain draft auth contracts; this change does not introduce
-the generic `APIResponse<T>` success wrapper without implemented auth endpoints.
+The unit and browser fixtures use the current success envelope and validation
+field names so a bare DTO fixture cannot hide an envelope integration failure.
 
 Sources:
 - [Catalogue](https://drive.google.com/file/d/1KIJsr87F-6TWieBbie9CVzgCBTPsM4Zk/view)

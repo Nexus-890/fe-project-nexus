@@ -1,5 +1,35 @@
 # Profile verification
 
+## Current response contract — 2026-11-03
+
+The review finding was reproduced: the old API client passed the entire
+`{code, message, data}` success envelope to the login/profile DTO guards.
+The client now extracts `data` and normalizes current backend validation
+`errors: [{field, code, detail}]` into form messages. Unit and browser fixtures
+model the backend source on `origin/develop` at `6e92bbac`.
+
+Verification on the profile branch with these changes:
+
+- `npm run test:auth`: 41/41 tests passed, including malformed enveloped DTOs,
+  register/login/GET/PUT envelopes, current 400 errors, and legacy payloads.
+- `npm run test:profile`: 9/9 browser tests passed against the local Postman
+  simulation. Login, profile GET, and successful PUT explicitly assert envelopes;
+  changed names update the form and header. The 400 case uses `detail`.
+- Simulation request events confirmed 8 successful login calls, 23 successful
+  profile GETs, 2 successful PUTs, and the exercised 400/401/503 failures.
+- `npm run lint` and `npm run build` passed.
+- Existing auth browser acceptance passed 14/14 session, Bearer, storage/cache,
+  race-condition, expiry, and retry checks with no browser errors.
+- The 375×812 browser check found no horizontal overflow or clipped layout text.
+
+These results exercise the real frontend against local fixtures; the backend
+source was inspected without rerunning a live backend. The injected phone
+error tests placement only because phone is read-only in the current update DTO.
+The historical backend run below predates this contract and does not verify
+current backend connectivity.
+
+## Historical verification — 2026-10-20
+
 Validated on 2026-10-20 with the real Next.js frontend and a local stateful
 Postman simulation based on this repository's backend DTOs. Run
 `npm run test:profile` to reproduce. All 9 browser tests passed.
