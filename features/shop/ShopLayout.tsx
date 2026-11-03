@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Header from "@/ui/components/templates/Header";
 import { useAuth } from "@/hooks/auth/useAuth";
 import { useCategoryTree } from "@/hooks/catalog/useCategoryTree";
@@ -7,18 +7,35 @@ import { useCategoryTree } from "@/hooks/catalog/useCategoryTree";
 export default function ShopLayout({ children }: { children: ReactNode }) {
   const { user, status, signOut } = useAuth();
   const categories = useCategoryTree();
+  const [signOutError, setSignOutError] = useState(false);
+
+  async function endSession() {
+    setSignOutError(false);
+    try {
+      const result = await signOut();
+      if (!result.ok) setSignOutError(true);
+    } catch {
+      setSignOutError(true);
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header
         user={user}
         authenticating={status === "authenticating"}
-        onSignOut={signOut}
+        onSignOut={() => void endSession()}
         categories={categories.data ?? []}
         categoriesLoading={categories.isPending}
         categoriesError={categories.isError}
         onRetryCategories={() => void categories.refetch()}
       />
+      {signOutError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-center gap-3 border-b border-danger/30 bg-red-100 px-4 py-3 text-sm text-danger">
+          <span>Unable to finish signing out. Please try again.</span>
+          <button type="button" onClick={() => void endSession()} className="min-h-11 font-medium underline">Retry sign out</button>
+        </div>
+      ) : null}
       <main className="min-w-0 flex-1">{children}</main>
     </div>
   );

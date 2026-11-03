@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import type { ApiClient } from "../api/type";
 import type { ApiError, ApiResult } from "../common/response/type";
-import type { RegisterRequest, LoginRequest } from "./request/type";
-import type { UserResponse, LoginResponse } from "./response/type";
+import type { RegisterRequest } from "./request/type";
+import type { UserResponse } from "./response/type";
+import type { OidcClient } from "../../features/auth/oidc";
 
 export interface AuthApi {
   readonly client: ApiClient;
   register(input: RegisterRequest, signal?: AbortSignal): Promise<ApiResult<UserResponse>>;
-  login(input: LoginRequest, signal?: AbortSignal): Promise<ApiResult<LoginResponse>>;
   me(signal?: AbortSignal): Promise<ApiResult<UserResponse>>;
 }
 
@@ -17,10 +17,11 @@ export interface AuthContextValue {
   status: "anonymous" | "authenticating" | "authenticated" | "error";
   error: ApiError | null;
   api: AuthApi;
-  signIn(payload: LoginRequest): Promise<ApiResult<UserResponse>>;
+  signIn(returnTo?: string): Promise<ApiResult<void>>;
+  completeSignIn(url: string): Promise<ApiResult<string>>;
   register(payload: RegisterRequest): Promise<ApiResult<UserResponse>>;
   retryProfile(): Promise<ApiResult<UserResponse>>;
-  signOut(): void;
+  signOut(): Promise<ApiResult<void>>;
 }
 
 export interface AuthProviderProps {
@@ -30,4 +31,6 @@ export interface AuthProviderProps {
   stub?: boolean;
   /** Inject a transport for integration tests. */
   fetch?: typeof globalThis.fetch;
+  /** Inject the redirect client for isolated session tests. */
+  oidc?: OidcClient;
 }

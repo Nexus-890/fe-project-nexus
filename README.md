@@ -7,7 +7,8 @@ file responsibilities, TanStack Query flows, the stub, and testing instructions.
 
 ```bash
 npm run test:auth
-NEXT_PUBLIC_AUTH_STUB=true npm run dev
+npm run test:auth:browser
+npm run dev
 ```
 
 The access token is kept in memory only; a page reload does not restore the
@@ -58,9 +59,10 @@ Each page feature has its own folder: `features/home`, `features/category`,
 live in `lib/catalog-model.ts`; shared UI lives under `ui/components`.
 
 Authentication pages live outside the shop chrome under `app/(auth)`: sign-up is
-`/sign-up` and sign-in is `/sign-in`. Both forms use the shared `AuthProvider`,
-`react-hook-form`, and Zod. Draft auth paths are kept in `service/auth.ts`,
-alongside the other auth endpoint paths.
+`/sign-up` and sign-in is `/sign-in`. Sign-up uses the shared `AuthProvider`,
+`react-hook-form`, and Zod. Sign-in redirects to Keycloak with OIDC + PKCE;
+`/auth/callback` exchanges the code and restores the requested page.
+Registration/profile API paths are kept in `service/auth.ts`.
 The home feature currently renders the API-backed category tree only. Product
 listing and paging stay in the category and search features until the products
 endpoint is available. The shared header owns search navigation and renders the

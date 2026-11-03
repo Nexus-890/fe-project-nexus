@@ -6,6 +6,14 @@ import { createAuthApi } from "../service/auth";
 import { createAuthStub } from "./fixtures/auth-stub";
 import type { ProblemDetails } from "../types/common/response/type";
 import type { RegisterRequest } from "../types/auth/request/type";
+import type { LoginRequest } from "../types/auth/request/type";
+import type { LoginResponse } from "../types/auth/response/type";
+import type { AuthApi } from "../types/auth/type";
+
+// Keep regression coverage for the legacy backend fixture without exposing a
+// password sign-in operation on the production auth API.
+const fixtureLogin = (auth: AuthApi, input: LoginRequest) =>
+  auth.client.post<LoginResponse>("/api/v1/auth/login", input, { auth: false });
 
 const registerInput: RegisterRequest = {
   email: "buyer@example.test",
@@ -174,7 +182,7 @@ test("stub register-login-me flow carries Authorization and stores no token in w
   const register = await auth.register(registerInput);
   assert.equal(register.ok, true);
 
-  const login = await auth.login({ email: registerInput.email, password: registerInput.password });
+  const login = await fixtureLogin(auth, { email: registerInput.email, password: registerInput.password });
   assert.equal(login.ok, true);
   if (!login.ok) {
     assert.fail("login should succeed");
@@ -210,7 +218,7 @@ test("separate stub instances do not accept each other's runtime token", async (
   const authA = createAuthApi(createApiClient({ fetch: createAuthStub() }));
   const register = await authA.register(registerInput);
   assert.equal(register.ok, true);
-  const login = await authA.login({ email: registerInput.email, password: registerInput.password });
+  const login = await fixtureLogin(authA, { email: registerInput.email, password: registerInput.password });
   assert.equal(login.ok, true);
   if (!login.ok) {
     assert.fail("login should succeed");
@@ -275,7 +283,7 @@ test("stub validation and duplicate conflicts return typed HTTP errors", async (
     assert.equal(duplicate.error.status, 409);
   }
 
-  const invalidLogin = await auth.login({ email: "", password: "" });
+  const invalidLogin = await fixtureLogin(auth, { email: "", password: "" });
   assert.equal(invalidLogin.ok, false);
   if (!invalidLogin.ok) {
     assert.equal(invalidLogin.error.status, 400);
@@ -321,16 +329,7 @@ test("stub malformed bodies return common-web form-level errors without field er
   }
 });
 
-test("auth API validates malformed login and user success bodies", async () => {
-  const badLogin = createAuthApi(createApiClient({
-    fetch: async () => new Response(JSON.stringify({ accessToken: "token", expiresIn: 0, tokenType: "Bearer" }), { status: 200 }),
-  }));
-  const badLoginResult = await badLogin.login({ email: "a@example.test", password: "password" });
-  assert.equal(badLoginResult.ok, false);
-  if (!badLoginResult.ok) {
-    assert.equal(badLoginResult.error.kind, "invalid-response");
-  }
-
+test("auth API exposes no password login and validates user success bodies", async () => {
   const badMe = createAuthApi(createApiClient({
     getAccessToken: () => "token",
     fetch: async () => new Response(JSON.stringify({
@@ -347,6 +346,7 @@ test("auth API validates malformed login and user success bodies", async () => {
     }), { status: 200 }),
   }));
   const badMeResult = await badMe.me();
+  assert.equal("login" in badMe, false);
   assert.equal(badMeResult.ok, false);
   if (!badMeResult.ok) {
     assert.equal(badMeResult.error.kind, "invalid-response");

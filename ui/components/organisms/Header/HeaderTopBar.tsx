@@ -8,11 +8,6 @@ import type { HeaderProps } from "@/types/ui/type";
 export default function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
   const router = useRouter();
 
-  function signOut() {
-    onSignOut();
-    router.push("/sign-in");
-  }
-
   return (
     <div className="border-b border-border">
       <div className="mx-auto flex min-h-11 lg:min-h-9 max-w-[1248px] items-center justify-between gap-3 px-4 py-1 lg:py-0 text-xs text-gray-900 sm:px-6">
@@ -26,7 +21,15 @@ export default function HeaderTopBar({ user, authenticating, onSignOut }: Header
             <span className="inline-flex min-h-11 lg:min-h-9 items-center px-2" role="status">Signing in…</span>
           ) : (
             <>
-              <Link href="/sign-in" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign in</Link>
+              <Link
+                href="/sign-in"
+                onNavigate={(event) => {
+                  event.preventDefault();
+                  const returnTo = window.location.pathname + window.location.search + window.location.hash;
+                  router.push(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+                }}
+                className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary"
+              >Sign in</Link>
               <Link href="/sign-up" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign up</Link>
             </>
           )}
@@ -36,7 +39,7 @@ export default function HeaderTopBar({ user, authenticating, onSignOut }: Header
           <Link href="/#live-auctions" className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary md:inline-flex">Live Auctions</Link>
           <Link href="/#help" className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary lg:inline-flex">Help &amp; Contact</Link>
           {user && (
-            <button type="button" onClick={signOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
+            <button type="button" onClick={onSignOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
               Sign out
             </button>
           )}
