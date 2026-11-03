@@ -208,6 +208,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/{id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload an image to an owned product
+         * @description Requires SELLER and PRODUCT.UPDATE; only the owner may upload. Validate JPEG/PNG/WebP bytes, not the filename or supplied MIME type. Enforce the configured count limit (default 5) before storage upload. File limit defaults to 5 MB. Product list and detail return images sorted by sortOrder then ID.
+         */
+        post: operations["uploadProductImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -294,6 +314,8 @@ export interface components {
             sellerId: string;
             /** @description Existing BigDecimal JSON number; this migration preserves the delivered numeric wire format. */
             minPrice: number | null;
+            /** @description Product images sorted by sortOrder then ID; empty when none exist. */
+            images?: components["schemas"]["Image"][];
         };
         ProductDetail: {
             /** Format: uuid */
@@ -547,6 +569,13 @@ export interface components {
             message: string;
             data: components["schemas"]["Sku"][];
             page: components["schemas"]["PageInfo"];
+        };
+        ImageUploadResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Image"];
         };
     };
     responses: never;
@@ -3407,6 +3436,206 @@ export interface operations {
                         status?: 504;
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    uploadProductImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description JPEG, PNG or WebP bytes within nexus.storage.max-file-size.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Image uploaded and its URL recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "69000000-0000-4000-8000-000000000301",
+                     *         "imageUrl": "https://storage.example.org/storage/v1/object/public/product-images/products/69000000-0000-4000-8000-000000000201/cover.jpg",
+                     *         "sortOrder": 0
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ImageUploadResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: CATALOG_IMAGE_REQUIRED, CATALOG_IMAGE_LIMIT_REACHED, CATALOG_IMAGE_SORT_LIMIT_REACHED, CATALOG_IMAGE_INVALID_TYPE, CATALOG_IMAGE_READ_FAILED, INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "CATALOG_IMAGE_REQUIRED" | "CATALOG_IMAGE_LIMIT_REACHED" | "CATALOG_IMAGE_SORT_LIMIT_REACHED" | "CATALOG_IMAGE_INVALID_TYPE" | "CATALOG_IMAGE_READ_FAILED" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED, CATALOG_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "CATALOG_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN, CATALOG_UNAUTHORIZED. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "CATALOG_UNAUTHORIZED";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: CATALOG_PRODUCT_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "CATALOG_PRODUCT_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Content Too Large. Codes: CATALOG_IMAGE_TOO_LARGE. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 413;
+                        /** @enum {string} */
+                        code?: "CATALOG_IMAGE_TOO_LARGE";
+                    };
+                };
+            };
+            /** @description Unsupported Media Type. Codes: UNSUPPORTED_MEDIA_TYPE. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 415;
+                        /** @enum {string} */
+                        code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: RATE_LIMITED. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: CATALOG_IMAGE_STORAGE_UNAVAILABLE, CATALOG_IMAGE_STORAGE_NOT_CONFIGURED. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "CATALOG_IMAGE_STORAGE_UNAVAILABLE" | "CATALOG_IMAGE_STORAGE_NOT_CONFIGURED";
                     };
                 };
             };
