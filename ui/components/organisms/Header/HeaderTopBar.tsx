@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/ui/type";
 
-export default function HeaderTopBar({ user, authenticating, onSignOut }: HeaderProps) {
+export default function HeaderTopBar({ user, authenticating, onSignOut, cartCount = 0 }: HeaderProps) {
   const router = useRouter();
 
   return (
@@ -45,23 +45,26 @@ export default function HeaderTopBar({ user, authenticating, onSignOut }: Header
           )}
         </nav>
 
-        <nav aria-label="Account and shopping links" className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2">
-          <button type="button" className="inline-flex min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary">
+        <nav aria-label="Account and shopping links" className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <button type="button" className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary sm:inline-flex">
             <MapPin size={14} aria-hidden="true" />
             <span className="hidden md:inline">Ship to HCMC</span>
           </button>
-          <Link href="/#sell" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">Sell</Link>
+          <Link href="/#sell" className="hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary sm:inline-flex">Sell</Link>
           <button type="button" className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary md:inline-flex">
             Watchlist <ChevronDown size={13} aria-hidden="true" />
           </button>
           <button type="button" className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary lg:inline-flex">
             My Nexus <ChevronDown size={13} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Notifications" className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
+          <button type="button" aria-label="Notifications" className="relative hidden min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary sm:inline-flex">
             <Bell size={17} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Shopping cart" className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
+          <button type="button" aria-label={`Shopping cart (${cartCount} ${cartCount === 1 ? "item" : "items"})`} className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
             <ShoppingCart size={19} aria-hidden="true" />
+            <span aria-hidden="true" className="absolute top-0 right-0 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+              {cartCount}
+            </span>
           </button>
         </nav>
       </div>

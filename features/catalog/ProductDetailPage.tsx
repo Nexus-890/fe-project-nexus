@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { ChevronRight, House } from "lucide-react";
 import { useAuth } from "@/hooks/auth/useAuth";
+import { useCart } from "@/hooks/cart/useCart";
 import { useProduct } from "@/features/catalog/useProduct";
-import { unwrapApiResult } from "@/lib/api-result";
 import { formatVND } from "@/lib/format-price";
-import { createCartService } from "@/service/cart";
 import { mockProductDetail, USE_PRODUCT_DETAIL_MOCK } from "@/mocks/product-detail";
-import type { AddCartItemRequest } from "@/types/cart/request/type";
 import type { ProductSku } from "@/types/catalog/response/type";
 import SKUSelector from "@/ui/components/molecules/SKUSelector";
 import QuantityPicker from "@/ui/components/molecules/QuantityPicker";
@@ -37,27 +34,13 @@ function selectedSku(skus: ProductSku[], selectedId: string): ProductSku | undef
 
 export default function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const id = resolveProductId(slug, productId);
-  const { accessToken } = useAuth();
+  const { status } = useAuth();
+  const cart = useCart();
   const product = useProduct(id, Boolean(id));
   const [selectedSkuId, setSelectedSkuId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [signInPrompt, setSignInPrompt] = useState(false);
   const [cartMessage, setCartMessage] = useState<string | null>(null);
-
-  const cartService = useMemo(() => createCartService({
-    getAccessToken: () => accessToken,
-  }), [accessToken]);
-
-  const addToCart = useMutation({
-    mutationFn: async (input: AddCartItemRequest) => unwrapApiResult(await cartService.addCartItem(input)),
-    onSuccess: () => {
-      setCartMessage("Added to cart.");
-      setSignInPrompt(false);
-    },
-    onError: (error: unknown) => {
-      setCartMessage(error instanceof Error ? error.message : "Unable to add this item to cart.");
-    },
-  });
 
   if (!id) {
     return <ProductError message="This product link does not include a product id." />;
@@ -74,17 +57,29 @@ export default function ProductDetailPage({ slug, productId }: ProductDetailPage
   const detail = product.data;
   const sku = selectedSku(detail.skus, selectedSkuId);
   const price = formatVND(sku?.price ?? null);
-  const returnTo = `/products/${encodeURIComponent(slug)}`;
+  const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
-  const handleAddToCart = () => {
-    if (!accessToken) {
+  const handleAddToCart = async () => {
+    if (status === "anonymous" && !cart.guestEnabled) {
       setSignInPrompt(true);
       setCartMessage(null);
       return;
     }
-    if (!sku) return;
+    if (!sku || cart.adding || status === "authenticating" || status === "error") return;
     setCartMessage(null);
-    addToCart.mutate({ skuId: sku.id, quantity });
+    setSignInPrompt(false);
+    try {
+      const result = await cart.addItem({ skuId: sku.id, quantity });
+      if (result.ok) {
+        setCartMessage("Added to cart.");
+      } else if (status === "anonymous" && (result.error.status === 401 || result.error.status === 403)) {
+        setSignInPrompt(true);
+      } else {
+        setCartMessage("Unable to add this item to cart. Please try again.");
+      }
+    } catch {
+      setCartMessage("Unable to add this item to cart. Please try again.");
+    }
   };
 
   return (
@@ -124,11 +119,11 @@ export default function ProductDetailPage({ slug, productId }: ProductDetailPage
 
           <button
             type="button"
-            onClick={handleAddToCart}
-            disabled={!sku || addToCart.isPending}
+            onClick={() => void handleAddToCart()}
+            disabled={!sku || cart.adding || cart.loading || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            {addToCart.isPending ? "Adding…" : "Add to Cart"}
+            {cart.adding ? "Adding…" : "Add to Cart"}
           </button>
 
           {signInPrompt ? (

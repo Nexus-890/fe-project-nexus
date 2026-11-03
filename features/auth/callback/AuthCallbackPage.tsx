@@ -6,13 +6,16 @@ import { useEffect, useRef, useState } from "react";
 import Logo from "@/ui/components/atoms/Logo";
 import { Button } from "@/ui/components/ui/button";
 import { useAuth } from "@/hooks/auth/useAuth";
+import { useCart } from "@/hooks/cart/useCart";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const { completeSignIn, status } = useAuth();
+  const { ready: cartReady } = useCart();
   const callbackUrl = useRef<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -20,7 +23,7 @@ export default function AuthCallbackPage() {
     callbackUrl.current ??= window.location.href;
     void completeSignIn(callbackUrl.current).then((result) => {
       if (!active) return;
-      if (result.ok) router.replace(result.data);
+      if (result.ok) setDestination(result.data);
       else setFailed(true);
     }).catch(() => {
       if (active) setFailed(true);
@@ -28,12 +31,18 @@ export default function AuthCallbackPage() {
     return () => { active = false; };
   }, [completeSignIn, router]);
 
+  useEffect(() => {
+    // The globally mounted cart provider shares one merge attempt, including
+    // StrictMode replays. Resolve the cart before returning to the shop.
+    if (destination && status === "authenticated" && cartReady) router.replace(destination);
+  }, [destination, status, cartReady, router]);
+
   async function retry() {
     if (!callbackUrl.current) return;
     setRetrying(true);
     try {
       const result = await completeSignIn(callbackUrl.current);
-      if (result.ok) router.replace(result.data);
+      if (result.ok) { setFailed(false); setDestination(result.data); }
     } catch {
       setFailed(true);
     } finally {

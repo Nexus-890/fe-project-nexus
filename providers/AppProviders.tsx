@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./AuthProvider";
+import { CartProvider } from "./CartProvider";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -22,7 +23,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <AuthProvider
         stub={process.env.NEXT_PUBLIC_AUTH_STUB === "true"}
       >
-        {children}
+        <CartProvider>{children}</CartProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

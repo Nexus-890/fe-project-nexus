@@ -13,6 +13,7 @@ export interface HeaderProps {
   user: UserResponse | null;
   authenticating: boolean;
   onSignOut: () => void;
+  cartCount?: number;
   categories: CategoryNode[];
   categoriesLoading: boolean;
   categoriesError: boolean;

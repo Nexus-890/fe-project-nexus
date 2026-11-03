@@ -14,6 +14,13 @@ npm run dev
 The access token is kept in memory only; a page reload does not restore the
 session in Sprint 1.
 
+## Guest cart
+
+See [Guest cart and merge on sign-in](docs/guest-cart.md) for the shared header
+count, persistence through Keycloak and merge retry flow. Guest carts are
+disabled by default because the backend guest/merge endpoints are not yet
+delivered. The document records the proposed API and local HTTP verification.
+
 ## Development
 
 First, run the development server:

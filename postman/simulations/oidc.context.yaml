@@ -8,6 +8,8 @@ purpose:
     in-memory authentication, logout, and unchanged registration while Docker
     and the real services are unavailable. Uses one-port routing because browser
     fetch and navigation are configured with explicit local dependency origins.
+    Also exercises guest-cart persistence and callback merge against the
+    explicitly proposed guest contract recorded in docs/guest-cart.md.
 assumptions:
   - id: keycloak-code-pkce-contract
     status: supported
@@ -101,8 +103,106 @@ assumptions:
       https://github.com/keycloak/keycloak/blob/26.7.5/services/src/main/java/org/keycloak/protocol/oidc/OIDCAdvancedConfigWrapper.java;
       https://github.com/keycloak/keycloak/blob/26.7.5/services/src/main/java/org/keycloak/protocol/oidc/endpoints/LogoutEndpoint.java
     updated_at: "2026-11-03"
+  - id: delivered-cart-count-contract
+    status: supported
+    claim: >-
+      The delivered commerce CartResponse supplies cart ID, ACTIVE status and
+      item ID, SKU ID and integer quantities needed by the header count.
+    reason: >-
+      Current Java DTOs define these fields. The frontend count model accepts
+      the actual numeric-price payload and an optional data envelope without
+      requiring the extra fields present only in the older frontend draft.
+    verification: >-
+      On 2026-11-03 inspected CartResponse.java and CartItemResponse.java at
+      4c1139ab. Unit tests accept delivered and draft payloads and reject invalid
+      or overflowing quantities. The member GET fixture returns an envelope;
+      additions and merges return bare DTO-shaped data.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/dto/response/CartResponse.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/dto/response/CartItemResponse.java;
+      features/cart/model.ts; tests/cart.test.ts
+    updated_at: "2026-11-03"
+  - id: simulated-guest-cart-flow
+    status: supported
+    claim: >-
+      Under the proposed guest contract, the real frontend retains its guest
+      session through reload and Keycloak, merges once before returning to the
+      shop, and retries a failed merge using the original idempotency key.
+    reason: >-
+      The five guest browser scenarios exercise real browser HTTP and the
+      existing OIDC flow, including provider PKCE checks. They assert quantities,
+      storage and request evidence. Backend support is not established by these
+      stand-ins.
+    verification: >-
+      On 2026-11-03 the final npm run test:auth:browser passed all 14 scenarios
+      in 34.4 seconds, including the nine existing OIDC scenarios. Observed the
+      same stored guest credential while the browser was at Keycloak, then that
+      credential on exactly one callback merge request and a merged count of 5
+      from guest 2 plus member 3. Reload restored the guest count; later client
+      navigation did not repeat merge; logout and reload showed anonymous count
+      0. Both pre-write 503 and committed-write/failed-response 503 retained the
+      key for retry, with one applied merge in fixture state. Guest-disabled 403
+      showed sign-in. Inspected the simulation log: guest creation 201, additions
+      201, guest GET 200, merge 200/503, member GET 200 and disabled creation 403
+      all ran. Unit suite passed 65 tests including frontend flag false, blocked
+      storage, expired carts and stale auth responses. A first token-persistence
+      test observation used an unsupported redirect interception point; it was
+      corrected to inspect storage on the provider page. Next's pre-existing
+      security reminder caused startup/build attempts to exit; retries completed.
+    source: >-
+      tests/browser/guest-cart.spec.ts; tests/browser/oidc.spec.ts;
+      tests/cart.test.ts; postman/mocks/oidc-api/default.js;
+      test-results/oidc-simulation.ndjson (ignored local evidence);
+      docs/guest-cart.md; fingerprint guest-cart-implementation
+    updated_at: "2026-11-03"
+  - id: backend-guest-merge-api-present
+    status: contradicted
+    claim: >-
+      The current committed backend implements guest creation, guest item
+      operations and merge after Keycloak sign-in.
+    reason: >-
+      The controller and published OpenAPI expose authenticated cart operations
+      only. The service explicitly disallows guest identity and the guest flag
+      is not consumed. The local mock guest routes are a proposal.
+    verification: >-
+      On 2026-11-03 inspected commerce controllers, services, DTOs, configuration,
+      OpenAPI and gateway permission rules at 4c1139ab. No guest token header,
+      guest endpoint, merge endpoint or public feature-configuration contract
+      was defined. The gateway already routes carts to commerce, but anonymous
+      guest permission and CORS changes remain backend work. CLI 1.73.0 whoami
+      reports signed out, so published owner mock discovery was skipped;
+      postman status is unsupported in this installed CLI.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/controller/CartController.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/service/CartService.java;
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      ../be-project-nexus/api-gateway/src/main/java/com/group5/apigateway/config/RouteConfig.java;
+      docs/guest-cart.md
+    updated_at: "2026-11-03"
+  - id: real-merge-is-atomic-and-idempotent
+    status: unknown
+    claim: >-
+      The future backend atomically consumes a guest cart and applies its
+      quantities at most once per user, token and merge key, including retries
+      after a lost success response and a later sign-in.
+    reason: >-
+      This guarantee is required for safe retry and multiple tabs. The fixture
+      models it, but no backend implementation or agreed retention period exists.
+    verification: >-
+      On 2026-11-03 the committed-response 503 browser scenario demonstrated
+      frontend reuse of the same key, and the stand-in applied quantities once.
+      Provider-side verification requires the delivered merge endpoint and
+      tests of concurrent calls, ownership and key retention.
+    source: >-
+      docs/guest-cart.md; postman/mocks/oidc-api/default.js;
+      tests/browser/guest-cart.spec.ts; features/cart/controller.ts
+    updated_at: "2026-11-03"
 fingerprints:
   - id: oidc-browser-implementation
     date: "2026-11-03"
     commit: "6e92bbac with uncommitted frontend OIDC implementation"
+    cli: "1.73.0"
+  - id: guest-cart-implementation
+    date: "2026-11-03"
+    commit: "4c1139ab with uncommitted guest-cart frontend implementation on codex/guest-cart-merge"
     cli: "1.73.0"
