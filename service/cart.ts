@@ -1,5 +1,5 @@
 import { createApiClient, createInvalidResponseError } from "../lib/api-client";
-import { isCart } from "../lib/cart-validation";
+import { parseCartResponse } from "../lib/cart-validation";
 import { createMockCart, USE_CART_MOCK } from "../mocks/cart";
 import type { ApiClient } from "../types/api/type";
 import type { AddCartItemRequest, UpdateCartItemRequest } from "../types/cart/request/type";
@@ -18,7 +18,8 @@ export interface CartServiceOptions {
 
 function validateCart(result: ApiResult<unknown>): ApiResult<Cart> {
   if (!result.ok) return result;
-  return isCart(result.data) ? { ok: true, data: result.data } : {
+  const data = parseCartResponse(result.data);
+  return data ? { ok: true, data } : {
     ok: false,
     error: createInvalidResponseError("Cart response does not match the expected contract"),
   };
@@ -26,7 +27,7 @@ function validateCart(result: ApiResult<unknown>): ApiResult<Cart> {
 
 const validQuantity = (quantity: number) => Number.isSafeInteger(quantity) && quantity >= 1;
 
-/** Sprint 1 paths/DTOs follow docs/api/commerce-service.yaml until BE lands. */
+/** Paths/DTOs follow the delivered Cart API in docs/api/openapi/commerce-service.yaml. */
 export function createCartService(options: CartServiceOptions = {}) {
   const client = options.client ?? createApiClient({ getAccessToken: options.getAccessToken });
   const useMock = options.mock ?? (!options.client && USE_CART_MOCK);

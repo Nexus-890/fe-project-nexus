@@ -28,6 +28,16 @@ function snapshot(quantity: number): Cart {
   };
 }
 
+function backendResponse(quantity: number) {
+  return new Response(JSON.stringify({
+    code: 0, message: "response success",
+    data: {
+      id: "cart-1", userId: "buyer-1", status: "ACTIVE",
+      items: [{ id: "item-1", skuId: "sku-1", productId: "product-1", quantity, unitPrice: 100000 }],
+    },
+  }));
+}
+
 function mountCart(queryClient: QueryClient, transport: typeof globalThis.fetch) {
   const api = createAuthApi(createApiClient({
     baseUrl: "http://cart-query.test", getAccessToken: () => "test-token", fetch: transport,
@@ -84,16 +94,16 @@ test("a GET started during a cart write cannot overwrite the confirmed snapshot"
     await postStarted.promise;
     const concurrentRead = cart.refetch();
     await getStarted.promise;
-    postResponse.resolve(new Response(JSON.stringify(snapshot(2))));
+    postResponse.resolve(backendResponse(2));
     await write;
     assert.equal(getSignal?.aborted, true, "write completion must cancel a read started while POST was pending");
-    getResponse.resolve(new Response(JSON.stringify(snapshot(1))));
+    getResponse.resolve(backendResponse(1));
     await concurrentRead;
     assert.equal(queryClient.getQueryData<Cart>(key)?.items[0].quantity, 2);
     assert.equal(queryClient.getQueryData<Cart>(key)?.subtotal, "200000.00");
   } finally {
-    postResponse.resolve(new Response(JSON.stringify(snapshot(2))));
-    getResponse.resolve(new Response(JSON.stringify(snapshot(1))));
+    postResponse.resolve(backendResponse(2));
+    getResponse.resolve(backendResponse(1));
     queryClient.clear();
   }
 });

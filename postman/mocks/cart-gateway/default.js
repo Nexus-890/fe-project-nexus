@@ -1,10 +1,10 @@
 /* Postman loads local mock handlers as CommonJS. */
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * Local Sprint 1 cart stand-in. Cart paths and DTOs follow the FE task's draft
- * contract; no Cart controller exists in the checked-out commerce service.
- * The CLI is signed out, so a published owner mock could not be searched.
- * Optional display metadata supports the cart reference without checkout data.
+ * Cart HTTP stand-in based on origin/develop's CartController, CartResponse,
+ * CartItemResponse and common-core ApiResponse. Cart prices are JSON numbers;
+ * responses contain no catalog metadata or precomputed totals.
+ * This local fixture uses the repository's backend sources; no published mock is used.
  */
 const http = require("node:http");
 
@@ -23,6 +23,8 @@ const user = {
 const token = "local-cart-fixture-token";
 const productId = "91300001-1111-4111-8111-111111111111";
 const skuId = "91300002-1111-4111-8111-111111111111";
+const secondProductId = "91300007-1111-4111-8111-111111111111";
+const secondSkuId = "91300008-1111-4111-8111-111111111111";
 const productName = "Wireless Headphones Silver";
 const product = {
   id: productId,
@@ -67,20 +69,23 @@ function json(res, value, status = 200) {
   res.end(JSON.stringify(value));
 }
 
-function cartItem(quantity = 1) {
+function cartItem(quantity = 1, secondary = false) {
   return {
-    id: "91300005-1111-4111-8111-111111111111", skuId, productId, productName,
-    quantity, unitPrice: "1500000.00", lineTotal: (1500000 * quantity).toFixed(2),
-    sellerId: product.sellerId, sellerName: "Nexus Audio Store", color: "Silver", size: null,
+    id: secondary ? "91300009-1111-4111-8111-111111111111" : "91300005-1111-4111-8111-111111111111",
+    skuId: secondary ? secondSkuId : skuId,
+    productId: secondary ? secondProductId : productId,
+    quantity, unitPrice: secondary ? 500000.5 : 1500000,
   };
 }
 
 function cart(items = []) {
   return {
-    id: "91300006-1111-4111-8111-111111111111", status: "ACTIVE", items,
-    subtotal: items.reduce((sum, item) => sum + Number(item.lineTotal), 0).toFixed(2),
-    currency: "VND", updatedAt: "2026-10-20T08:00:00Z",
+    id: "91300006-1111-4111-8111-111111111111", userId: user.id, status: "ACTIVE", items,
   };
+}
+
+function cartResponse(res, value, status = 200) {
+  return json(res, { code: 0, message: "response success", data: value }, status);
 }
 
 const pause = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -93,7 +98,9 @@ const server = http.createServer(async (req, res) => {
 
   if (path === "/__test/reset" && req.method === "POST") {
     await pendingHistoryWrite;
-    await pm.state.set(stateKey("cart"), cart(req.body?.seeded ? [cartItem(req.body?.quantity || 1)] : []));
+    const items = req.body?.seeded ? [cartItem(req.body?.quantity || 1)] : [];
+    if (req.body?.secondQuantity) items.push(cartItem(req.body.secondQuantity, true));
+    await pm.state.set(stateKey("cart"), cart(items));
     await pm.state.set(stateKey("controls"), {});
     await pm.state.set(stateKey("requests"), []);
     return json(res, {});
@@ -137,7 +144,7 @@ const server = http.createServer(async (req, res) => {
   if (path === cartPath && req.method === "GET") {
     if (controls.getDelayMs) await pause(controls.getDelayMs);
     if (controls.getStatus) return json(res, { title: "Cart unavailable", status: controls.getStatus, detail: "Unable to load your cart." }, controls.getStatus);
-    return json(res, await pm.state.get(stateKey("cart")) || cart());
+    return cartResponse(res, await pm.state.get(stateKey("cart")) || cart());
   }
 
   // @endpoint POST /v1/carts/me/items
@@ -150,9 +157,12 @@ const server = http.createServer(async (req, res) => {
     }
     const current = await pm.state.get(stateKey("cart")) || cart();
     const existing = current.items.find(item => item.skuId === skuId);
-    const next = cart([cartItem((existing?.quantity || 0) + req.body.quantity)]);
+    const next = cart([
+      ...current.items.filter(item => item.skuId !== skuId),
+      cartItem((existing?.quantity || 0) + req.body.quantity),
+    ]);
     await pm.state.set(stateKey("cart"), next);
-    return json(res, next);
+    return cartResponse(res, next, 201);
   }
 
   const itemMatch = path.match(/^\/v1\/carts\/me\/items\/([^/]+)$/);
@@ -165,13 +175,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PUT" && (!Number.isInteger(req.body?.quantity) || req.body.quantity < 1 || Object.keys(req.body).some(key => key !== "quantity"))) {
       return json(res, { title: "Validation failed", status: 400 }, 400);
     }
-    const next = req.method === "DELETE" ? cart() : cart([cartItem(req.body.quantity)]);
+    const next = cart(req.method === "DELETE"
+      ? current.items.filter(entry => entry.id !== item.id)
+      : current.items.map(entry => entry.id === item.id ? { ...entry, quantity: req.body.quantity } : entry));
     await pm.state.set(stateKey("cart"), next);
     if (req.method === "DELETE") {
       res.writeHead(204, corsHeaders);
       return res.end();
     }
-    return json(res, next);
+    return cartResponse(res, next);
   }
   return json(res, { title: "Endpoint not modelled", detail: `${req.method} ${path}` }, 501);
 });

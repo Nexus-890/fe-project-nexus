@@ -57,10 +57,11 @@ test("product detail keeps the UUID path and normalizes numeric SKU prices", asy
   }]);
 });
 
-test("adding a cart item sends exactly skuId and quantity to the draft endpoint", async () => {
+test("adding a cart item sends exactly skuId and quantity and accepts the backend cart envelope", async () => {
   const fixture = clientFor({
     "/api/v1/carts/me/items": {
-      id: "cart-1", status: "ACTIVE", items: [], subtotal: "0.00", currency: "VND", updatedAt: "2026-10-15T08:00:00Z",
+      code: 0, message: "response success",
+      data: { id: "cart-1", userId: "buyer-1", status: "ACTIVE", items: [] },
     },
   });
 

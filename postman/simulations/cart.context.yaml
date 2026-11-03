@@ -1,0 +1,64 @@
+purpose:
+  stands_in_for: Local HTTP cart gateway with existing auth/catalog fixtures.
+  unblocks: Frontend cart hooks, shared header count and cart page regression checks.
+
+assumptions:
+  - id: compact-cart-envelope
+    status: supported
+    claim: Cart GET, POST and PUT return a compact Cart DTO in an ApiResponse envelope with numeric unitPrice.
+    reason: The delivered backend controller, DTOs and current OpenAPI agree; the previous rich draft fixture did not match them.
+    verification: >-
+      On 2026-11-03 inspected origin/develop at the backend-contract fingerprint.
+      GET returns 200, POST 201 and PUT 200 with code/message/data. DELETE returns
+      204 without a body. Cart has id/userId/status/items; each item has
+      id/productId/skuId/quantity/unitPrice. No display metadata or totals are supplied.
+      This is source/spec evidence, not a request to a running backend.
+    source: >-
+      origin/develop:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/controller/CartController.java;
+      cart/dto/response/CartResponse.java; cart/dto/response/CartItemResponse.java;
+      be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java;
+      be-project-nexus/docs/api/openapi/commerce-service.yaml
+    updated_at: "2026-11-03"
+
+  - id: frontend-against-compact-http-fixture
+    status: supported
+    claim: The frontend shares one cart GET and sums quantities correctly in the local compact-payload scenarios exercised.
+    reason: The real frontend ran against the HTTP simulation with frontend cart/product mocks disabled.
+    verification: >-
+      On 2026-11-03, at the frontend-fix fingerprint, npm run test:cart passed
+      all 9 browser tests. Verified quantity two without reload; two lines with
+      quantities 3 and 2 give count 5 and subtotal 5500001.00; header/cart share
+      one GET; PUT updates the badge; DELETE 204 triggers one refresh; anonymous
+      pages make no cart calls; failed writes preserve confirmed state; late
+      responses after sign-out do not restore the count; mobile/desktop fit.
+      cart-simulation.ndjson contains listening and Cart GET/POST/PUT/DELETE
+      request events, including the compact numeric-price envelope. The 46
+      passing unit tests also cover malformed envelopes, DTO validation, exact
+      decimal totals and concurrent reads. These results establish caller
+      behavior against this stand-in only.
+    source: >-
+      tests/browser/cart.spec.ts; tests/cart-api.test.ts; tests/cart-query.test.ts;
+      postman/mocks/cart-gateway/default.js; playwright.cart.config.ts;
+      cart-simulation.ndjson (generated, ignored)
+    updated_at: "2026-11-03"
+
+  - id: live-backend-integration
+    status: unknown
+    claim: A running gateway and commerce service accept the current frontend session and return the documented Cart payload.
+    reason: The local suite substitutes auth/catalog/cart HTTP responses and does not start the real backend.
+    verification: >-
+      No live backend request was made in this change. A signed-in run against
+      the gateway with cart mocks disabled is still needed to establish actual
+      authentication, permissions, gateway routing and backend connectivity.
+    source: playwright.cart.config.ts; service/cart.ts; configs/api.ts
+    updated_at: "2026-11-03"
+
+fingerprints:
+  - id: backend-contract
+    date: "2026-11-03"
+    commit: "6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop)"
+    cli: "1.73.0"
+  - id: frontend-fix
+    date: "2026-11-03"
+    commit: "f5e651d1 plus uncommitted Cart contract fix and regression tests"
+    cli: "1.73.0; postman status is unavailable in this installed CLI"

@@ -4,6 +4,8 @@ const fixtureUrl = "http://127.0.0.1:3913/api";
 const productId = "91300001-1111-4111-8111-111111111111";
 const skuId = "91300002-1111-4111-8111-111111111111";
 const productName = "Wireless Headphones Silver";
+// CartResponse contains IDs/prices only; the UI uses its deterministic fallback label.
+const cartItemName = `Product ${productId}`;
 
 type RecordedRequest = {
   method: string;
@@ -70,7 +72,10 @@ test("quantity two from the product updates the header without reloading", async
   await openProduct(page);
   await page.getByRole("spinbutton", { name: "Quantity", exact: true }).fill("2");
   await page.evaluate(() => Object.assign(window, { cartAcceptanceMarker: "same-document" }));
+  const addition = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/v1/carts/me/items");
   await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
+  expect((await addition).status()).toBe(201);
   await expectCount(page, 2);
   expect(await page.evaluate(() => (window as typeof window & { cartAcceptanceMarker?: string }).cartAcceptanceMarker)).toBe("same-document");
 
@@ -78,7 +83,7 @@ test("quantity two from the product updates the header without reloading", async
   expect(posts).toHaveLength(1);
   expect(posts[0]).toMatchObject({ path: "/v1/carts/me/items", authenticated: true, body: { skuId, quantity: 2 } });
   await openCart(page);
-  await expect(page.getByText(productName, { exact: true })).toBeVisible();
+  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
   await expectCount(page, 2);
 });
 
@@ -87,10 +92,34 @@ test("the header and cart list share one authenticated GET", async ({ page, requ
   await signIn(page);
   await expectCount(page, 3);
   await openCart(page);
-  await expect(page.getByText(productName, { exact: true })).toBeVisible();
+  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
   const gets = cartRequests(await history(request)).filter(entry => entry.method === "GET");
   expect(gets).toHaveLength(1);
   expect(gets[0]).toMatchObject({ path: "/v1/carts/me", authenticated: true });
+});
+
+test("minimal backend DTO sums quantities across lines and derives money totals", async ({ page, request }) => {
+  await reset(request, { seeded: true, quantity: 3, secondQuantity: 2 });
+  const response = page.waitForResponse(entry => entry.request().method() === "GET"
+    && new URL(entry.url()).pathname === "/api/v1/carts/me");
+  await signIn(page);
+  const payload = await (await response).json();
+  expect(Object.keys(payload).sort()).toEqual(["code", "data", "message"]);
+  expect(payload).toMatchObject({ code: 0, message: "response success" });
+  expect(Object.keys(payload.data).sort()).toEqual(["id", "items", "status", "userId"]);
+  expect(payload.data.items).toHaveLength(2);
+  for (const item of payload.data.items) {
+    expect(Object.keys(item).sort()).toEqual(["id", "productId", "quantity", "skuId", "unitPrice"]);
+    expect(typeof item.unitPrice).toBe("number");
+  }
+
+  await expectCount(page, 5);
+  await openCart(page);
+  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
+  await expect(page.getByText("Product 91300007-1111-4111-8111-111111111111", { exact: true })).toBeVisible();
+  await expect(page.getByText("Subtotal (5 items)", { exact: true })).toBeVisible();
+  await expect(page.getByText("5.500.001,00 ₫", { exact: true })).toBeVisible();
+  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(1);
 });
 
 test("updating and removing an item updates the shared header count", async ({ page, request }) => {
@@ -98,15 +127,18 @@ test("updating and removing an item updates the shared header count", async ({ p
   await signIn(page);
   await openCart(page);
   await expectCount(page, 1);
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${productName}`, "i") }).click();
+  const update = page.waitForResponse(response => response.request().method() === "PUT"
+    && new URL(response.url()).pathname.startsWith("/api/v1/carts/me/items/"));
+  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
+  expect((await update).status()).toBe(200);
   await expectCount(page, 2);
   const updates = cartRequests(await history(request)).filter(entry => entry.method === "PUT");
   expect(updates).toHaveLength(1);
   expect(updates[0]).toMatchObject({ body: { quantity: 2 }, authenticated: true });
   const removal = page.waitForResponse(response => response.request().method() === "DELETE" && new URL(response.url()).pathname.startsWith("/api/v1/carts/me/items/"));
-  await page.getByRole("button", { name: new RegExp(`Remove.*${productName}`, "i") }).click();
+  await page.getByRole("button", { name: new RegExp(`Remove.*${cartItemName}`, "i") }).click();
   expect((await removal).status()).toBe(204);
-  await expect(page.getByText(productName, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(cartItemName, { exact: true })).toHaveCount(0);
   await expect(page.getByText(/your cart is empty/i)).toBeVisible();
   const removals = cartRequests(await history(request)).filter(entry => entry.method === "DELETE");
   expect(removals).toHaveLength(1);
@@ -123,7 +155,7 @@ test("cart GET failure offers retry and recovers the cart", async ({ page, reque
   await expect(page.locator("main").getByRole("alert")).toContainText(/cart/i);
   await control(request, { getStatus: 0 });
   await page.getByRole("button", { name: /retry cart|try again/i }).click();
-  await expect(page.getByText(productName, { exact: true })).toBeVisible();
+  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
   await expectCount(page, 2);
 });
 
@@ -132,11 +164,11 @@ test("failed quantity update preserves the last confirmed cart and can retry", a
   await signIn(page);
   await openCart(page);
   await control(request, { writeStatus: 503 });
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${productName}`, "i") }).click();
+  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
   await expect(page.locator("main").getByRole("alert")).toBeVisible();
   await expectCount(page, 1);
   await control(request, { writeStatus: 0 });
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${productName}`, "i") }).click();
+  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
   await expectCount(page, 2);
 });
 
@@ -161,7 +193,7 @@ test("cart fits mobile and desktop and captures review screenshots", async ({ pa
   await reset(request, { seeded: true, quantity: 2 });
   await signIn(page);
   await openCart(page);
-  await expect(page.getByText(productName, { exact: true })).toBeVisible();
+  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
   const screenshotStyle = "nextjs-portal { display: none !important; }";
   await page.screenshot({ path: info.outputPath("cart-desktop-1440.png"), fullPage: true, style: screenshotStyle });
   await page.setViewportSize({ width: 375, height: 812 });
