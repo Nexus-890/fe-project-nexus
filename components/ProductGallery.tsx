@@ -1,10 +1,10 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ProductImage } from "@/types/catalogResponseType";
+import ProductImageView from "./ProductImage";
+import { sortProductImages } from "./productImageUtils";
 
 interface ProductGalleryProps {
   images: ProductImage[];
@@ -13,18 +13,17 @@ interface ProductGalleryProps {
 /**
  * Product image gallery used by the detail page.
  *
- * Images are kept as a list from the API so replacing the mock fixture with
- * the real response does not require changing this component. The selected
- * image only lives in the client state; changing it never triggers a request.
+ * Image selection is local; switching views never triggers another API call.
  */
 function ProductGallery({ images, productName }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const sortedImages = sortProductImages(images);
 
   const hasImages = images.length > 0;
   const visibleIndex = hasImages
     ? Math.min(selectedIndex, images.length - 1)
     : 0;
-  const selectedImage = images[visibleIndex];
+  const selectedImage = sortedImages[visibleIndex];
 
   const move = (offset: number) => {
     if (!hasImages) return;
@@ -45,31 +44,19 @@ function ProductGallery({ images, productName }: ProductGalleryProps) {
     }
   };
 
-  if (!hasImages) {
-    return (
-      <div
-        className="flex h-[min(92vw,520px)] min-h-[280px] max-h-[520px] items-center justify-center rounded-md bg-black px-6 text-center text-sm text-white"
-        role="img"
-        aria-label={`${productName} image placeholder`}
-      >
-        Product image placeholder
-      </div>
-    );
-  }
-
   return (
     <div className="min-w-0" onKeyDown={handleKeyDown}>
       <div
-        className="group relative flex h-[min(92vw,520px)] min-h-[280px] max-h-[520px] items-center justify-center overflow-hidden rounded-md bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="group relative aspect-square w-full overflow-hidden rounded-sm bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         role="region"
         aria-label={`${productName} image gallery`}
         tabIndex={0}
       >
-        <img
-          key={selectedImage.imageUrl}
-          src={selectedImage.imageUrl}
+        <ProductImageView
+          key={selectedImage?.imageUrl ?? "empty"}
+          src={selectedImage?.imageUrl}
+          productName={productName}
           alt={`${productName} view ${visibleIndex + 1} of ${images.length}`}
-          className="h-full w-full object-contain"
         />
 
         {images.length > 1 ? (
@@ -78,7 +65,7 @@ function ProductGallery({ images, productName }: ProductGalleryProps) {
               type="button"
               onClick={() => move(-1)}
               aria-label="Previous product image"
-              className="absolute left-2 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-900 opacity-100 shadow-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:left-3 sm:opacity-0 sm:group-hover:opacity-100"
+              className="absolute left-2 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm transition hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:left-3 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
             >
               <ChevronLeft size={22} aria-hidden="true" />
             </button>
@@ -86,7 +73,7 @@ function ProductGallery({ images, productName }: ProductGalleryProps) {
               type="button"
               onClick={() => move(1)}
               aria-label="Next product image"
-              className="absolute right-2 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-900 opacity-100 shadow-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:right-3 sm:opacity-0 sm:group-hover:opacity-100"
+              className="absolute right-2 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm transition hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:right-3 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
             >
               <ChevronRight size={22} aria-hidden="true" />
             </button>
@@ -94,25 +81,26 @@ function ProductGallery({ images, productName }: ProductGalleryProps) {
         ) : null}
       </div>
 
-      {images.length > 1 ? (
+      {hasImages ? (
         <div
           className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]"
-          role="list"
+          role="group"
           aria-label="Product image thumbnails"
         >
-          {images.map((image, index) => (
+          {sortedImages.map((image, index) => (
             <button
               key={image.id || image.imageUrl}
               type="button"
               onClick={() => setSelectedIndex(index)}
               aria-label={`View ${productName} image ${index + 1}`}
               aria-current={index === visibleIndex ? "true" : undefined}
-              className={`inline-flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-black p-0.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-[80px] sm:w-[80px] ${index === visibleIndex ? "border-2 border-primary" : "border-border hover:border-gray-500"}`}
+              className={`inline-flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-sm border bg-black p-0.5 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-[80px] sm:w-[80px] ${index === visibleIndex ? "border-2 border-primary" : "border-border hover:border-muted-foreground"}`}
             >
-              <img
+              <ProductImageView
+                key={image.imageUrl}
                 src={image.imageUrl}
+                productName={productName}
                 alt={`${productName} thumbnail ${index + 1}`}
-                className="h-full w-full object-contain"
               />
             </button>
           ))}

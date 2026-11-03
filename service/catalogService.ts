@@ -8,6 +8,7 @@ import type { ApiResponse, Page } from "../types/commonResponseType";
 import type {
   CategoryNode,
   ProductDetail,
+  ProductImage,
   ProductSummary,
 } from "../types/catalogResponseType";
 import type { ProductFilters } from "../types/catalogRequestType";
@@ -32,6 +33,26 @@ export const isCategoryTree = (value: unknown): value is CategoryNode[] =>
       Number.isInteger(node.level) &&
       isCategoryTree(node.children),
   );
+
+const parseProductImages = (value: unknown): ProductImage[] => {
+  if (!Array.isArray(value))
+    throw createInvalidResponseError("Invalid product images");
+  return value.map((image) => {
+    if (
+      !isRecord(image) ||
+      typeof image.id !== "string" ||
+      typeof image.imageUrl !== "string" ||
+      !Number.isInteger(image.sortOrder)
+    ) {
+      throw createInvalidResponseError("Invalid product image");
+    }
+    return {
+      id: image.id,
+      imageUrl: image.imageUrl,
+      sortOrder: image.sortOrder as number,
+    };
+  });
+};
 
 export const parseProductPage = (
   response: ApiResponse<unknown>,
@@ -60,6 +81,8 @@ export const parseProductPage = (
         typeof item.categoryId === "string" ? item.categoryId : undefined,
       sellerId: typeof item.sellerId === "string" ? item.sellerId : undefined,
       status: typeof item.status === "string" ? item.status : undefined,
+      // The current list DTO has no media; #122 adds this optional field.
+      images: item.images == null ? [] : parseProductImages(item.images),
     };
   });
   return {
@@ -110,21 +133,7 @@ export const parseProductDetail = (value: unknown): ProductDetail => {
       price,
     };
   });
-  const images = value.images.map((image) => {
-    if (
-      !isRecord(image) ||
-      typeof image.id !== "string" ||
-      typeof image.imageUrl !== "string" ||
-      !Number.isInteger(image.sortOrder)
-    ) {
-      throw createInvalidResponseError("Invalid product image");
-    }
-    return {
-      id: image.id,
-      imageUrl: image.imageUrl,
-      sortOrder: image.sortOrder as number,
-    };
-  });
+  const images = parseProductImages(value.images);
   const minPrice =
     value.minPrice == null ? null : normalizeMoney(value.minPrice);
   if (value.minPrice != null && minPrice === null)

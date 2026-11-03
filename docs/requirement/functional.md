@@ -18,6 +18,9 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CAT-05 | Execute real free-text search and newest/price sorting | Backend contract gap: delivered ProductController does not accept q/sort |
 | CAT-06 | Display product detail, images, SKU options and selected price | Implemented: ProductDetailPage and gallery/SKU components |
 | CAT-07 | Keep product link resolution and quantity integer/minimum rules | Implemented: detail helpers and QuantityPicker |
+| CAT-08 | Show all product images in sortOrder with selectable thumbnails and wrapping/keyboard navigation | ProductGallery; detail API supplies images; see [gallery scope and evidence](../features/product-image-gallery.md) |
+| CAT-09 | Show the first ordered image on a product card | Frontend supports optional summary images; delivered list API has no images, so live cards retain placeholders until BE #122 provides them |
+| CAT-10 | Show a placeholder for absent images and broken image URLs on detail and cards | Shared ProductImage fallback; acceptance includes HTTP 404 and no uncaught page error |
 | CART-01 | Anonymous add-item click requests sign-in without sending a private API call | Implemented: product detail interaction |
 | CART-02 | Authenticated add-item request sends skuId and quantity only | Implemented frontend mutation/service; real authorization/contract needs integration evidence |
 | CART-03 | Use current-session cache/feedback only; show request failures accurately | Implemented mutation/session policy; tested scenarios determine evidence |
