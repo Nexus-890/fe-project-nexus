@@ -194,7 +194,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("cart displays snapshot unit and line prices with a disabled checkout at desktop", async ({ page }, info) => {
+test("cart displays snapshot unit and line prices with a checkout link at desktop", async ({ page }, info) => {
   await page.setViewportSize({ width: 1440, height: 1056 });
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
@@ -205,8 +205,7 @@ test("cart displays snapshot unit and line prices with a disabled checkout at de
   await expect(line.getByText("300.000,00 ₫", { exact: true })).toBeVisible();
   await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
   await expect(page.getByRole("main")).not.toContainText("999.999");
-  await expect(page.getByRole("button", { name: /Place order|Proceed to Checkout/i })).toBeDisabled();
-  await expect(page.getByRole("main")).toContainText(/checkout.*not available|order.*not available|coming soon/i);
+  await expect(page.getByRole("link", { name: "Proceed to Checkout" })).toHaveAttribute("href", "/checkout");
   await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName(/2/);
   expect(state.reads).toContain("buyer-1");
   await capture(page, info, "cart-desktop-1440.png");

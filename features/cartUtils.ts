@@ -18,6 +18,9 @@ const requireQuantity = (quantity: number): bigint => {
 export const multiplyCartMoney = (value: string, quantity: number): string =>
   fromCents(toCents(value) * requireQuantity(quantity));
 
+export const sumCartMoney = (values: readonly string[]): string =>
+  fromCents(values.reduce((total, value) => total + toCents(value), BigInt(0)));
+
 export const getCartSubtotal = (items: readonly CartItem[]): string =>
   fromCents(
     items.reduce(

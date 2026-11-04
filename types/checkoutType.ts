@@ -1,0 +1,48 @@
+/** Checkout form state keeps GHN codes separate from the display names. */
+export type CheckoutAddress = {
+  recipientName: string;
+  phoneNumber: string;
+  addressLine: string;
+  provinceCode: string;
+  districtCode: string;
+  wardCode: string;
+};
+
+/** Provisional #201 application model; reconcile with its delivered OpenAPI. */
+export type ShippingLocality = { code: string; name: string };
+
+export type CheckoutDestination = CheckoutAddress & {
+  city: string;
+  district: string;
+  ward: string;
+  countryCode: "VN";
+};
+
+export type CheckoutPreviewItem = {
+  itemId: string;
+  productId: string;
+  skuId: string;
+  quantity: number;
+  unitPrice: string;
+  lineTotal: string;
+};
+
+export type CheckoutIssue = {
+  itemId: string;
+  skuId: string;
+  code: "OUT_OF_STOCK" | "PRICE_CHANGED" | "PRODUCT_INACTIVE";
+};
+
+/**
+ * Normalized UI model of the unmerged #188 preview draft. Its money is numeric
+ * on the wire; null shippingFee means unavailable, never free shipping.
+ */
+export type CheckoutPreview = {
+  items: CheckoutPreviewItem[];
+  subtotal: string;
+  shippingFee: string | null;
+  taxAmount: string;
+  discountAmount: string;
+  total: string;
+  issues: CheckoutIssue[];
+};

@@ -1,0 +1,9 @@
+simulation: nexus-checkout-browser
+routing: path
+mocks:
+  - name: keycloak
+    routeKey: keycloak
+    path: postman/mocks/oidc-keycloak/config.yaml
+  - name: api
+    routeKey: api
+    path: postman/mocks/checkout-api/config.yaml

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:checkout": "node scripts/dev-checkout.mjs",
     "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "eslint",
@@ -14,7 +15,8 @@
     "test:unit": "node scripts/test-auth.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
-    "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts"
+    "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts",
+    "test:checkout": "node scripts/test-browser.mjs --config playwright.checkout.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

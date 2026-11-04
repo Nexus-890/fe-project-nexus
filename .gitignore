@@ -44,6 +44,7 @@ next-env.d.ts
 /playwright-report/
 /.next-catalog-*/
 /.next-oidc-run/
+/.next-checkout-run/
 
 !.env.example
 

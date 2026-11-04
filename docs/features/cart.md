@@ -1,6 +1,6 @@
 # Cart
 
-The frontend implements `/cart`, the header cart link/count, product-detail add-item, snapshot prices/totals, optimistic quantity/removal, rollback and empty/loading/error/auth states. Checkout stays disabled with a visible reason. Delivered OpenAPI covers GET/add. After merging the existing #129 remote history at `e2411ea4`, backend update/remove source also exists, but build, DTO, authentication binding and response-contract issues still block compatible integration. See the [implementation report](cart-page-implementation.md) for verification and the [initial readiness review](cart-page-readiness.md) for the original source audit.
+The frontend implements `/cart`, the header cart link/count, product-detail add-item, snapshot prices/totals, optimistic quantity/removal, rollback and empty/loading/error/auth states. The summary links to [checkout address and quote review](checkout.md), and stays disabled while cart edits settle. Delivered OpenAPI covers GET/add. After merging the existing #129 remote history at `e2411ea4`, backend update/remove source also exists, but build, DTO, authentication binding and response-contract issues still block compatible integration. See the [implementation report](cart-page-implementation.md) for verification and the [initial readiness review](cart-page-readiness.md) for the original source audit.
 
 ## Interaction
 
@@ -48,7 +48,7 @@ Fill the origin and reconcile the delivered contract, body, response and privile
 
 [cartUtils](../../features/cartUtils.ts) calculates exact line totals/subtotal with BigInt cents from normalized snapshot unitPrice; `formatVND` renders them. Optional catalog metadata supplies names/images/variants. Failed enrichment leaves a usable identifier/image fallback and Remove control; live catalog SKU prices never replace cart prices. No currency conversion, seller display name or shipping promise is fabricated.
 
-The thin route delegates to CartPage with flat CartLine/CartSummary components. Desktop places the list beside the summary; mobile stacks them with wrapping and 44px targets. The supplied design guides layout. Coupons, Save for Later, seller trust, live price alerts, shipping/tax quotes and working checkout remain outside the task.
+The thin route delegates to CartPage with flat CartLine/CartSummary components. Desktop places the list beside the summary; mobile stacks them with wrapping and 44px targets. Coupons, Save for Later, seller trust and live price alerts remain outside the Cart task. #150 adds the checkout link and handles address/shipping preview on its own page.
 
 Before an edit, cancel the cart GET, snapshot the cache and optimistically patch quantity/removal. Totals/header count change immediately. Disable all cart line controls while the operation settles, including across page remounts, to serialize full-cart responses. PUT success uses the returned cart; DELETE success keeps the removal; settled operations refetch. On rejection, restore the snapshot only if that operation's optimistic value still owns the cache and announce the reason. Removing the last line shows the empty state/catalog link immediately; rejected removal restores it. Manual quantity entry commits on blur/Enter, while plus/minus commit immediately.
 

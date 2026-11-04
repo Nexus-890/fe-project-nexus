@@ -9,7 +9,8 @@ UI files are directly under `components`. Atomic Design remains a logical depend
 | Primitives | button, input, checkbox, label, separator, select, sonner | Native/Base UI behavior, variants, focus and class composition |
 | Small UI parts | Logo, ButtonCustom, Pagination, QuantityPicker | Reusable rendering or local interaction through props |
 | Product parts | ProductCard, ProductGallery, ProductImage, SKUSelector, ProductGrid | Catalog presentation, shared image fallback and SKU/image/quantity selection |
-| Cart parts | CartLine, CartSummary | Snapshot price/line total, optional catalog display metadata, quantity/remove controls, subtotal and disabled checkout reason; CartPage/useCart own requests/state |
+| Cart parts | CartLine, CartSummary | Snapshot price/line total, optional catalog display metadata, quantity/remove controls, subtotal and checkout navigation; CartPage/useCart own requests/state |
+| Checkout parts | AddressForm, OrderSummary | Controlled validated address fields and snapshot/quote presentation; CheckoutPage/CheckoutSummary own requests/state |
 | Category parts | CategoryTree, CategoryNavigation, CategoryFilterSidebar | Tree/filter rendering and navigation events |
 | Shop chrome | Header, HeaderTopBar, HeaderMain, HeaderCategoryNav, SearchBar | Header/search composition from data and callbacks supplied by the feature |
 | Presentation helpers | formatPrice, componentUtils where needed | Shared pure formatting/class utilities, not HTTP or auth ownership |
