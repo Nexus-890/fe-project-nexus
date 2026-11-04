@@ -18,4 +18,10 @@ export const queryKeys = {
     group: (sessionId: number, orderGroupId: string) =>
       ["payment", sessionId, orderGroupId] as const,
   },
+  orders: {
+    group: (sessionId: number, orderGroupId: string) =>
+      ["orders", sessionId, "group", orderGroupId] as const,
+    own: (sessionId: number, page: number) =>
+      ["orders", sessionId, "own", { page, size: 10 }] as const,
+  },
 };

@@ -1,18 +1,22 @@
 purpose:
   stands_in_for: >-
-    The payment-service initiation API and the profile/catalog/cart endpoints used
+    The payment-service initiation API, order reads/status changes and the profile/catalog/cart endpoints used
     by the real Next.js payment page, plus the existing local Keycloak protocol
     fixture. The payment mock follows the delivered payment OpenAPI and DTOs with
     the additive serverNow and transferContent fields. Published owner mocks were
     not searched: no owner workspace was identified, postman status is unsupported
     by installed CLI 1.73.0, and postman mock list --json returned an empty list.
+    The order-group GET is an explicit #153/#138 stand-in based on the existing
+    OrderGroupResponse DTO; this route is not yet delivered by the backend.
   unblocks: >-
     Browser acceptance for one group QR, selectable/copyable transfer values,
     a server-derived deadline, expiry, repeat reads and failures while the live
     backend/Keycloak are unavailable. One-port routing uses explicit browser API
     and provider origins on 3914 and the application on 3104, preserving existing
     development sessions on 3913. Payment.environment.yaml configures the shared
-    Keycloak fixture without changing its default origins.
+    Keycloak fixture without changing its default origins. The polling suite
+    additionally exercises child-order transitions, confirmation navigation,
+    cancellation, hidden-tab suspension and stale-response guards.
 assumptions:
   - id: delivered-payment-fields
     status: supported
@@ -76,6 +80,72 @@ assumptions:
       test-results/payment-simulation.ndjson (local ignored evidence);
       docs/features/payment-evidence/
     updated_at: "2026-11-04"
+  - id: order-group-endpoint-delivery
+    status: unknown
+    claim: >-
+      GET /api/v1/orders/groups/{id} returns ApiResponse.data containing the
+      requested group's OrderGroupResponse and current child-order statuses.
+    reason: >-
+      Issue #153 explicitly permits a mock until #138 merges. The existing DTO
+      defines the shape, but the fetched #152 base has no GET group controller
+      or delivered OpenAPI path. The fixture can establish frontend behavior
+      under that shape, not backend endpoint availability or authorization.
+    verification: >-
+      On 2026-11-04 inspected the #152 base bbfcb7e8, OrderController and
+      OrderGroupResponse. The mock keeps group status PENDING while individual
+      child orders are changed by HTTP PATCH, matching the demo distinction in
+      the issue. A test-only fixture-admin identity permits those mock PATCH
+      calls; real ADMIN authorization and checkout reconciliation remain unverified.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/controller/OrderController.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/dto/response/OrderGroupResponse.java;
+      postman/mocks/payment-api/default.js; tests/payment-polling.spec.ts
+    updated_at: "2026-11-04"
+  - id: payment-status-browser-acceptance
+    status: supported
+    claim: >-
+      In the local polling scenarios, the real frontend reads child-order
+      statuses on a three-second cadence, confirms only when every child is
+      PAID, shows a canceled state when all are CANCELED, and stops polling on
+      terminal state, countdown expiry or hidden-tab visibility.
+    reason: >-
+      Playwright runs the actual Next.js page, generic query hook and Axios
+      boundary against local HTTP dependency servers. Child transitions use
+      real HTTP PATCH requests to the stand-in, whose group status remains
+      PENDING. Tab visibility is the sole replaced browser boundary in the
+      suspension checks; the thirty-second interval and HTTP requests use real
+      elapsed time. This is evidence about the caller under these modeled
+      responses, not evidence of delivered #138 or live payment reconciliation.
+    verification: >-
+      On 2026-11-04, against the payment-status-polling fingerprint, npm run
+      test:payment executed 18 scenarios: 17 passed, and the cadence/PAID test
+      reached the correct confirmed UI but failed an elapsed assertion at
+      3035.99 ms because a repeated URL assertion included sampling backoff.
+      Replaced only that measurement with the navigation event, measured from
+      the successful PATCH response. The targeted command npm run test:payment
+      -- --grep 'polls child statuses' then passed in 29.6 seconds (20.3 seconds
+      for the test), including navigation inside three seconds and both order
+      rows displayed as PAID. The other eight polling cases passed in the full
+      run: partial/mixed child states did not confirm; all canceled stopped;
+      zero countdown stopped and stayed stopped after visibility restoration;
+      a hidden tab made no requests for thirty real seconds; malformed empty
+      groups failed closed; a 503 displayed detail and recovered on the next
+      poll; and delayed PAID responses could not confirm while hidden or after
+      expiry. All nine prior QR/countdown cases passed. Inspected logs from the
+      full run (468 HTTP requests, 27 group reads, one group 503, 12 PATCH 200s)
+      and targeted run (55 HTTP requests, five group reads, two PATCH 200s).
+      The latter returned one all-PAID snapshot while group status was PENDING.
+      Saved and visually inspected confirmed/canceled mobile screenshots.
+      Next's pre-existing security advisory blocked initial startup; unchanged
+      retries reached the executed scenarios. No live backend was exercised.
+    source: >-
+      tests/payment-polling.spec.ts; tests/payment.spec.ts;
+      postman/mocks/payment-api/default.js; features/usePaymentStatus.ts;
+      test-results/payment-full-simulation.ndjson (ignored local full-run log);
+      test-results/payment-simulation.ndjson (ignored local targeted-run log);
+      docs/features/payment-evidence/payment-confirmed.png;
+      docs/features/payment-evidence/payment-canceled.png
+    updated_at: "2026-11-04"
   - id: real-bank-provider-and-deployment
     status: unknown
     claim: >-
@@ -96,6 +166,10 @@ assumptions:
       docs/features/payment.md; ../be-project-nexus/docs/adr/ADR-008-api-contract.md
     updated_at: "2026-11-04"
 fingerprints:
+  - id: payment-status-polling
+    date: "2026-11-04"
+    commit: "bbfcb7e8 with uncommitted #153 polling, order-service and browser simulation changes"
+    cli: "1.73.0"
   - id: payment-qr-countdown
     date: "2026-11-04"
     commit: "origin/develop 0d0a36a4 with uncommitted payment frontend, serverNow and transferContent changes"

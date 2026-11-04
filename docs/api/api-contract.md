@@ -81,6 +81,10 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
 | DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
 | POST `/api/v1/payments` | Payment page, Bearer + CHECKOUT.START + group ownership; idempotent read of existing group instructions, current serverNow and full transferContent |
+| GET `/api/v1/orders/groups/{id}` | Payment status polling every 3 seconds; Bearer; expected #138 read using the existing OrderGroup DTO, currently supplied only by the explicit test simulation |
+| GET `/api/v1/orders` | Own order list after payment; Bearer + ORDER.LIST; delivered data[] plus sibling page metadata |
+
+The group read is pending in #138: it is absent from the delivered commerce controller/OpenAPI. Its expected resource uses the existing generated OrderGroup schema from order creation. Production calls the real endpoint and reports errors; it never falls back to mock data. Polling reads every child's status, because the administrative PATCH can leave group.status unchanged. See [payment status polling](../features/payment-status-polling.md) for acceptance evidence and the pending live integration.
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
 

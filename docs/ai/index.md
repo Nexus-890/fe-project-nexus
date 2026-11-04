@@ -12,6 +12,7 @@ Read the frontend [AGENTS.md](../../AGENTS.md) first. Use the table to select re
 | Cart page or API handoff | [Cart implementation](../features/cart-page-implementation.md), [Cart configuration/flow](../features/cart.md), [initial audit](../features/cart-page-readiness.md), [authentication](../features/authentication.md) | CartPage/useCart/cartUtils, cartService blank origin, shared hooks/session key, ShopLayout/header and delivered BE versus pending update/remove |
 | Component or visual change | [Design system](../ui/design-system.md), [components](../ui/components.md) | Owning component, `app/globals.css`, real consumers |
 | Group payment QR, memo or countdown | [Payment](../features/payment.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | CheckoutPaymentPage, CopyableField/CountdownTimer, paymentService, delivered payment controller/DTO/spec and payment simulation |
+| Payment status polling or order-list confirmation | [Polling](../features/payment-status-polling.md), [Payment](../features/payment.md), [API contract](../api/api-contract.md) | usePaymentStatus, CheckoutPaymentPage, OrdersPage, orderService, payment polling browser tests and simulation |
 | File layout, naming, or imports | [Architecture](architecture.md), [coding rules](coding-rules.md) | Imports, component generator aliases, test/smoke scripts |
 | Test or release validation | [Workflow](task-workflow.md), [non-functional requirements](../requirement/non-functional.md) | `package.json`, tests, runner configs, actual command output |
 

@@ -52,5 +52,6 @@ next-env.d.ts
 /.next-verify-build/
 /.next-cart-readiness-build/
 /.next-payment-build/
+/.next-polling-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json

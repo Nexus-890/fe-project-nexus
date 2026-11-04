@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, Landmark, LoaderCircle, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
 import CopyableField from "../components/CopyableField";
@@ -12,6 +13,7 @@ import { useAuth } from "../hooks/useAuth";
 import { initiatePayment } from "../service/paymentService";
 import type { PaymentInstructions } from "../types/paymentResponseType";
 import type { ApiError } from "../types/commonResponseType";
+import { usePaymentStatus } from "./usePaymentStatus";
 
 const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary disabled:cursor-wait disabled:opacity-50";
 
@@ -50,6 +52,7 @@ function CheckoutPaymentPage({ orderGroupId }: { orderGroupId: string }) {
 
 function PaymentContents({ orderGroupId }: { orderGroupId: string }) {
   const { requestContext, sessionId } = useAuth();
+  const router = useRouter();
   // Initiation is idempotent for this group. Only mount and explicit refresh call
   // POST; window focus/reconnect must not silently restart payment requests.
   const payment = useApiQuery({
@@ -57,12 +60,31 @@ function PaymentContents({ orderGroupId }: { orderGroupId: string }) {
     service: (signal) => initiatePayment({ orderGroupId }, { context: requestContext, signal }),
     meta: { requiresAuth: true },
   }, { retry: false, retryOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: "always", gcTime: 0 });
+  const paymentStatus = usePaymentStatus(orderGroupId, payment.data);
+
+  useEffect(() => {
+    if (paymentStatus.outcome === "paid")
+      router.replace(`/orders?payment=confirmed&groupId=${encodeURIComponent(orderGroupId)}`);
+  }, [orderGroupId, paymentStatus.outcome, router]);
+
+  if (paymentStatus.outcome === "paid") return <p role="status" className="rounded-sm border border-border p-8 text-success">Payment confirmed. Opening your orders…</p>;
+  if (paymentStatus.outcome === "canceled") return <div className="rounded-sm border border-border p-6 sm:p-8">
+    <CircleAlert size={28} className="mb-4 text-muted-foreground" aria-hidden="true" />
+    <h2 className="text-heading-20">Payment canceled</h2>
+    <p role="status" className="mt-2 text-sm text-muted-foreground">All orders in this group were canceled. Please don’t transfer using the previous instructions.</p>
+    <Link href="/orders" className={`${buttonClass} mt-5`}>View your orders</Link>
+  </div>;
 
   if (!payment.data && payment.isPending) return <div role="status" className="flex items-center gap-3 rounded-sm border border-border p-8 text-sm text-muted-foreground"><LoaderCircle size={20} className="animate-spin" aria-hidden="true" />Preparing your payment…</div>;
   if (!payment.data || payment.isError) return <PaymentError error={payment.error} pending={payment.isFetching} onRetry={() => void payment.refetch()} />;
 
   return <>
-    <PaymentDetails key={payment.data.receivedAt} payment={payment.data} orderGroupId={orderGroupId} refreshing={payment.isFetching} onRefresh={() => void payment.refetch()} />
+    {paymentStatus.error && <div role="alert" className="mb-5 rounded-sm border border-border p-4 text-sm">
+      <p>{paymentStatus.error.code === "COMMERCE_ORDER_GROUP_NOT_FOUND" ? "Order group unavailable" : paymentStatus.error.status === 401 || paymentStatus.error.status === 403 ? "Payment status access required" : "Unable to check payment status"}</p>
+      <p className="mt-1 text-muted-foreground">{paymentStatus.error.detail || paymentStatus.error.title}</p>
+      {paymentStatus.error.errors?.length ? <ul className="mt-2 list-inside list-disc">{paymentStatus.error.errors.map((field, index) => <li key={`${field.field}:${index}`}>{field.detail}</li>)}</ul> : null}
+    </div>}
+    <PaymentDetails key={payment.data.receivedAt} payment={payment.data} seconds={paymentStatus.seconds} orderGroupId={orderGroupId} refreshing={payment.isFetching} onRefresh={() => void payment.refetch()} />
   </>;
 }
 
@@ -79,21 +101,8 @@ function PaymentError({ error, pending, onRetry }: { error: ApiError | null; pen
   </div>;
 }
 
-function PaymentDetails({ payment, orderGroupId, refreshing, onRefresh }: { payment: PaymentInstructions; orderGroupId: string; refreshing: boolean; onRefresh: () => void }) {
-  const secondsLeft = () => Math.max(0, Math.ceil((payment.remainingMs - (performance.now() - payment.receivedAt)) / 1000));
-  const [seconds, setSeconds] = useState(secondsLeft);
+function PaymentDetails({ payment, seconds, orderGroupId, refreshing, onRefresh }: { payment: PaymentInstructions; seconds: number; orderGroupId: string; refreshing: boolean; onRefresh: () => void }) {
   const [qrFailed, setQrFailed] = useState(false);
-  useEffect(() => {
-    const tick = () => setSeconds(Math.max(0, Math.ceil((payment.remainingMs - (performance.now() - payment.receivedAt)) / 1000)));
-    const timer = window.setInterval(tick, 250);
-    document.addEventListener("visibilitychange", tick);
-    window.addEventListener("pageshow", tick);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", tick);
-      window.removeEventListener("pageshow", tick);
-    };
-  }, [payment]);
   const expired = seconds === 0;
 
   return <>
