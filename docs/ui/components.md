@@ -8,7 +8,7 @@ UI files are directly under `components`. Atomic Design remains a logical depend
 | --- | --- | --- |
 | Primitives | button, input, checkbox, label, separator, select, sonner | Native/Base UI behavior, variants, focus and class composition |
 | Small UI parts | Logo, ButtonCustom, Pagination, QuantityPicker | Reusable rendering or local interaction through props |
-| Product parts | ProductCard, ProductGallery, SKUSelector, ProductGrid | Catalog presentation and SKU/image/quantity selection |
+| Product parts | ProductCard, ProductGallery, ProductImage, SKUSelector, ProductGrid | Catalog presentation, shared image fallback and SKU/image/quantity selection |
 | Cart parts | CartLine, CartSummary | Snapshot price/line total, optional catalog display metadata, quantity/remove controls, subtotal and disabled checkout reason; CartPage/useCart own requests/state |
 | Category parts | CategoryTree, CategoryNavigation, CategoryFilterSidebar | Tree/filter rendering and navigation events |
 | Shop chrome | Header, HeaderTopBar, HeaderMain, HeaderCategoryNav, SearchBar | Header/search composition from data and callbacks supplied by the feature |
@@ -22,7 +22,9 @@ Keep props next to a component when only that component owns them; share a type 
 
 Local state belongs to the interaction: gallery selected image, SKU choice, controlled quantity and form values. Remote server state belongs in the query cache. Do not copy the whole API response into local state or trigger a GET simply because the user selected another SKU.
 
-`QuantityPicker` preserves integer values of at least one. `SKUSelector` preserves selected-id behavior and fallback labels. `ProductGallery` preserves wrapping arrows, keyboard navigation, selected-image bounds and empty-media placeholder. Product price consumers share `formatVND`; do not duplicate the formatter or change its rounding/precision during a move.
+`QuantityPicker` preserves integer values of at least one. `SKUSelector` preserves selected-id behavior and fallback labels. `ProductGallery` sorts a copy of images by `sortOrder`, preserves wrapping arrows, keyboard navigation and selected-image bounds, and renders selectable thumbnails. Equal sort orders keep their input order. `ProductImage` handles empty or failed image URLs with the shared placeholder, without replacing the source repeatedly after an error. `ProductCard` displays the first ordered image available in its summary. Product price consumers share `formatVND`; do not duplicate the formatter or change its rounding/precision during a move.
+
+The gallery's main media area is a black square with contained images. Thumbnails are 72px square on mobile and 80px from the small breakpoint. Keep those reserved dimensions for loading, loaded, missing and failed media. Card media keeps its existing reserved height. The [gallery feature](../features/product-image-gallery.md) records the API dependency and acceptance scenarios; gallery styling does not authorize redesigning the SKU picker, product information or page layout.
 
 QuantityPicker also accepts optional disabled/item-label/commitOnBlur settings for Cart. Cart commits manual quantity input on blur/Enter and uses immediate plus/minus actions; product-detail defaults stay unchanged. Cart uses decimal-safe cartUtils for calculated totals and formatVND for display. Remote metadata cannot override snapshot prices. See [Cart integration and scope](../features/cart.md).
 

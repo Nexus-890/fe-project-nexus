@@ -201,7 +201,11 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
       <section className="mt-5 grid min-w-0 items-start gap-8 lg:grid-cols-2 lg:gap-10">
         <div className="min-w-0">
-          <ProductGallery images={detail.images} productName={detail.name} />
+          <ProductGallery
+            key={detail.id}
+            images={detail.images}
+            productName={detail.name}
+          />
         </div>
 
         <section className="min-w-0 space-y-6" aria-label="Product details">

@@ -23,6 +23,8 @@ Default query settings are staleTime 30 seconds, gcTime five minutes, no refetch
 
 Keep the existing 4px spacing grid, radius levels, font choices and focus behavior from the [design system](../ui/design-system.md). Do not redesign the palette or introduce a dark theme as part of the structural rebuild. Existing mobile scenarios use a 375×812 viewport and inspect horizontal overflow and control sizes; a passing scenario only covers the routes and states actually exercised.
 
+For [product images](../features/product-image-gallery.md), reserve the main square, thumbnail squares and card media height before images load. At 375px wide, delayed responses and HTTP 404 fallback must preserve those media bounds and avoid page overflow. The thumbnail strip may scroll within its own container. Image selection stays local and must not issue another product GET; listing images must not cause a detail GET for every card.
+
 The access token's in-memory scope avoids web-storage persistence; it does not make browser JavaScript immune to XSS. Backend authorization, ownership, gateway CORS and deployed security still need their own checks. Do not log credentials or tokens in test evidence or commit real environment secrets.
 
 ## Verification status

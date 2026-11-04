@@ -34,7 +34,11 @@ The search UI retains q/category/sort in URL state. The delivered products contr
 
 Product cards link using id and slug. The product service validates detail, SKU and image data, normalizing monetary numbers into the UI's decimal-string representation. Existing optional/null rules are retained unless a contract update explicitly requires a change.
 
-The selected SKU is local state. Changing it updates displayed price without issuing another product GET. The selected id falls back to the first available SKU according to the existing helper. Quantity remains an integer of at least 1. The gallery preserves image selection, previous/next wrapping, keyboard controls and empty-media placeholder.
+The selected SKU is local state. Changing it updates displayed price without issuing another product GET. The selected id falls back to the first available SKU according to the existing helper. Quantity remains an integer of at least 1.
+
+The [product image gallery](product-image-gallery.md) orders images by `sortOrder`, displays a main image and selectable thumbnails, and preserves wrapping arrows and keyboard navigation. `ProductImage` supplies the shared empty/broken-image placeholder. The main image reserves a black square; thumbnails reserve 72px on mobile and 80px from the small breakpoint, so loading and failures do not change media dimensions. Product cards use the first ordered image when one is supplied.
+
+The delivered detail endpoint already returns `images`; the delivered list endpoint does not. The list parser accepts a validated optional `images` array and normalizes omission to `[]`, so current list responses continue to show placeholders. List image data remains a backend dependency of upload task #122. Do not fetch product detail separately for each card or invent a media endpoint to fill this gap. Existing public product GET paths and the shared empty-string base URL fallback stay in place.
 
 `components/formatPrice.ts` preserves string-safe VND formatting. For example `"150000"` becomes `"150.000 ₫"`, `"150000.5"` becomes `"150.000,50 ₫"`, and `"001000.125"` becomes `"1.000,125 ₫"`. It does not round long decimal strings or convert a large integer string through Number. Null/invalid values keep the existing unavailable-price fallback.
 

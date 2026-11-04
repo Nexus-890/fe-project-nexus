@@ -66,4 +66,6 @@ Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the ol
 
 The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require compatible BE build/contract/auth behavior. Working checkout, payment, auction bidding and password-recovery UI remain outside scope. Full refresh requires signing back in because auth stays in memory.
 
+Product detail already consumes image URLs from its real GET endpoint. Product cards support optional list images, but the delivered product list response currently has none; those cards keep the placeholder until BE upload task #122 supplies image data. See [product image gallery](docs/features/product-image-gallery.md) for ordering, fallback, reserved media dimensions and verification scope. The API base URL still defaults to `""` when neither public API environment variable is set; service paths use the existing product endpoints.
+
 Read [architecture](docs/ai/architecture.md), [coding rules](docs/ai/coding-rules.md), [feature flows](docs/features/index.md) and the [design system](docs/ui/design-system.md) before extending the app.
