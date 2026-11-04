@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**", ".next-oidc-run/**", ".next-cart-*/**", ".next-typecheck/**", ".next-verify-build/**", "types/*GeneratedType.ts", ".next-catalog-*/**", "test-results/**", "playwright-report/**",
     "out/**",
+    ".next-orders-run/**",
     "build/**",
     "next-env.d.ts",
   ]),

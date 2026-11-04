@@ -1,4 +1,5 @@
 import type { ProductFilters } from "../types/catalogRequestType";
+import type { OrderFilters } from "../types/orderRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
@@ -13,5 +14,9 @@ export const queryKeys = {
   },
   cart: {
     me: (sessionId: number) => ["cart", sessionId, "me"] as const,
+  },
+  orders: {
+    list: (sessionId: number, filters: OrderFilters) =>
+      ["orders", sessionId, "list", filters] as const,
   },
 };
