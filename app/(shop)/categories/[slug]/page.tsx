@@ -1,6 +1,7 @@
-import CategoryPage from "@/features/category/CategoryPage";
-import type { CategoryPageProps } from "@/types/catalog/request/type";
+import CategoryPage, { type CategoryPageProps } from "@/features/CategoryPage";
 
-export default function Page(props: CategoryPageProps) {
+function Page(props: CategoryPageProps) {
   return <CategoryPage {...props} />;
 }
+
+export default Page;

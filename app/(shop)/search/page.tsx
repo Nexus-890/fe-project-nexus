@@ -1,6 +1,11 @@
-import SearchPage from "@/features/search/SearchPage";
-import type { SearchPageProps } from "@/types/catalog/type";
+import SearchPage from "@/features/SearchPage";
 
-export default async function Page({ searchParams }: SearchPageProps) {
+type SearchPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+async function Page({ searchParams }: SearchPageProps) {
   return <SearchPage query={await searchParams} />;
 }
+
+export default Page;

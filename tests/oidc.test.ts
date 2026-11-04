@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { test } from "node:test";
 import { InMemoryWebStorage, UserManager, type INavigator, type UserManagerSettings } from "oidc-client-ts";
-import { createOidcClient, safeReturnTo } from "../features/auth/oidc";
+import { createOidcClient, safeReturnTo } from "../features/oidc";
 
 test("return destinations preserve shop paths and reject external/auth destinations", () => {
   assert.equal(safeReturnTo("/products/laptop?variant=blue#details"), "/products/laptop?variant=blue#details");

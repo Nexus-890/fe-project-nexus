@@ -1,0 +1,27 @@
+purpose:
+  stands_in_for: Delivered catalog product/SKU HTTP envelopes and documented failures.
+  unblocks: Verification of the Nexus frontend service and shared Axios boundary without a running gateway/catalog stack.
+assumptions:
+  - id: delivered-envelope-caller-handling
+    status: supported
+    claim: The rebuilt frontend reads documented numeric-money envelopes and preserves typed HTTP failures in the exercised catalog scenarios.
+    reason: The real getProduct service and requestApi Axios code were run against the existing catalog mock derived from delivered OpenAPI; five request events confirm routing through the stand-in.
+    verification: On 2026-10-30 with fingerprint rebuild-251, the optional product-detail unit probe passed product 200, SKU 200, SKU 404 and 503 symbolic errors, and rejection of a deliberately malformed bare success. Repeated for gallery-20261103 with NEXUS_SIM_ORIGIN=http://localhost:4968; all 55 unit/probe tests passed and five simulation request events confirmed the same paths and statuses. The product response modeled images=[]; successful pictures, sorting, and 404 fallback were separately verified in browser fixtures. This proves caller behavior against the stand-in, not live gateway authorization or database behavior.
+    source: tests/catalog.sim.yaml; tests/product-detail.test.ts; service/catalogService.ts; configs/api.ts; ../be-project-nexus/infra/contract-simulation/catalog/default.js; ../be-project-nexus/docs/api/openapi/catalog-service.yaml
+    updated_at: '2026-11-03'
+  - id: live-gateway-release-readiness
+    status: unknown
+    claim: A live gateway and all owning services accept the rebuilt frontend across login, category, product and cart flows.
+    reason: The local gateway/catalog/commerce ports were not listening; mock and browser-fixture checks cannot establish deployment readiness.
+    verification: On 2026-10-30 local listener inspection found no gateway on 8080, catalog on 8082 or commerce on 8083. The gallery task repeated listener inspection on 2026-11-02 with the same result. Source audit found detail images delivered but list images absent until BE task #122. Live integration remains required with the agreed contract cutover.
+    source: docs/api/api-contract.md; ../be-project-nexus/docs/adr/ADR-008-api-contract.md
+    updated_at: '2026-11-03'
+fingerprints:
+  - id: rebuild-251
+    date: '2026-10-30'
+    commit: '93415a0c with uncommitted frontend rebuild changes'
+    cli: 'Postman 1.73.0'
+  - id: gallery-20261103
+    date: '2026-11-03'
+    commit: '2a2147d1 with uncommitted product image gallery changes'
+    cli: 'Postman 1.73.0'

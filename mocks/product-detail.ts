@@ -1,6 +1,6 @@
-import type { AddCartItemRequest } from "../types/cart/request/type";
-import type { Cart } from "../types/cart/response/type";
-import type { ProductDetail } from "../types/catalog/response/type";
+import type { AddCartItemRequest } from "../types/cartRequestType";
+import type { Cart } from "../types/cartResponseType";
+import type { ProductDetail } from "../types/catalogResponseType";
 
 
 export const USE_PRODUCT_DETAIL_MOCK = process.env.NEXT_PUBLIC_PRODUCT_DETAIL_MOCK === "true";
@@ -71,26 +71,21 @@ export function getMockProductDetail(productId: string): ProductDetail {
 
 export function getMockCartAfterAdd(input: AddCartItemRequest): Cart {
   const sku = mockProductDetail.skus.find((entry) => entry.id === input.skuId) ?? mockProductDetail.skus[0];
-  const lineTotal = multiplyMoney(sku.price, input.quantity);
   return {
     id: "00000001-1111-4111-8111-111111111111",
+    userId: "00000080-1111-4111-8111-111111111111",
     status: "ACTIVE",
     items: [{
       id: "00000002-1111-4111-8111-111111111111",
       skuId: input.skuId,
       productId: sku.productId,
-      productName: mockProductDetail.name,
       quantity: input.quantity,
       unitPrice: sku.price,
-      lineTotal,
     }],
-    subtotal: lineTotal,
-    currency: "VND",
-    updatedAt: "2026-10-15T08:00:00Z",
   };
 }
 
-function multiplyMoney(value: string, quantity: number): string {
+export function multiplyMoney(value: string, quantity: number): string {
   const [whole, fraction = ""] = value.split(".");
   const cents = (BigInt(whole) * BigInt("100") + BigInt(fraction.padEnd(2, "0").slice(0, 2))) * BigInt(quantity);
   const text = cents.toString().padStart(3, "0");

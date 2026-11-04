@@ -1,5 +1,7 @@
-import HomePage from "@/features/home/HomePage";
+import HomePage from "@/features/HomePage";
 
-export default function Page() {
+function Page() {
   return <HomePage />;
 }
+
+export default Page;

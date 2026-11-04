@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import ShopLayout from "@/features/shop/ShopLayout";
+import ShopLayout from "@/features/ShopLayout";
 
-export default function Layout({ children }: { children: ReactNode }) {
+function Layout({ children }: { children: ReactNode }) {
   return <ShopLayout>{children}</ShopLayout>;
 }
 
-
+export default Layout;

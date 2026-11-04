@@ -11,6 +11,16 @@ function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
 }
+const success = (data, page) => ({ code: 0, message: "response success", data, ...(page ? { page } : {}) });
+function problem(res, status, code, title, detail, errors) {
+  res.writeHead(status, { "Content-Type": "application/problem+json", "Cache-Control": "no-store" });
+  const problemType = { VALIDATION_FAILED: "validation-error", UNAUTHENTICATED: "unauthorized" }[code]
+    || code.toLowerCase().replaceAll("_", "-");
+  res.end(JSON.stringify({
+    type: `urn:problem:${problemType}`,
+    title, status, code, detail, ...(errors ? { errors } : {}),
+  }));
+}
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3103");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -37,21 +47,32 @@ const server = http.createServer(async (req, res) => {
     await pm.state.set("oidc-api:evidence", evidence);
     const mode = await pm.state.get("oidc-api:mode") || "success";
     if (mode === "profile-503-once" && evidence.meRequests === 1) {
-      return json(res, { title: "Profile temporarily unavailable", status: 503 }, 503);
+      return problem(res, 503, "SERVICE_UNAVAILABLE", "Service Unavailable", "Profile temporarily unavailable");
     }
-    if (mode === "profile-401") return json(res, { title: "Unauthorized", status: 401 }, 401);
-    return bearer ? json(res, user) : json(res, { title: "Unauthorized", status: 401 }, 401);
+    if (mode === "profile-401" || !bearer) {
+      return problem(res, 401, "UNAUTHENTICATED", "Unauthorized", "A valid access token is required to access this resource");
+    }
+    if (mode === "profile-missing-data-once" && evidence.meRequests === 1) {
+      return json(res, { code: 0, message: "response success" });
+    }
+    if (mode === "profile-invalid-user-once" && evidence.meRequests === 1) {
+      return json(res, success({ ...user, roles: "BUYER" }));
+    }
+    return json(res, success(user));
   }
   if (url.pathname === "/v1/auth/register" && req.method === "POST") {
     const fields = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
-    if (!fields.password || !fields.email) return json(res, { title: "Invalid registration", status: 400 }, 400);
+    const errors = ["email", "password"].filter((field) => !fields[field]).map((field) => ({
+      field, code: "VALIDATION_NOT_BLANK", detail: "cannot be blank!",
+    }));
+    if (errors.length) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "The request data is invalid", errors);
     evidence.registrations += 1;
     await pm.state.set("oidc-api:evidence", evidence);
-    return json(res, { ...user, email: fields.email, fullName: fields.fullName }, 201);
+    return json(res, success({ ...user, email: fields.email, fullName: fields.fullName }), 201);
   }
   await pm.state.set("oidc-api:evidence", evidence);
-  if (url.pathname === "/v1/categories/tree") return json(res, []);
-  if (url.pathname === "/v1/products") return json(res, { content: [], page: 0, size: 12, totalElements: 0 });
+  if (url.pathname === "/v1/categories/tree") return json(res, success([]));
+  if (url.pathname === "/v1/products") return json(res, success([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
   return json(res, { title: "Fixture endpoint not implemented", status: 501 }, 501);
 });
 server.listen(process.env.PORT);
