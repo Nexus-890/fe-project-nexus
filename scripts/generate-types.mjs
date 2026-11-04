@@ -9,6 +9,7 @@ for (const [service, output] of [
   ["user", "userGeneratedType.ts"],
   ["catalog", "catalogGeneratedType.ts"],
   ["commerce", "commerceGeneratedType.ts"],
+  ["payment", "paymentGeneratedType.ts"],
 ]) {
   const spec = new URL(
     `../../be-project-nexus/docs/api/openapi/${service}-service.yaml`,

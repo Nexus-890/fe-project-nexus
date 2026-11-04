@@ -14,7 +14,8 @@
     "test:unit": "node scripts/test-auth.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
-    "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts"
+    "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts",
+    "test:payment": "node scripts/test-browser.mjs --config playwright.payment.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

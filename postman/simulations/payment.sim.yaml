@@ -1,0 +1,9 @@
+simulation: nexus-payment-browser
+routing: path
+mocks:
+  - name: keycloak
+    routeKey: keycloak
+    path: postman/mocks/oidc-keycloak/config.yaml
+  - name: api
+    routeKey: api
+    path: postman/mocks/payment-api/config.yaml

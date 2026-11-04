@@ -14,4 +14,8 @@ export const queryKeys = {
   cart: {
     me: (sessionId: number) => ["cart", sessionId, "me"] as const,
   },
+  payment: {
+    group: (sessionId: number, orderGroupId: string) =>
+      ["payment", sessionId, orderGroupId] as const,
+  },
 };

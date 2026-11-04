@@ -4,10 +4,11 @@
  */
 const http = require("node:http");
 const { createHash, generateKeyPairSync, randomUUID, sign } = require("node:crypto");
-const origin = "http://127.0.0.1:3913/keycloak";
+const origin = pm.environment.get("fixtureProviderOrigin") || "http://127.0.0.1:3913/keycloak";
 const issuer = `${origin}/realms/nexus`;
 const protocol = `${issuer}/protocol/openid-connect`;
 const appOrigins = new Set(["http://127.0.0.1:3102", "http://127.0.0.1:3103"]);
+if (pm.environment.get("fixtureAppOrigin")) appOrigins.add(pm.environment.get("fixtureAppOrigin"));
 const callbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/callback`));
 const subject = "68000000-0000-4000-8000-000000000003";
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });

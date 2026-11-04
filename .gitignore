@@ -44,11 +44,13 @@ next-env.d.ts
 /playwright-report/
 /.next-catalog-*/
 /.next-oidc-run/
+/.next-payment-run/
 
 !.env.example
 
 /.next-typecheck/
 /.next-verify-build/
 /.next-cart-readiness-build/
+/.next-payment-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json

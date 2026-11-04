@@ -1,0 +1,8 @@
+name: Payment
+values:
+  - key: fixtureProviderOrigin
+    value: http://127.0.0.1:3914/keycloak
+    enabled: true
+  - key: fixtureAppOrigin
+    value: http://127.0.0.1:3104
+    enabled: true
