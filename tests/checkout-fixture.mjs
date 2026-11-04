@@ -7,7 +7,7 @@ const output = createWriteStream("test-results/checkout-simulation.ndjson");
 const errors = createWriteStream("test-results/checkout-simulation.err");
 const simulation = spawn("postman", [
   "simulation", "run", "postman/simulations/checkout.sim.yaml",
-  "--port", "3913", "--no-history", "--output", "ndjson",
+  "--port", process.env.NEXUS_CHECKOUT_API_PORT || "3913", "--no-history", "--output", "ndjson",
 ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 
 simulation.stdout.pipe(output);

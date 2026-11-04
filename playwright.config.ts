@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
-  testIgnore: ["**/oidc.spec.ts", "**/checkout.spec.ts"],
+  testIgnore: ["**/oidc.spec.ts", "**/checkout.spec.ts", "**/place-order.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,

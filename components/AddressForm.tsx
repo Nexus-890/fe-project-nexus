@@ -126,6 +126,7 @@ function AddressForm({
               maxLength={maxLength}
               placeholder={placeholder}
               required
+              disabled={busy}
               aria-invalid={Boolean(errors[field])}
               aria-describedby={errors[field] ? `checkout-${field}-error` : undefined}
               className={controlClass}
@@ -153,7 +154,7 @@ function AddressForm({
                 name={field}
                 value={values[field]}
                 required
-                disabled={!enabled || state.loading || Boolean(state.error)}
+                disabled={busy || !enabled || state.loading || Boolean(state.error)}
                 aria-invalid={Boolean(errors[field])}
                 aria-describedby={describedBy}
                 className={controlClass}
@@ -178,6 +179,7 @@ function AddressForm({
                   </p>
                   <button
                     type="button"
+                    disabled={busy}
                     onClick={() => onRetry(level)}
                     className="inline-flex min-h-11 min-w-11 items-center rounded-sm font-medium text-primary underline underline-offset-4"
                   >

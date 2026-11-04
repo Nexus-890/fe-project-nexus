@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Check, LockKeyhole, QrCode, Truck } from "lucide-react";
 import AddressForm from "../components/AddressForm";
 import CheckoutSummary from "./CheckoutSummary";
+import CheckoutOrderFeedback from "./CheckoutOrderFeedback";
 import { formatVND } from "../components/formatPrice";
 import { createCanceledError, createInvalidResponseError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
@@ -17,6 +18,7 @@ import type { CartItem } from "../types/cartResponseType";
 import type { UserResponse } from "../types/authResponseType";
 import { getCheckoutDestination, getCheckoutFieldErrors, previewMatchesCart, validateCheckoutAddress } from "./checkoutSchema";
 import { useCart } from "./useCart";
+import { useCheckout } from "./useCheckout";
 
 const retryClass = "mt-4 min-h-11 min-w-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary";
 
@@ -43,22 +45,26 @@ function CheckoutPage() {
 function CheckoutCart({ user }: { user: UserResponse }) {
   const router = useRouter();
   const { cart, pending } = useCart();
-  const empty = cart.isSuccess && !cart.isFetching && cart.data.items.length === 0;
+  // A committed order consumes the active cart, even if its POST response was
+  // lost. A reconnect/refetch must not discard the key needed to recover it.
+  const [attemptItems, setAttemptItems] = useState<CartItem[] | null>(null);
+  const empty = !attemptItems && cart.isSuccess && !cart.isFetching && cart.data.items.length === 0;
   useEffect(() => {
     if (empty && !pending) router.replace("/cart");
   }, [empty, pending, router]);
 
-  if (cart.isError) return (
+  if (cart.isError && !attemptItems) return (
     <div className="mt-6 rounded-sm border border-border p-6">
       <p role="alert">{cart.error.detail || "Unable to load your cart. Please try again."}</p>
       <button type="button" onClick={() => void cart.refetch()} className={retryClass}>Retry cart</button>
     </div>
   );
-  if (!cart.data || empty || pending) return <p role="status" className="py-12 text-muted-foreground">{empty ? "Opening your cart…" : "Loading your cart…"}</p>;
-  return <CheckoutContents user={user} items={cart.data.items} />;
+  if ((!cart.data || empty || pending) && !attemptItems) return <p role="status" className="py-12 text-muted-foreground">{empty ? "Opening your cart…" : "Loading your cart…"}</p>;
+  const items = cart.data?.items.length ? cart.data.items : attemptItems ?? [];
+  return <CheckoutContents user={user} items={items} onAttemptStart={() => setAttemptItems(items)} />;
 }
 
-function CheckoutContents({ user, items }: { user: UserResponse; items: CartItem[] }) {
+function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse; items: CartItem[]; onAttemptStart: () => void }) {
   const { requestContext, sessionId, isSessionCurrent } = useAuth();
   const [values, setValues] = useState<CheckoutAddress>(() => ({
     recipientName: user.fullName, phoneNumber: user.phone, addressLine: user.address ?? "",
@@ -100,15 +106,21 @@ function CheckoutContents({ user, items }: { user: UserResponse; items: CartItem
     retry: false, staleTime: 0, gcTime: 0,
   });
   const quote = destination && !preview.isFetching && !preview.isError ? preview.data : undefined;
-  const serverErrors = getCheckoutFieldErrors(destination ? preview.error : null);
-  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...serverErrors };
   const addressReady = destination !== null;
-  const issue = quote?.issues[0];
-  const quoteError = destination ? preview.error?.detail || preview.error?.title : undefined;
   const canContinue = Boolean(quote && quote.shippingFee !== null && !quote.issues.length);
   const ready = reviewedAddress === JSON.stringify(destination) && addressReady;
+  const order = useCheckout(destination, ready && canContinue, onAttemptStart);
+  const serverErrors = {
+    ...getCheckoutFieldErrors(destination ? preview.error : null),
+    ...getCheckoutFieldErrors(order.error),
+  };
+  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...serverErrors };
+  const issue = quote?.issues[0];
+  const quoteError = destination ? preview.error?.detail || preview.error?.title : undefined;
 
   const changeAddress = (field: keyof CheckoutAddress, value: string) => {
+    if (order.addressLocked) return;
+    order.resetAfterEdit();
     setReviewedAddress(null);
     setValues((previous) => ({
       ...previous, [field]: value,
@@ -138,6 +150,7 @@ function CheckoutContents({ user, items }: { user: UserResponse; items: CartItem
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
         <div className="min-w-0 space-y-6">
           <AddressForm
+            busy={order.addressLocked}
             values={values} errors={errors}
             provinces={provinces.data ?? []} districts={districts.data ?? []} wards={wards.data ?? []}
             provinceState={{ loading: provinces.isFetching, error: provinces.error?.detail || provinces.error?.title }}
@@ -160,8 +173,9 @@ function CheckoutContents({ user, items }: { user: UserResponse; items: CartItem
             <div className="mt-4 flex gap-3 rounded-sm border border-primary p-4">
               <QrCode size={22} className="shrink-0" aria-hidden="true" /><div className="text-sm"><p className="font-medium">Bank transfer (VietQR)</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Scan a QR code with your banking app · processed by SePay</p></div>
             </div>
-            <button type="button" disabled aria-describedby="checkout-payment-note" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"><LockKeyhole size={16} aria-hidden="true" />Continue to payment</button>
-            <p id="checkout-payment-note" className="mt-3 text-xs leading-5 text-muted-foreground">You can review your order here. Order placement will be available soon.</p>
+            <CheckoutOrderFeedback error={order.error} conflict={order.conflict} items={items} pending={order.pending} canConfirm={ready && canContinue} uncertain={order.uncertain} onConfirm={order.confirmPrice} />
+            <button type="button" disabled={order.pending || order.blocked || (!order.canRetry && (!ready || !canContinue || Boolean(Object.keys(serverErrors).length)))} onClick={order.placeOrder} aria-busy={order.pending} aria-describedby="checkout-payment-note" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"><LockKeyhole size={16} aria-hidden="true" />{order.pending ? "Placing order…" : "Place order"}</button>
+            <p id="checkout-payment-note" className="mt-3 text-xs leading-5 text-muted-foreground">Place one purchase for all shops, then continue to a single payment for your order group.</p>
           </section>
           <Link href="/cart" className="inline-flex min-h-11 min-w-11 items-center gap-2 text-sm hover:text-primary"><ArrowLeft size={16} aria-hidden="true" />Back to Cart</Link>
         </div>

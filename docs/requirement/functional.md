@@ -27,8 +27,9 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CART-04 | Render Cart lines with snapshot unit/line prices, subtotal and an empty catalog link | Implemented CartPage/components/query/header count; [evidence](../features/cart-page-implementation.md) |
 | CART-05 | Optimistically edit quantity/remove, immediately recalculate and roll back rejected changes | Implemented FE/cache/service calls; merged BE source mappings exist but build/auth/response compatibility blocks live acceptance; tested with explicit HTTP stand-ins |
 | CART-06 | Keep cart contents after refresh and verify responsive/real-API acceptance | Reread after same-user reauthentication; responsive screenshots in report; uninterrupted auth and peer real-API/cart-ID evidence pending |
-| CART-07 | Keep place-order disabled with a visible reason | #150 enables Cart navigation to address/quote review; order placement remains disabled on checkout until #151 |
+| CART-07 | Guard place-order until checkout is ready and while pending | #150 supplies address/quote review; #151 enables placement with duplicate-click protection and explicit price confirmation |
 | CART-08 | Checkout, payment, vouchers, Save for Later and shipping/tax calculations | Outside the Cart page task; design examples are not additional functional scope |
+| ORDER-01 | Place one order group with safe retries and actionable 409 errors | [#151](../features/place-order.md): reuse the key/body on uncertain retries, confirm changed prices with a new key, name stock failures and open one group payment route; real inventory/reviewer acceptance pending |
 | ROUTE-01 | Preserve `/login`, `/register` and `/category/[slug]` aliases | Implemented route redirects |
 | DEV-01 | Build UI with explicit auth/product/cart stand-ins | Development/test only, blocked in production |
 | OTHER-01 | Auction bidding, order management, payment, shipment and notification screens | Not implied by backend service existence; separate frontend features |

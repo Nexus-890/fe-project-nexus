@@ -45,6 +45,7 @@ next-env.d.ts
 /.next-catalog-*/
 /.next-oidc-run/
 /.next-checkout-run/
+/.next-checkout-*/
 
 !.env.example
 
