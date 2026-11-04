@@ -1,10 +1,9 @@
 import { createInvalidResponseError, requestApi } from "../configs/api";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
-import type { LoginRequest, RegisterRequest } from "../types/authRequestType";
-import type { LoginResponse, UserResponse } from "../types/authResponseType";
+import type { RegisterRequest } from "../types/authRequestType";
+import type { UserResponse } from "../types/authResponseType";
 
 export const REGISTER_PATH = "/api/v1/auth/register";
-export const LOGIN_PATH = "/api/v1/auth/login";
 export const ME_PATH = "/api/v1/users/me";
 
 export const register = async (
@@ -18,21 +17,6 @@ export const register = async (
   if (!isUserResponse(response.data))
     throw createInvalidResponseError(
       "Register response must contain a valid user.",
-    );
-  return response.data;
-};
-
-export const login = async (
-  input: LoginRequest,
-  options: ServiceRequestOptions = {},
-): Promise<LoginResponse> => {
-  const response = await requestApi<unknown>("POST", LOGIN_PATH, input, {
-    ...options,
-    auth: false,
-  });
-  if (!isLoginResponse(response.data))
-    throw createInvalidResponseError(
-      "Login response must contain a Bearer token and positive expiresIn.",
     );
   return response.data;
 };
@@ -56,15 +40,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isNullableString = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
-
-export const isLoginResponse = (value: unknown): value is LoginResponse =>
-  isRecord(value) &&
-  typeof value.accessToken === "string" &&
-  value.accessToken.length > 0 &&
-  typeof value.expiresIn === "number" &&
-  Number.isFinite(value.expiresIn) &&
-  value.expiresIn > 0 &&
-  value.tokenType === "Bearer";
 
 export const isUserResponse = (value: unknown): value is UserResponse =>
   isRecord(value) &&

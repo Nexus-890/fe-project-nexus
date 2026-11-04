@@ -41,7 +41,7 @@ async function installCart(page: Page, title = productName) {
     items: [{ id: lineId, productId, skuId, quantity: 2, unitPrice: 150000 }],
   };
   const state = {
-    account: { id: "buyer-1", name: "First Buyer" },
+    account: { id: "buyer-1", name: "First Buyer", authorization: "" },
     carts: new Map<string, FixtureCart>([["buyer-1", cart]]),
     reads: [] as string[],
     writes: [] as Array<{ method: string; path: string; body: unknown; token: string | undefined }>,
@@ -54,18 +54,20 @@ async function installCart(page: Page, title = productName) {
     updateFinished: deferred(),
     finishedUpdates: 0,
   };
-  await page.route("**/api/v1/auth/login", (route) => {
-    if (route.request().method() === "OPTIONS")
-      return route.fulfill({ status: 204, headers: corsHeaders });
-    expect(route.request().headers().authorization).toBeUndefined();
-    return json(route, envelope({
-      accessToken: `cart-token-${state.account.id}`, expiresIn: 3600, tokenType: "Bearer",
-    }));
+  const issuedTokens = new Set<string>();
+  page.on("response", async (response) => {
+    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+      const body = await response.json();
+      issuedTokens.add(body.access_token);
+    }
   });
-  await page.route("**/api/v1/users/me", (route) => {
+  await page.route("**/api/v1/users/me", async (route) => {
     if (route.request().method() === "OPTIONS")
       return route.fulfill({ status: 204, headers: corsHeaders });
-    expect(route.request().headers().authorization).toBe(`Bearer cart-token-${state.account.id}`);
+    const authorization = route.request().headers().authorization;
+    expect(authorization).toMatch(/^Bearer .+$/);
+    await expect.poll(() => issuedTokens.has(authorization.slice("Bearer ".length))).toBe(true);
+    state.account.authorization = authorization;
     return json(route, envelope({
       id: state.account.id, email: `${state.account.id}@example.test`,
       fullName: state.account.name, phone: "0901234567", gender: null,
@@ -96,7 +98,7 @@ async function installCart(page: Page, title = productName) {
     const path = new URL(request.url()).pathname;
     const token = request.headers().authorization;
     const buyer = state.account.id;
-    expect(token).toBe(`Bearer cart-token-${buyer}`);
+    expect(token).toBe(state.account.authorization);
     const currentCart = state.carts.get(buyer)!;
     if (method === "GET" && path === cartPath) {
       state.reads.push(buyer);
@@ -148,9 +150,12 @@ async function installCart(page: Page, title = productName) {
 }
 
 async function signIn(page: Page, name: string) {
-  await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@example.test");
-  await page.getByLabel("Password", { exact: true }).fill("Password1!");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/keycloak\/realms\/nexus\/protocol\/openid-connect\/auth\?/);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@nexus.local");
+  await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText(`Hi ${name}`, { exact: true })).toBeVisible();
 }
@@ -173,6 +178,10 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await page.screenshot({ path, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });
   await info.attach(name, { path, contentType: "image/png" });
 }
+
+test.beforeEach(async ({ request }) => {
+  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
+});
 
 test("signed-out cart requests sign-in without fetching protected cart data", async ({ page }) => {
   const state = await installCart(page);
@@ -221,7 +230,7 @@ test("quantity changes subtotal before the response and rejection restores the s
     await expect.poll(() => state.writes.length).toBe(1);
     expect(state.writes[0]).toEqual({
       method: "PUT", path: `${cartPath}/items/${lineId}`,
-      body: { quantity: 3 }, token: "Bearer cart-token-buyer-1",
+      body: { quantity: 3 }, token: state.account.authorization,
     });
     gate.resolve();
     await expect(page.getByText("Only two units can be purchased.", { exact: true })).toBeVisible();
@@ -298,7 +307,7 @@ test("bodyless remove response leaves an empty cart and a working catalog link",
   await expect.poll(() => state.writes.length).toBe(1);
   expect(state.writes[0]).toEqual({
     method: "DELETE", path: `${cartPath}/items/${lineId}`,
-    body: null, token: "Bearer cart-token-buyer-1",
+    body: null, token: state.account.authorization,
   });
   await catalog.click();
   await expect(page).not.toHaveURL(/\/cart$/);
@@ -354,6 +363,10 @@ test("a pending old-account edit cannot restore private cart data after account 
     await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
     await expect.poll(() => state.writes.length).toBe(1);
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:3102\/(?:\?.*)?$/);
+    await page.waitForLoadState("load");
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/sign-in$/);
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";

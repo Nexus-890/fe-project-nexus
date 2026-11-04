@@ -14,7 +14,7 @@ The Cart task explicitly requests an empty service origin. `service/cartService.
 
 For same-origin local integration, leave NEXT_PUBLIC_API_URL blank and set server-only `API_PROXY_TARGET` to the gateway origin. Next rewrites `/api/v1/*` to it, while server-side catalog calls use it as their origin fallback. Public origins take precedence for common auth/catalog requests. Restart Next after changing this environment variable; the proxy is disabled when it is absent. Targets must be HTTP(S) origins without credentials, paths, query or hash.
 
-Axios uses a 15-second default timeout and JSON Accept header. Caller options cannot redirect a protected request to another origin or replace URL/method/auth/adapter/parser settings. Controlled headers, timeout and parameter serialization remain configurable. Public login/register/catalog calls do not send Bearer; private requests read the current token from the provider-scoped request context. Never put a token in singleton defaults, query keys, or server module state.
+Axios uses a 15-second default timeout and JSON Accept header. Caller options cannot redirect a protected request to another origin or replace URL/method/auth/adapter/parser settings. Controlled headers, timeout and parameter serialization remain configurable. Public register/catalog calls do not send Bearer; private requests read the current token from the provider-scoped request context. Keycloak owns the sign-in redirect and code exchange. Never put a token in singleton defaults, query keys, or server module state.
 
 Preserve endpoint status: reads/updates return 200, creation uses the endpoint's 201, and a 204 has no response body. Handle 204 before parsing JSON. Cancellation propagates separately from ordinary API errors.
 
@@ -43,7 +43,7 @@ Backend catalog/cart monetary fields are JSON numbers serialized from BigDecimal
 | Layer | Public contract |
 | --- | --- |
 | HTTP configuration | `requestApi` performs controlled HTTP and returns the validated envelope; failed requests reject with `ApiError` |
-| Domain service | Named async functions such as `getProducts`, `getProduct`, `getCategoryTree`, `login`, `getMe`, `addCartItem` return parsed data/models |
+| Domain service | Named async functions such as `getProducts`, `getProduct`, `getCategoryTree`, `register`, `getMe`, `addCartItem` return parsed data/models |
 | Query hook | `useApiQuery(request, options)` receives queryKey and a typed service callback; TanStack owns state/cache |
 | Mutation hook | `useApiMutation(request, options)` receives a service callback or typed workflow executor plus mutation/cache options |
 
@@ -65,14 +65,13 @@ Keep every changing request parameter in the key. `select` changes the observer'
 
 Mutation variables use typed `body`, `pathParams`, `query` and controlled config/signal. A `never` generic means that request field is absent. `invalidateKey` and `removeKey` are the names from the new reference: each accepts fixed keys or a resolver based on result/variables. After success, await prefix invalidation with active-query refetch, remove exact keys, then call the caller's onSuccess with all arguments. Preserve onMutate/onError/onSettled and optimistic context. Mutation failure does not run success cache work.
 
-Protected queries carry private-query metadata and session-specific keys. Protected mutations verify the session is still current before success cache work and UI callbacks. Auth's multi-step executor returns a user, so LoginResponse/token never becomes mutation result data. [Authentication](../features/authentication.md) describes the workflow.
+Protected queries carry private-query metadata and session-specific keys. Protected mutations verify the session is still current before success cache work and UI callbacks. OIDC callback exchange stays outside mutation data; profile loading uses the shared query cache. [Authentication](../features/authentication.md) describes the workflow.
 
 ## Frontend endpoint inventory
 
 | Method/path | Consumer and access |
 | --- | --- |
 | POST `/api/v1/auth/register` | Sign-up, public; creation does not sign in |
-| POST `/api/v1/auth/login` | Provider login workflow, public |
 | GET `/api/v1/users/me` | Provider profile, Bearer |
 | GET `/api/v1/categories/tree` | Home, shop navigation, category resolution, public |
 | GET `/api/v1/products` | Category/search listing, public; delivered parameters categoryId/page/size |

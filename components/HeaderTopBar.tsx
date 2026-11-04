@@ -1,16 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 
 function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderProps) {
-  const router = useRouter();
-
   function signOut() {
     onSignOut();
-    router.push("/sign-in");
   }
 
   return (

@@ -76,3 +76,27 @@ Stop the simulation after the run. The probe calls the real `getProduct` service
 ## Pre-push verification — 2026-11-02
 
 The target branch was fetched and had no remote commits beyond the local base before publication. `npm run lint`, `npm run typecheck`, `npm run generate:types:check` and all 51 unit tests passed again. Browser, production-build and Postman results above remain the recorded 2026-10-30 evidence; those checks were not rerun for this publication-only step. No additional mock-isolation or hook-interface change is included in this commit.
+
+## OIDC review corrections and develop integration — 2026-11-04
+
+Source branch: fsa_ChungTQ/refactor/239-fe-sign-in-with-keycloak-oidc-pkce, starting at 4c1139ab. Merged origin/develop 0d14ca45 and resolved the frontend rebuild conflicts into its flat structure. The branch now uses configs/api.ts and service/authService.ts; obsolete nested HTTP/auth wrappers were removed after moving the OIDC behavior into Provider.tsx and flat features.
+
+The review finding was confirmed against the committed backend controllers and ApiResponse: GET /api/v1/users/me HTTP 200 and POST /api/v1/auth/register HTTP 201 return {code,message,data}. The old client validated the wrapper as a user. The merged implementation validates the envelope centrally and then validates response.data. Fixtures now emit the actual envelope and delivered field/code/detail validation errors. Native HTTP regressions and browser assertions cover both successful statuses and malformed nested data; callback retries never repeat a successful code exchange.
+
+Executed locally on 2026-11-04:
+
+| Check | Result |
+| --- | --- |
+| npm run test:auth | 64 passed, including native HTTP envelope regressions and OIDC protocol checks |
+| npm run test:auth:browser | 11 passed against local Postman API/Keycloak stand-ins |
+| npm run test:catalog | 20 passed, including the auth acceptance harness, catalog/gallery and authenticated cart/account-switch scenarios |
+| npm run lint | Passed |
+| npm run typecheck | Passed with newly generated isolated route types |
+| npm run generate:types; npm run generate:types:check | Passed after regenerating catalog/commerce DTOs that had drifted from develop's already committed OpenAPI |
+| NEXUS_TEST_DIST_DIR=.next-verify-build npm run build | Passed production compilation, TypeScript and all page generation; no temporary auth-smoke route in production output |
+
+The initial main browser run passed 19/20. The logout/account-switch test interacted before the full provider redirect finished loading; it now waits for the document load before using the normal sign-in Link. All three product cases passed in a focused run, followed by all 20 main scenarios in a full run. The injected auth harness continues to exercise in-memory generation/private-cache races; real provider logout intentionally navigates to a new document.
+
+Installed Next.js 16.4.0 emitted its existing security upgrade reminder. Unchanged retries completed the browser/build checks; no framework upgrade is included. An overlapping temporary smoke-route cleanup invalidated an earlier build attempt, so the final production build was run separately after all fixture servers stopped. Runners restored the checked-in tsconfig and removed the temporary route. Local logs/traces and preexisting cart build output were excluded from Git.
+
+Simulation evidence establishes frontend behavior against locally modeled dependencies. Real backend JWT trust/CORS, live Keycloak authentication/logout and new-account provisioning remain unverified. See the [OIDC simulation context](../../postman/simulations/oidc.context.yaml). Postman CLI 1.73.0 ran the simulation; its status subcommand is unavailable. No mock was published or deployed.

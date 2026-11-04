@@ -1,6 +1,6 @@
 # Nexus frontend
 
-Next.js App Router frontend for the Nexus marketplace. The current UI includes registration/login, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
+Next.js App Router frontend for the Nexus marketplace. The current UI includes registration, Keycloak OIDC sign-in with PKCE, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
 
 ## Development
 
@@ -21,7 +21,9 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000). Configure an absolute backend origin either through the proxy or the public direct origin. Service paths already contain `/api/v1`; do not add it to the origin. Restart Next after environment changes. Direct cross-origin browser calls require backend CORS support. The [existing UI/API inventory](docs/features/api-ui-integration.md) separates connected flows from incompatible/undelivered backend contracts or absent screens.
 
-For explicit local fixtures, use the documented `NEXT_PUBLIC_AUTH_STUB`, `NEXT_PUBLIC_PRODUCT_DETAIL_MOCK` and `NEXT_PUBLIC_CART_MOCK` flags in development. These are stand-ins, are blocked in production, and do not prove live API compatibility. The auth fixture has no default account; register first. Access tokens are kept only in memory; a full reload returns to anonymous. Refresh tokens/persistent login are outside current scope.
+Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUBLIC_KEYCLOAK_CLIENT_ID` from `.env.example`. Sign-in opens Keycloak; `/auth/callback` exchanges the code, loads the profile and restores the requested page. See [authentication](docs/features/authentication.md) for local setup and integration limits. Access tokens stay in memory; a full reload returns to anonymous.
+
+Explicit auth/product/cart development fixtures are blocked in production. The auth stub supplies registration/profile responses to injected test adapters; it does not replace the Keycloak redirect flow or provision real accounts.
 
 ## Code layout
 
@@ -51,6 +53,7 @@ npm run lint
 npm run typecheck
 npm run test:auth
 npm run test:catalog
+npm run test:auth:browser
 npm run build
 ```
 

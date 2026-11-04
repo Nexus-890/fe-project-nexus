@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { requestApi, isApiError } from "../configs/api";
-import { getMe, login, register } from "../service/authService";
+import { getMe, register } from "../service/authService";
+import * as authService from "../service/authService";
 import { createAuthStub } from "../mocks/authStub";
+import type { AuthStubLoginRequest, AuthStubLoginResponse } from "../mocks/authStub";
 import type { ApiError, ProblemDetails } from "../types/commonResponseType";
 import type { RegisterRequest } from "../types/authRequestType";
+import type { UserResponse } from "../types/authResponseType";
+import type { ServiceRequestOptions } from "../types/commonRequestType";
+
+// The legacy stub can issue a test token without exposing password login in
+// the production authentication service. OIDC owns production sign-in.
+const fixtureLogin = async (input: AuthStubLoginRequest, options: ServiceRequestOptions = {}) =>
+  (await requestApi<AuthStubLoginResponse>("POST", "/api/v1/auth/login", input, { ...options, auth: false })).data;
 
 const registerInput: RegisterRequest = {
   email: "buyer@example.test",
@@ -312,7 +321,7 @@ test("stub register-login-me uses current Authorization without writing web stor
   try {
     const user = await register(registerInput, { context });
     assert.equal(user.email, registerInput.email);
-    const logged = await login(
+    const logged = await fixtureLogin(
       { email: registerInput.email, password: registerInput.password },
       { context, auth: true },
     );
@@ -358,7 +367,7 @@ test("stub aborts delayed requests with AbortError", async () => {
 test("separate auth stub instances do not accept another instance token", async () => {
   const contextA = { fetch: createAuthStub() };
   await register(registerInput, { context: contextA });
-  const logged = await login(
+  const logged = await fixtureLogin(
     { email: registerInput.email, password: registerInput.password },
     { context: contextA },
   );
@@ -440,7 +449,7 @@ test("stub validation and duplicate responses become typed rejected service prom
     }),
   );
   await assert.rejects(
-    login({ email: "", password: "" }, { context }),
+    fixtureLogin({ email: "", password: "" }, { context }),
     errorIs((error) => {
       assert.equal(error.status, 400);
       assert.deepEqual(error.fieldErrors?.password, ["cannot be blank!"]);
@@ -484,32 +493,104 @@ test("stub emits delivered field/code/detail errors and malformed-body errors", 
   }
 });
 
-test("auth services reject malformed login/profile data even inside a valid envelope", async () => {
-  await assert.rejects(
-    login(
-      { email: "a@test.dev", password: "password" },
+test("auth services expose no password login and reject malformed nested user data", async () => {
+  assert.equal("login" in authService, false);
+  const user: UserResponse = {
+    id: "68000000-0000-4000-8000-000000000002",
+    email: registerInput.email,
+    phone: registerInput.phone,
+    fullName: registerInput.fullName,
+    gender: "MALE",
+    address: registerInput.address,
+    dateOfBirth: registerInput.dateOfBirth,
+    roles: ["BUYER"],
+    status: "ACTIVE",
+    createdAt: "2026-10-23T00:00:00Z",
+  };
+  for (const data of [
+    null,
+    [],
+    { id: "u1", email: "a@test.dev", roles: "BUYER" },
+    { ...user, roles: "BUYER" },
+    { ...user, email: null },
+    { code: 0, message: "response success", data: user },
+  ]) {
+    for (const operation of [
+      () => getMe({ context: { fetch: async () => success(data, 200) } }),
+      () => register(registerInput, { context: { fetch: async () => success(data, 201) } }),
+    ]) {
+      await assert.rejects(
+        operation(),
+        errorIs((error) => assert.equal(error.kind, "invalid-response")),
+      );
+    }
+  }
+});
+
+test("auth services accept real HTTP 200 profile and 201 registration envelopes from develop", async () => {
+  const { createServer } = await import("node:http");
+  const user: UserResponse = {
+    id: "68000000-0000-4000-8000-000000000002",
+    email: registerInput.email,
+    phone: registerInput.phone,
+    fullName: registerInput.fullName,
+    gender: "MALE",
+    address: registerInput.address,
+    dateOfBirth: registerInput.dateOfBirth,
+    roles: ["BUYER"],
+    status: "ACTIVE",
+    createdAt: "2026-10-23T00:00:00Z",
+  };
+  const seen: Array<{
+    path: string | undefined;
+    method: string | undefined;
+    authorization: string | undefined;
+    body: string;
+    status: number;
+  }> = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const status = request.url === "/api/v1/auth/register" ? 201 : 200;
+    seen.push({
+      path: request.url,
+      method: request.method,
+      authorization: request.headers.authorization,
+      body: Buffer.concat(chunks).toString(),
+      status,
+    });
+    response.writeHead(status, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    response.end(JSON.stringify({ code: 0, message: "response success", data: user }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const context = {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    getAccessToken: () => "oidc-access-token",
+  };
+  try {
+    assert.deepEqual(await getMe({ context, auth: false }), user);
+    assert.deepEqual(await register(registerInput, { context, auth: true }), user);
+    assert.deepEqual(seen, [
       {
-        context: {
-          fetch: async () =>
-            success({
-              accessToken: "token",
-              expiresIn: 0,
-              tokenType: "Bearer",
-            }),
-        },
+        path: "/api/v1/users/me", method: "GET", authorization: "Bearer oidc-access-token",
+        body: "", status: 200,
       },
-    ),
-    errorIs((error) => assert.equal(error.kind, "invalid-response")),
-  );
-  await assert.rejects(
-    getMe({
-      context: {
-        fetch: async () =>
-          success({ id: "u1", email: "a@test.dev", roles: "BUYER" }),
+      {
+        path: "/api/v1/auth/register", method: "POST", authorization: undefined,
+        body: JSON.stringify(registerInput), status: 201,
       },
-    }),
-    errorIs((error) => assert.equal(error.kind, "invalid-response")),
-  );
+    ]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });
 
 test("Axios defaults and caller headers never retain or replace a session token", async () => {

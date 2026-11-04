@@ -71,3 +71,28 @@ The user authorized pushing to `fsa_ChungTQ/chore/129-fe-cart-page`. Frontend im
 After the merge, generated DTOs were regenerated from the merged OpenAPI (the new order-cancellation schema changed the commerce output). Generated-type drift check, lint, fresh-route typecheck, all 60 unit tests, Markdown link/whitespace checks and the isolated production build passed again. The first build stopped at the existing Next security reminder; its unchanged retry passed. Browser evidence remains the earlier recorded 23-scenario verification; this publication step did not rerun the browser suite or rebuild/test the inherited BE changes.
 
 The merged remote includes BE #111 update/remove source, so the initial readiness report's missing-operation finding applies only to its original base revision. Current integration is blocked by the incompatible PUT response, stale DTO imports/unresolved symbols/repository calls and authentication binding described above. No BE repair or permissive FE response fallback is part of this publication. Earlier live GET/login/catalog evidence does not validate a freshly built backend from the merged source.
+
+## Develop conflict resolution — 2026-11-04
+
+Merged `origin/develop` at `59631cd6` into the Cart branch from `a0922206`.
+Resolved six conflicts by preserving Cart navigation/count, the blank Cart
+origin and API proxy setup while adopting Keycloak OIDC sign-in/logout and its
+logout failure/retry UI. Regenerated user DTOs from the incoming OpenAPI, which
+removes password login; legacy login types now belong only to the explicit auth
+stub. Cart browser tests now traverse the provider redirect/callback and check
+the issued Bearer token. Product/OIDC tests explicitly fixture the header's Cart
+GET so it does not reach a developer's local gateway.
+
+Verification on this merged state:
+
+- Generated DTO drift check, fresh-route typecheck and all 73 unit/service tests passed.
+- Lint passed with `npm run lint -- --ignore-pattern .next-profile-run/**`; the extra exclusion is an existing untracked development output directory, not source.
+- `npm run test:browser` passed all 30 scenarios, including all 9 Cart scenarios. After adding the header GET fixtures, the 3 product scenarios passed again and all 11 dedicated OIDC scenarios passed.
+- Production build passed using `NEXUS_TEST_DIST_DIR=.next-verify-build`; `/cart` and `/auth/callback` are included. Initial browser/build invocations stopped at the existing Next.js 16.4.0 security reminder; unchanged retries passed. The dependency advisory remains open.
+
+These browser checks use Postman/Playwright HTTP fixtures. No live backend or
+backend test suite was run for this conflict resolution. The incoming backend
+now contains Keycloak trust/provisioning source changes; historical login and
+backend-readiness findings above apply to their recorded revisions. Current
+live Cart integration remains unverified. See the scoped
+[simulation evidence](../../postman/simulations/oidc.context.yaml).
