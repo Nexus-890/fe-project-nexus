@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppProviders } from "../providers/AppProviders";
+import Provider from "../providers/Provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description: "Nexus Auction",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en" data-scroll-behavior="smooth"
@@ -27,8 +27,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       
     >
       <body className="min-h-full flex flex-col">
-        <AppProviders>{children}</AppProviders>
+        <Provider>{children}</Provider>
       </body>
     </html>
   );
 }
+
+export default RootLayout;

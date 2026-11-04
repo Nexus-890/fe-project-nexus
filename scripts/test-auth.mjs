@@ -9,15 +9,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = mkdtempSync(path.join(tmpdir(), "nexus-auth-tests-"));
 
 try {
-  const tests = readdirSync(path.join(root, "tests"))
-    .filter((name) => name.endsWith(".test.ts"));
+  const tests = readdirSync(path.join(root, "tests")).filter((name) =>
+    name.endsWith(".test.ts"),
+  );
   const program = ts.createProgram({
     rootNames: [
       ...tests.map((name) => path.join(root, "tests", name)),
-      path.join(root, "providers/AuthProvider.tsx"),
-      path.join(root, "hooks/auth/useAuth.ts"),
-      path.join(root, "providers/AppProviders.tsx"),
-      path.join(root, "tests/browser/AuthProbe.tsx"),
+      path.join(root, "providers/Provider.tsx"),
+      path.join(root, "hooks/useAuth.ts"),
+      path.join(root, "tests/AuthProbe.tsx"),
     ],
     options: {
       target: ts.ScriptTarget.ES2022,
@@ -35,19 +35,31 @@ try {
   });
   const diagnostics = ts.getPreEmitDiagnostics(program);
   if (diagnostics.length) {
-    process.stderr.write(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-      getCanonicalFileName: (file) => file,
-      getCurrentDirectory: () => root,
-      getNewLine: () => "\n",
-    }));
+    process.stderr.write(
+      ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+        getCanonicalFileName: (file) => file,
+        getCurrentDirectory: () => root,
+        getNewLine: () => "\n",
+      }),
+    );
     process.exitCode = 1;
   } else {
     program.emit();
-    symlinkSync(path.join(root, "node_modules"), path.join(output, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-    const result = spawnSync(process.execPath, [
-      "--test",
-      ...tests.map((name) => path.join(output, "tests", name.replace(/\.ts$/, ".js"))),
-    ], { cwd: root, stdio: "inherit" });
+    symlinkSync(
+      path.join(root, "node_modules"),
+      path.join(output, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--test",
+        ...tests.map((name) =>
+          path.join(output, "tests", name.replace(/\.ts$/, ".js")),
+        ),
+      ],
+      { cwd: root, stdio: "inherit" },
+    );
     process.exitCode = result.status ?? 1;
   }
 } finally {

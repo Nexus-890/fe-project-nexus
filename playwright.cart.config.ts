@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests/browser",
+  testDir: "./tests",
   testMatch: "cart.spec.ts",
   fullyParallel: false,
   workers: 1,
@@ -27,7 +27,7 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       env: {
-        NEXUS_TEST_DIST_DIR: ".next-cart-run",
+        NEXUS_TEST_DIST_DIR: ".next-cart-conflict-run",
         NEXT_PUBLIC_API_URL: "http://127.0.0.1:3913",
         NEXT_PUBLIC_AUTH_STUB: "false",
         NEXT_PUBLIC_CART_MOCK: "false",

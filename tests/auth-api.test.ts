@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { createApiClient } from "../lib/api-client";
-import { createAuthApi } from "../service/auth";
-import { createAccountApi } from "../service/account";
-import { createAuthStub } from "./fixtures/auth-stub";
-import type { ProblemDetails } from "../types/common/response/type";
-import type { RegisterRequest } from "../types/auth/request/type";
-import type { UserResponse } from "../types/auth/response/type";
+import { requestApi, isApiError } from "../configs/api";
+import { getMe, login, register } from "../service/authService";
+import { updateProfile } from "../service/accountService";
+import { createAuthStub } from "../mocks/authStub";
+import type { ApiError, ProblemDetails } from "../types/commonResponseType";
+import type { RegisterRequest } from "../types/authRequestType";
+import type { UserResponse } from "../types/authResponseType";
 
 const registerInput: RegisterRequest = {
   email: "buyer@example.test",
@@ -20,521 +20,816 @@ const registerInput: RegisterRequest = {
   dateOfBirth: "1999-01-01",
 };
 
-test("auth stub cannot be enabled in production, including injected transports", () => {
-  const result = spawnSync(process.execPath, [
-    "-e", `require(${JSON.stringify(require.resolve("./fixtures/auth-stub"))}).createAuthStub()`,
-  ], { env: { ...process.env, NODE_ENV: "production" }, encoding: "utf8" });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /auth stub is disabled in production/);
-});
-
-test("transport attaches Bearer token only for protected relative requests", async () => {
-  const seen: Array<{ url: string; authorization: string | null }> = [];
-  const fetchStub: typeof fetch = async (input, init) => {
-    const headers = new Headers(init?.headers);
-    seen.push({ url: String(input), authorization: headers.get("Authorization") });
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  };
-  const client = createApiClient({ getAccessToken: () => "token-123", fetch: fetchStub });
-
-  const protectedResult = await client.get("/api/v1/users/me");
-  const publicResult = await client.post("/api/v1/auth/login", { email: "a", password: "b" }, { auth: false });
-  const externalResult = await client.get("https://evil.example/api/v1/users/me");
-
-  assert.equal(protectedResult.ok, true);
-  assert.equal(publicResult.ok, true);
-  assert.equal(externalResult.ok, false);
-  assert.equal(seen[0]?.authorization, "Bearer token-123");
-  assert.equal(seen[1]?.authorization, null);
-  assert.equal(seen.length, 2, "external URL must be rejected before fetch so bearer cannot leak");
-});
-
-test("common-web validation errors are returned as typed ApiError with form field errors", async () => {
-  const client = createApiClient({
-    fetch: async () => new Response(JSON.stringify({
-      type: "urn:problem:validation-error",
-      title: "Validation Failed",
-      status: 400,
-      detail: "The request data is invalid",
-      instance: "/api/v1/auth/register",
-      traceId: "trace-1",
-      errors: [
-        { field: "email", message: "Invalid email address!" },
-        { field: "password", message: "cannot be blank!" },
-      ],
-    }), { status: 400, headers: { "Content-Type": "application/problem+json" } }),
-  });
-
-  const result = await client.post("/api/v1/auth/register", {}, { auth: false });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(typeof result.error, "object");
-    assert.equal(result.error.kind, "http");
-    assert.equal(result.error.status, 400);
-    assert.equal(result.error.type, "urn:problem:validation-error");
-    assert.equal(result.error.title, "Validation Failed");
-    assert.equal(result.error.detail, "The request data is invalid");
-    assert.equal(result.error.instance, "/api/v1/auth/register");
-    assert.equal(result.error.traceId, "trace-1");
-    assert.deepEqual(result.error.errors, [
-      { field: "email", message: "Invalid email address!" },
-      { field: "password", message: "cannot be blank!" },
-    ]);
-    assert.deepEqual(result.error.fieldErrors, {
-      email: ["Invalid email address!"], password: ["cannot be blank!"],
-    });
-  }
-});
-
-test("validation normalization ignores malformed entries and groups repeated fields safely", async () => {
-  const client = createApiClient({ fetch: async () => new Response(JSON.stringify({
-    title: "Validation Failed", status: 500,
-    errors: [
-      null, "invalid", {}, { field: "email", message: 123 }, { field: 123, message: "invalid" },
-      { field: "email", message: "First message" },
-      { field: "email", message: "Second message" },
-      { field: "__proto__", message: "A field name is data, not a prototype" },
-    ],
-  }), { status: 400 }) });
-  const result = await client.post("/validation", {}, { auth: false });
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.status, 400, "HTTP status takes precedence over body status");
-    assert.deepEqual(result.error.fieldErrors?.email, ["First message", "Second message"]);
-    assert.deepEqual(result.error.fieldErrors?.["__proto__"], ["A field name is data, not a prototype"]);
-    assert.equal(Object.getPrototypeOf(result.error.fieldErrors), Object.prototype);
-    assert.equal(result.error.errors?.length, 3);
-  }
-});
-
-test("common-web errors array takes precedence over legacy field error records", async () => {
-  const client = createApiClient({ fetch: async () => new Response(JSON.stringify({
-    title: "Validation Failed", errors: [{ field: "email", message: "Current backend message" }],
-    fieldErrors: { email: ["Legacy message"] },
-  }), { status: 400 }) });
-  const result = await client.get("/validation");
-  assert.equal(result.ok, false);
-  if (!result.ok) assert.deepEqual(result.error.fieldErrors, { email: ["Current backend message"] });
-});
-
-test("legacy field error records remain compatible", async () => {
-  for (const body of [
-    { fieldErrors: { email: ["Invalid email", 123], password: "Required" } },
-    { errors: { email: ["Invalid email", 123], password: "Required" } },
-  ]) {
-    const client = createApiClient({ fetch: async () => new Response(JSON.stringify(body), { status: 400 }) });
-    const result = await client.get("/validation");
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.deepEqual(result.error.fieldErrors, { email: ["Invalid email"], password: ["Required"] });
-      assert.equal(result.error.errors, undefined);
-    }
-  }
-});
-
-test("common-web errors without valid field entries stay typed form-level errors", async () => {
-  for (const errors of [undefined, [], [null, { field: "email" }], "invalid"]) {
-    const client = createApiClient({ fetch: async () => new Response(JSON.stringify({
-      type: "urn:problem:domain-error", title: "Bad Request", detail: "Email is existed", errors,
-    }), { status: 400 }) });
-    const result = await client.get("/validation");
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.equal(result.error.kind, "http");
-      assert.equal(result.error.detail, "Email is existed");
-      assert.equal(result.error.fieldErrors, undefined);
-      assert.equal(result.error.errors, undefined);
-    }
-  }
-});
-
-test("stub register-login-me flow carries Authorization and stores no token in web storage", async () => {
-  const storageWrites: string[] = [];
-  const storage = {
-    get length() { return storageWrites.length; },
-    clear() { storageWrites.length = 0; },
-    getItem() { return null; },
-    key(index: number) { return storageWrites[index] ?? null; },
-    removeItem(key: string) { storageWrites.push(`remove:${key}`); },
-    setItem(key: string, value: string) { storageWrites.push(`${key}:${value}`); },
-  } satisfies Storage;
-
-  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-  Object.defineProperty(globalThis, "sessionStorage", { value: storage, configurable: true });
-
-  let accessToken: string | null = null;
-  let lastAuthorization: string | null = null;
-  const stub = createAuthStub();
-  const fetchSpy: typeof fetch = async (input, init) => {
-    lastAuthorization = new Headers(init?.headers).get("Authorization");
-    return stub(input, init);
-  };
-  const client = createApiClient({ getAccessToken: () => accessToken, fetch: fetchSpy });
-  const auth = createAuthApi(client);
-
-  const register = await auth.register(registerInput);
-  assert.equal(register.ok, true);
-
-  const login = await auth.login({ email: registerInput.email, password: registerInput.password });
-  assert.equal(login.ok, true);
-  if (!login.ok) {
-    assert.fail("login should succeed");
-  }
-  const loginToken = login.data.accessToken;
-
-  accessToken = loginToken;
-  assert.equal(storageWrites.some((entry) => entry.includes(loginToken)), false);
-
-  const me = await auth.me();
-  assert.equal(me.ok, true);
-  assert.equal(lastAuthorization, `Bearer ${loginToken}`);
-
-  accessToken = null;
-  const afterSignOut = await auth.me();
-  assert.equal(afterSignOut.ok, false);
-  if (!afterSignOut.ok) {
-    assert.equal(afterSignOut.error.status, 401);
-  }
-});
-
-test("stub aborts delayed requests with AbortError", async () => {
-  const controller = new AbortController();
-  const stub = createAuthStub({ delayMs: 50 });
-  const pending = stub("http://stub.test/api/v1/users/me", { signal: controller.signal });
-
-  controller.abort();
-
-  await assert.rejects(pending, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
-});
-
 test("profile PUT persists normalized fields and keeps existing sessions after an email change", async () => {
   let accessToken: string | null = null;
-  const client = createApiClient({ fetch: createAuthStub(), getAccessToken: () => accessToken });
-  const auth = createAuthApi(client);
-  const account = createAccountApi(client);
-  const registered = await auth.register(registerInput);
-  assert.equal(registered.ok, true);
-  const anonymous = await account.updateProfile({ fullName: "Not allowed" });
-  assert.equal(anonymous.ok, false);
-  if (!anonymous.ok) assert.equal(anonymous.error.status, 401);
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  await register(registerInput, options);
+  await assert.rejects(updateProfile({ fullName: "Not allowed" }, options), { kind: "http", status: 401 });
 
-  const firstLogin = await auth.login({ email: registerInput.email, password: registerInput.password });
-  const secondLogin = await auth.login({ email: registerInput.email, password: registerInput.password });
-  assert.ok(firstLogin.ok && secondLogin.ok);
-  accessToken = firstLogin.data.accessToken;
-  const updated = await account.updateProfile({
+  const firstLogin = await login({ email: registerInput.email, password: registerInput.password }, options);
+  const secondLogin = await login({ email: registerInput.email, password: registerInput.password }, options);
+  accessToken = firstLogin.accessToken;
+  const updated = await updateProfile({
     fullName: "  Updated Buyer  ", email: "  NEW.BUYER@EXAMPLE.TEST  ",
     address: "  New street  ", dateOfBirth: "2000-02-29", gender: "FEMALE",
-  });
-  assert.ok(updated.ok);
-  assert.equal(updated.data.fullName, "Updated Buyer");
-  assert.equal(updated.data.email, "new.buyer@example.test");
-  assert.equal(updated.data.address, "New street");
-  assert.equal(updated.data.phone, registerInput.phone);
-  assert.deepEqual(await auth.me(), updated);
+  }, options);
+  assert.equal(updated.fullName, "Updated Buyer");
+  assert.equal(updated.email, "new.buyer@example.test");
+  assert.equal(updated.address, "New street");
+  assert.equal(updated.phone, registerInput.phone);
+  assert.deepEqual(await getMe(options), updated);
 
-  const ignored = await client.put<UserResponse>("/api/v1/users/me", {
+  const ignored = await requestApi<UserResponse>("PUT", "/api/v1/users/me", {
     fullName: null, email: null, address: null, gender: null, dateOfBirth: null,
     phone: "invalid", identityNumber: "other", password: "changed", roles: ["ADMIN"], status: "LOCKED",
-  });
-  assert.deepEqual(ignored, updated, "null retains values and fields outside UpdateProfileRequest are ignored");
-  accessToken = secondLogin.data.accessToken;
-  assert.deepEqual(await auth.me(), updated, "all existing sessions keep the same user identity");
-  const oldEmail = await auth.login({ email: registerInput.email, password: registerInput.password });
-  assert.equal(oldEmail.ok, false);
-  const newEmail = await auth.login({ email: updated.data.email, password: registerInput.password });
-  assert.ok(newEmail.ok, "the login index moves to the new email while password remains unchanged");
-  const cleared = await account.updateProfile({ address: "  " });
-  assert.ok(cleared.ok);
-  assert.equal(cleared.data.address, "");
+  }, options);
+  assert.deepEqual(ignored.data, updated, "null retains values and fields outside UpdateProfileRequest are ignored");
+  accessToken = secondLogin.accessToken;
+  assert.deepEqual(await getMe(options), updated, "all existing sessions keep the same user identity");
+  await assert.rejects(login({ email: registerInput.email, password: registerInput.password }, options), { kind: "http", status: 401 });
+  assert.ok((await login({ email: updated.email, password: registerInput.password }, options)).accessToken,
+    "the login index moves to the new email while password remains unchanged");
+  const cleared = await updateProfile({ address: "  " }, options);
+  assert.equal(cleared.address, "");
 });
 
 test("profile PUT rejects invalid fields and duplicate email without changing any stored values", async () => {
   let accessToken: string | null = null;
-  const client = createApiClient({ fetch: createAuthStub(), getAccessToken: () => accessToken });
-  const auth = createAuthApi(client);
-  const original = await auth.register(registerInput);
-  assert.ok(original.ok);
-  assert.ok((await auth.register({ ...registerInput, email: "other@example.test", phone: "0900000001", identityNumber: "012345678902" })).ok);
-  const login = await auth.login({ email: registerInput.email, password: registerInput.password });
-  assert.ok(login.ok);
-  accessToken = login.data.accessToken;
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  const original = await register(registerInput, options);
+  await register({ ...registerInput, email: "other@example.test", phone: "0900000001", identityNumber: "012345678902" }, options);
+  accessToken = (await login({ email: registerInput.email, password: registerInput.password }, options)).accessToken;
 
   for (const [payload, field] of [
     [{ fullName: " " }, "fullName"],
     [{ email: "invalid" }, "email"],
     [{ dateOfBirth: "2999-01-01" }, "dateOfBirth"],
   ] as const) {
-    const invalid = await client.put("/api/v1/users/me", { address: "Must not persist", ...payload });
-    assert.equal(invalid.ok, false);
-    if (!invalid.ok) {
-      assert.equal(invalid.error.status, 400);
-      assert.ok(invalid.error.fieldErrors?.[field]?.length);
-    }
-    assert.deepEqual(await auth.me(), original);
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", { address: "Must not persist", ...payload }, options), errorIs((error) => {
+      assert.equal(error.status, 400);
+      assert.ok(error.fieldErrors?.[field]?.length);
+    }));
+    assert.deepEqual(await getMe(options), original);
   }
   for (const payload of [{ gender: "UNKNOWN" }, { dateOfBirth: "2000-02-30" }]) {
-    const malformed = await client.put("/api/v1/users/me", payload);
-    assert.equal(malformed.ok, false);
-    if (!malformed.ok) {
-      assert.equal(malformed.error.status, 400);
-      assert.equal(malformed.error.type, "urn:problem:invalid-request-body");
-    }
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", payload, options), {
+      kind: "http", status: 400, type: "urn:problem:invalid-request-body",
+    });
   }
-  const conflict = await client.put("/api/v1/users/me", { email: " OTHER@EXAMPLE.TEST ", fullName: "Must not persist" });
-  assert.equal(conflict.ok, false);
-  if (!conflict.ok) assert.equal(conflict.error.status, 409);
-  assert.deepEqual(await auth.me(), original);
-  const sameEmail = await client.put<UserResponse>("/api/v1/users/me", { email: " BUYER@EXAMPLE.TEST " });
-  assert.deepEqual(sameEmail, original, "the current user's own email is not a duplicate");
+  await assert.rejects(requestApi("PUT", "/api/v1/users/me", { email: " OTHER@EXAMPLE.TEST ", fullName: "Must not persist" }, options), {
+    kind: "http", status: 409, code: "USER_EMAIL_ALREADY_USED",
+  });
+  assert.deepEqual(await getMe(options), original);
+  const sameEmail = await requestApi<UserResponse>("PUT", "/api/v1/users/me", { email: " BUYER@EXAMPLE.TEST " }, options);
+  assert.deepEqual(sameEmail.data, original, "the current user's own email is not a duplicate");
+});
+const success = (data: unknown, status = 200) =>
+  new Response(
+    JSON.stringify({
+      code: 0,
+      message: "response success",
+      data,
+    }),
+    { status, headers: { "Content-Type": "application/json" } },
+  );
+const problem = (body: unknown, status = 400) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/problem+json" },
+  });
+const errorIs = (verify: (error: ApiError) => void) => (error: unknown) => {
+  assert.ok(isApiError(error));
+  verify(error);
+  return true;
+};
+
+test("auth stub and provider cannot be enabled in production, including injected transports", () => {
+  const stubPath = JSON.stringify(require.resolve("../mocks/authStub"));
+  const providerPath = JSON.stringify(require.resolve("../providers/Provider"));
+  const scripts = [
+    "require(" + stubPath + ").createAuthStub()",
+    "const React=require('react');const render=require('react-dom/server').renderToString;const Provider=require(" +
+      providerPath +
+      ").default;render(React.createElement(Provider,{stub:true,fetch:async()=>new Response('{}')},null))",
+  ];
+  for (const script of scripts) {
+    const result = spawnSync(process.execPath, ["-e", script], {
+      env: { ...process.env, NODE_ENV: "production" },
+      encoding: "utf8",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /auth stub is disabled in production/);
+  }
 });
 
-test("separate stub instances do not accept each other's runtime token", async () => {
-  const authA = createAuthApi(createApiClient({ fetch: createAuthStub() }));
-  const register = await authA.register(registerInput);
-  assert.equal(register.ok, true);
-  const login = await authA.login({ email: registerInput.email, password: registerInput.password });
-  assert.equal(login.ok, true);
-  if (!login.ok) {
-    assert.fail("login should succeed");
-  }
-  const tokenFromA = login.data.accessToken;
-  const authB = createAuthApi(createApiClient({ fetch: createAuthStub(), getAccessToken: () => tokenFromA }));
-  const meFromB = await authB.me();
+test("transport attaches the current Bearer only to protected relative requests", async () => {
+  const seen: Array<{ url: string; authorization: string | null }> = [];
+  const context = {
+    getAccessToken: () => "token-123",
+    fetch: (async (input, init) => {
+      seen.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("Authorization"),
+      });
+      return success({ id: "user" });
+    }) satisfies typeof fetch,
+  };
+  assert.deepEqual(
+    (await requestApi("GET", "/api/v1/users/me", undefined, { context })).data,
+    { id: "user" },
+  );
+  await requestApi("POST", "/api/v1/auth/login", {}, { context, auth: false });
+  await assert.rejects(
+    requestApi("GET", "https://evil.example/me", undefined, { context }),
+    errorIs((error) => {
+      assert.equal(error.kind, "invalid-response");
+    }),
+  );
+  assert.equal(seen[0]?.authorization, "Bearer token-123");
+  assert.equal(seen[1]?.authorization, null);
+  assert.equal(
+    seen.length,
+    2,
+    "Unsafe URL must never reach fetch or leak a token",
+  );
+});
 
-  assert.equal(meFromB.ok, false);
-  if (!meFromB.ok) {
-    assert.equal(meFromB.error.status, 401);
+test("delivered Problem Details preserve symbolic code, trace and field/code/detail errors", async () => {
+  const errors = [
+    {
+      field: "email",
+      code: "VALIDATION_EMAIL",
+      detail: "Invalid email address!",
+    },
+    {
+      field: "password",
+      code: "VALIDATION_NOT_BLANK",
+      detail: "cannot be blank!",
+    },
+  ];
+  const context = {
+    fetch: (async () =>
+      problem({
+        type: "urn:problem:validation-error",
+        title: "Validation Failed",
+        status: 400,
+        code: "VALIDATION_FAILED",
+        detail: "The request data is invalid",
+        instance: "/register",
+        traceId: "trace-1",
+        errors,
+      })) satisfies typeof fetch,
+  };
+  await assert.rejects(
+    requestApi("POST", "/register", {}, { context, auth: false }),
+    errorIs((error) => {
+      assert.equal(error.kind, "http");
+      assert.equal(error.status, 400);
+      assert.equal(error.code, "VALIDATION_FAILED");
+      assert.equal(error.type, "urn:problem:validation-error");
+      assert.equal(error.detail, "The request data is invalid");
+      assert.equal(error.instance, "/register");
+      assert.equal(error.traceId, "trace-1");
+      assert.deepEqual(error.errors, errors);
+      assert.deepEqual(error.fieldErrors, {
+        email: ["Invalid email address!"],
+        password: ["cannot be blank!"],
+      });
+    }),
+  );
+});
+
+test("field normalization ignores malformed entries and groups repeated fields without prototype pollution", async () => {
+  const context = {
+    fetch: (async () =>
+      problem({
+        title: "Validation Failed",
+        status: 500,
+        code: "VALIDATION_FAILED",
+        errors: [
+          null,
+          "invalid",
+          {},
+          { field: "email", code: 123, detail: "invalid" },
+          { field: "email", code: "FIRST", detail: "First message" },
+          { field: "email", code: "SECOND", detail: "Second message" },
+          { field: "__proto__", code: "FIELD", detail: "A field name is data" },
+        ],
+      })) satisfies typeof fetch,
+  };
+  await assert.rejects(
+    requestApi("POST", "/validation", {}, { context }),
+    errorIs((error) => {
+      assert.equal(
+        error.status,
+        400,
+        "HTTP status takes precedence over body status",
+      );
+      assert.deepEqual(error.fieldErrors?.email, [
+        "First message",
+        "Second message",
+      ]);
+      assert.deepEqual(error.fieldErrors?.["__proto__"], [
+        "A field name is data",
+      ]);
+      assert.equal(Object.getPrototypeOf(error.fieldErrors), Object.prototype);
+      assert.equal(error.errors?.length, 3);
+    }),
+  );
+});
+
+test("legacy field message records are not silently accepted as the delivered contract", async () => {
+  for (const body of [
+    { fieldErrors: { email: ["Legacy"] } },
+    { errors: { email: ["Legacy"] } },
+    { errors: [{ field: "email", message: "Legacy" }] },
+  ]) {
+    const context = {
+      fetch: (async () =>
+        problem({
+          title: "Bad Request",
+          code: "VALIDATION_FAILED",
+          ...body,
+        })) satisfies typeof fetch,
+    };
+    await assert.rejects(
+      requestApi("GET", "/validation", undefined, { context }),
+      errorIs((error) => {
+        assert.equal(error.status, 400);
+        assert.equal(error.fieldErrors, undefined);
+        assert.equal(error.errors, undefined);
+      }),
+    );
   }
 });
 
-test("transport rejects unsafe paths and versioned baseUrl before fetch", async () => {
-  assert.throws(() => createApiClient({ baseUrl: "https://api.example.test/api/v1", fetch: async () => new Response("{}") }), /origin only/);
+test("unknown symbolic errors and malformed field entries remain usable form-level errors", async () => {
+  for (const errors of [undefined, [], [null, { field: "email" }], "invalid"]) {
+    const context = {
+      fetch: (async () =>
+        problem({
+          type: "urn:problem:domain-error",
+          title: "Bad Request",
+          code: "FUTURE_UNKNOWN_CODE",
+          detail: "Action was rejected",
+          errors,
+        })) satisfies typeof fetch,
+    };
+    await assert.rejects(
+      requestApi("GET", "/validation", undefined, { context }),
+      errorIs((error) => {
+        assert.equal(error.kind, "http");
+        assert.equal(error.code, "FUTURE_UNKNOWN_CODE");
+        assert.equal(error.detail, "Action was rejected");
+        assert.equal(error.fieldErrors, undefined);
+        assert.equal(error.errors, undefined);
+      }),
+    );
+  }
+});
 
-  let called = false;
-  const client = createApiClient({
-    fetch: async () => {
-      called = true;
-      return new Response("{}", { status: 200 });
+test("success envelope retains sibling page and metadata; bare or malformed success is rejected", async () => {
+  const page = { number: 2, size: 12, totalElements: 30, totalPages: 3 };
+  const envelope = {
+    code: 7,
+    message: "Custom success",
+    data: [{ id: "1" }],
+    page,
+  };
+  const result = await requestApi("GET", "/list", undefined, {
+    context: {
+      fetch: async () => new Response(JSON.stringify(envelope)),
     },
   });
-
-  const result = await client.get("/\\evil.example/api/v1/users/me");
-  assert.equal(result.ok, false);
-  assert.equal(called, false);
+  assert.deepEqual(result, envelope);
+  for (const body of [
+    { id: "bare" },
+    [],
+    { data: {}, code: "0", message: "wrong" },
+    { code: 0, message: "ok", data: [], page: { ...page, size: 0 } },
+  ]) {
+    await assert.rejects(
+      requestApi("GET", "/list", undefined, {
+        context: {
+          fetch: async () => new Response(JSON.stringify(body)),
+        },
+      }),
+      errorIs((error) => assert.equal(error.kind, "invalid-response")),
+    );
+  }
+  await assert.rejects(
+    requestApi("GET", "/list", undefined, {
+      context: {
+        fetch: async () => new Response("not-json"),
+      },
+    }),
+    errorIs((error) => assert.equal(error.kind, "invalid-response")),
+  );
 });
 
-test("non-json HTTP errors keep HTTP status", async () => {
-  const client = createApiClient({
-    fetch: async () => new Response("not-json", { status: 401, statusText: "Unauthorized" }),
+test("stub register-login-me uses current Authorization without writing web storage", async () => {
+  const writes: string[] = [];
+  const storage = {
+    get length() {
+      return writes.length;
+    },
+    clear() {
+      writes.length = 0;
+    },
+    getItem() {
+      return null;
+    },
+    key(index: number) {
+      return writes[index] ?? null;
+    },
+    removeItem(key: string) {
+      writes.push("remove:" + key);
+    },
+    setItem(key: string, value: string) {
+      writes.push(key + ":" + value);
+    },
+  } satisfies Storage;
+  const previousLocal = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage",
+  );
+  const previousSession = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "sessionStorage",
+  );
+  Object.defineProperty(globalThis, "localStorage", {
+    value: storage,
+    configurable: true,
   });
-
-  const result = await client.get("/api/v1/users/me");
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.kind, "http");
-    assert.equal(result.error.status, 401);
-    assert.equal(result.error.title, "Unauthorized");
+  Object.defineProperty(globalThis, "sessionStorage", {
+    value: storage,
+    configurable: true,
+  });
+  let token: string | null = null;
+  let authorization: string | null = null;
+  const stub = createAuthStub();
+  const context = {
+    getAccessToken: () => token,
+    fetch: (async (input, init) => {
+      authorization = new Headers(init?.headers).get("Authorization");
+      return stub(input, init);
+    }) satisfies typeof fetch,
+  };
+  try {
+    const user = await register(registerInput, { context });
+    assert.equal(user.email, registerInput.email);
+    const logged = await login(
+      { email: registerInput.email, password: registerInput.password },
+      { context, auth: true },
+    );
+    assert.equal(
+      authorization,
+      null,
+      "Public service must override a caller auth=true",
+    );
+    token = logged.accessToken;
+    assert.equal((await getMe({ context })).email, user.email);
+    assert.equal(authorization, "Bearer " + token);
+    assert.deepEqual(writes, []);
+    token = null;
+    await assert.rejects(
+      getMe({ context }),
+      errorIs((error) => assert.equal(error.status, 401)),
+    );
+  } finally {
+    for (const [key, descriptor] of [
+      ["localStorage", previousLocal],
+      ["sessionStorage", previousSession],
+    ] as const) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
   }
 });
 
-test("stub validation and duplicate conflicts return typed HTTP errors", async () => {
-  const auth = createAuthApi(createApiClient({ fetch: createAuthStub() }));
-
-  const invalidRegister = await auth.register({ ...registerInput, email: "" });
-  assert.equal(invalidRegister.ok, false);
-  if (!invalidRegister.ok) {
-    assert.equal(invalidRegister.error.status, 400);
-    assert.deepEqual(invalidRegister.error.fieldErrors?.email, ["cannot be blank!"]);
-  }
-
-  const first = await auth.register(registerInput);
-  assert.equal(first.ok, true);
-
-  const duplicate = await auth.register(registerInput);
-  assert.equal(duplicate.ok, false);
-  if (!duplicate.ok) {
-    assert.equal(duplicate.error.status, 409);
-  }
-
-  const invalidLogin = await auth.login({ email: "", password: "" });
-  assert.equal(invalidLogin.ok, false);
-  if (!invalidLogin.ok) {
-    assert.equal(invalidLogin.error.status, 400);
-    assert.deepEqual(invalidLogin.error.fieldErrors?.password, ["cannot be blank!"]);
-  }
+test("stub aborts delayed requests with AbortError", async () => {
+  const controller = new AbortController();
+  const pending = createAuthStub({ delayMs: 50 })(
+    "http://stub.test/api/v1/users/me",
+    { signal: controller.signal },
+  );
+  controller.abort();
+  await assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof DOMException && error.name === "AbortError",
+  );
 });
 
-test("stub emits common-web validation wire contract, not frontend fieldErrors", async () => {
+test("separate auth stub instances do not accept another instance token", async () => {
+  const contextA = { fetch: createAuthStub() };
+  await register(registerInput, { context: contextA });
+  const logged = await login(
+    { email: registerInput.email, password: registerInput.password },
+    { context: contextA },
+  );
+  const contextB = {
+    fetch: createAuthStub(),
+    getAccessToken: () => logged.accessToken,
+  };
+  await assert.rejects(
+    getMe({ context: contextB }),
+    errorIs((error) => assert.equal(error.status, 401)),
+  );
+});
+
+test("unsafe paths and versioned baseUrl are rejected before any fetch", async () => {
+  let calls = 0;
+  const transport: typeof fetch = async () => {
+    calls++;
+    return success({});
+  };
+  for (const path of [
+    "https://evil.test/me",
+    "//evil.test/me",
+    "/\\evil.test/me",
+    "/users\u0000/me",
+  ]) {
+    await assert.rejects(
+      requestApi("GET", path, undefined, { context: { fetch: transport } }),
+      errorIs((error) => assert.equal(error.kind, "invalid-response")),
+    );
+  }
+  for (const baseUrl of [
+    "https://api.test/api/v1",
+    "ftp://api.test",
+    "https://user:pass@api.test",
+    "/api",
+  ]) {
+    await assert.rejects(
+      requestApi("GET", "/me", undefined, {
+        context: { baseUrl, fetch: transport },
+      }),
+      errorIs((error) => assert.equal(error.kind, "invalid-response")),
+    );
+  }
+  assert.equal(calls, 0);
+});
+
+test("non-json HTTP errors retain HTTP status instead of becoming parse errors", async () => {
+  await assert.rejects(
+    requestApi("GET", "/me", undefined, {
+      context: {
+        fetch: async () =>
+          new Response("not-json", { status: 401, statusText: "Unauthorized" }),
+      },
+    }),
+    errorIs((error) => {
+      assert.equal(error.kind, "http");
+      assert.equal(error.status, 401);
+      assert.equal(error.title, "Unauthorized");
+    }),
+  );
+});
+
+test("stub validation and duplicate responses become typed rejected service promises", async () => {
+  const context = { fetch: createAuthStub() };
+  await assert.rejects(
+    register({ ...registerInput, email: "" }, { context }),
+    errorIs((error) => {
+      assert.equal(error.status, 400);
+      assert.equal(error.code, "VALIDATION_FAILED");
+      assert.deepEqual(error.fieldErrors?.email, ["cannot be blank!"]);
+    }),
+  );
+  await register(registerInput, { context });
+  await assert.rejects(
+    register(registerInput, { context }),
+    errorIs((error) => {
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "USER_EMAIL_ALREADY_USED");
+    }),
+  );
+  await assert.rejects(
+    login({ email: "", password: "" }, { context }),
+    errorIs((error) => {
+      assert.equal(error.status, 400);
+      assert.deepEqual(error.fieldErrors?.password, ["cannot be blank!"]);
+    }),
+  );
+});
+
+test("stub emits delivered field/code/detail errors and malformed-body errors", async () => {
   const stub = createAuthStub();
   for (const path of ["/api/v1/auth/register", "/api/v1/auth/login"]) {
     const response = await stub(path, {
-      method: "POST", body: "{}", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      body: "{}",
+      headers: { "Content-Type": "application/json" },
     });
     const body: ProblemDetails = await response.json();
     assert.equal(response.status, 400);
-    assert.equal(response.headers.get("Content-Type"), "application/problem+json");
-    assert.equal(body.type, "urn:problem:validation-error");
-    assert.equal(body.title, "Validation Failed");
-    assert.equal(body.detail, "The request data is invalid");
+    assert.equal(
+      response.headers.get("Content-Type"),
+      "application/problem+json",
+    );
+    assert.equal(body.code, "VALIDATION_FAILED");
     assert.equal(body.instance, path);
-    assert.equal(typeof body.traceId, "string");
     assert.equal(Object.hasOwn(body, "fieldErrors"), false);
-    assert.ok(body.errors && body.errors.length > 0);
-    assert.equal(new Set(body.errors.map((error) => error.field)).size, body.errors.length);
-    assert.ok(body.errors.every((error) => error.message === "cannot be blank!"));
-    assert.ok(body.errors.some((error) => error.field === "email"));
-  }
-});
-
-test("stub malformed bodies return common-web form-level errors without field errors", async () => {
-  const stub = createAuthStub();
-  for (const path of ["/api/v1/auth/register", "/api/v1/auth/login"]) {
+    assert.ok(body.errors?.length);
+    assert.ok(
+      body.errors.every(
+        (error) =>
+          error.code === "VALIDATION_NOT_BLANK" &&
+          error.detail === "cannot be blank!",
+      ),
+    );
+    assert.ok(body.errors.every((error) => !Object.hasOwn(error, "message")));
     for (const payload of ["not-json", "null", "[]"]) {
-      const response = await stub(path, { method: "POST", body: payload });
-      const body: ProblemDetails = await response.json();
-      assert.equal(response.status, 400);
-      assert.equal(body.type, "urn:problem:invalid-request-body");
-      assert.equal(body.title, "Invalid Request Body");
-      assert.equal(body.instance, path);
-      assert.equal(body.errors, undefined);
-      assert.equal(Object.hasOwn(body, "fieldErrors"), false);
+      const invalid = await stub(path, { method: "POST", body: payload });
+      const invalidBody: ProblemDetails = await invalid.json();
+      assert.equal(invalid.status, 400);
+      assert.equal(invalidBody.code, "INVALID_REQUEST_BODY");
+      assert.equal(invalidBody.errors, undefined);
     }
   }
 });
 
-test("auth API validates malformed login and user success bodies", async () => {
-  const badLogin = createAuthApi(createApiClient({
-    fetch: async () => new Response(JSON.stringify({ accessToken: "token", expiresIn: 0, tokenType: "Bearer" }), { status: 200 }),
-  }));
-  const badLoginResult = await badLogin.login({ email: "a@example.test", password: "password" });
-  assert.equal(badLoginResult.ok, false);
-  if (!badLoginResult.ok) {
-    assert.equal(badLoginResult.error.kind, "invalid-response");
-  }
-
-  const badMe = createAuthApi(createApiClient({
-    getAccessToken: () => "token",
-    fetch: async () => new Response(JSON.stringify({
-      id: "u1",
-      email: "a@example.test",
-      phone: "0900000000",
-      fullName: "A",
-      gender: null,
-      address: null,
-      dateOfBirth: null,
-      roles: "BUYER",
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-    }), { status: 200 }),
-  }));
-  const badMeResult = await badMe.me();
-  assert.equal(badMeResult.ok, false);
-  if (!badMeResult.ok) {
-    assert.equal(badMeResult.error.kind, "invalid-response");
-  }
+test("auth services reject malformed login/profile data even inside a valid envelope", async () => {
+  await assert.rejects(
+    login(
+      { email: "a@test.dev", password: "password" },
+      {
+        context: {
+          fetch: async () =>
+            success({
+              accessToken: "token",
+              expiresIn: 0,
+              tokenType: "Bearer",
+            }),
+        },
+      },
+    ),
+    errorIs((error) => assert.equal(error.kind, "invalid-response")),
+  );
+  await assert.rejects(
+    getMe({
+      context: {
+        fetch: async () =>
+          success({ id: "u1", email: "a@test.dev", roles: "BUYER" }),
+      },
+    }),
+    errorIs((error) => assert.equal(error.kind, "invalid-response")),
+  );
 });
 
-test("Axios config keeps source defaults and copies caller headers without retaining tokens", async () => {
+test("Axios defaults and caller headers never retain or replace a session token", async () => {
   const { AxiosHeaders } = await import("axios");
-  const { default: anonymous } = await import("../configs/api");
-  assert.equal(anonymous.defaults.timeout, 15_000);
-  assert.equal(anonymous.defaults.headers.Accept, "application/json");
-  assert.equal(anonymous.defaults.headers.Authorization, undefined);
-
+  const { default: api } = await import("../configs/api");
+  assert.equal(api.defaults.timeout, 15_000);
+  assert.equal(api.defaults.headers.Accept, "application/json");
+  assert.equal(api.defaults.headers.Authorization, undefined);
   let token: string | null = "first";
-  const authorization: Array<string | null> = [];
-  const callerHeaders = new AxiosHeaders({ Authorization: "caller-value", "X-Trace": "test" });
-  const client = createApiClient({ getAccessToken: () => token, fetch: async (_, init) => {
-    authorization.push(new Headers(init?.headers).get("Authorization"));
-    return new Response("{}", { status: 200 });
-  } });
-  await client.get("/me", { config: { headers: callerHeaders } });
-  token = "second";
-  await client.get("/me");
-  await client.post("/login", {}, { auth: false, config: { headers: callerHeaders } });
-  token = null;
-  await client.get("/me", { config: { headers: callerHeaders } });
-  assert.deepEqual(authorization, ["Bearer first", "Bearer second", null, null]);
-  assert.equal(callerHeaders.get("Authorization"), "caller-value");
-});
-
-test("Axios timeout becomes a typed network failure; explicit cancellation stays AbortError", async () => {
-  const client = createApiClient({ fetch: createAuthStub({ delayMs: 100 }) });
-  const timeout = await client.get("/api/v1/users/me", { config: { timeout: 10 } });
-  assert.equal(timeout.ok, false);
-  if (!timeout.ok) {
-    assert.equal(timeout.error.kind, "network");
-    assert.equal(timeout.error.status, 0);
-    assert.match(timeout.error.detail ?? "", /timeout/i);
-  }
-  const controller = new AbortController();
-  const pending = client.get("/api/v1/users/me", { signal: controller.signal });
-  controller.abort();
-  await assert.rejects(pending, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
-});
-
-test("request config cannot override URL, origin, method, signal or authentication", async () => {
-  const seen: Array<{ url: string; method?: string; authorization: string | null }> = [];
-  const client = createApiClient({
-    baseUrl: "https://api.example.test", getAccessToken: () => "private-token",
-    fetch: async (input, init) => {
-      seen.push({ url: String(input), method: init?.method, authorization: new Headers(init?.headers).get("Authorization") });
-      return new Response("{}", { status: 200 });
-    },
+  const seen: Array<string | null> = [];
+  const headers = new AxiosHeaders({
+    Authorization: "caller-value",
+    "X-Trace": "test",
   });
-  // Simulate an untyped JS caller; TypeScript callers cannot supply owned fields.
-  const config = {
-    baseURL: "https://evil.example", url: "https://evil.example", method: "DELETE",
-    auth: { username: "override", password: "override" },
-    headers: { Authorization: "override" }, adapter: () => { throw new Error("Must not use caller adapter"); },
+  const context = {
+    getAccessToken: () => token,
+    fetch: (async (_, init) => {
+      seen.push(new Headers(init?.headers).get("Authorization"));
+      return success({});
+    }) satisfies typeof fetch,
   };
-  const result = await client.get("/api/v1/users/me", { config });
-  assert.equal(result.ok, true);
-  assert.deepEqual(seen, [{ url: "https://api.example.test/api/v1/users/me", method: "GET", authorization: "Bearer private-token" }]);
+  await requestApi("GET", "/me", undefined, { context, config: { headers } });
+  token = "second";
+  await requestApi("GET", "/me", undefined, { context });
+  await requestApi(
+    "POST",
+    "/login",
+    {},
+    { context, auth: false, config: { headers } },
+  );
+  token = null;
+  await requestApi("GET", "/me", undefined, { context, config: { headers } });
+  assert.deepEqual(seen, ["Bearer first", "Bearer second", null, null]);
+  assert.equal(headers.get("Authorization"), "caller-value");
+  assert.equal(api.defaults.headers.Authorization, undefined);
 });
 
-test("native Axios HTTP adapter supports real GET/POST without the fixture", async () => {
+test("Axios timeout is typed network failure while explicit cancellation stays AbortError", async () => {
+  const context = { fetch: createAuthStub({ delayMs: 100 }) };
+  await assert.rejects(
+    requestApi("GET", "/api/v1/users/me", undefined, {
+      context,
+      config: { timeout: 10 },
+    }),
+    errorIs((error) => {
+      assert.equal(error.kind, "network");
+      assert.equal(error.status, 0);
+      assert.match(error.detail ?? "", /timeout/i);
+    }),
+  );
+  const controller = new AbortController();
+  const pending = requestApi("GET", "/api/v1/users/me", undefined, {
+    context,
+    signal: controller.signal,
+  });
+  controller.abort();
+  await assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof DOMException && error.name === "AbortError",
+  );
+});
+
+test("untyped caller config cannot override URL/origin/method/auth/signal/adapter/parser", async () => {
+  const seen: Array<{
+    url: string;
+    method: string | undefined;
+    authorization: string | null;
+  }> = [];
+  const controller = new AbortController();
+  const context = {
+    baseUrl: "https://api.test",
+    getAccessToken: () => "private-token",
+    fetch: (async (input, init) => {
+      seen.push({
+        url: String(input),
+        method: init?.method,
+        authorization: new Headers(init?.headers).get("Authorization"),
+      });
+      return success({});
+    }) satisfies typeof fetch,
+  };
+  const config = {
+    baseURL: "https://evil.test",
+    url: "https://evil.test",
+    method: "DELETE",
+    auth: { username: "override", password: "override" },
+    headers: { Authorization: "override" },
+    signal: AbortSignal.abort(),
+    adapter: () => {
+      throw new Error("Caller adapter executed");
+    },
+    transformResponse: [
+      () => {
+        throw new Error("Caller parser executed");
+      },
+    ],
+  };
+  await requestApi("GET", "/me", undefined, {
+    context,
+    config,
+    signal: controller.signal,
+  });
+  assert.deepEqual(seen, [
+    {
+      url: "https://api.test/me",
+      method: "GET",
+      authorization: "Bearer private-token",
+    },
+  ]);
+});
+
+test("native Axios HTTP adapter sends all mutation methods and handles real 201/204/errors", async () => {
   const { createServer } = await import("node:http");
   const server = createServer(async (request, response) => {
     if (request.url === "/validation") {
       response.writeHead(400, { "Content-Type": "application/problem+json" });
-      response.end(JSON.stringify({
-        type: "urn:problem:validation-error", title: "Validation Failed", status: 400,
-        detail: "The request data is invalid", instance: "/validation",
-        errors: [{ field: "email", message: "cannot be blank!" }],
-      }));
+      response.end(
+        JSON.stringify({
+          title: "Validation Failed",
+          status: 400,
+          code: "VALIDATION_FAILED",
+          errors: [
+            {
+              field: "email",
+              code: "VALIDATION_NOT_BLANK",
+              detail: "cannot be blank!",
+            },
+          ],
+        }),
+      );
+      return;
+    }
+    if (request.method === "DELETE") {
+      response.writeHead(204);
+      response.end();
       return;
     }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({
-      url: request.url, method: request.method,
-      authorization: request.headers.authorization ?? null,
-      body: Buffer.concat(chunks).toString() || null,
-    }));
+    response.writeHead(request.method === "POST" ? 201 : 200, {
+      "Content-Type": "application/json",
+    });
+    response.end(
+      JSON.stringify({
+        code: 0,
+        message: "response success",
+        data: {
+          url: request.url,
+          method: request.method,
+          authorization: request.headers.authorization ?? null,
+          body: Buffer.concat(chunks).toString() || null,
+        },
+      }),
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
-  const client = createApiClient({ baseUrl: `http://127.0.0.1:${address.port}`, getAccessToken: () => "native-token" });
+  const context = {
+    baseUrl: "http://127.0.0.1:" + address.port,
+    getAccessToken: () => "native-token",
+  };
   try {
-    const get = await client.get("/products", { params: { page: 2 }, config: { proxy: false } });
-    assert.deepEqual(get, { ok: true, data: { url: "/products?page=2", method: "GET", authorization: "Bearer native-token", body: null } });
-    const post = await client.post("/login", { email: "native@example.test" }, { auth: false, config: { proxy: false } });
-    assert.deepEqual(post, { ok: true, data: { url: "/login", method: "POST", authorization: null, body: '{"email":"native@example.test"}' } });
-    const validation = await client.get("/validation", { config: { proxy: false } });
-    assert.equal(validation.ok, false);
-    if (!validation.ok) {
-      assert.equal(validation.error.status, 400);
-      assert.deepEqual(validation.error.errors, [{ field: "email", message: "cannot be blank!" }]);
-      assert.deepEqual(validation.error.fieldErrors, { email: ["cannot be blank!"] });
+    const result = await requestApi("GET", "/products", undefined, {
+      context,
+      params: { page: 2 },
+    });
+    assert.deepEqual(result.data, {
+      url: "/products?page=2",
+      method: "GET",
+      authorization: "Bearer native-token",
+      body: null,
+    });
+    for (const method of ["POST", "PUT", "PATCH"] as const) {
+      const result = await requestApi(
+        method,
+        "/resource",
+        { name: "native" },
+        { context, auth: false },
+      );
+      assert.deepEqual(result.data, {
+        url: "/resource",
+        method,
+        authorization: null,
+        body: '{"name":"native"}',
+      });
     }
+    const removed = await requestApi<void>("DELETE", "/resource", undefined, {
+      context,
+    });
+    assert.equal(removed.data, undefined);
+    await assert.rejects(
+      requestApi("GET", "/validation", undefined, { context }),
+      errorIs((error) => {
+        assert.equal(error.status, 400);
+        assert.deepEqual(error.fieldErrors, { email: ["cannot be blank!"] });
+      }),
+    );
   } finally {
     server.closeAllConnections();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test("native transport rejects caller socket/transport/redirect escape hatches", async () => {
+  const { createServer } = await import("node:http");
+  let intercepted = false;
+  const server = createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { Location: "/target" });
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(
+      JSON.stringify({
+        code: 0,
+        message: "response success",
+        data: { path: request.url },
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const config = {
+    headers: { "X-Allowed": "yes" },
+    socketPath: "invalid-nexus-socket",
+    transport: {
+      request: () => {
+        intercepted = true;
+        throw new Error("Override transport executed");
+      },
+    },
+    beforeRedirect: () => {
+      intercepted = true;
+      throw new Error("Override redirect executed");
+    },
+    proxy: { host: "invalid-nexus-proxy", port: 1 },
+  };
+  try {
+    const result = await requestApi("GET", "/redirect", undefined, {
+      context: { baseUrl: `http://127.0.0.1:${address.port}` },
+      config,
+    });
+    assert.deepEqual(result.data, { path: "/target" });
+    assert.equal(intercepted, false);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
   }
 });

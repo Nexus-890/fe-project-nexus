@@ -1,11 +1,12 @@
 // Generated from local PostgreSQL by be-project-nexus/infra/local-dev/seed-buyer-cart.ps1.
-// Sprint 1 fixture: cart endpoints are still mocked until the commerce implementation lands.
-import type { Cart } from "../types/cart/response/type";
+// Sprint 1 fixture: explicit offline cart fixture; real endpoints remain the default.
+import type { Cart } from "../types/cartResponseType";
 
 export const buyerCartSeedUserId = "68000000-0000-4000-8000-000000000003";
 export const buyerCartSeedEmail = "buyer@nexus.local";
 
 export const buyerCartSeed: Cart = {
+    "userId": buyerCartSeedUserId,
     "id":  "01a15922-444b-7e23-ac13-2421158ab411",
     "status":  "ACTIVE",
     "items":  [

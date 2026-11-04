@@ -8,17 +8,17 @@ query. This change is frontend only.
 ## Structure and navigation
 
 - `app/(account)/profile/page.tsx` provides the route and page metadata.
-- `features/account/ProfilePage.tsx` composes four separate main cards:
+- `features/ProfilePage.tsx` composes four separate main cards:
   `ReputationCard`, `PersonalInformationCard`, `ChangePasswordCard`, and
   `PenaltyHistoryCard`.
 - The cards, sidebar, footer, avatar, and Skeleton live in
-  `ui/components/organisms/Account/`. The feature files compose the page and
-  coordinate its data; form validation lives in `lib/profile-schema.ts`.
+  `components/`. The feature files compose the page and
+  coordinate its data; form validation lives in `features/profileSchema.ts`.
 - `AvatarCard` is a separate sidebar card using the shadcn Avatar and its initials
   fallback. The sidebar and page display shadcn Skeleton components while loading.
 - The UI uses Tailwind CSS and shadcn Card, Button, Input, Textarea, Select, Label,
   Avatar, and Skeleton components.
-- `route/index.ts` centralizes routes and navigation data. The header name and
+- `configs/routes.ts` centralizes routes and navigation data. The header name and
   “My Nexus” link to `/profile`; the sidebar renders `ACCOUNT_NAVIGATION.map()`.
   Reputation and Security link to their card anchors. Unimplemented destinations
   are visibly pending. Repeated fields, gender options, reputation thresholds,
@@ -31,14 +31,14 @@ fallback for route navigation/streaming and does not track a request started by
 
 ## API and state
 
-`features/account/api.ts` revalidates `GET /api/v1/users/me` on entry through the
+`features/ProfilePage.tsx` revalidates `GET /api/v1/users/me` on entry through the
 existing auth `/me` query. Loading, retry, and save operations use the active
-session's client. `service/account.ts` defines the relative endpoint path and
+session's client. `service/accountService.ts` defines the relative endpoint path and
 sends `PUT /api/v1/users/me` with bearer authentication; the configured API base
 URL comes from the existing environment configuration.
 
 The form submits only changed fields supported by the backend DTO. The service
-allowlists those fields and validates the returned `UserResponse` before updating
+allowlists those fields and validates the envelope data as `UserResponse` before updating
 the shared query. An earlier GET is cancelled before the saved response enters
 the cache, and results from an ended session cannot populate a later session.
 Cancel restores the latest saved values. A failed save preserves edits; a failed
@@ -79,7 +79,7 @@ validation in `UpdateProfileRequest`. Phone remains read-only in this FE-only
 scope. Supporting real phone changes and a real backend phone 400 response
 requires a future backend contract change.
 
-`PENDING_ACCOUNT_ENDPOINTS` in `service/account.ts` records these proposed paths:
+`PENDING_ACCOUNT_ENDPOINTS` in `service/accountService.ts` records these proposed paths:
 
 | Feature | Proposed endpoint, pending backend confirmation | Current UI |
 | --- | --- | --- |

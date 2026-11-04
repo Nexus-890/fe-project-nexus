@@ -1,4 +1,4 @@
-import ShoppingCartPage from "@/features/cart/ShoppingCartPage";
+import ShoppingCartPage from "@/features/ShoppingCartPage";
 
 export default function Page() {
   return <ShoppingCartPage />;

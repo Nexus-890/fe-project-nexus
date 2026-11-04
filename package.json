@@ -4,13 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:auth": "node scripts/test-auth.mjs",
-    "test:catalog": "playwright test",
-    "test:cart": "playwright test --config playwright.cart.config.ts",
-    "test:profile": "playwright test --config playwright.profile.config.ts"
+    "test:catalog": "node scripts/test-browser.mjs",
+    "generate:types": "node scripts/generate-types.mjs",
+    "generate:types:check": "node scripts/generate-types.mjs --check",
+    "test:unit": "node scripts/test-auth.mjs",
+    "test:browser": "node scripts/test-browser.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "test:cart": "node scripts/test-browser.mjs --config playwright.cart.config.ts",
+    "test:profile": "node scripts/test-browser.mjs --config playwright.profile.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -44,6 +49,7 @@
     "@vitest/browser-playwright": "^4.1.10",
     "eslint": "^9",
     "eslint-config-next": "^16.4.0",
+    "openapi-typescript": "7.13.0",
     "storybook": "^10.6.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",

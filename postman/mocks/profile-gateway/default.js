@@ -1,5 +1,4 @@
 /* Postman loads mock handlers as CommonJS, including in ESM projects. */
-/* eslint-disable @typescript-eslint/no-require-imports */
 /** Local profile contract from this repository's UserController and IAM DTOs. */
 const http = require("node:http");
 
@@ -24,8 +23,25 @@ const headers = {
 };
 
 function json(res, value, status = 200) {
-  res.writeHead(status, headers);
+  if (status >= 400) {
+    const code = value.code || ({ 400: "VALIDATION_FAILED", 401: "UNAUTHENTICATED", 403: "FORBIDDEN", 503: "SERVICE_UNAVAILABLE" }[status] || "INTERNAL_ERROR");
+    const problemType = ({ VALIDATION_FAILED: "validation-error", UNAUTHENTICATED: "unauthorized" }[code] || code.toLowerCase().replaceAll("_", "-"));
+    const type = value.type || `urn:problem:${problemType}`;
+    value = { type, code, status, ...value };
+  }
+  res.writeHead(status, { ...headers, ...(status >= 400 ? { "Content-Type": "application/problem+json" } : {}) });
   res.end(JSON.stringify(value));
+}
+const success = (res, data, page) => json(res, { code: 0, message: "response success", data, ...(page ? { page } : {}) });
+let pendingHistoryWrite = Promise.resolve();
+function recordRequest(entry) {
+  const write = pendingHistoryWrite.then(async () => {
+    const history = await pm.state.get("profile-gateway:requests") || [];
+    history.push(entry);
+    await pm.state.set("profile-gateway:requests", history);
+  });
+  pendingHistoryWrite = write.catch(() => {});
+  return write;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -34,6 +50,7 @@ const server = http.createServer(async (req, res) => {
   if (path === "/health") return json(res, { ready: true });
 
   if (path === "/__test/reset" && req.method === "POST") {
+    await pendingHistoryWrite;
     await pm.state.set("profile-gateway:user", initialUser);
     await pm.state.set("profile-gateway:controls", {});
     await pm.state.set("profile-gateway:requests", []);
@@ -45,12 +62,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, {});
   }
   if (path === "/__test/requests") {
+    await pendingHistoryWrite;
     return json(res, await pm.state.get("profile-gateway:requests") || []);
   }
 
-  const history = await pm.state.get("profile-gateway:requests") || [];
-  history.push({ method: req.method, path, body: req.body ?? null, authenticated: Boolean(req.headers.authorization) });
-  await pm.state.set("profile-gateway:requests", history);
+  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated: Boolean(req.headers.authorization) });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
@@ -64,7 +80,7 @@ const server = http.createServer(async (req, res) => {
     if (req.body?.email !== initialUser.email || req.body?.password !== "profile-password") {
       return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
     }
-    return json(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
+    return success(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
   }
 
   // @endpoint GET /v1/users/me
@@ -73,15 +89,16 @@ const server = http.createServer(async (req, res) => {
     if (controls.getStatus) {
       return json(res, { title: "Profile unavailable", status: controls.getStatus, detail: "Unable to load your profile." }, controls.getStatus);
     }
-    return json(res, user);
+    return success(res, user);
   }
 
   // @endpoint PUT /v1/users/me
   if (path === "/v1/users/me" && req.method === "PUT") {
     if (controls.putStatus === 400) {
       return json(res, {
-        title: "Validation failed", status: 400,
-        errors: [{ field: "phone", message: "Phone number is invalid" }],
+        type: "urn:problem:validation-error", title: "Validation Failed", status: 400,
+        code: "VALIDATION_FAILED", detail: "The request data is invalid",
+        errors: [{ field: "phone", code: "VALIDATION_PATTERN", detail: "Phone number is invalid" }],
       }, 400);
     }
     if (controls.putStatus) {
@@ -96,18 +113,19 @@ const server = http.createServer(async (req, res) => {
     if (typeof next.address === "string") next.address = next.address.trim();
     if (typeof next.email === "string") next.email = next.email.trim().toLowerCase();
     await pm.state.set("profile-gateway:user", next);
-    return json(res, next);
+    return success(res, next);
   }
 
-  // Shared shop shell dependencies; exact category and PageResponse shapes.
+  // Shared shop shell dependencies use the delivered envelope/page contract.
   if (path === "/v1/categories/tree") {
-    return json(res, [
+    return success(res, [
       { id: "electronics", name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] },
     ]);
   }
   if (path === "/v1/products") {
-    return json(res, { content: [], page: 0, size: 20, totalElements: 0 });
+    return success(res, [], { number: 0, size: 20, totalElements: 0, totalPages: 0 });
   }
+  if (path === "/v1/carts/me") return success(res, { id: "profile-fixture-cart", userId: user.id, status: "ACTIVE", items: [] });
   return json(res, { title: "Endpoint not modelled", detail: `${req.method} ${path}` }, 501);
 });
 

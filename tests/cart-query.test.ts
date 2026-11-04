@@ -3,13 +3,11 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { queryKeys } from "../configs/query-keys";
-import { useCart } from "../hooks/cart/useCart";
-import { createApiClient } from "../lib/api-client";
-import { AuthContext } from "../providers/AuthProvider";
-import { createAuthApi } from "../service/auth";
-import type { AuthContextValue } from "../types/auth/type";
-import type { Cart } from "../types/cart/response/type";
+import { queryKeys } from "../configs/queryKeys";
+import { useCart } from "../hooks/useCart";
+import { AuthContext } from "../providers/Provider";
+import type { AuthContextValue } from "../types/authType";
+import type { Cart } from "../types/cartResponseType";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -19,7 +17,7 @@ function deferred<T>() {
 
 function snapshot(quantity: number): Cart {
   return {
-    id: "cart-1", status: "ACTIVE", currency: "VND", updatedAt: "2026-10-20T00:00:00Z",
+    id: "cart-1", userId: "buyer-1", status: "ACTIVE", currency: "VND", updatedAt: "2026-10-20T00:00:00Z",
     items: [{
       id: "item-1", skuId: "sku-1", productId: "product-1", productName: "Headphones",
       quantity, unitPrice: "100000.00", lineTotal: `${quantity * 100000}.00`,
@@ -39,11 +37,11 @@ function backendResponse(quantity: number) {
 }
 
 function mountCart(queryClient: QueryClient, transport: typeof globalThis.fetch) {
-  const api = createAuthApi(createApiClient({
+  const requestContext = {
     baseUrl: "http://cart-query.test", getAccessToken: () => "test-token", fetch: transport,
-  }));
+  };
   const auth: AuthContextValue = {
-    api, accessToken: "test-token", sessionId: 1, isCurrentSession: (id) => id === 1,
+    requestContext, accessToken: "test-token", sessionId: 1, isSessionCurrent: (id) => id === 1,
     status: "authenticated", error: null,
     user: {
       id: "buyer-1", email: "buyer@example.com", fullName: "Buyer", phone: "0900000000",

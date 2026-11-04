@@ -1,10 +1,10 @@
 import { buyerCartSeed } from "./cart-seed";
 import { mockProductDetail } from "./product-detail";
-import type { AddCartItemRequest, UpdateCartItemRequest } from "../types/cart/request/type";
-import type { Cart, CartItem } from "../types/cart/response/type";
-import type { ApiResult } from "../types/common/response/type";
+import type { AddCartItemRequest, UpdateCartItemRequest } from "../types/cartRequestType";
+import type { Cart, CartItem } from "../types/cartResponseType";
+import type { ApiResult } from "../types/commonResponseType";
 
-/** Explicit Sprint 1 fallback only; production API calls stay in service/cart.ts. */
+/** Explicit Sprint 1 fallback only; production API calls stay in service/cartService.ts. */
 export const USE_CART_MOCK = process.env.NEXT_PUBLIC_CART_MOCK === "true";
 const carts = new Map<string, Cart>();
 
@@ -31,8 +31,8 @@ export function createMockCart(user?: { id: string; email: string }) {
     let cart = carts.get(key);
     if (!cart) {
       cart = user?.email.toLowerCase() === "buyer@nexus.local"
-        ? structuredClone(buyerCartSeed)
-        : { id: `mock-cart-${key}`, status: "ACTIVE" as const, items: [], subtotal: "0.00", currency: "VND" as const, updatedAt: new Date().toISOString() };
+        ? { ...structuredClone(buyerCartSeed), userId: key }
+        : { userId: key, id: `mock-cart-${key}`, status: "ACTIVE" as const, items: [], subtotal: "0.00", currency: "VND" as const, updatedAt: new Date().toISOString() };
       carts.set(key, cart);
     }
     return cart;
@@ -83,3 +83,25 @@ export function createMockCart(user?: { id: string; email: string }) {
     },
   };
 }
+
+/** Serve the explicitly selected per-account fixture through the same HTTP boundary. */
+export const getCartMockFetch = (path: string, user?: { id: string; email: string }): typeof globalThis.fetch | undefined => {
+  if (!USE_CART_MOCK) return undefined;
+  if (process.env.NODE_ENV === "production") throw new Error("Catalog and cart mocks are disabled in production.");
+  if (!user || !/^\/api\/v1\/carts\/me(?:\/items(?:\/[^/]+)?)?$/.test(path)) return undefined;
+  const cart = createMockCart(user);
+  return async (_input, init) => {
+    if (init?.signal?.aborted) throw new DOMException("Request canceled", "AbortError");
+    const method = (init?.method ?? "GET").toUpperCase();
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    const itemId = decodeURIComponent(path.split("/").at(-1) ?? "");
+    const result = method === "GET" ? cart.getCart()
+      : method === "POST" ? cart.addCartItem(body)
+      : method === "PUT" ? cart.updateCartItem({ itemId, quantity: body.quantity })
+      : cart.removeCartItem(itemId);
+    if (!result.ok) return new Response(JSON.stringify(result.error), { status: result.error.status, headers: { "Content-Type": "application/problem+json" } });
+    if (method === "DELETE") return new Response(null, { status: 204 });
+    const data = { ...result.data, items: result.data.items.map((item) => ({ ...item, unitPrice: Number(item.unitPrice) })) };
+    return new Response(JSON.stringify({ code: 0, message: "response success", data }), { status: method === "POST" ? 201 : 200, headers: { "Content-Type": "application/json" } });
+  };
+};

@@ -1,5 +1,4 @@
 /* Postman loads local mock handlers as CommonJS. */
-/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Cart HTTP stand-in based on origin/develop's CartController, CartResponse,
  * CartItemResponse and common-core ApiResponse. Cart prices are JSON numbers;
@@ -30,7 +29,7 @@ const product = {
   id: productId,
   name: productName,
   slug: `wireless-headphones-silver-${productId}`,
-  minPrice: "1500000.00",
+  minPrice: 1500000,
   categoryId: "91300003-1111-4111-8111-111111111111",
   sellerId: "91300004-1111-4111-8111-111111111111",
   status: "ACTIVE",
@@ -38,7 +37,7 @@ const product = {
   auctionEnable: false,
   skus: [{
     id: skuId, productId, skuCode: "CART-HEADPHONES-SILVER", color: "Silver",
-    size: null, price: "1500000.00", status: "ACTIVE",
+    size: null, price: 1500000, status: "ACTIVE",
   }],
   images: [],
 };
@@ -65,7 +64,13 @@ function recordRequest(entry) {
 }
 
 function json(res, value, status = 200) {
-  res.writeHead(status, corsHeaders);
+  if (status >= 400) {
+    const code = value.code || ({ 400: "VALIDATION_FAILED", 401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND", 503: "SERVICE_UNAVAILABLE" }[status] || "INTERNAL_ERROR");
+    const problemType = ({ VALIDATION_FAILED: "validation-error", UNAUTHENTICATED: "unauthorized" }[code] || code.toLowerCase().replaceAll("_", "-"));
+    const type = value.type || `urn:problem:${problemType}`;
+    value = { type, code, status, ...value };
+  }
+  res.writeHead(status, { ...corsHeaders, ...(status >= 400 ? { "Content-Type": "application/problem+json" } : {}) });
   res.end(JSON.stringify(value));
 }
 
@@ -84,8 +89,8 @@ function cart(items = []) {
   };
 }
 
-function cartResponse(res, value, status = 200) {
-  return json(res, { code: 0, message: "response success", data: value }, status);
+function cartResponse(res, value, status = 200, page) {
+  return json(res, { code: 0, message: "response success", data: value, ...(page ? { page } : {}) }, status);
 }
 
 const pause = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -127,18 +132,18 @@ const server = http.createServer(async (req, res) => {
     if (req.body?.email !== user.email || req.body?.password !== "cart-password") {
       return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
     }
-    return json(res, { accessToken: token, expiresIn: 3600, tokenType: "Bearer" });
+    return cartResponse(res, { accessToken: token, expiresIn: 3600, tokenType: "Bearer" });
   }
   if ((path === "/v1/users/me" || path.startsWith(cartPath)) && req.headers.authorization !== `Bearer ${token}`) {
     return json(res, { title: "Unauthorized", status: 401 }, 401);
   }
   // @endpoint GET /v1/users/me
-  if (path === "/v1/users/me" && req.method === "GET") return json(res, user);
+  if (path === "/v1/users/me" && req.method === "GET") return cartResponse(res, user);
   if (path === "/v1/categories/tree") {
-    return json(res, [{ id: product.categoryId, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }]);
+    return cartResponse(res, [{ id: product.categoryId, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }]);
   }
-  if (path === "/v1/products") return json(res, { content: [product], page: 0, size: 20, totalElements: 1 });
-  if (path === `/v1/products/${productId}`) return json(res, product);
+  if (path === "/v1/products") return cartResponse(res, [product], 200, { number: 0, size: 20, totalElements: 1, totalPages: 1 });
+  if (path === `/v1/products/${productId}`) return cartResponse(res, product);
 
   // @endpoint GET /v1/carts/me
   if (path === cartPath && req.method === "GET") {

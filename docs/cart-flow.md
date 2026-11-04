@@ -1,9 +1,9 @@
 # Cart hooks and header count
 
-Code follows the existing frontend structure: `service/cart.ts` owns HTTP calls,
-`hooks/cart/useCart.ts` uses the shared `useApiQuery`, `configs/query-keys.ts`
-owns the key, and `types/cart/{request,response}/type.ts` owns DTOs. The `/cart`
-route delegates to `features/cart/ShoppingCartPage.tsx`; UI stays in `ui/components`.
+Code follows the existing frontend structure: `service/cartService.ts` owns HTTP calls,
+`hooks/useCart.ts` uses the shared `useApiQuery`/`useApiMutation`, `configs/queryKeys.ts`
+owns the key, and `types/cartRequestType.ts` / `types/cartResponseType.ts` expose DTOs. The `/cart`
+route delegates to `features/ShoppingCartPage.tsx`; UI stays in `components`.
 
 ShopLayout, ProductDetailPage and ShoppingCartPage observe the same session cart.
 The badge sums item quantities. A fresh cart is shared for 30 seconds, including
@@ -23,8 +23,8 @@ The delivered contract comes from the Cart controller/DTOs on `develop` and
 | PUT | `/api/v1/carts/me/items/{id}` | 200; ApiResponse<CartResponse>; body `{quantity}` |
 | DELETE | `/api/v1/carts/me/items/{id}` | 204; hook then gets the current cart |
 
-All calls use the common authenticated API client and API origin/proxy. The cart
-service unwraps the `{code: 0, message, data}` envelope at its response boundary.
+All calls use the common authenticated API client and API origin/proxy. The common HTTP boundary validates the `{code, message, data}` envelope once; the cart
+service validates its nested data.
 The wire DTO contains only `{id, userId, status, items}`, with items shaped as
 `{id, productId, skuId, quantity, unitPrice}`. `unitPrice` is a JSON number.
 
@@ -43,8 +43,9 @@ UI development, explicitly set `NEXT_PUBLIC_CART_MOCK=true` in `.env.local`,
 restart Next, sign in as `buyer@nexus.local` and open `/cart` via the header.
 Authentication still uses the real backend unless its separate stub is enabled.
 
-The buyer's active PostgreSQL cart contains ten real catalogue SKUs, each with
-quantity one. Its initial mock snapshot is exported to `mocks/cart-seed.ts`.
+The committed development snapshot in `mocks/cart-seed.ts` contains ten catalogue
+SKUs with quantity one, exported during the earlier local buyer seed run. It is
+fixture data and does not establish the current database state.
 Other accounts start with an empty mock cart. Mock edits persist in module memory
 per account for the running browser document; they do not write to PostgreSQL.
 A full reload also ends the existing in-memory authentication session.
@@ -68,7 +69,7 @@ backend response below instead.
 npm run test:auth
 npm run test:cart
 npm run lint
-npx tsc --noEmit --incremental false
+npm run typecheck
 npm run build
 ```
 
