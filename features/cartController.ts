@@ -6,10 +6,10 @@ import type { GuestStorage } from "./guestCartStorage";
 export type CartIdentity = { status: string; userId: string | null; accessToken: string | null; sessionId?: number };
 export interface CartControllerService {
   getCart: () => Promise<ApiResult<CartSnapshot>>;
-  addCartItem: (input: AddCartItemRequest) => Promise<ApiResult<CartSnapshot>>;
-  createGuestCart: () => Promise<ApiResult<{ guestToken: string; cart: CartSnapshot }>>;
-  getGuestCart: (token: string) => Promise<ApiResult<CartSnapshot>>;
-  addGuestCartItem: (token: string, input: AddCartItemRequest) => Promise<ApiResult<CartSnapshot>>;
+  addCartItem: (input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
+  createGuestCart: (signal?: AbortSignal) => Promise<ApiResult<{ guestToken: string; cart: CartSnapshot }>>;
+  getGuestCart: (token: string, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
+  addGuestCartItem: (token: string, input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
   mergeGuestCart: (token: string, mergeKey: string) => Promise<ApiResult<CartSnapshot>>;
 }
 export interface CartState {
@@ -116,6 +116,11 @@ export function createCartController(options: {
 
   function setIdentity(next: CartIdentity): void {
     if (identity.status === next.status && identity.userId === next.userId && identity.accessToken === next.accessToken && identity.sessionId === next.sessionId) return;
+    if (identity.status === "authenticated" && next.status === "authenticated" && identity.userId === next.userId && identity.sessionId === next.sessionId) {
+      // Token rotation keeps the same cart session and its pending work.
+      identity = next;
+      return;
+    }
     identity = next;
     generation += 1;
     const id = generation;
@@ -128,7 +133,7 @@ export function createCartController(options: {
     });
   }
 
-  function addItem(input: AddCartItemRequest): Promise<ApiResult<CartSnapshot>> {
+  function addItem(input: AddCartItemRequest, signal?: AbortSignal): Promise<ApiResult<CartSnapshot>> {
     const id = generation;
     const owner = identityOwner(identity);
     if (!owner || (owner === "guest" && !options.guestEnabled)) {
@@ -137,22 +142,22 @@ export function createCartController(options: {
     if (state.adding || state.loading) return Promise.resolve(failure("Please wait for your cart."));
     update({ adding: true, error: null });
     return enqueue<ApiResult<CartSnapshot>>(async () => {
-      if (!current(id)) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
       try {
+        if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
         let result: ApiResult<CartSnapshot>;
         if (owner === "guest") {
           let guest = options.storage.read();
           if (!guest) {
-            const created = await service.createGuestCart();
+            const created = await service.createGuestCart(signal);
             if (!created.ok) return created;
-            if (!current(id)) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
+            if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
             guest = { token: created.data.guestToken, mergeKey: randomId() };
             // Fail before adding if persistence is unavailable: otherwise the
             // user's items would be lost when Keycloak navigates away.
             options.storage.write(guest);
           }
-          result = await service.addGuestCartItem(guest.token, input);
-          if (!current(id)) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
+          result = await service.addGuestCartItem(guest.token, input, signal);
+          if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
           if (!result.ok && (result.error.status === 404 || result.error.status === 410)) {
             options.storage.clear(guest);
             update({ itemCount: 0 });
@@ -161,9 +166,9 @@ export function createCartController(options: {
           // Do not modify the member cart during an unresolved merge; a later
           // retry must apply guest quantities to the latest server cart.
           if (state.mergeError) return failure("Please retry merging your saved items first.");
-          result = await service.addCartItem(input);
+          result = await service.addCartItem(input, signal);
         }
-        if (!current(id)) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
+        if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
         if (result.ok) showCart(result.data);
         return result;
       } catch {

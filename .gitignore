@@ -47,6 +47,7 @@ next-env.d.ts
 /.next-profile-*/
 /profile-simulation.ndjson
 /profile-simulation.err
+/.next-oidc-*/
 
 !.env.example
 

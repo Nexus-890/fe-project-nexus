@@ -166,6 +166,9 @@ test("malformed quantities and overflowing header totals are rejected", () => {
     { id: "two", skuId: "sku-2", quantity: 1 },
   ] }), null);
   assert.equal(readCart({ ...cart(1), items: [{ id: "item-1", quantity: 1 }] }), null);
+  assert.equal(readCart({ ...cart(), id: " " }), null);
+  assert.equal(readCart({ ...cart(1), items: [{ ...cart(1).items[0], id: " " }] }), null);
+  assert.equal(readCart({ ...cart(1), items: [{ ...cart(1).items[0], skuId: " " }] }), null);
   assert.equal(readCart({ ...cart(), status: "MERGED" }), null);
   assert.equal(readGuestCart({ guestToken: "short", cart: cart() }), null);
 });
@@ -458,4 +461,109 @@ test("merge success does not remove a newer guest session written by another tab
   await flush();
   assert.deepEqual(storage.read(), newer);
   assert.equal(controller.getSnapshot().itemCount, 7);
+});
+
+test("same-user token renewal preserves the merged cart without resetting the badge or merging again", async () => {
+  const { controller, storage, calls } = controllerFixture({ stored: guestSession });
+  const identity = { ...member, sessionId: 1 };
+  controller.setIdentity(identity);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(storage.read(), null);
+  const changes: ReturnType<typeof controller.getSnapshot>[] = [];
+  const unsubscribe = controller.subscribe(() => { changes.push(controller.getSnapshot()); });
+  controller.setIdentity({ ...identity, accessToken: "renewed-memory-token" });
+  await flush();
+  unsubscribe();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:1");
+  assert.equal(calls.merges.length, 1);
+  assert.equal(calls.memberReads, 0);
+  assert.deepEqual(changes, []);
+});
+
+test("same-user token renewal keeps an in-flight member addition active and publishes its result", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const { controller, calls } = controllerFixture({ service: {
+    addCartItem: async () => pending.promise,
+  } });
+  controller.setIdentity(member);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  await flush();
+  assert.equal(controller.getSnapshot().adding, true);
+  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
+  assert.equal(controller.getSnapshot().adding, true);
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  pending.resolve(ok(cart(6, "member-cart")));
+  assert.equal((await adding).ok, true);
+  assert.equal(controller.getSnapshot().itemCount, 6);
+  assert.equal(controller.getSnapshot().adding, false);
+  assert.equal(calls.memberReads, 1);
+  assert.equal(calls.merges.length, 0);
+});
+
+test("token rotation during guest merge preserves readiness, guest credentials and the single pending merge", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  let merges = 0;
+  const { controller, storage } = controllerFixture({
+    stored: guestSession,
+    service: {
+      mergeGuestCart: async () => { merges++; return pending.promise; },
+    },
+  });
+  const identity = { ...member, sessionId: 1 };
+  controller.setIdentity(identity);
+  await flush();
+  controller.setIdentity({ ...identity, accessToken: "renewed-memory-token" });
+  assert.equal(controller.getSnapshot().loading, true);
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:1");
+  assert.deepEqual(storage.read(), guestSession);
+  pending.resolve(ok(cart(7)));
+  await flush();
+  assert.equal(merges, 1);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(storage.read(), null);
+});
+
+
+test("a new session for the same user invalidates pending cart work", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  let reads = 0;
+  const { controller } = controllerFixture({ service: {
+    addCartItem: async () => pending.promise,
+    getCart: async () => ok(cart(++reads === 1 ? 4 : 2, "member-cart")),
+  } });
+  controller.setIdentity({ ...member, sessionId: 1 });
+  await flush();
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  await flush();
+  controller.setIdentity({ ...member, accessToken: "new-sign-in", sessionId: 2 });
+  pending.resolve(ok(cart(99, "old-session-cart")));
+  assert.equal((await adding).ok, false);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 2);
+  assert.equal(reads, 2);
+});
+
+test("aborting an addition suppresses a late response while retaining the active cart", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const signal = new AbortController();
+  let forwarded: AbortSignal | undefined;
+  const { controller } = controllerFixture({ service: {
+    addCartItem: async (_input, received) => { forwarded = received; return pending.promise; },
+  } });
+  controller.setIdentity(member);
+  await flush();
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 }, signal.signal);
+  await flush();
+  signal.abort();
+  pending.resolve(ok(cart(99)));
+  assert.equal((await adding).ok, false);
+  assert.equal(forwarded, signal.signal);
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  assert.equal(controller.getSnapshot().adding, false);
 });

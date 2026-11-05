@@ -70,6 +70,17 @@ assumptions:
       two successful PUT me responses and one each PUT 400, 401 and 503.
       The run used temporary isolated app/API ports 13103/13913; fixture and
       test port edits were restored afterwards. This is local fixture evidence.
+      On 2026-11-05 at profile-session-develop-merge, the profile browser suite
+      passed 10/10 in 39.0 seconds on temporary app/API ports 3153/3963, restored
+      after the run. It adds proactive 120-second renewal coverage: dirty fields
+      survive without another profile read and save through the renewed token.
+      Persistent PUT 401 produces two PUTs, one renewal, no saved changes and
+      no remote logout. The controlled clock is resumed before saving so queued
+      TanStack state notifications can run; an earlier paused-clock attempt
+      had returned correct PUT 200 data but held the UI notification. Before
+      the next general runner cleaned the ignored output, log inspection found
+      one listening event and 191 requests: token POST 200 (11), profile GET
+      200 (26)/401 (1)/503 (2), PUT 200 (3)/400 (1)/401 (2)/503 (1).
     source: >-
       tests/profile.spec.ts; playwright.profile.config.ts;
       postman/simulations/profile.sim.yaml; postman/mocks/profile-gateway/default.js
@@ -116,6 +127,38 @@ assumptions:
       ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java;
       ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java
     updated_at: "2026-11-05"
+  - id: profile-session-renewal-boundary
+    status: supported
+    claim: >-
+      The profile workflow uses the shared token coordinator and originating
+      auth generation for saves, so normal token rotation preserves its cache
+      while an ended session cancels registered updates and rejects late results.
+    reason: >-
+      The merged Provider uses scoped request-context accessors, guarded generic
+      profile mutations and an AbortController registry. The common HTTP boundary
+      owns renewal and one protected-request replay; accountService does not
+      introduce a separate token or session store.
+    verification: >-
+      On 2026-11-05 inspected the profile/session merge at the
+      profile-session-develop-merge fingerprint, including Provider, tokenSession,
+      configs/api.ts and the existing session-restore documentation. This is a
+      source-level ownership/lifecycle finding. The exported source baseline
+      passed 99/99 unit tests; the merged suite passed 138/138, generated DTO
+      drift and fresh-route typecheck passed. The profile page now revalidates
+      on session readiness rather than each token replacement; its fixture
+      validates actual token expiry with the shared controlled clock. The current
+      profile run passed 10/10 and the dedicated OIDC/guest/session run passed
+      24/24; the main browser run passed 31/31. Lint, generated DTO drift,
+      fresh-route typecheck and the isolated production build passed. The
+      build generated all 13 pages, including the silent callback and excluding
+      temporary probe routes. Their evidence is recorded separately from
+      historical profile passes; no live backend/session restoration result
+      is implied.
+    source: >-
+      providers/Provider.tsx; features/tokenSession.ts; configs/api.ts;
+      service/accountService.ts; docs/features/session-restore.md;
+      tests/profile.spec.ts; tests/session.spec.ts; tests/token-retry.test.ts
+    updated_at: "2026-11-05"
 
 fingerprints:
   - id: develop-contract-20261103
@@ -133,4 +176,8 @@ fingerprints:
   - id: profile-guest-cart-conflict-resolution
     date: "2026-11-05"
     commit: "b16dc0b2 with uncommitted merge of origin/develop ff2a4986 and HeaderTopBar/playwright conflict resolutions"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-session-develop-merge
+    date: "2026-11-05"
+    commit: "6357abb5 with uncommitted merge of origin/develop 1dd23dd3 and guarded profile/session integration"
     cli: "Postman CLI 1.73.0"

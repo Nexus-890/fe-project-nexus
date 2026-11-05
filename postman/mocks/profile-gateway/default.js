@@ -35,12 +35,24 @@ function success(res, data, status = 200) {
   return json(res, { code: 0, message: "response success", data }, status);
 }
 
+let pendingHistoryWrite = Promise.resolve();
+function recordRequest(entry) {
+  const write = pendingHistoryWrite.then(async () => {
+    const history = await pm.state.get("profile-gateway:requests") || [];
+    history.push(entry);
+    await pm.state.set("profile-gateway:requests", history);
+  });
+  pendingHistoryWrite = write.catch(() => {});
+  return write;
+}
+
 const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   if (req.method === "OPTIONS") return json(res, {});
   if (path === "/health") return json(res, { ready: true });
 
   if (path === "/__test/reset" && req.method === "POST") {
+    await pendingHistoryWrite;
     await pm.state.set("profile-gateway:user", initialUser);
     await pm.state.set("profile-gateway:controls", {});
     await pm.state.set("profile-gateway:requests", []);
@@ -52,20 +64,26 @@ const server = http.createServer(async (req, res) => {
     return json(res, {});
   }
   if (path === "/__test/requests") {
+    await pendingHistoryWrite;
     return json(res, await pm.state.get("profile-gateway:requests") || []);
   }
+  if (path === "/__test/user") {
+    return json(res, await pm.state.get("profile-gateway:user") || initialUser);
+  }
 
-  const history = await pm.state.get("profile-gateway:requests") || [];
-  history.push({ method: req.method, path, body: req.body ?? null, authenticated: Boolean(req.headers.authorization) });
-  await pm.state.set("profile-gateway:requests", history);
+  const authorization = req.headers.authorization || "";
+  const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+  const expiry = await pm.state.get("oidc-keycloak:access-token-expiry");
+  const time = await pm.state.get("oidc-keycloak:clock-time") ?? Date.now();
+  const authenticated = Boolean(authorization.startsWith("Bearer ") && expectedHash
+    && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash
+    && typeof expiry === "number" && expiry > Math.floor(time / 1000));
+  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
   if (path === "/v1/users/me" || path === "/v1/carts/me") {
-    const authorization = req.headers.authorization || "";
-    const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
-    if (!authorization.startsWith("Bearer ") || !expectedHash
-        || createHash("sha256").update(authorization.slice(7)).digest("hex") !== expectedHash) {
+    if (!authenticated) {
       return json(res, { title: "Unauthorized", status: 401 }, 401);
     }
   }

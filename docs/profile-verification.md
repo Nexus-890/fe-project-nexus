@@ -1,5 +1,67 @@
 # Profile verification
 
+## Session restore integration — 2026-11-05
+
+Source `6357abb5` merges `origin/develop` at `1dd23dd3` in an isolated worktree.
+The merged provider retains guarded profile mutations and their abort registry
+while adopting the incoming token coordinator, restore lifecycle and bounded
+401 replay. It checks the save's originating session generation, cancels older
+profile reads before committing saved data and aborts pending saves when the
+session ends, including renewal failure. Successful token rotation preserves
+the same profile cache; a page reload attempts silent Keycloak restoration
+before the profile UI decides whether sign-in is required.
+
+Current executed checks:
+
+- Exported source baseline `6357abb5`: 99/99 unit tests passed.
+- Merged unit/transport suite: 138/138 passed.
+- Generated DTO drift check and fresh-route typecheck passed.
+- Lint passed.
+- Dedicated OIDC/guest/session browser suite passed 24/24 in 1.3 minutes using
+  app port 3151, simulation port 3961 and `.next-oidc-profile-final` output.
+- Profile browser suite passed 10/10 in 39.0 seconds using app port 3153 and
+  simulation port 3963; temporary port substitutions were restored afterwards.
+- Main browser suite passed 31/31 in 1.3 minutes using app/simulation/catalog
+  ports 3152/3962/3964 and `.next-catalog-profile-final`; temporary substitutions
+  were restored afterwards. The three suites total 65 passed browser scenarios.
+- `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` passed with exit code
+  zero: production compilation, TypeScript and all 13 page generations.
+  `/auth/silent` is present; temporary auth-smoke/session-probe routes are absent.
+
+The Profile page now revalidates when the session becomes ready, preserving
+dirty form fields across normal token rotation. The profile fixture validates
+the issued token's actual expiry under the controlled clock and serializes its
+request history. Browser assertions passed for proactive renewal preserving
+dirty fields with no extra profile GET, then saving through the renewed token.
+A persistent PUT 401 triggered exactly two PUTs and one renewal, no save and
+no remote logout. The controlled clock is resumed before the final save so
+TanStack can deliver its queued state notifications; an earlier paused-clock
+attempt had already returned the correct PUT 200 data but held that UI update.
+
+The auth simulation log recorded one listening event and 447 requests, including
+token POST 200 (27)/400 (2), profile GET 200 (20)/401 (2)/503 (2), merge POST
+200 (4)/503 (2), and protected GET 200 (18)/401 (8). These are local fixture
+outcomes; the historical five-minute wall-clock scenario was not rerun here.
+
+The profile log was inspected before the following general runner cleaned the
+ignored output: one listening event and 191 requests, with token POST 200 (11),
+profile GET 200 (26)/401 (1)/503 (2), and profile PUT 200 (3)/400 (1)/401 (2)/503
+(1). This is current stand-in evidence; no live profile save was performed.
+
+The final main-run log contains one listening event and 155 Keycloak requests,
+including 15 successful token POSTs and three logout 302 responses. Its
+application API calls use explicit browser HTTP fixtures. This log cannot
+re-establish the earlier auth/profile run counters after runner cleanup.
+
+Initial production-build attempts completed compilation/types/page generation
+and then stopped at the installed Next.js security reminder. The final unchanged
+retry passed; no framework upgrade or security-check bypass is included.
+The checks in older sections below apply to their named revisions and are
+preserved separately from this merge's results.
+The [session restore guide](features/session-restore.md)
+and [profile simulation context](../postman/simulations/profile.context.yaml)
+describe the current lifecycle and preserved historical evidence.
+
 ## Develop integration — 2026-11-05
 
 Merged develop at `0d0a36a4` into the profile branch. The profile feature,

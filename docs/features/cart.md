@@ -23,13 +23,13 @@ Do not require draft fields such as productName, lineTotal, subtotal, currency o
 
 ## API configuration
 
-The user requested an empty Cart base URL to fill later. Edit this single value in [cartService.ts](../../service/cartService.ts):
+Application cart calls use `NEXT_PUBLIC_API_URL` from the auth provider's scoped request context, sharing its current token and renewal coordinator. Direct service calls without a context origin use this fallback in [cartService.ts](../../service/cartService.ts):
 
 ```ts
 export const CART_API_BASE_URL = "";
 ```
 
-Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths already include that prefix. All Cart calls still use the common `requestApi` Axios boundary for tokens, envelopes, errors and cancellation. An explicitly provided request-context baseUrl takes precedence; otherwise blank means browser same-origin relative requests. It does not fabricate a cart or enable fixtures. Auth/catalog keep their existing `NEXT_PUBLIC_API_URL` configuration. Restart/rebuild after filling the service constant.
+Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths already include that prefix. All Cart calls use the common `requestApi` Axios boundary for tokens, envelopes, errors and cancellation. A request-context baseUrl takes precedence over the fallback; without one, blank means browser same-origin relative requests. Changing the fallback does not override the provider's configured API origin or enable fixtures. Restart/rebuild after changing configuration.
 
 | Service | Method/path | Request/success | Backend status |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths alr
 
 The merged [CartController](../../../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/controller/CartController.java) matches the prepared PUT/DELETE method/path shapes, but its PUT returns a bare CartResponse instead of `{code,message,data}`. [CartService](../../../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/service/CartService.java) still imports old request/response packages after DTOs moved under `cart.dto`; unresolved symbols and repository-call mismatches also need correction. The controller references AuthenticationPrincipal without its import, and new update/remove CurrentUser binding differs from the established annotated pattern. A compatible BE build and authenticated runtime verification are required before claiming integration.
 
-Fill the origin and reconcile the delivered contract, body, response and privileges with the BE owner. A filled URL does not resolve these compatibility issues. Keep the strict shared success-envelope parser; do not accept a bare PUT DTO as a workaround. Calls make real HTTP requests and show failures/rollback when refused. Never substitute the additive POST for edits; it also refreshes snapshot price from catalog. `UpdateCartItemRequest` remains an application input because the delivered OpenAPI still lacks PUT/DELETE. Regenerate wire types when that contract is updated rather than hand-editing them.
+Configure the API origin and reconcile the delivered contract, body, response and privileges with the BE owner. A filled URL does not resolve these compatibility issues. Keep the strict shared success-envelope parser; do not accept a bare PUT DTO as a workaround. Calls make real HTTP requests and show failures/rollback when refused. Never substitute the additive POST for edits; it also refreshes snapshot price from catalog. `UpdateCartItemRequest` remains an application input because the delivered OpenAPI still lacks PUT/DELETE. Regenerate wire types when that contract is updated rather than hand-editing them.
 
 ## Page state and display
 
@@ -58,4 +58,6 @@ Cart keys carry the account/session identifier and private-query metadata. Sessi
 
 An explicit cart development fixture is useful for the detail interaction before a local backend is available. Select it in dev/test setup, model the delivered envelope, and block it in production. Keep fixture-only totals/helpers scoped to fixture behavior rather than pretending those fields are delivered.
 
-The backend persists cart data, but full refresh still loses the in-memory auth session. Sign back into the same account to reread its cart. Guest credentials persist separately when the guest feature is enabled; access/ID tokens remain in memory and auth restoration remains #184. Tests/screenshots use explicit HTTP stand-ins and do not establish deployed authorization/database behavior. Peer real-API add/edit with a recorded cart ID remains pending compatible BE build/contract/auth behavior; see the implementation report for current evidence.
+On full reload, the provider checks the Keycloak SSO session with `prompt=none` and reloads the profile before reading the account's cart. The cart page shows account loading during restoration; product additions wait until auth and cart readiness settle. Same-session token renewal preserves the cart cache and header count, and protected cart requests share one renewal and at most one replay after a 401. Renewal failure or explicit logout clears the private cache; explicit logout also prevents reload from restoring that session until the next sign-in. See [session restore](session-restore.md).
+
+Guest credentials persist separately when the guest feature is enabled; access, ID and refresh tokens remain in memory. Tests/screenshots use explicit HTTP stand-ins and do not establish deployed authorization/database behavior. Peer real-API add/edit with a recorded cart ID remains pending compatible BE build/contract/auth behavior; see the implementation report for current evidence.

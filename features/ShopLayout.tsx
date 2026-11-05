@@ -31,9 +31,10 @@ function ShopLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <Header
         user={user}
-        authenticating={status === "authenticating"}
+        authenticating={status === "authenticating" || status === "restoring"}
+        restoring={status === "restoring"}
         onSignOut={() => void endSession()}
-        cartQuantity={cart.itemCount}
+        cartQuantity={cart.ready ? cart.itemCount : undefined}
         categories={categories.data ?? []}
         categoriesLoading={categories.isPending}
         categoriesError={categories.isError}

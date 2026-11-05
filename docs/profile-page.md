@@ -29,6 +29,10 @@ pending. There is no route-level `loading.tsx`: that convention creates a Suspen
 fallback for route navigation/streaming and does not track a request started by
 `useEffect`.
 
+Entry revalidation follows session readiness rather than token value. A normal
+renewal therefore keeps the mounted form and its unsaved fields intact instead
+of launching an unrelated profile read that could replace it with an error UI.
+
 ## API and state
 
 `features/ProfilePage.tsx` revalidates `GET /api/v1/users/me` on entry through the
@@ -43,10 +47,20 @@ responses follow the delivered `{code,message,data}` envelope. The shared
 validate the nested `UserResponse`; bare and malformed payloads are rejected.
 Request types reuse the generated `UpdateProfile` schema.
 
+On page load the provider first exposes `restoring` while it checks the existing
+Keycloak SSO session through the silent callback. A successful check loads the
+profile before exposing authenticated controls; missing SSO settles to anonymous.
+The shared token coordinator renews credentials in memory and permits one replay
+of a protected 401 request. Normal token rotation preserves the profile cache and
+session generation. See [session restore](features/session-restore.md).
+
 The form submits only changed fields supported by the backend DTO. The service
 allowlists those fields and validates the returned `UserResponse` before updating
 the shared query. An earlier GET is cancelled before the saved response enters
 the cache, and results from an ended session cannot populate a later session.
+Logout, renewal failure and provider unmount abort registered profile saves.
+The save workflow checks its originating session before returning feedback or
+publishing data; late results cannot restore a cleared or replaced account.
 Cancel restores the latest saved values. A failed save preserves edits; a failed
 load offers a retry.
 
@@ -74,9 +88,13 @@ Backend validation errors use Problem Details with
 `errors: [{ field, code, detail }]`. The API client normalizes `detail` into form messages;
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
-Missing or expired sessions redirect to `/sign-in`, including a 401 during save.
-The existing auth implementation holds tokens in memory, so a full browser
-refresh also returns to sign-in; persistent sessions are outside this change.
+Missing sessions redirect to `/sign-in` after restoration settles. A final 401
+during save clears local authentication after the shared renewal/replay policy;
+it does not implicitly trigger a remote logout redirect. Browser refresh can
+restore the account through Keycloak SSO without persisting access, refresh or
+ID tokens. Explicit logout prevents silent restoration until the next deliberate
+sign-in. Deployed cookie/frame policy can prevent silent restoration; the
+profile page does not provide a separate session protocol.
 
 ## Backend dependencies
 

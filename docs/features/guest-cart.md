@@ -1,11 +1,12 @@
 # Guest cart and merge on sign-in (CRT-07, CRT-08)
 
 The guest flow is integrated with the flat frontend structure and the shared
-authentication provider. `CartProvider`, mounted inside `Provider` at the
-application root, owns guest cart operations and the callback merge attempt.
-Product pages use its shared add action. The header count sums item quantities,
-including repeated SKUs, and links to the existing `/cart` page. Authenticated
-cart queries, optimistic edits and private cache isolation remain in place.
+authentication provider. `CartProvider`, mounted inside `AuthSession` at the
+application root, owns guest/add/merge operations and the shared header count.
+Product pages use `useGuestCart().addItem()`; the cart page's `useCart` coordinates
+quantity edits and removals. The header count sums item quantities, including
+repeated SKUs, and links to `/cart`. Authenticated queries, optimistic edits and
+private cache isolation remain in place.
 
 ## Backend readiness
 
@@ -26,14 +27,19 @@ visitors to sign in without creating a guest cart. A guest API 401/403 also
 shows the sign-in prompt.
 
 All cart calls use the shared `configs/api.ts` HTTP boundary and the Cart
-service's configured origin. `CART_API_BASE_URL` intentionally remains blank
-for same-origin requests; configure it or the Next gateway proxy as described
-in [Cart configuration](cart.md#api-configuration). There is no `localhost:4010`
-fallback. Responses use the strict `{code,message,data}` success envelope.
+service's configured origin. Application calls receive `NEXT_PUBLIC_API_URL`
+from the auth provider's scoped request context, including its shared token
+renewal coordinator. Direct service calls fall back to the intentionally blank
+`CART_API_BASE_URL` for same-origin requests unless their context supplies an
+origin. See [Cart configuration](cart.md#api-configuration). There is no
+`localhost:4010` fallback. Responses use the strict `{code,message,data}` envelope.
 Cart decoding accepts the delivered IDs, quantity and numeric snapshot price;
-draft-only names, totals and timestamps are not required.
+draft-only names, totals and timestamps are not required. The header reads the
+same scoped QueryClient cart used by the cart page.
 
 ## Proposed guest API
+
+Every successful response below wraps its payload in `{code,message,data}`; the payload column describes `data`. Bare payloads are rejected by the shared HTTP boundary.
 
 | Request | Credentials | Successful response |
 |---|---|---|
@@ -67,7 +73,7 @@ frontend deduplication or the current backend.
 2. Reload fetches the guest cart using the saved token. A missing/expired guest
    cart clears only that matching local session. Transient errors retain it.
 3. Sign-in navigates to Keycloak. The guest session survives in localStorage;
-   access/ID tokens remain in memory, exactly as in #239.
+   access, ID and refresh tokens remain in memory.
 4. After code exchange and `/me`, `CartProvider` makes one automatic merge
    attempt. The callback waits for the cart attempt to settle before returning
    to the requested page. A valid merge response updates the shared count and
@@ -83,7 +89,9 @@ serialize cooperating tabs where supported. Server idempotency is required
 regardless. Lock acquisition times out after 15 seconds. A stale response cannot
 delete a newer guest session. Signing out
 immediately hides the member count; a successfully consumed guest token is not
-restored. Session restoration after reload remains #184.
+restored. Session restoration after reload is handled by #184; token rotation
+within the same authenticated session preserves the cart and does not merge it
+again. Protected cart requests share the auth provider's renewal coordinator.
 
 ## Verification
 
@@ -98,9 +106,9 @@ npm run build
 ```
 
 The existing Postman simulation runs the real Next.js frontend at port 3103
-against local API and Keycloak stand-ins at 3913. The guest browser suite
-forwards same-origin cart requests over HTTP to that simulation, preserving
-the service's configured origin. Browser tests cover guest
+against local API and Keycloak stand-ins at 3913. Cart requests use the configured
+API origin; the guest browser suite also forwards any same-origin cart requests
+over HTTP to that simulation. Browser tests cover guest
 creation, repeated quantities, reload, mobile header count, token persistence
 through Keycloak, one merge after callback, logout, guest-disabled 403, and retry
 both before a write and after a simulated committed write whose response failed.

@@ -43,7 +43,7 @@ function CartPage() {
       </h1>
       {status === "authenticated" ? (
         <CartContents key={sessionId} />
-      ) : status === "authenticating" ? (
+      ) : status === "restoring" || status === "authenticating" ? (
         <p role="status" className="py-12 text-muted-foreground">
           Loading your account…
         </p>

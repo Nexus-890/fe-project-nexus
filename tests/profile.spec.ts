@@ -15,6 +15,22 @@ async function history(request: APIRequestContext): Promise<RecordedRequest[]> {
   return (await request.get(`${fixtureUrl}/__test/requests`)).json();
 }
 
+async function keycloakEvidence(request: APIRequestContext): Promise<{
+  tokenRequests: number;
+  refreshRequests: number;
+  logouts: number;
+}> {
+  const response = await request.get(`${simulation}/keycloak/test/evidence`);
+  expect(response.ok()).toBe(true);
+  return response.json();
+}
+
+async function clockTime(request: APIRequestContext, time: number) {
+  expect((await request.get(`${simulation}/keycloak/test/clock`, {
+    params: { time: String(time) },
+  })).ok()).toBe(true);
+}
+
 async function signIn(page: Page) {
   await page.goto("/sign-in");
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
@@ -140,14 +156,29 @@ test("delayed GET shows skeleton before fields populate", async ({ page, request
   await expect(page.getByRole("status", { name: "Loading profile" })).toHaveCount(0);
 });
 
-test("an expired session during PUT returns to sign in", async ({ page, request }) => {
+test("a persistently rejected PUT renews once, retries once and clears local authentication without saving", async ({ page, request }) => {
   await signIn(page);
   await openProfile(page);
   await populatedForm(page);
+  const before = await keycloakEvidence(request);
   await control(request, { putStatus: 401 });
   await page.getByLabel("Full Name", { exact: true }).fill("Expired session");
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  const puts = (await history(request)).filter(entry => entry.method === "PUT" && entry.path === "/v1/users/me");
+  expect(puts).toHaveLength(2);
+  expect(puts.every(entry => entry.authenticated)).toBe(true);
+  expect(puts.map(entry => entry.body)).toEqual([
+    { fullName: "Expired session" }, { fullName: "Expired session" },
+  ]);
+  expect(await keycloakEvidence(request)).toMatchObject({
+    tokenRequests: before.tokenRequests + 1,
+    refreshRequests: before.refreshRequests + 1,
+    logouts: before.logouts,
+  });
+  expect(await (await request.get(`${fixtureUrl}/__test/user`)).json()).toMatchObject({
+    fullName: originalName, email: "lan.nguyen@example.com", address: originalAddress,
+  });
 });
 
 test("GET failure shows a retry and recovers the real form", async ({ page, request }) => {
@@ -174,6 +205,60 @@ test("failed PUT keeps edits and retries without changing the header early", asy
   await control(request, { putStatus: 0 });
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   await expect(page.locator("header").getByRole("link", { name: "Hi Lan retry update" })).toBeVisible();
+});
+
+test("token renewal preserves dirty profile fields without starting another profile read", async ({ page, request }) => {
+  const start = Date.now();
+  expect((await request.get(`${simulation}/keycloak/test/control`, { params: { ttl: "120" } })).ok()).toBe(true);
+  await clockTime(request, start);
+  await page.clock.install({ time: start });
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  const pausedAt = await page.evaluate(() => Date.now() + 1_000);
+  await page.clock.pauseAt(pausedAt);
+  await clockTime(request, pausedAt);
+  const before = await keycloakEvidence(request);
+  const profileReads = (await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me").length;
+  await page.getByLabel("Full Name", { exact: true }).fill("Unsaved name during renewal");
+  await page.getByLabel("Address", { exact: true }).fill("Unsaved address during renewal");
+  // If token rotation accidentally refetches /me, the failure would replace the
+  // dirty form. A normal proactive refresh should leave that form untouched.
+  await control(request, { getStatus: 503 });
+  const renewed = page.waitForResponse(response =>
+    new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token"
+    && response.request().postData()?.includes("grant_type=refresh_token") === true);
+  await clockTime(request, pausedAt + 60_000);
+  await page.clock.runFor(60_000);
+  const tokenResponse = await renewed;
+  expect(tokenResponse.status()).toBe(200);
+  await tokenResponse.finished();
+  await expect.poll(async () => (await keycloakEvidence(request)).refreshRequests).toBe(before.refreshRequests + 1);
+  await page.clock.runFor(250);
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
+  await expect(page.getByLabel("Address", { exact: true })).toHaveValue("Unsaved address during renewal");
+  await expect(page.getByRole("heading", { name: "Unable to load your profile", exact: true })).toHaveCount(0);
+  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  expect((await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me")).toHaveLength(profileReads);
+  expect((await history(request)).filter(entry => entry.method === "PUT")).toEqual([]);
+
+  await control(request, { getStatus: 0 });
+  // The renewal assertions use a paused clock. Resume normal scheduling before
+  // saving so TanStack's timer-based cache notifications can reach the form.
+  await page.clock.resume();
+  const saved = page.waitForResponse(response =>
+    response.request().method() === "PUT" && new URL(response.url()).pathname === "/api/v1/users/me");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  expect((await saved).status()).toBe(200);
+  await expect(page.locator("header").getByRole("link", { name: "Hi Unsaved name during renewal" })).toBeVisible();
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
+  await expect(page.getByLabel("Address", { exact: true })).toHaveValue("Unsaved address during renewal");
+  const puts = (await history(request)).filter(entry => entry.method === "PUT");
+  expect(puts).toHaveLength(1);
+  expect(puts[0].authenticated).toBe(true);
+  expect(puts[0].body).toEqual({
+    fullName: "Unsaved name during renewal", address: "Unsaved address during renewal",
+  });
 });
 
 test("profile fits 375x812 without clipped text and has desktop and mobile screenshots", async ({ page }, info) => {

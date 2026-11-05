@@ -8,7 +8,7 @@ import { Button } from "@/components/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 
-function AuthCallbackPage() {
+export default function AuthCallbackPage() {
   const router = useRouter();
   const { completeSignIn, status } = useAuth();
   const { ready: cartReady } = useGuestCart();
@@ -70,5 +70,3 @@ function AuthCallbackPage() {
     </div>
   );
 }
-
-export default AuthCallbackPage;

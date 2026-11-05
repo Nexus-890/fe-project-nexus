@@ -17,15 +17,17 @@ import PenaltyHistoryCard from "@/components/PenaltyHistoryCard";
 export default function ProfilePage() {
   const router = useRouter();
   const { user, status, accessToken, sessionId, isSessionCurrent, retryProfile, updateProfile } = useAuth();
+  const profileReady = Boolean(accessToken) && (status === "authenticated" || status === "error");
   const [load, setLoad] = useState<{
     sessionId: number;
     pending: boolean;
     error: ApiError | null;
   }>({ sessionId, pending: true, error: null });
 
-  // Revalidate the shared /me query so the form and header use the same profile.
+  // Revalidate once this session is ready. Token rotation must not refetch the
+  // profile and replace an in-progress form if that unrelated read fails.
   useEffect(() => {
-    if (!accessToken) return;
+    if (!profileReady) return;
     let active = true;
     void retryProfile().then((result) => {
       if (active && isSessionCurrent(sessionId)) {
@@ -33,7 +35,7 @@ export default function ProfilePage() {
       }
     });
     return () => { active = false; };
-  }, [accessToken, sessionId, isSessionCurrent, retryProfile]);
+  }, [profileReady, sessionId, isSessionCurrent, retryProfile]);
 
   async function reload() {
     setLoad({ sessionId, pending: true, error: null });
@@ -48,7 +50,7 @@ export default function ProfilePage() {
   }, [router, status]);
 
   const profileError = load.error;
-  if (!accessToken || load.sessionId !== sessionId || load.pending) return <ProfileSkeleton />;
+  if (!profileReady || load.sessionId !== sessionId || load.pending) return <ProfileSkeleton />;
   if (profileError || !user) return (
     <div className="space-y-6 pb-12">
       <h1 className="text-heading-32">Profile</h1>

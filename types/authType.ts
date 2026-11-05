@@ -9,9 +9,10 @@ import type { OidcClient } from "../features/oidc";
 export type AuthContextValue = {
   accessToken: string | null;
   user: UserResponse | null;
-  status: "anonymous" | "authenticating" | "authenticated" | "error";
+  status: "restoring" | "anonymous" | "authenticating" | "authenticated" | "error";
   error: ApiError | null;
   requestContext: ApiContext;
+  renewAccessToken: (failedToken: string) => Promise<string | null>;
   sessionId: number;
   isSessionCurrent: (sessionId: number) => boolean;
   signIn: (returnTo?: string) => Promise<ApiResult<void>>;
