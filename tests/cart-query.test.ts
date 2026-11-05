@@ -4,7 +4,8 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { queryKeys } from "../configs/queryKeys";
-import { useCart } from "../hooks/useCart";
+import { useCart } from "../features/useCart";
+import { CartContext } from "../providers/CartProvider";
 import { AuthContext } from "../providers/Provider";
 import type { AuthContextValue } from "../types/authType";
 import type { Cart } from "../types/cartResponseType";
@@ -59,30 +60,52 @@ function mountCart(
     retryProfile: async () => { throw new Error("Unexpected profile request"); },
     updateProfile: async () => { throw new Error("Unexpected profile write"); },
   };
+  if (!queryClient.getQueryData(queryKeys.cart.me(1))) queryClient.setQueryData(queryKeys.cart.me(1), snapshot(1));
+  const cartContext = {
+    ready: true, loading: false, adding: false, guestEnabled: false,
+    itemCount: 1, error: null, mergeError: null,
+    addItem: async () => { throw new Error("Unexpected addition"); },
+    retryMerge: async () => { throw new Error("Unexpected merge"); },
+  };
   let hook: ReturnType<typeof useCart> | undefined;
   function Probe() {
     hook = useCart();
     return null;
   }
   renderToString(createElement(QueryClientProvider, { client: queryClient },
-    createElement(AuthContext.Provider, { value: auth }, createElement(Probe))));
+    createElement(AuthContext.Provider, { value: auth },
+      createElement(CartContext.Provider, { value: cartContext }, createElement(Probe)))));
   if (!hook) throw new Error("Cart hook did not render");
   return hook;
 }
 
+function editCart(cart: ReturnType<typeof useCart>, client: QueryClient, quantity: number): Promise<void> {
+  const finished = new Promise<void>((resolve, reject) => {
+    const unsubscribe = client.getMutationCache().subscribe(() => {
+      const mutation = client.getMutationCache().getAll().at(-1);
+      if (mutation?.state.status === "success") { unsubscribe(); resolve(); }
+      if (mutation?.state.status === "error") { unsubscribe(); reject(mutation.state.error); }
+    });
+  });
+  cart.updateQuantity("item-1", quantity);
+  return finished;
+}
+
 test("a GET started during a cart write cannot overwrite the confirmed snapshot", { timeout: 5000 }, async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const postStarted = deferred<void>();
+  const putStarted = deferred<void>();
   const getStarted = deferred<void>();
-  const postResponse = deferred<Response>();
+  const putResponse = deferred<Response>();
   const getResponse = deferred<Response>();
   let getSignal: AbortSignal | null | undefined;
+  let reads = 0;
   const transport: typeof globalThis.fetch = async (_, init) => {
-    if (init?.method === "POST") {
-      postStarted.resolve();
-      return postResponse.promise;
+    if (init?.method === "PUT") {
+      putStarted.resolve();
+      return putResponse.promise;
     }
     assert.equal(init?.method, "GET");
+    if (++reads > 1) return backendResponse(2);
     getSignal = init.signal;
     getStarted.resolve();
     // Deliberately ignore cancellation to model a server finishing an old read.
@@ -93,19 +116,19 @@ test("a GET started during a cart write cannot overwrite the confirmed snapshot"
   queryClient.setQueryData(key, snapshot(1));
 
   try {
-    const write = cart.addItem.mutateAsync({ skuId: "sku-1", quantity: 1 });
-    await postStarted.promise;
-    const concurrentRead = cart.refetch();
+    const write = editCart(cart, queryClient, 2);
+    await putStarted.promise;
+    const concurrentRead = cart.cart.refetch();
     await getStarted.promise;
-    postResponse.resolve(backendResponse(2));
+    putResponse.resolve(backendResponse(2));
     await write;
-    assert.equal(getSignal?.aborted, true, "write completion must cancel a read started while POST was pending");
+    assert.equal(getSignal?.aborted, true, "write completion must cancel a read started while PUT was pending");
     getResponse.resolve(backendResponse(1));
     await concurrentRead;
     assert.equal(queryClient.getQueryData<Cart>(key)?.items[0].quantity, 2);
     assert.equal(queryClient.getQueryData<Cart>(key)?.subtotal, "200000.00");
   } finally {
-    postResponse.resolve(backendResponse(2));
+    putResponse.resolve(backendResponse(2));
     getResponse.resolve(backendResponse(1));
     queryClient.clear();
   }
@@ -131,7 +154,7 @@ test("rejected optimistic edit restores exact totals and stays pending until rec
   client.setQueryData(key, snapshot(1));
   let finished = false;
   try {
-    const write = cart.updateItem.mutateAsync({ itemId: "item-1", quantity: 3 });
+    const write = editCart(cart, client, 3);
     const rejection = assert.rejects(write, { status: 400 });
     void write.then(() => { finished = true; }, () => { finished = true; });
     await putStarted.promise;
@@ -168,7 +191,7 @@ test("a late old-session edit cannot restore private data or start a new read", 
   const key = queryKeys.cart.me(1);
   client.setQueryData(key, snapshot(1));
   try {
-    const write = cart.updateItem.mutateAsync({ itemId: "item-1", quantity: 3 });
+    const write = editCart(cart, client, 3);
     const rejection = assert.rejects(write, { kind: "aborted" });
     await started.promise;
     current = false;

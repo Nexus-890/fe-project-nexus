@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, House } from "lucide-react";
 import { isApiError } from "@/configs/api";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
-import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
+import { useGuestCart } from "@/hooks/useGuestCart";
 import { formatVND } from "@/components/formatPrice";
 import { getProduct } from "@/service/catalogService";
 import {
@@ -47,8 +47,8 @@ function selectedSku(
 
 function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const id = resolveProductId(slug, productId);
-  const { accessToken, sessionId, isSessionCurrent } = useAuth();
-  const cart = useCart();
+  const { status, sessionId, isSessionCurrent } = useAuth();
+  const cart = useGuestCart();
   const product = useApiQuery(
     {
       queryKey: queryKeys.catalog.product(id),
@@ -61,12 +61,17 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   );
   const [selectedSkuId, setSelectedSkuId] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [signInPrompt, setSignInPrompt] = useState(false);
+  const [signInPrompt, setSignInPrompt] = useState<number | null>(null);
   const [cartMessage, setCartMessage] = useState<{
     sessionId: number;
     text: string;
   } | null>(null);
-  const addingToCurrentCart = cart.addItem.isPending;
+  const activeSession = useRef<{ sessionId: number; status: typeof status } | null>(null);
+
+  useEffect(() => {
+    activeSession.current = { sessionId, status };
+    return () => { activeSession.current = null; };
+  }, [sessionId, status]);
 
   if (!id) {
     return (
@@ -97,30 +102,39 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const detail = product.data;
   const sku = selectedSku(detail.skus, selectedSkuId);
   const price = formatVND(sku?.price ?? null);
-  const returnTo = `/products/${encodeURIComponent(slug)}`;
+  const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
-  const handleAddToCart = () => {
-    if (!accessToken) {
-      setSignInPrompt(true);
+  const handleAddToCart = async () => {
+    if (status === "anonymous" && !cart.guestEnabled) {
+      setSignInPrompt(sessionId);
       setCartMessage(null);
       return;
     }
-    if (!sku) return;
+    if (!sku || cart.adding || cart.loading || status === "authenticating" || status === "error") return;
     setCartMessage(null);
-    cart.addItem.mutate({ skuId: sku.id, quantity }, {
-      onSuccess: () => {
-        if (!isSessionCurrent(sessionId)) return;
+    setSignInPrompt(null);
+    const isCurrent = () => activeSession.current?.sessionId === sessionId &&
+      activeSession.current.status === status &&
+      (status !== "authenticated" || isSessionCurrent(sessionId));
+    try {
+      const result = await cart.addItem({ skuId: sku.id, quantity });
+      if (!isCurrent()) return;
+      if (result.ok) {
         setCartMessage({ sessionId, text: "Added to cart." });
-        setSignInPrompt(false);
-      },
-      onError: (error) => {
-        if (!isSessionCurrent(sessionId) || error.kind === "aborted") return;
-        setCartMessage({
-          sessionId,
-          text: isApiError(error) ? error.detail || error.title : "Unable to add this item to cart.",
-        });
-      },
-    });
+      } else if (result.error.kind !== "aborted") {
+        if (status === "anonymous" && (result.error.status === 401 || result.error.status === 403)) {
+          setSignInPrompt(sessionId);
+        } else {
+          setCartMessage({ sessionId, text: isApiError(result.error)
+            ? result.error.detail || result.error.title
+            : "Unable to add this item to cart." });
+        }
+      }
+    } catch {
+      if (isCurrent()) {
+        setCartMessage({ sessionId, text: "Unable to add this item to cart. Please try again." });
+      }
+    }
   };
 
   return (
@@ -195,14 +209,14 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
           <button
             type="button"
-            onClick={handleAddToCart}
-            disabled={!sku || addingToCurrentCart}
+            onClick={() => void handleAddToCart()}
+            disabled={!sku || cart.adding || cart.loading || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            {addingToCurrentCart ? "Adding…" : "Add to Cart"}
+            {cart.adding ? "Adding…" : "Add to Cart"}
           </button>
 
-          {signInPrompt ? (
+          {signInPrompt === sessionId ? (
             <p
               role="status"
               className="rounded-md border border-border bg-muted p-3 text-sm"

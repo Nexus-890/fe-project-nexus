@@ -32,6 +32,7 @@ export default defineConfig({
         API_PROXY_TARGET: "http://127.0.0.1:3913",
         NEXT_PUBLIC_AUTH_STUB: "false",
         NEXT_PUBLIC_CART_MOCK: "false",
+        NEXT_PUBLIC_GUEST_CART_ENABLED: "false",
         NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_KEYCLOAK_URL: "http://127.0.0.1:3913/keycloak",
         NEXT_PUBLIC_KEYCLOAK_REALM: "nexus",

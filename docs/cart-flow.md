@@ -1,19 +1,27 @@
 # Cart hooks and header count
 
 Code follows the existing frontend structure: `service/cartService.ts` owns HTTP calls,
-`hooks/useCart.ts` uses the shared `useApiQuery`/`useApiMutation`, `configs/queryKeys.ts`
-owns the key, and `types/cartRequestType.ts` / `types/cartResponseType.ts` expose DTOs. The `/cart`
-route delegates to `features/CartPage.tsx`; UI stays in `components` and
-`features/useCart.ts` provides page feedback. CartPage enriches optional catalog metadata.
+`configs/queryKeys.ts` owns the session key, and `types/cartRequestType.ts` /
+`types/cartResponseType.ts` expose DTOs. `providers/CartProvider.tsx` and
+`features/cartController.ts` own add/guest/merge operations and the header count
+through `hooks/useGuestCart.ts`. The `/cart` route delegates to
+`features/CartPage.tsx`; `features/useCart.ts` composes the generic API hooks for
+authenticated query/edit state and page feedback. UI stays in `components`.
+CartPage enriches optional catalog metadata.
 
 ShopLayout, ProductDetailPage and CartPage observe the same session cart.
-The badge sums item quantities. A fresh cart is shared for 30 seconds, including
-when entering the cart page. Successful writes replace the cached snapshot;
-writes are serialized per session and cancel older reads. Quantity/removal edits
+The badge sums item quantities. Provider additions/merges and page edits update
+the same private cache. Additions and page edits wait for each other; page edits
+also wait for the provider's initial load or guest merge to settle. Writes
+cancel older reads before and after completion. Quantity/removal edits
 update the shared count/totals optimistically and restore their own snapshot on
-rejection. Settled edits reconcile with the server. Sign-out removes the
-private query and prevents late mutation responses from restoring it. Anonymous
-rendering makes no cart request and shows no count. Tokens stay out of query keys.
+rejection. Edits stay pending through authoritative reconciliation, including
+after a same-session page unmount. Sign-out removes the private query and
+prevents late mutation responses from restoring it. With the default guest flag
+off, anonymous rendering makes no cart request and shows no count. The opt-in
+[guest flow](features/guest-cart.md) can restore/add a guest cart and merge it
+after Keycloak sign-in; its API remains a proposed backend handoff. Authentication
+tokens stay out of storage and query keys; only guest credentials persist.
 
 The delivered contract comes from the Cart controller/DTOs on `develop` and
 `be-project-nexus/docs/api/openapi/commerce-service.yaml`. The older
@@ -38,8 +46,8 @@ The wire DTO contains only `{id, userId, status, items}`, with items shaped as
 `parseCart` converts prices into decimal strings and derives line totals and
 subtotal using integer cents. Currency is the shop's VND display convention;
 the backend does not supply currency or an update timestamp. Display metadata
-is optional: without a product name, the cart labels the item `Product <id>` and
-links to its product page. No extra product requests are needed for the count.
+is optional: without catalog metadata, the cart labels the item `Item <id>` and
+keeps the quantity/removal controls usable. No extra product requests are needed for the count.
 Discounts, checkout and saved items belong to separate tasks.
 
 ## Test the buyer data locally
@@ -77,6 +85,7 @@ backend response below instead.
 ```powershell
 npm run test:auth
 npm run test:cart
+npm run test:auth:browser
 npm run lint
 npm run typecheck
 npm run build
@@ -96,7 +105,8 @@ for contract evidence and remaining integration limits.
 
 The main browser suite also runs `tests/cart.spec.ts` for the Cart page's
 optimistic edits/rollback, cache ownership, metadata fallback and responsive
-states. The suites use different fixtures and retain separate evidence. The
+states. `test:auth:browser` additionally runs the OIDC and guest merge scenarios.
+The suites use different fixtures and retain separate evidence. The
 current controller/spec includes all four Cart operations, but PUT/DELETE
 principal binding still differs from GET/POST and needs real authenticated
 verification.

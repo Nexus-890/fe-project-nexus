@@ -85,6 +85,11 @@ assumptions:
       passed 9/9 in 38.0 seconds; eight successful provider authorization/token
       exchanges preceded authenticated API calls. A PUT 401 returned to local
       sign-in without a remote logout request in the simulation log.
+      On 2026-11-05, at the shared-cart-guest-reconciliation fingerprint,
+      npm run test:profile passed 9/9 in 42.5 seconds with CartProvider mounted.
+      Its log contains one listening event, profile GET 200 (23)/503 (2),
+      profile PUT 200 (2)/400 (1)/401 (1)/503 (1), and eight successful OIDC
+      token exchanges. These are local fixture results; no backend was started.
     source: >-
       tests/profile.spec.ts; playwright.profile.config.ts;
       postman/simulations/profile.sim.yaml;
@@ -110,4 +115,8 @@ fingerprints:
   - id: shared-cart-develop-merge
     date: "2026-11-05"
     commit: "78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile integration"
+    cli: "1.73.0"
+  - id: shared-cart-guest-reconciliation
+    date: "2026-11-05"
+    commit: "b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration"
     cli: "1.73.0"

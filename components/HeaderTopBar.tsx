@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 import { HEADER_UTILITY_NAVIGATION, ROUTES } from "@/configs/routes";
 
 function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderProps) {
+  const router = useRouter();
   function signOut() {
     onSignOut();
   }
@@ -23,8 +25,23 @@ function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderP
             <span className="inline-flex min-h-11 lg:min-h-9 items-center px-2" role="status">Signing in…</span>
           ) : (
             <>
-              <Link href={ROUTES.signIn} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign in</Link>
-              <Link href={ROUTES.signUp} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary">Sign up</Link>
+              <Link
+                href={ROUTES.signIn}
+                onNavigate={(event) => {
+                  event.preventDefault();
+                  const returnTo = window.location.pathname + window.location.search + window.location.hash;
+                  router.push(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+                }}
+                className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary"
+              >
+                Sign in
+              </Link>
+              <Link
+                href={ROUTES.signUp}
+                className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 font-medium hover:text-primary"
+              >
+                Sign up
+              </Link>
             </>
           )}
           <span className="hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
@@ -53,9 +70,9 @@ function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderP
           <button type="button" aria-label="Notifications" className="relative hidden min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary sm:inline-flex">
             <Bell size={17} aria-hidden="true" />
           </button>
-          <Link href={ROUTES.cart} aria-label={user && cartQuantity !== undefined ? `Shopping cart, ${cartQuantity} items` : "Shopping cart"} className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
+          <Link href={ROUTES.cart} aria-label={cartQuantity !== undefined ? `Shopping cart, ${cartQuantity} items` : "Shopping cart"} className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
             <ShoppingCart size={19} aria-hidden="true" />
-            {user && cartQuantity !== undefined && cartQuantity > 0 ? (
+            {cartQuantity !== undefined && cartQuantity > 0 ? (
               <span aria-live="polite" aria-atomic="true" className="absolute top-0 right-0 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
                 {cartQuantity > 99 ? "99+" : cartQuantity}
               </span>

@@ -190,3 +190,45 @@ PUT/DELETE principal binding still differs from GET/POST and needs authenticated
 runtime verification. Peer Cart-ID acceptance and coordinated release remain
 pending; fixture success does not establish either. Current simulation evidence
 is recorded in the [Cart context](../../postman/simulations/cart.context.yaml).
+
+## Cart hooks after the guest-cart develop update — 2026-11-05
+
+The earlier resolution at `b0fc9331` was clean against `0d0a36a4`. On this
+follow-up, fetch found seven newer commits through `ff2a4986`, including the
+guest-cart integration. A real local merge reproduced nine conflicted files.
+Merging the old source into a separate checkout of the subsequently published
+`cfe10dfa` target reproduced the same nine conflicts; that test was aborted.
+The source branch now incorporates `ff2a4986` and resolves the overlap.
+
+CartProvider/controller owns additions, guest persistence, callback merging and
+header state. The authenticated page keeps its optimistic edit/rollback logic
+in `features/useCart.ts`; it shares the provider's private query key and waits
+for guest synchronization or pending additions. Both queries reuse fresh data
+and pause reads during edits; edits cancel stale reads and hold the lock through
+reconciliation. The obsolete `hooks/useCart.ts` was removed after its callers
+and regression tests migrated. The provider passes the current account identity
+to the explicitly enabled development mock. Profile updates and OIDC session
+guards are preserved. Header sign-in preserves the current return destination,
+and guest counts are visible when the opt-in guest feature is enabled.
+
+| Check | Result |
+| --- | --- |
+| Exported pre-merge baseline at `b0fc9331` | 87/87 unit tests passed |
+| `npm run test:unit` after integration | 108/108 passed |
+| `npm run test:browser -- --max-failures=2` | 31/31 passed in 2.1 minutes |
+| `npm run test:auth:browser -- --max-failures=2` | 17/17 passed in 2.2 minutes, including all six guest cases |
+| `npm run test:cart -- --max-failures=2` | 9/9 passed in 47.5 seconds; header/page still share one initial GET |
+| `npm run test:profile -- --max-failures=2` | 9/9 passed in 42.5 seconds |
+| `npm run typecheck` | Passed with fresh isolated route types |
+| `npm run lint`; `npm run generate:types:check` | Passed |
+| `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` | Passed compilation, TypeScript and all 12 pages; no auth-smoke route |
+
+The installed Next.js security reminder stopped initial fixture servers;
+unchanged retries produced the passing runs. No framework upgrade is included.
+Simulation evidence is appended to the Cart, profile and OIDC contexts without
+replacing prior histories. Guest endpoints remain a proposed contract behind
+an opt-in flag; no live backend or backend tests were run for this merge.
+
+The production build also passed after the unchanged advisory retry. All 59
+local Markdown links in the changed guides resolve, the three simulation
+context YAML files parse, and staged whitespace checks pass.
