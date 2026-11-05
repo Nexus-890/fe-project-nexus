@@ -8,17 +8,17 @@ query. This change is frontend only.
 ## Structure and navigation
 
 - `app/(account)/profile/page.tsx` provides the route and page metadata.
-- `features/account/ProfilePage.tsx` composes four separate main cards:
+- `features/ProfilePage.tsx` composes four separate main cards:
   `ReputationCard`, `PersonalInformationCard`, `ChangePasswordCard`, and
   `PenaltyHistoryCard`.
 - The cards, sidebar, footer, avatar, and Skeleton live in
-  `ui/components/organisms/Account/`. The feature files compose the page and
-  coordinate its data; form validation lives in `lib/profile-schema.ts`.
+  `components/`. The feature files compose the page and
+  coordinate its data; form validation lives in `features/profileSchema.ts`.
 - `AvatarCard` is a separate sidebar card using the shadcn Avatar and its initials
   fallback. The sidebar and page display shadcn Skeleton components while loading.
 - The UI uses Tailwind CSS and shadcn Card, Button, Input, Textarea, Select, Label,
   Avatar, and Skeleton components.
-- `route/index.ts` centralizes routes and navigation data. The header name and
+- `route.ts` centralizes routes and navigation data. The header name and
   “My Nexus” link to `/profile`; the sidebar renders `ACCOUNT_NAVIGATION.map()`.
   Reputation and Security link to their card anchors. Unimplemented destinations
   are visibly pending. Repeated fields, gender options, reputation thresholds,
@@ -31,16 +31,17 @@ fallback for route navigation/streaming and does not track a request started by
 
 ## API and state
 
-`features/account/api.ts` revalidates `GET /api/v1/users/me` on entry through the
-existing auth `/me` query. Loading, retry, and save operations use the active
-session's client. `service/account.ts` defines the relative endpoint path and
+`features/ProfilePage.tsx` revalidates `GET /api/v1/users/me` on entry through the
+shared auth query. The provider owns retry and save operations using the active
+session's scoped request context. `service/accountService.ts` allowlists the body and
 sends `PUT /api/v1/users/me` with bearer authentication; the configured API base
 URL comes from the existing environment configuration.
 
-Success responses follow the `origin/develop` contract (`6e92bbac`, checked
-2026-11-03): `{code: 0, message: "response success", data: ...}`. The shared
-API client extracts `data` before the auth/profile services validate the DTO;
-the form and header only receive the validated `UserResponse`.
+Sign-in uses the existing Keycloak OIDC/PKCE flow and callback. Application
+responses follow the delivered `{code,message,data}` envelope. The shared
+`configs/api.ts` boundary validates that envelope before auth/profile services
+validate the nested `UserResponse`; bare and malformed payloads are rejected.
+Request types reuse the generated `UpdateProfile` schema.
 
 The form submits only changed fields supported by the backend DTO. The service
 allowlists those fields and validates the returned `UserResponse` before updating
@@ -84,7 +85,7 @@ validation in `UpdateProfileRequest`. Phone remains read-only in this FE-only
 scope. Supporting real phone changes and a real backend phone 400 response
 requires a future backend contract change.
 
-`PENDING_ACCOUNT_ENDPOINTS` in `service/account.ts` records these proposed paths:
+`PENDING_ACCOUNT_ENDPOINTS` in `service/accountService.ts` records these proposed paths:
 
 | Feature | Proposed endpoint, pending backend confirmation | Current UI |
 | --- | --- | --- |
@@ -109,12 +110,11 @@ transaction statistics, or penalties.
 | Loading, failure, and cancellation | Skeleton, load retry, preserved edits after save failure, and Cancel are covered. |
 | 375×812 layout | Browser assertions check document width and visible text clipping; mobile screenshot attached below. |
 
-Validation reported for this implementation: `npm run lint` and `npm run build`
-passed; `npm run test:auth` passed 38 tests after the develop integration. `npm run test:profile` runs the real
-Next.js frontend against a local stateful Postman HTTP simulation based on the
-repository's backend DTOs. See [profile verification](profile-verification.md)
-for the browser results and the subsequent successful login/GET/PUT check
-against the running backend using the staging demo buyer account.
+The [profile verification report](profile-verification.md) records checks for the
+current merge and historical results. `npm run test:profile` runs the real Next.js
+frontend against local Postman stand-ins for Keycloak and the profile gateway.
+The historical password-login backend check predates the Keycloak migration and
+does not establish current live integration.
 
 The screenshots use simulation data to demonstrate the layout:
 

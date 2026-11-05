@@ -3,3 +3,5 @@ routing: path
 mocks:
   - routeKey: api
     path: ../mocks/profile-gateway/config.yaml
+  - routeKey: keycloak
+    path: ../mocks/oidc-keycloak/config.yaml

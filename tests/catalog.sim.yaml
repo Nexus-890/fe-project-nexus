@@ -1,0 +1,5 @@
+simulation: nexus-frontend-contract
+routing: header
+mocks:
+  - routeKey: catalog
+    path: ../../be-project-nexus/infra/contract-simulation/catalog/config.yaml

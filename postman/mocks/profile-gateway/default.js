@@ -1,7 +1,7 @@
 /* Postman loads mock handlers as CommonJS, including in ESM projects. */
-/* eslint-disable @typescript-eslint/no-require-imports */
 /** Local profile contract from origin/develop's ApiResponse, UserController and IAM DTOs. */
 const http = require("node:http");
+const { createHash } = require("node:crypto");
 
 const initialUser = {
   id: "9e1018ac-5fb0-47a6-bc3c-3e32a41f49af",
@@ -61,19 +61,16 @@ const server = http.createServer(async (req, res) => {
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
-  if (path === "/v1/users/me" && req.headers.authorization !== "Bearer local-profile-fixture-token") {
-    return json(res, { title: "Unauthorized", status: 401 }, 401);
+  if (path === "/v1/users/me" || path === "/v1/carts/me") {
+    const authorization = req.headers.authorization || "";
+    const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+    if (!authorization.startsWith("Bearer ") || !expectedHash
+        || createHash("sha256").update(authorization.slice(7)).digest("hex") !== expectedHash) {
+      return json(res, { title: "Unauthorized", status: 401 }, 401);
+    }
   }
 
   // The simulation strips routeKey /api, preserving the real caller's URL.
-  // @endpoint POST /v1/auth/login
-  if (path === "/v1/auth/login" && req.method === "POST") {
-    if (req.body?.email !== initialUser.email || req.body?.password !== "profile-password") {
-      return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
-    }
-    return success(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
-  }
-
   // @endpoint GET /v1/users/me
   if (path === "/v1/users/me" && req.method === "GET") {
     if (controls.getDelayMs) await new Promise(resolve => setTimeout(resolve, controls.getDelayMs));
@@ -108,12 +105,16 @@ const server = http.createServer(async (req, res) => {
 
   // Shared shop shell dependencies; exact category and PageResponse shapes.
   if (path === "/v1/categories/tree") {
-    return json(res, [
+    return success(res, [
       { id: "electronics", name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] },
     ]);
   }
   if (path === "/v1/products") {
-    return json(res, { content: [], page: 0, size: 20, totalElements: 0 });
+    return json(res, { code: 0, message: "response success", data: [],
+      page: { number: 0, size: 20, totalElements: 0, totalPages: 0 } });
+  }
+  if (path === "/v1/carts/me") {
+    return success(res, { id: "profile-header-cart", userId: user.id, status: "ACTIVE", items: [] });
   }
   return json(res, { title: "Endpoint not modelled", detail: `${req.method} ${path}` }, 501);
 });

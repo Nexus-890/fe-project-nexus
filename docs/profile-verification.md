@@ -1,6 +1,38 @@
 # Profile verification
 
-## Current response contract — 2026-11-03
+## Develop integration — 2026-11-05
+
+Merged develop at `0d0a36a4` into the profile branch. The profile feature,
+components, schema and types use the flat frontend structure. Profile requests
+use the single shared HTTP boundary and the current Keycloak session. The
+provider updates the shared profile cache after a successful save and rejects
+responses from an ended session.
+
+Verification against this integration:
+
+- Type generation and generated DTO drift check passed.
+- Lint and regenerated-route typecheck passed.
+- Unit/transport suite passed 78/78, including five profile regression tests.
+- Catalog/cart/auth acceptance browser suite passed 30/30.
+- Dedicated OIDC browser suite passed 11/11.
+- Production build passed after the initial security reminder was acknowledged by retry.
+- Profile browser suite passed 9/9 against the real Next frontend and local
+  Postman profile/Keycloak stand-ins, covering PKCE sign-in, authenticated GET,
+  partial PUT, shared header updates, validation, Cancel, loading, retry,
+  expiry and the 375×812 layout.
+
+The installed Next.js 16.4.0 emitted its existing security upgrade reminder
+on first startup for isolated test output; retrying allowed verification to
+continue. Dependency upgrades are a separate change from this conflict merge.
+
+The simulation log confirmed eight provider token exchanges (200), 23 profile
+GETs (200), two GET failures (503), two successful PUTs, and PUT 400/401/503
+failures. No application password-login API call occurred. These results
+establish behavior against local stand-ins; the historical live backend result
+below predates the Keycloak migration and is not current integration evidence.
+
+
+## Historical response-contract verification — 2026-11-03
 
 The review finding was reproduced: the old API client passed the entire
 `{code, message, data}` success envelope to the login/profile DTO guards.

@@ -1,7 +1,7 @@
 purpose:
   stands_in_for: >-
-    The repository's auth and own-profile gateway HTTP endpoints, using the
-    origin/develop contract, plus minimal fixtures needed by the shared shop shell.
+    The repository's own-profile gateway HTTP endpoints and a reused local
+    Keycloak protocol fixture, plus minimal dependencies of the shared shop shell.
   unblocks: >-
     Running the real Next.js profile UI locally against deterministic responses
     to check login, profile loading and saving, header updates, and error states.
@@ -58,10 +58,16 @@ assumptions:
       profile-simulation.ndjson confirmed eight POST login 200, 23 GET me 200,
       two PUT me 200, one PUT 400, one PUT 401, one PUT 503 and two GET 503
       events. No live backend runtime behavior is established by this run.
+      On 2026-11-05 at profile-merge-20261105, npm run test:profile passed 9/9
+      browser tests after the flat architecture and OIDC migration. The simulation
+      log recorded eight provider token exchanges (200), 23 GET me (200), two
+      GET me (503), two PUT me (200), and one each PUT 400, 401 and 503. No
+      POST API password login occurred. This re-establishes the UI behavior
+      against the new fixtures only; live backend verification remains pending.
     source: >-
-      tests/browser/profile.spec.ts; playwright.profile.config.ts;
+      tests/profile.spec.ts; playwright.profile.config.ts;
       postman/simulations/profile.sim.yaml; postman/mocks/profile-gateway/default.js
-    updated_at: "2026-11-03"
+    updated_at: "2026-11-05"
   - id: profile-phone-error-is-synthetic
     status: supported
     claim: >-
@@ -79,6 +85,31 @@ assumptions:
       origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java:12-33;
       postman/mocks/profile-gateway/default.js; tests/browser/profile.spec.ts
     updated_at: "2026-11-03"
+  - id: oidc-profile-integration
+    status: supported
+    claim: >-
+      In the local browser scenarios, the application signs in through the
+      Keycloak code and PKCE flow and sends the resulting Bearer token to GET/PUT
+      users/me; the profile API fixture validates the issued token hash.
+    reason: >-
+      The profile simulation reuses the existing oidc-keycloak member rather than
+      restoring the obsolete API password login. Both mocks share namespaced
+      simulation state for token verification. The source backend controller
+      still returns ApiResponse for GET and PUT users/me and its UpdateProfile
+      DTO retains the five supported editable fields.
+    verification: >-
+      On 2026-11-05 at profile-merge-20261105, read UserController and
+      UpdateProfileRequest from the incoming develop tree, then ran all nine
+      profile browser scenarios against the real Next application. Request
+      history and the simulation log confirm code exchanges and authenticated
+      profile loads/saves, including recoverable failures and 401 expiry. This
+      is local protocol evidence, not real Keycloak or backend runtime evidence.
+    source: >-
+      tests/profile.spec.ts; playwright.profile.config.ts;
+      postman/mocks/profile-gateway/default.js; postman/mocks/oidc-keycloak/default.js;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java
+    updated_at: "2026-11-05"
 
 fingerprints:
   - id: develop-contract-20261103
@@ -88,4 +119,8 @@ fingerprints:
   - id: fixture-edit-20261103
     date: "2026-11-03"
     commit: "d1521c1f81890c84fbf4dd7ad316e9a8d0fc5f04 plus uncommitted fixture and frontend integration edits in the isolated profile worktree"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-merge-20261105
+    date: "2026-11-05"
+    commit: "0ee537b3 plus uncommitted merge of develop 0d0a36a4 and profile/auth integration edits"
     cli: "Postman CLI 1.73.0"
