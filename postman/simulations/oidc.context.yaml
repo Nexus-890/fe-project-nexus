@@ -77,6 +77,50 @@ assumptions:
       cleaned the ignored log. No detailed per-endpoint event counts were recorded for this run.
       This establishes caller behavior against the stand-ins, not live Keycloak or backend
       integration.
+
+      On 2026-11-03 ran npx playwright test --config playwright.auth.config.ts against the dirty
+      frontend implementation fingerprint: 9 tests passed in 24 seconds. Covered normal
+      sign-in/returnTo/logout/reload, tampered state, denied authorization, rejected token exchange,
+      unsolicited callback, external returnTo, profile 503 then retry with exactly one code
+      exchange, profile 401 clearing local state without provider logout, and registration remaining
+      POST /api/v1/auth/register followed by sign-in. Browser storage had no access/ID tokens; the
+      sign-in request path never posted passwords to our API. Inspected
+      test-results/oidc-simulation.ndjson and observed metadata, provider
+      authorization/token/logout, Bearer profile and registration requests with expected
+      success/error responses. Ports 3103 and 3913 were no longer listening after Playwright
+      cleanup. A prior attempt stopped because Next.js displayed its package security update
+      reminder; retry ran the unchanged application successfully. On 2026-11-04 ran npm run
+      test:auth:browser against the dirty oidc-envelope-merge fingerprint: all 11 scenarios passed
+      in 29.4 seconds. The browser explicitly received GET /api/v1/users/me HTTP 200 and POST
+      /api/v1/auth/register HTTP 201 with {code:0,message:"response success",data:user}. Sign-in
+      returned to its requested page and registration navigated to sign-in. Missing envelope data
+      and malformed user roles each produced the callback error, then succeeded on manual profile
+      retry with exactly one code exchange. Inspected 137 simulation request events, including
+      profile responses 200 (7), 401 (1) and 503 (1), registration 201 (1), token responses 200 (6)
+      and 400 (1), and logout 302 (1). Ports 3103 and 3913 stopped after cleanup and tsconfig.json
+      was restored. The first attempt stopped for the existing Next.js advisory reminder; an
+      unchanged retry produced the passing run. Postman CLI 1.73.0 rejects postman status as an
+      unknown command; its local simulation command ran successfully. On 2026-11-05, at the
+      shared-cart-hooks-develop-merge fingerprint, npm run test:auth:browser passed all 11 scenarios
+      in 42.6 seconds after the installed Next advisory interrupted initial startup. An unchanged
+      retry passed. Safe pathname/status log inspection confirmed one listening event and 125
+      requests, including profile 200 (7)/401 (1)/503 (1), registration 201 (1), token 200 (6)/400
+      (1) and logout 302 (1). This is current frontend/stand-in evidence; real token trust,
+      provisioning and provider logout remain outside the simulated run. On 2026-11-05, at the dirty
+      guest-cart-develop-merge fingerprint, the final npm run test:auth:browser passed all 17
+      scenarios in 41.5 seconds: 11 OIDC and 6 guest cases. An earlier attempt overlapped live
+      source Hot Refresh; the stable final implementation passed on rerun. The existing Next.js 16.4
+      security reminder also required unchanged startup retries. The final auth simulation log
+      contained 236 request events; it was inspected before the subsequent general browser runner
+      cleaned the ignored log. No detailed per-endpoint event counts were recorded for this run.
+      This establishes caller behavior against the stand-ins, not live Keycloak or backend
+      integration.
+      On 2026-11-05 at profile-guest-cart-conflict-resolution, all 17 dedicated OIDC/guest-cart
+      browser scenarios passed after merging the profile branch with develop ff2a4986. These include
+      return destinations, profile retry, guest persistence and merge retry/idempotency assertions.
+      Temporary app/API ports 13103/13913 avoided shared ports and were restored after verification.
+      The following general browser run replaced this suite's simulation log; no dedicated-suite
+      event counts are claimed.
     source: >-
       tests/oidc.spec.ts; playwright.auth.config.ts; postman/mocks/oidc-keycloak/default.js;
       postman/mocks/oidc-api/default.js; test-results/oidc-simulation.ndjson (local ignored run
@@ -190,6 +234,41 @@ assumptions:
       The isolated production build with NEXUS_TEST_DIST_DIR=.next-verify-build passed unchanged
       retry. The final npm run test:browser -- --max-failures=1 passed 31 cases in 57.0 seconds. No
       live backend or Keycloak integration was run.
+
+      On 2026-11-03 the final npm run test:auth:browser passed all 14 scenarios in 34.4 seconds,
+      including the nine existing OIDC scenarios. Observed the same stored guest credential while
+      the browser was at Keycloak, then that credential on exactly one callback merge request and a
+      merged count of 5 from guest 2 plus member 3. Reload restored the guest count; later client
+      navigation did not repeat merge; logout and reload showed anonymous count 0. Both pre-write
+      503 and committed-write/failed-response 503 retained the key for retry, with one applied merge
+      in fixture state. Guest-disabled 403 showed sign-in. Inspected the simulation log: guest
+      creation 201, additions 201, guest GET 200, merge 200/503, member GET 200 and disabled
+      creation 403 all ran. Unit suite passed 65 tests including frontend flag false, blocked
+      storage, expired carts and stale auth responses. A first token-persistence test observation
+      used an unsupported redirect interception point; it was corrected to inspect storage on the
+      provider page. Next's pre-existing security reminder caused startup/build attempts to exit;
+      retries completed. On 2026-11-05, at the dirty guest-cart-develop-merge fingerprint, the final
+      npm run test:auth:browser passed all 17 cases in 41.5 seconds, including six guest cases and
+      eleven OIDC cases. Guest cases retained the reload, mobile quantity, redirect persistence, one
+      callback merge, logout, disabled-cart and same-key pre-/post-commit failure checks. The added
+      profile-503 recovery case confirmed no merge before explicit account retry, then one merge
+      with the saved key and one code exchange. Same-origin cart requests were forwarded over HTTP
+      to the simulation, preserving the intentionally blank Cart service origin. Successes used
+      strict backend envelopes. The final auth log contained 236 request events before the general
+      browser runner cleaned that ignored output. An earlier auth attempt overlapped source Hot
+      Refresh; rerunning stable final source passed. Existing security reminders required unchanged
+      startup/build retries. All 94 unit/transport tests, generate:types:check, fresh route
+      typecheck and lint passed; lint ignored the existing unrelated .next-profile-run/** output.
+      The isolated production build with NEXUS_TEST_DIST_DIR=.next-verify-build passed unchanged
+      retry. The final npm run test:browser -- --max-failures=1 passed 31 cases in 57.0 seconds. No
+      live backend or Keycloak integration was run. On 2026-11-05, at the
+      shared-cart-guest-reconciliation fingerprint, the merged shared Cart/provider implementation
+      passed all 17 OIDC/guest browser cases in 2.2 minutes. These include all six guest scenarios,
+      one callback merge, reload, unavailable guest routes, and both pre-write and committed-write
+      503 retries with the same merge key. The simulation log contained 234 request events and one
+      listening event: guest creates 201 (5)/403 (1), guest item POST 201 (6), guest GET 200 (1),
+      merge POST 200 (4)/503 (2), token POST 200 (10)/400 (1). This supports the caller's behavior
+      under the proposed fixture contract only.
     source: >-
       tests/guest-cart.spec.ts; tests/oidc.spec.ts; tests/cart.test.ts;
       postman/mocks/oidc-api/default.js; test-results/oidc-simulation.ndjson (ignored local
@@ -293,9 +372,61 @@ assumptions:
       auth run's 236-event log was cleaned by this runner, so the final log cannot re-establish that
       auth run's event counts. A final postman status attempt returned unknown command on CLI
       1.73.0; no simulation setup was changed. These remain local HTTP fixture results.
+
+      On 2026-11-04, at the cart-oidc-develop-merge fingerprint, npm run test:browser passed all 30
+      scenarios, including all 9 cart scenarios. After isolating the header cart GET in the
+      product/OIDC suites, npm run test:browser -- product.spec.ts passed all 3 product scenarios
+      and npm run test:auth:browser passed all 11 OIDC scenarios in 28.1 seconds. The final OIDC
+      simulation log contained 124 request events, including profile 200 (7), 401 (1), 503 (1),
+      registration 201 (1), token 200 (6), token 400 (1) and logout 302 (1). Header cart fixtures
+      kept those reads off the local gateway proxy. Initial browser starts stopped for the existing
+      Next.js security reminder; unchanged retries passed. No live backend was tested. On
+      2026-11-05, at the shared-cart-hooks-develop-merge fingerprint, npm run test:browser passed
+      30/30, npm run test:cart passed the nine shared Cart HTTP scenarios, npm run test:profile
+      passed 9/9 and the dedicated OIDC run passed 11/11. Shared Cart hooks retain the optimistic
+      page wrapper and session-generation guards. The separate cart/profile context files record
+      their request counts and current fixture wiring. On 2026-11-05, at the dirty
+      guest-cart-develop-merge fingerprint, npm run test:browser -- --max-failures=1 passed all 31
+      cases in 57.0 seconds: 9 Cart, 4 Product, 7 Gallery, 10 Catalog and the auth acceptance
+      harness. The added Product case covers navigation during a pending add, preserving the
+      destination page's cart feedback isolation. Two outdated sign-in URL assertions were updated
+      to the preserved return destination, /sign-in?returnTo=%2F. An inherited gallery 404 case
+      initially stalled with the page still showing Loading product; it passed unchanged in the
+      final run. The dedicated auth suite separately passed all 17 OIDC/guest cases. The final
+      general simulation log contained 86 request events, including fourteen Keycloak token POST
+      responses with HTTP 200. Only the Keycloak member was exercised by the general suite; its
+      application API calls used Playwright HTTP fixtures. The preceding auth run's 236-event log
+      was cleaned by this runner, so the final log cannot re-establish that auth run's event counts.
+      A final postman status attempt returned unknown command on CLI 1.73.0; no simulation setup was
+      changed. These remain local HTTP fixture results. On 2026-11-05, at the
+      shared-cart-guest-reconciliation fingerprint, all 31 main browser cases passed in 2.1 minutes
+      and the dedicated OIDC/guest suite passed 17/17 in 2.2 minutes. Member adds/header state now
+      use the existing CartProvider/controller; authenticated page edits retain exact optimistic
+      totals, canceled stale reads, guarded rollback and a pending lock through explicit
+      reconciliation. The former hooks/useCart implementation was removed after its callers and
+      three regression tests migrated. Unit/transport checks passed 108/108.
+
+      On 2026-11-05, the shared-cart-session-reconciliation run passed 147 unit tests, 24
+      OIDC/guest/session browser cases in 1.4 minutes, and 31 general cases in 1.7 minutes. The auth
+      simulation recorded 447 requests, including token POST 200 (27)/400 (2), profile GET 200
+      (20)/503 (2)/401 (2), merge POST 200 (4)/503 (2), and protected GET 200 (18)/401 (8). Auth
+      used app/simulation ports 3141/3951; the general suite used temporary port substitutions
+      3142/3952/3953 with original tracked bytes restored. Same-session renewal retains cart state;
+      pending old-session writes remain isolated. The optional five-minute wall-clock scenario was
+      not rerun. These are local fixture checks only.
+      On 2026-11-05 at profile-guest-cart-conflict-resolution, the general browser suite passed all
+      31 cases, including account switching and cart navigation during pending writes. The inspected
+      final simulation log contained 86 Keycloak request events, including 14 successful token
+      exchanges. Application API calls used the existing Playwright fixtures. Temporary
+      app/catalog/OIDC ports were 13102/13911/13913; all port edits were restored. No live backend
+      integration was tested.
     source: >-
       tests/cart.spec.ts; tests/product.spec.ts; tests/oidc.spec.ts; features/ShopLayout.tsx;
       features/useCart.ts; test-results/oidc-simulation.ndjson (local ignored run evidence)
+
+      tests/cart.spec.ts; tests/product.spec.ts; tests/oidc.spec.ts; features/ShopLayout.tsx;
+      providers/CartProvider.tsx; features/useCart.ts; test-results/oidc-simulation.ndjson (local
+      ignored run evidence)
     updated_at: '2026-11-05'
   - id: gateway-session-cookie
     status: supported
@@ -522,6 +653,51 @@ assumptions:
       tests/cart.spec.ts; tests/token-retry.test.ts; tests/auth-acceptance.mjs;
       postman/mocks/oidc-keycloak/default.js; postman/mocks/oidc-api/default.js
     updated_at: '2026-11-05'
+  - id: profile-session-develop-integration
+    status: supported
+    claim: >-
+      The profile branch retains the incoming restore, renewal, bounded 401
+      replay and guest-cart behavior in the current local OIDC/session browser
+      scenarios while keeping the guarded profile-update workflow.
+    reason: >-
+      The real Next application and installed OIDC SDK ran against the local
+      API/Keycloak stand-ins. The provider shares its token coordinator with
+      profile requests, cancels registered saves when the session ends and
+      checks their originating generation before cache/feedback updates.
+      This establishes caller behavior under the fixture contract only.
+    verification: >-
+      On 2026-11-05 at the profile-session-develop-merge fingerprint, the source
+      baseline passed 99/99 unit tests; the merged suite passed 138/138.
+      Generated DTO drift, fresh-route typecheck and lint passed. The dedicated
+      OIDC/guest/session browser suite passed 24/24 in 1.3 minutes using app
+      port 3151, simulation port 3961 and .next-oidc-profile-final output.
+      Safe pathname/status log inspection found one listening event and 447
+      requests: token POST 200 (27)/400 (2), profile GET 200 (20)/401 (2)/503 (2),
+      merge POST 200 (4)/503 (2), protected GET 200 (18)/401 (8), registration
+      POST 201 (1) and logout 302 (3). The dedicated profile suite then passed
+      10/10 in 39.0 seconds, including preservation of dirty fields during
+      proactive renewal and a persistent PUT 401 with exactly one replay.
+      Its context records the profile fixture's request counts. The main browser
+      suite then passed 31/31 in 1.3 minutes using temporary ports
+      3152/3962/3964 and .next-catalog-profile-final; exact tracked test/config
+      bytes were restored. The three suites total 65 passed scenarios. The final
+      main-run log contains one listening event and 155 Keycloak requests,
+      including 15 token POST 200 and three logout 302 responses. Main-run
+      application APIs use explicit Playwright fixtures; this replacement log
+      cannot re-establish earlier auth/profile event counts. The final
+      NEXUS_TEST_DIST_DIR=.next-verify-build npm run build passed with exit zero,
+      compilation, TypeScript and all 13 page generations. The silent callback
+      route is present and temporary auth-smoke/session-probe routes are absent.
+      Earlier attempts stopped only at the installed Next security reminder
+      after generating pages; the final unchanged retry passed. No live backend/Keycloak
+      integration or repeat of the historical five-minute wall-clock run was
+      performed.
+    source: >-
+      providers/Provider.tsx; features/ProfilePage.tsx; tests/session.spec.ts;
+      tests/profile.spec.ts; tests/token-retry.test.ts; tests/guest-cart.spec.ts;
+      postman/mocks/oidc-keycloak/default.js; postman/mocks/oidc-api/default.js;
+      test-results/oidc-simulation.ndjson (ignored current local run evidence)
+    updated_at: '2026-11-05'
 fingerprints:
   - id: oidc-browser-implementation
     date: '2026-11-03'
@@ -558,4 +734,28 @@ fingerprints:
     commit: >-
       d7a4090d with uncommitted merge of origin/develop cfe10dfa; follow-up backend changes leave
       frontend source unchanged
+    cli: 1.73.0
+  - id: shared-cart-hooks-develop-merge
+    date: '2026-11-05'
+    commit: >-
+      78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile
+      integration
+    cli: 1.73.0
+  - id: shared-cart-guest-reconciliation
+    date: '2026-11-05'
+    commit: b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration
+    cli: 1.73.0
+  - id: shared-cart-session-reconciliation
+    date: '2026-11-05'
+    commit: >-
+      e0149a94 with uncommitted merge of origin/develop 1dd23dd3 and Cart/profile/session
+      reconciliation
+    cli: 1.73.0
+  - id: profile-guest-cart-conflict-resolution
+    date: "2026-11-05"
+    commit: "b16dc0b2 with uncommitted merge of origin/develop ff2a4986 and HeaderTopBar/playwright conflict resolutions"
+    cli: "1.73.0"
+  - id: profile-session-develop-merge
+    date: '2026-11-05'
+    commit: 6357abb5 with uncommitted merge of origin/develop 1dd23dd3 and guarded profile/session integration
     cli: 1.73.0

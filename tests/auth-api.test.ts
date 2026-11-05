@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import api, { requestApi, isApiError } from "../configs/api";
 import { createSession, endSession, getMe, refreshSession, register } from "../service/authService";
 import * as authService from "../service/authService";
+import { updateProfile } from "../service/accountService";
 import { createAuthStub } from "../mocks/authStub";
 import type { AuthStubLoginRequest, AuthStubLoginResponse } from "../mocks/authStub";
 import type { ApiError, ProblemDetails } from "../types/commonResponseType";
@@ -26,6 +27,70 @@ const registerInput: RegisterRequest = {
   address: "1 Test Street",
   dateOfBirth: "1999-01-01",
 };
+
+test("profile PUT persists normalized fields and keeps existing sessions after an email change", async () => {
+  let accessToken: string | null = null;
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  await register(registerInput, options);
+  await assert.rejects(updateProfile({ fullName: "Not allowed" }, options), { kind: "http", status: 401 });
+
+  const firstLogin = await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options);
+  const secondLogin = await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options);
+  accessToken = firstLogin.accessToken;
+  const updated = await updateProfile({
+    fullName: "  Updated Buyer  ", email: "  NEW.BUYER@EXAMPLE.TEST  ",
+    address: "  New street  ", dateOfBirth: "2000-02-29", gender: "FEMALE",
+  }, options);
+  assert.equal(updated.fullName, "Updated Buyer");
+  assert.equal(updated.email, "new.buyer@example.test");
+  assert.equal(updated.address, "New street");
+  assert.equal(updated.phone, registerInput.phone);
+  assert.deepEqual(await getMe(options), updated);
+
+  const ignored = await requestApi<UserResponse>("PUT", "/api/v1/users/me", {
+    fullName: null, email: null, address: null, gender: null, dateOfBirth: null,
+    phone: "invalid", identityNumber: "other", password: "changed", roles: ["ADMIN"], status: "LOCKED",
+  }, options);
+  assert.deepEqual(ignored.data, updated, "null retains values and fields outside UpdateProfileRequest are ignored");
+  accessToken = secondLogin.accessToken;
+  assert.deepEqual(await getMe(options), updated, "all existing sessions keep the same user identity");
+  await assert.rejects(fixtureLogin({ email: registerInput.email, password: registerInput.password }, options), { kind: "http", status: 401 });
+  assert.ok((await fixtureLogin({ email: updated.email, password: registerInput.password }, options)).accessToken,
+    "the login index moves to the new email while password remains unchanged");
+  const cleared = await updateProfile({ address: "  " }, options);
+  assert.equal(cleared.address, "");
+});
+
+test("profile PUT rejects invalid fields and duplicate email without changing any stored values", async () => {
+  let accessToken: string | null = null;
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  const original = await register(registerInput, options);
+  await register({ ...registerInput, email: "other@example.test", phone: "0900000001", identityNumber: "012345678902" }, options);
+  accessToken = (await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options)).accessToken;
+
+  for (const [payload, field] of [
+    [{ fullName: " " }, "fullName"],
+    [{ email: "invalid" }, "email"],
+    [{ dateOfBirth: "2999-01-01" }, "dateOfBirth"],
+  ] as const) {
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", { address: "Must not persist", ...payload }, options), errorIs((error) => {
+      assert.equal(error.status, 400);
+      assert.ok(error.fieldErrors?.[field]?.length);
+    }));
+    assert.deepEqual(await getMe(options), original);
+  }
+  for (const payload of [{ gender: "UNKNOWN" }, { dateOfBirth: "2000-02-30" }]) {
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", payload, options), {
+      kind: "http", status: 400, type: "urn:problem:invalid-request-body",
+    });
+  }
+  await assert.rejects(requestApi("PUT", "/api/v1/users/me", { email: " OTHER@EXAMPLE.TEST ", fullName: "Must not persist" }, options), {
+    kind: "http", status: 409, code: "USER_EMAIL_ALREADY_USED",
+  });
+  assert.deepEqual(await getMe(options), original);
+  const sameEmail = await requestApi<UserResponse>("PUT", "/api/v1/users/me", { email: " BUYER@EXAMPLE.TEST " }, options);
+  assert.deepEqual(sameEmail.data, original, "the current user's own email is not a duplicate");
+});
 const success = (data: unknown, status = 200) =>
   new Response(
     JSON.stringify({

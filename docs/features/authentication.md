@@ -42,6 +42,10 @@ The globally mounted CartProvider waits for authenticated profile state before m
 
 Run npm run test:auth for transport/query/mutation/protocol tests, npm run test:auth:browser for the dedicated OIDC browser suite, and npm run test:catalog for catalog/product plus the auth acceptance harness. The test-only injected OIDC adapter in AuthProbe uses fixture accounts/tokens to preserve pending-callback/profile/account-switch race checks. It is never part of production sign-in.
 
+Profile edits use the provider updateProfile workflow and pure accountService through the shared HTTP boundary. Controlled requests abort on logout; generation checks prevent late saves from replacing a newer account. Successful PUT data replaces the same profile query used by the header. See [profile behavior](../profile-page.md).
+
+The explicit auth stub supplies local registration/profile data and test-only injected adapters. Its credential helpers do not replace production Keycloak sign-in. Fixture state/tokens belong to that instance and are lost when it is recreated; a fixture token does not establish real JWT acceptance. Production rejects enabling the stub.
+
 The dedicated browser suite runs the actual frontend against local Postman stand-ins derived from the committed realm and backend controllers/DTOs. It covers enveloped profile and registration responses, malformed profile recovery, PKCE/state/nonce, returnTo, reload restoration, renewal/replay limits, logout and storage behavior, plus the gateway session stand-in: the HttpOnly cookie and its path, refresh rotation and replay refusal, the CSRF header and cookie revocation on logout. [Simulation context](../../postman/simulations/oidc.context.yaml) preserves evidence and uncertainty. These checks do not establish live backend JWT trust, the real gateway CORS policy, Keycloak logout or account provisioning; the gateway side of #252 is covered by its own SessionControllerTest and SecurityConfigTest. Full real backend/Keycloak integration remains unverified; #237/#238 own backend migration.
 
 ## Session restoration and renewal

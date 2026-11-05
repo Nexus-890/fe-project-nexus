@@ -100,7 +100,9 @@ test("adding a cart item sends exactly skuId and quantity and accepts delivered 
     body: { skuId: "sku-1", quantity: 2 },
     auth: "Bearer session-token",
   });
-  assert.equal("subtotal" in cart, false);
+  assert.equal(cart.items[0].lineTotal, "300000.00");
+  assert.equal(cart.subtotal, "300000.00");
+  assert.equal(cart.currency, "VND");
 });
 test("invalid quantity or sku fails before sending HTTP", async () => {
   let calls = 0;

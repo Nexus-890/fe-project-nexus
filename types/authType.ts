@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ApiContext } from "./commonRequestType";
 import type { ApiError, ApiResult } from "./commonResponseType";
 import type { RegisterRequest } from "./authRequestType";
+import type { UpdateProfileRequest } from "./accountType";
 import type { UserResponse } from "./authResponseType";
 import type { OidcClient } from "../features/oidc";
 
@@ -18,6 +19,7 @@ export type AuthContextValue = {
   completeSignIn: (url: string) => Promise<ApiResult<string>>;
   register: (payload: RegisterRequest) => Promise<ApiResult<UserResponse>>;
   retryProfile: () => Promise<ApiResult<UserResponse>>;
+  updateProfile: (payload: UpdateProfileRequest) => Promise<ApiResult<UserResponse>>;
   signOut: () => Promise<ApiResult<void>>;
 };
 

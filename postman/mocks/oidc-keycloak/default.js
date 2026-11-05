@@ -8,7 +8,7 @@ const { createHash, generateKeyPairSync, randomUUID, sign } = require("node:cryp
 const origin = `http://127.0.0.1:${process.env.NEXUS_OIDC_SIM_PORT || "3913"}/keycloak`;
 const issuer = `${origin}/realms/nexus`;
 const protocol = `${issuer}/protocol/openid-connect`;
-const appOrigins = new Set(["http://127.0.0.1:3102", "http://127.0.0.1:3103", process.env.NEXUS_OIDC_APP_ORIGIN].filter(Boolean));
+const appOrigins = new Set(["http://127.0.0.1:3102", "http://127.0.0.1:3103", "http://127.0.0.1:3104", process.env.NEXUS_OIDC_APP_ORIGIN].filter(Boolean));
 const callbacks = new Set([...appOrigins].map((origin) => `${origin}/auth/callback`));
 const subject = "68000000-0000-4000-8000-000000000003";
 const cookieName = "fixture-keycloak-session";

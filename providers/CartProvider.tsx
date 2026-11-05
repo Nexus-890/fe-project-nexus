@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { createCanceledError, isApiError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
 import { useAuth } from "../hooks/useAuth";
@@ -46,6 +46,8 @@ const cartResult = async <T,>(action: () => Promise<T>): Promise<ApiResult<T>> =
 function CartProvider({ children }: { children: ReactNode }) {
   const { status, user, accessToken, requestContext, sessionId, isSessionCurrent } = useAuth();
   const queryClient = useQueryClient();
+  const currentUser = useRef(user);
+  const editing = useIsMutating({ mutationKey: ["cart", sessionId, "edit"], exact: true }) > 0;
   const guestEnabled = process.env.NEXT_PUBLIC_GUEST_CART_ENABLED === "true";
   const [controller] = useState(() => createCartController({
     guestEnabled,
@@ -75,13 +77,17 @@ function CartProvider({ children }: { children: ReactNode }) {
           return cart;
         });
       };
+      const memberContext = () => ({
+        ...requestContext,
+        ...(currentUser.current ? { mockUser: { id: currentUser.current.id, email: currentUser.current.email } } : {}),
+      });
       return {
-        getCart: () => memberResult(() => getCart({ context: requestContext })),
-        addCartItem: (input, signal) => memberResult(() => addCartItem(input, { context: requestContext, signal }), true, signal),
+        getCart: () => memberResult(() => getCart({ context: memberContext() })),
+        addCartItem: (input, signal) => memberResult(() => addCartItem(input, { context: memberContext(), signal }), true, signal),
         createGuestCart: (signal) => cartResult(() => createGuestCart({ context: requestContext, signal })),
         getGuestCart: (token, signal) => cartResult(() => getGuestCart(token, { context: requestContext, signal })),
         addGuestCartItem: (token, input, signal) => cartResult(() => addGuestCartItem(token, input, { context: requestContext, signal })),
-        mergeGuestCart: (token, mergeKey) => memberResult(() => mergeGuestCart(token, mergeKey, { context: requestContext })),
+        mergeGuestCart: (token, mergeKey) => memberResult(() => mergeGuestCart(token, mergeKey, { context: memberContext() })),
       };
     },
   }));
@@ -90,15 +96,22 @@ function CartProvider({ children }: { children: ReactNode }) {
   const owner = identityOwner({ status, userId, accessToken, sessionId });
 
   useEffect(() => {
+    currentUser.current = user;
     controller.setIdentity({ status, userId, accessToken, sessionId });
-  }, [controller, status, userId, accessToken, sessionId]);
+  }, [controller, status, userId, user, accessToken, sessionId]);
 
   const ready = owner !== null && state.owner === owner && !state.loading;
   const memberCart = useApiQuery({
     queryKey: queryKeys.cart.me(sessionId),
-    service: (signal) => getCart({ context: requestContext, signal }),
+    service: (signal) => getCart({ context: { ...requestContext, ...(user ? { mockUser: { id: user.id, email: user.email } } : {}) }, signal }),
     meta: { requiresAuth: true },
-  }, { enabled: status === "authenticated" && ready && !state.mergeError && !state.adding, retryOnMount: false });
+  }, {
+    enabled: status === "authenticated" && ready && !state.mergeError && !state.adding && !editing,
+    // The controller seeds this cache during sign-in/add. Reuse that fresh
+    // snapshot when the header/page observer becomes enabled.
+    staleTime: 30_000,
+    retryOnMount: false,
+  });
   const itemCount = status === "authenticated" && memberCart.data
     ? cartItemCount(memberCart.data) : state.owner === owner ? state.itemCount : 0;
 

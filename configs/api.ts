@@ -7,6 +7,7 @@ import type {
 } from "../types/commonResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import { getCatalogMockFetch } from "../mocks/catalogStub";
+import { getCartMockFetch } from "../mocks/cart";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.trim() ||
@@ -169,7 +170,7 @@ export const requestApi = async <T>(
     throwIfAborted(options.signal);
     if (!isCurrentSession()) throw createCanceledError();
   };
-  const fetch = getCatalogMockFetch(path) ?? context.fetch;
+  const fetch = getCartMockFetch(path, context.mockUser) ?? getCatalogMockFetch(path) ?? context.fetch;
   const config: AxiosRequestConfig = {
     timeout: options.config?.timeout ?? api.defaults.timeout,
     paramsSerializer: options.config?.paramsSerializer,

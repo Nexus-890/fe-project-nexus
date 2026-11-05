@@ -34,7 +34,7 @@ function ShopLayout({ children }: { children: ReactNode }) {
         authenticating={status === "authenticating" || status === "restoring"}
         restoring={status === "restoring"}
         onSignOut={() => void endSession()}
-        cartQuantity={cart.ready ? cart.itemCount : undefined}
+        cartQuantity={cart.ready && (status === "authenticated" || cart.guestEnabled) ? cart.itemCount : undefined}
         categories={categories.data ?? []}
         categoriesLoading={categories.isPending}
         categoriesError={categories.isError}
