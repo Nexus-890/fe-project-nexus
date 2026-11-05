@@ -29,18 +29,38 @@ pending. There is no route-level `loading.tsx`: that convention creates a Suspen
 fallback for route navigation/streaming and does not track a request started by
 `useEffect`.
 
+Entry revalidation follows session readiness rather than token value. A normal
+renewal therefore keeps the mounted form and its unsaved fields intact instead
+of launching an unrelated profile read that could replace it with an error UI.
+
 ## API and state
 
 `features/ProfilePage.tsx` revalidates `GET /api/v1/users/me` on entry through the
-existing auth `/me` query. Loading, retry, and save operations use the active
-session's client. `service/accountService.ts` defines the relative endpoint path and
+shared auth query. The provider owns retry and save operations using the active
+session's scoped request context. `service/accountService.ts` allowlists the body and
 sends `PUT /api/v1/users/me` with bearer authentication; the configured API base
 URL comes from the existing environment configuration.
 
+Sign-in uses the existing Keycloak OIDC/PKCE flow and callback. Application
+responses follow the delivered `{code,message,data}` envelope. The shared
+`configs/api.ts` boundary validates that envelope before auth/profile services
+validate the nested `UserResponse`; bare and malformed payloads are rejected.
+Request types reuse the generated `UpdateProfile` schema.
+
+On page load the provider first exposes `restoring` while it checks the existing
+Keycloak SSO session through the silent callback. A successful check loads the
+profile before exposing authenticated controls; missing SSO settles to anonymous.
+The shared token coordinator renews credentials in memory and permits one replay
+of a protected 401 request. Normal token rotation preserves the profile cache and
+session generation. See [session restore](features/session-restore.md).
+
 The form submits only changed fields supported by the backend DTO. The service
-allowlists those fields and validates the envelope data as `UserResponse` before updating
+allowlists those fields and validates the returned `UserResponse` before updating
 the shared query. An earlier GET is cancelled before the saved response enters
 the cache, and results from an ended session cannot populate a later session.
+Logout, renewal failure and provider unmount abort registered profile saves.
+The save workflow checks its originating session before returning feedback or
+publishing data; late results cannot restore a cleared or replaced account.
 Cancel restores the latest saved values. A failed save preserves edits; a failed
 load offers a retry.
 
@@ -65,13 +85,16 @@ clearing an existing birth date because the current API cannot clear it.
 the UI shows “Kept private” without inventing or exposing a value.
 
 Backend validation errors use Problem Details with
-`errors: [{ field, code, detail }]`. The existing API client normalizes these errors;
+`errors: [{ field, code, detail }]`. The API client normalizes `detail` into form messages;
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
-Missing or expired sessions redirect to `/sign-in`, including a 401 during save.
-Authentication tokens stay in memory. A full reload checks Keycloak SSO and
-restores the profile before authenticated requests resume; shared renewal may
-replay a protected request once after a 401. See [session restore](features/session-restore.md).
+Missing sessions redirect to `/sign-in` after restoration settles. A final 401
+during save clears local authentication after the shared renewal/replay policy;
+it does not implicitly trigger a remote logout redirect. Browser refresh can
+restore the account through Keycloak SSO without persisting access, refresh or
+ID tokens. Explicit logout prevents silent restoration until the next deliberate
+sign-in. Deployed cookie/frame policy can prevent silent restoration; the
+profile page does not provide a separate session protocol.
 
 ## Backend dependencies
 
@@ -105,15 +128,11 @@ transaction statistics, or penalties.
 | Loading, failure, and cancellation | Skeleton, load retry, preserved edits after save failure, and Cancel are covered. |
 | 375×812 layout | Browser assertions check document width and visible text clipping; mobile screenshot attached below. |
 
-Historical validation reported for the original implementation: `npm run lint` and `npm run build`
-passed; `npm run test:auth` passed 38 tests after the develop integration. `npm run test:profile` runs the real
-Next.js frontend against a local stateful Postman HTTP simulation based on the
-repository's backend DTOs. See [profile verification](profile-verification.md)
-for the browser results and the subsequent successful login/GET/PUT check
-against the running backend using the staging demo buyer account. That dated
-password-login evidence does not establish current Keycloak integration. On
-2026-11-05 the merged OIDC profile simulation passed all 9 scenarios; its
-separate evidence and live limits are recorded in the same report.
+The [profile verification report](profile-verification.md) records checks for the
+current merge and historical results. `npm run test:profile` runs the real Next.js
+frontend against local Postman stand-ins for Keycloak and the profile gateway.
+The historical password-login backend check predates the Keycloak migration and
+does not establish current live integration.
 
 The screenshots use simulation data to demonstrate the layout:
 

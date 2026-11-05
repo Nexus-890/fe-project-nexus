@@ -34,6 +34,11 @@ Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUB
 
 Explicit auth/product/cart development fixtures are blocked in production. The auth stub supplies registration/profile responses to injected test adapters; it does not replace the Keycloak redirect flow or provision real accounts.
 
+Signed-in users can open `/profile` from the header or My Nexus, edit supported
+personal information and save to the shared profile/header query. Phone is read-only;
+avatar, password, reputation and penalties await backend support. See the
+[profile page](docs/profile-page.md) and [verification](docs/profile-verification.md).
+
 ## Code layout
 
 ```text

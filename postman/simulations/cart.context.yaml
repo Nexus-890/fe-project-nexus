@@ -74,6 +74,13 @@ assumptions:
       were observed. Shared initial GET, quantity sums, rollback, and late logout response
       assertions passed after integrating session restoration. Port substitutions were restored
       after the runner. No live backend was used.
+
+      On 2026-11-05 at cart-profile-develop-reconciliation, npm run test:cart passed 9/9. The log
+      contained one listening event and 188 requests, including cart GET 200 (12)/503 (3), item
+      POST 201 (2), PUT 200 (2)/503 (1), DELETE 204 (1), profile GET 200 (8), token POST 200 (8),
+      and logout 302 (1). Two product enrichment lookups returned the fixture's unmodelled 501;
+      the cart assertions still passed. These results establish the merged caller against its
+      local dependencies only, with live backend integration still unknown.
     source: >-
       tests/cart-shared.spec.ts (historically tests/cart.spec.ts); tests/cart-api.test.ts;
       tests/cart-query.test.ts; postman/mocks/cart-gateway/default.js; playwright.cart.config.ts;
@@ -121,4 +128,8 @@ fingerprints:
     commit: >-
       e0149a94 with uncommitted merge of origin/develop 1dd23dd3 and Cart/profile/session
       reconciliation
+    cli: 1.73.0
+  - id: cart-profile-develop-reconciliation
+    date: '2026-11-05'
+    commit: 450acf43 with uncommitted merge of origin/develop 00f94a19 and profile/cart conflict resolutions
     cli: 1.73.0

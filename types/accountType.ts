@@ -1,4 +1,4 @@
 import type { components } from "./userGeneratedType";
 
-/** Only delivered editable profile fields; null/omitted values retain data. */
+/** Editable profile fields from the delivered user-service contract. */
 export type UpdateProfileRequest = components["schemas"]["UpdateProfile"];

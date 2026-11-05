@@ -1,5 +1,5 @@
 /* Postman loads mock handlers as CommonJS, including in ESM projects. */
-/** Local profile contract from this repository's UserController and IAM DTOs. */
+/** Local profile contract from origin/develop's ApiResponse, UserController and IAM DTOs. */
 const http = require("node:http");
 const { createHash } = require("node:crypto");
 
@@ -30,10 +30,17 @@ function json(res, value, status = 200) {
     const type = value.type || `urn:problem:${problemType}`;
     value = { type, code, status, ...value };
   }
-  res.writeHead(status, { ...headers, ...(status >= 400 ? { "Content-Type": "application/problem+json" } : {}) });
+  res.writeHead(status, {
+    ...headers,
+    "Content-Type": status >= 400 ? "application/problem+json" : "application/json",
+  });
   res.end(JSON.stringify(value));
 }
-const success = (res, data, page) => json(res, { code: 0, message: "response success", data, ...(page ? { page } : {}) });
+
+function success(res, data, status = 200) {
+  return json(res, { code: 0, message: "response success", data }, status);
+}
+
 let pendingHistoryWrite = Promise.resolve();
 function recordRequest(entry) {
   const write = pendingHistoryWrite.then(async () => {
@@ -66,19 +73,28 @@ const server = http.createServer(async (req, res) => {
     await pendingHistoryWrite;
     return json(res, await pm.state.get("profile-gateway:requests") || []);
   }
+  if (path === "/__test/user") {
+    return json(res, await pm.state.get("profile-gateway:user") || initialUser);
+  }
 
   const authorization = req.headers.authorization || "";
   const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+  const expiry = await pm.state.get("oidc-keycloak:access-token-expiry");
+  const time = await pm.state.get("oidc-keycloak:clock-time") ?? Date.now();
   const authenticated = Boolean(authorization.startsWith("Bearer ") && expectedHash
-    && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
+    && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash
+    && typeof expiry === "number" && expiry > Math.floor(time / 1000));
   await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
-  if (["/v1/users/me", "/v1/carts/me"].includes(path) && !authenticated) {
-    return json(res, { title: "Unauthorized", status: 401 }, 401);
+  if (path === "/v1/users/me" || path === "/v1/carts/me") {
+    if (!authenticated) {
+      return json(res, { title: "Unauthorized", status: 401 }, 401);
+    }
   }
 
+  // The simulation strips routeKey /api, preserving the real caller's URL.
   // @endpoint GET /v1/users/me
   if (path === "/v1/users/me" && req.method === "GET") {
     if (controls.getDelayMs) await new Promise(resolve => setTimeout(resolve, controls.getDelayMs));
@@ -112,16 +128,19 @@ const server = http.createServer(async (req, res) => {
     return success(res, next);
   }
 
-  // Shared shop shell dependencies use the delivered envelope/page contract.
+  // Shared shop shell dependencies; exact category and PageResponse shapes.
   if (path === "/v1/categories/tree") {
     return success(res, [
       { id: "electronics", name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] },
     ]);
   }
   if (path === "/v1/products") {
-    return success(res, [], { number: 0, size: 20, totalElements: 0, totalPages: 0 });
+    return json(res, { code: 0, message: "response success", data: [],
+      page: { number: 0, size: 20, totalElements: 0, totalPages: 0 } });
   }
-  if (path === "/v1/carts/me") return success(res, { id: "profile-fixture-cart", userId: user.id, status: "ACTIVE", items: [] });
+  if (path === "/v1/carts/me") {
+    return success(res, { id: "profile-header-cart", userId: user.id, status: "ACTIVE", items: [] });
+  }
   return json(res, { title: "Endpoint not modelled", detail: `${req.method} ${path}` }, 501);
 });
 

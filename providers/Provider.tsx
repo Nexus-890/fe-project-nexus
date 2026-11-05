@@ -13,12 +13,12 @@ import { createOidcClient } from "../features/oidc";
 import { createTokenSession, renewalDelay } from "../features/tokenSession";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { getMe, register as registerUser } from "../service/authService";
-import { updateProfile as updateAccountProfile } from "../service/accountService";
-import type { UpdateProfileRequest } from "../types/accountType";
+import { updateProfile as saveProfile } from "../service/accountService";
 import { createAuthStub } from "../mocks/authStub";
 import type { ApiContext } from "../types/commonRequestType";
 import type { ApiError, ApiResult } from "../types/commonResponseType";
 import type { RegisterRequest } from "../types/authRequestType";
+import type { UpdateProfileRequest } from "../types/accountType";
 import type { UserResponse } from "../types/authResponseType";
 import type { AuthContextValue, AuthProviderProps } from "../types/authType";
 import CartProvider from "./CartProvider";
@@ -63,8 +63,8 @@ export function AuthSession({
     let value = 0;
     return { read: () => value, advance: () => ++value };
   });
-  const [profileUpdates] = useState(() => new Set<AbortController>());
   const mounted = useRef(false);
+  const [profileUpdates] = useState(() => new Set<AbortController>());
   const restoreStarted = useRef(false);
   const callback = useRef<{
     url: string;
@@ -131,6 +131,33 @@ export function AuthSession({
     { gcTime: 0, retry: false },
   );
   const { mutateAsync: registerAsync, reset: resetRegistration } = registration;
+
+  const profileUpdate = useApiMutation<UserResponse, {
+    body: UpdateProfileRequest;
+    sessionId: number;
+    controller: AbortController;
+  }>(
+    {
+      mutationKey: ["auth", "update-profile"],
+      execute: ({ body, controller }) => saveProfile(body, {
+        context: requestContext,
+        signal: controller.signal,
+      }),
+      isCurrent: ({ sessionId, controller }) =>
+        generation.read() === sessionId && Boolean(tokens.getAccessToken()) && !controller.signal.aborted,
+    },
+    {
+      gcTime: 0,
+      retry: false,
+      onSuccess: async (user, { sessionId, controller }) => {
+        // An older GET must not overwrite the values returned by the update.
+        await queryClient.cancelQueries({ queryKey: queryKeys.auth.me(sessionId), exact: true });
+        if (generation.read() !== sessionId || controller.signal.aborted || !tokens.getAccessToken()) return;
+        queryClient.setQueryData(queryKeys.auth.me(sessionId), user);
+      },
+    },
+  );
+  const { mutateAsync: saveProfileAsync, reset: resetProfileUpdate } = profileUpdate;
 
   const signIn = useCallback(async (returnTo?: string): Promise<ApiResult<void>> => {
     clearSession();
@@ -215,6 +242,7 @@ export function AuthSession({
     clearSession();
     callback.current = null;
     resetRegistration();
+    resetProfileUpdate();
     try {
       // The adapter retains its in-memory ID token for the end-session request.
       await oidc.signOut();
@@ -222,7 +250,7 @@ export function AuthSession({
     } catch {
       return { ok: false, error: redirectError("Sign out could not be completed. Please try again.") };
     }
-  }, [clearSession, oidc, resetRegistration]);
+  }, [clearSession, oidc, resetProfileUpdate, resetRegistration]);
 
   const register = useCallback(async (payload: RegisterRequest): Promise<ApiResult<UserResponse>> => {
     try {
@@ -295,16 +323,16 @@ export function AuthSession({
   }, [clearSession, generation, oidc, profile.error, session.accessToken, tokens]);
 
   useEffect(() => {
-    const controllers = profileUpdates;
     mounted.current = true;
+    const pendingUpdates = profileUpdates;
     return () => {
       mounted.current = false;
       // StrictMode immediately replays setup; only real unmount invalidates work.
       queueMicrotask(() => {
         if (mounted.current) return;
         generation.advance();
-        controllers.forEach((controller) => controller.abort());
-        controllers.clear();
+        pendingUpdates.forEach((controller) => controller.abort());
+        pendingUpdates.clear();
         tokens.clear();
         void oidc.clearSession().catch(() => {});
         void queryClient.cancelQueries({ predicate: privateQuery });
@@ -324,20 +352,19 @@ export function AuthSession({
     return { ok: true, data: result.data };
   }, [generation, refetchProfile, tokens]);
   const updateProfile = useCallback(async (payload: UpdateProfileRequest): Promise<ApiResult<UserResponse>> => {
-    if (!tokens.getAccessToken()) return { ok: false, error: createCanceledError() };
-    const id = generation.read();
+    const id = session.id;
+    if (generation.read() !== id || !tokens.getAccessToken())
+      return { ok: false, error: createCanceledError() };
     const controller = new AbortController();
     profileUpdates.add(controller);
-    const isCurrent = () => generation.read() === id && !controller.signal.aborted;
     try {
-      const user = await updateAccountProfile(payload, { context: requestContext, signal: controller.signal });
-      if (!isCurrent()) return { ok: false, error: createCanceledError() };
-      await queryClient.cancelQueries({ queryKey: queryKeys.auth.me(id), exact: true });
-      if (!isCurrent()) return { ok: false, error: createCanceledError() };
-      queryClient.setQueryData(queryKeys.auth.me(id), user);
+      const user = await saveProfileAsync({ body: payload, sessionId: id, controller });
+      if (generation.read() !== id || controller.signal.aborted)
+        return { ok: false, error: createCanceledError() };
       return { ok: true, data: user };
     } catch (error: unknown) {
-      if (!isCurrent()) return { ok: false, error: createCanceledError() };
+      if (generation.read() !== id || controller.signal.aborted)
+        return { ok: false, error: createCanceledError() };
       if (!isApiError(error)) throw error;
       if (error.status === 401) {
         clearSession();
@@ -346,8 +373,9 @@ export function AuthSession({
       return { ok: false, error };
     } finally {
       profileUpdates.delete(controller);
+      resetProfileUpdate();
     }
-  }, [clearSession, oidc, queryClient, requestContext, tokens, generation, profileUpdates]);
+  }, [clearSession, oidc, resetProfileUpdate, saveProfileAsync, session.id, generation, tokens, profileUpdates]);
   const isSessionCurrent = useCallback(
     (id: number) => generation.read() === id && Boolean(tokens.getAccessToken()),
     [generation, tokens],

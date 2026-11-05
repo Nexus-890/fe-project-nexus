@@ -1,12 +1,12 @@
 import { createInvalidResponseError, requestApi } from "../configs/api";
-import { isUserResponse } from "./authService";
-import type { ServiceRequestOptions } from "../types/commonRequestType";
+import { isUserResponse, ME_PATH } from "./authService";
 import type { UpdateProfileRequest } from "../types/accountType";
 import type { UserResponse } from "../types/authResponseType";
+import type { ServiceRequestOptions } from "../types/commonRequestType";
 
-export const PROFILE_PATH = "/api/v1/users/me";
+export const PROFILE_PATH = ME_PATH;
 
-/** Proposed contracts only; disabled account features must not call them. */
+/** These account capabilities remain disabled until their contracts are delivered. */
 export const PENDING_ACCOUNT_ENDPOINTS = {
   avatar: "/api/v1/users/me/avatar",
   password: "/api/v1/users/me/password",
@@ -18,12 +18,17 @@ export const updateProfile = async (
   input: UpdateProfileRequest,
   options: ServiceRequestOptions = {},
 ): Promise<UserResponse> => {
-  // Allowlist editable fields so phone, identity and access fields never leak.
+  // Ignore unsupported fields even if a caller passes a wider runtime object.
   const { fullName, email, dateOfBirth, gender, address } = input;
-  const response = await requestApi<unknown>("PUT", PROFILE_PATH, {
-    fullName, email, dateOfBirth, gender, address,
-  }, { ...options, auth: true });
+  const response = await requestApi<unknown>(
+    "PUT",
+    PROFILE_PATH,
+    { fullName, email, dateOfBirth, gender, address },
+    { ...options, auth: true },
+  );
   if (!isUserResponse(response.data))
-    throw createInvalidResponseError("Profile update must return a valid user.");
+    throw createInvalidResponseError(
+      "Profile update must return a valid user.",
+    );
   return response.data;
 };

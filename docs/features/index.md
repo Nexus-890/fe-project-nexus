@@ -3,6 +3,7 @@
 | Feature | Flow and implementation |
 | --- | --- |
 | [Authentication](authentication.md) | Sign-up/sign-in forms, in-memory session, profile retry, logout and account isolation |
+| [Profile](../profile-page.md) | Authenticated profile, supported partial updates, shared header data, validation and retry |
 | [Catalog](catalog.md) | Home/category navigation, listings, URL filters/paging, product/SKU/image presentation |
 | [Product image gallery](product-image-gallery.md) | Ordered detail images, thumbnails, card image fallback and the pending list-image backend dependency |
 | [Cart](cart.md) | Shared header count, snapshot prices, optimistic edit/remove and rollback with session isolation; [implementation report](cart-page-implementation.md) separates dated evidence from pending live acceptance |

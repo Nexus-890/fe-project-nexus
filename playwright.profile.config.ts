@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "postman simulation run postman/simulations/profile.sim.yaml --port 3913 --no-history --output ndjson > profile-simulation.ndjson 2> profile-simulation.err",
+      command: "node tests/profile-fixture.mjs",
       url: "http://127.0.0.1:3913/api/health",
       reuseExistingServer: false,
       timeout: 30_000,
@@ -31,9 +31,9 @@ export default defineConfig({
         NEXT_PUBLIC_API_URL: "http://127.0.0.1:3913",
         API_PROXY_TARGET: "http://127.0.0.1:3913",
         NEXT_PUBLIC_AUTH_STUB: "false",
+        NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_CART_MOCK: "false",
         NEXT_PUBLIC_GUEST_CART_ENABLED: "false",
-        NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_KEYCLOAK_URL: "http://127.0.0.1:3913/keycloak",
         NEXT_PUBLIC_KEYCLOAK_REALM: "nexus",
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: "nexus-web",

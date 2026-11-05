@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { ApiContext } from "./commonRequestType";
 import type { ApiError, ApiResult } from "./commonResponseType";
 import type { RegisterRequest } from "./authRequestType";
-import type { UserResponse } from "./authResponseType";
 import type { UpdateProfileRequest } from "./accountType";
+import type { UserResponse } from "./authResponseType";
 import type { OidcClient } from "../features/oidc";
 
 export type AuthContextValue = {

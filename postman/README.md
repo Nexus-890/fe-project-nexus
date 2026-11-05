@@ -5,34 +5,43 @@ local Postman simulation on port 3913. Install the Postman CLI (1.70.0+) and
 Google Chrome before running it. No Postman login, workspace, deployment, or
 live backend is used.
 
-The locally authored `mocks/profile-gateway` fixture comes from the backend
-in this same repository:
+The locally authored `mocks/profile-gateway` fixture follows the backend on
+`origin/develop` (`0d0a36a4`, inspected on 2026-11-05):
 
+- `be-project-nexus/lib/common-core/.../model/ApiResponse.java`
+- `be-project-nexus/lib/common-web/.../exception/GlobalExceptionHandler.java`
+- `be-project-nexus/user-service/.../iam/AuthController.java`
 - `be-project-nexus/user-service/.../iam/UserController.java`
 - `be-project-nexus/user-service/.../iam/dto/UserResponse.java`
 - `be-project-nexus/user-service/.../iam/dto/UpdateProfileRequest.java`
 
-The simulation also reuses the locally authored `mocks/oidc-keycloak` member
-derived from the committed realm and OIDC protocol fixture. The frontend
-redirects to its provider form and processes the callback; the API fixture
-does not expose a password-login replacement.
+GET/PUT profile success responses use
+`{ "code": 0, "message": "response success", "data": ... }`. The unit-test auth
+stub also uses this envelope for registration. Validation errors remain
+`application/problem+json`, with `errors: [{ field, code, detail }]`; they are
+not wrapped in a success envelope. Health and test control routes return their
+own bare bodies. The shared shop shell uses minimal catalog/cart fixtures
+with the success envelope and catalog page metadata; they do not establish
+live catalog/cart compatibility.
 
-This is our repository's API contract, so discovery of an external owner's
-published mock was unnecessary. The mock preserves the actual `/api/v1/...`
+This is our repository's API contract; the existing local fixture was reused
+without a search for an external owner's published mock. The mock preserves the actual `/api/v1/...`
 URLs: the simulation routes the first `/api` segment to the member, whose
 handler receives `/v1/...`. User writes persist in namespaced `pm.state`,
-and the profile endpoints compare the Bearer token hash issued by the Keycloak
-member through shared namespaced state. Other calls return
-501 instead of inventing product behavior.
+and profile endpoints validate the token hash issued by the reused
+`mocks/oidc-keycloak` member. Apart from the
+minimal shop shell fixtures, unmodelled calls return 501.
 
-The fixture account is `lan.nguyen@example.com` / `profile-password`, entered
-on the local provider form.
+Sign-in uses the application's code + PKCE redirect flow against that local
+Keycloak fixture. Enter `lan.nguyen@example.com` / `Fixture-pass-123!` only on
+the fixture provider's form; the application does not send passwords to an
+API login endpoint. The fixture accepts the nonempty test password and does
+not establish production Keycloak authentication behavior.
+`GET /keycloak/test/reset` resets its protocol state; browser setup resets both members before each scenario.
 `POST /api/__test/reset` resets state; `POST /api/__test/control` injects
 `getDelayMs`, `getStatus`, or `putStatus`. `GET /api/__test/requests` exposes
 the calls for request assertions. These routes exist only inside this local
 fixture, never in the application.
-`GET /keycloak/test/reset` resets the provider member too; the browser setup
-calls both resets before each scenario.
 
 `putStatus: 400` injects a phone field error to verify the FE error renderer.
 The current backend does **not** accept phone in `UpdateProfileRequest`:
@@ -43,7 +52,9 @@ that the current real backend validates phone during profile updates.
 The suite covers OIDC sign-in, header navigation, authenticated GET on profile
 entry, exact changed PUT fields, stateful saves, shared header updates, cancel,
 client validation, phone error placement, loading skeleton, retryable failures,
-session expiry, and 375×812 layout.
+session expiry, preservation of dirty fields during token renewal, and 375×812 layout.
 Screenshots and traces are under `test-results/profile`; request events are
-in `profile-simulation.ndjson`. Generated logs and browser output are ignored
+in `test-results/profile-simulation.ndjson`. Generated logs and browser output are ignored
 by Git. Real backend connectivity remains a separate integration check.
+Contract evidence, assumptions, and the scope of runtime verification are
+recorded in `simulations/profile.context.yaml`.

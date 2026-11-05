@@ -101,6 +101,198 @@ assumptions:
       the deployed gateway is still needed.
     source: service/accountService.ts; playwright.profile.config.ts
     updated_at: '2026-11-04'
+  - id: auth-profile-success-envelope
+    status: supported
+    claim: >-
+      The backend contract at develop-contract-20261103 wraps successful login,
+      registration, and GET/PUT users/me DTOs in code, message, and data properties.
+    reason: >-
+      The controllers explicitly return ApiResponse.of, and ApiResponse defines
+      code 0 and message response success as defaults while retaining the DTO in data.
+    verification: >-
+      On 2026-11-03, read the backend source at origin/develop 6e92bbac using
+      git show. This establishes the source contract only. No live backend
+      requests were made. The local mock and auth stub were updated to model it.
+    source: >-
+      origin/develop:be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java:7-25;
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/AuthController.java:27-37;
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java:31-39;
+      postman/mocks/profile-gateway/default.js; tests/fixtures/auth-stub.ts
+    updated_at: "2026-11-03"
+  - id: validation-error-wire-shape
+    status: supported
+    claim: >-
+      The backend validation contract at develop-contract-20261103 returns
+      application/problem+json with errors entries containing field, code, and detail.
+    reason: >-
+      GlobalExceptionHandler constructs ValidationError records with these three
+      fields and sends ProblemDetail without the success envelope.
+    verification: >-
+      On 2026-11-03, read GlobalExceptionHandler at origin/develop 6e92bbac.
+      No live backend error response was requested. The local fixture now uses
+      the same wire field names; fixture codes are representative test values.
+    source: >-
+      origin/develop:be-project-nexus/lib/common-web/src/main/java/com/group5/common_web/exception/GlobalExceptionHandler.java:57-74,120-139;
+      postman/mocks/profile-gateway/default.js; tests/fixtures/auth-stub.ts
+    updated_at: "2026-11-03"
+  - id: caller-handles-current-contract
+    status: supported
+    claim: >-
+      The real Next.js frontend can sign in, populate the profile form, save a
+      changed name, update the shared header, and render field errors using the
+      current auth and profile wire contract in this simulation.
+    reason: >-
+      The real frontend passed all nine profile browser scenarios against the
+      updated local simulation. The success path asserts envelopes on the wire,
+      form and header values after saves, and field-error placement for detail.
+      Support is limited to the scenarios run against these local fixtures.
+    verification: >-
+      On 2026-11-03 at fixture-edit-20261103, npm run test:profile passed 9/9
+      browser tests and npm run test:auth passed 41/41 tests. Inspection of
+      profile-simulation.ndjson confirmed eight POST login 200, 23 GET me 200,
+      two PUT me 200, one PUT 400, one PUT 401, one PUT 503 and two GET 503
+      events. No live backend runtime behavior is established by this run.
+      On 2026-11-05 at profile-merge-20261105, npm run test:profile passed 9/9
+      browser tests after the flat architecture and OIDC migration. The simulation
+      log recorded eight provider token exchanges (200), 23 GET me (200), two
+      GET me (503), two PUT me (200), and one each PUT 400, 401 and 503. No
+      POST API password login occurred. This re-establishes the UI behavior
+      against the new fixtures only; live backend verification remains pending.
+      On 2026-11-05 at profile-guest-cart-conflict-resolution, all nine profile
+      scenarios passed after merging develop ff2a4986. The inspected simulation
+      log contained 23 successful GET me responses, two GET 503 responses,
+      two successful PUT me responses and one each PUT 400, 401 and 503.
+      The run used temporary isolated app/API ports 13103/13913; fixture and
+      test port edits were restored afterwards. This is local fixture evidence.
+      On 2026-11-05 at profile-session-develop-merge, the profile browser suite
+      passed 10/10 in 39.0 seconds on temporary app/API ports 3153/3963, restored
+      after the run. It adds proactive 120-second renewal coverage: dirty fields
+      survive without another profile read and save through the renewed token.
+      Persistent PUT 401 produces two PUTs, one renewal, no saved changes and
+      no remote logout. The controlled clock is resumed before saving so queued
+      TanStack state notifications can run; an earlier paused-clock attempt
+      had returned correct PUT 200 data but held the UI notification. Before
+      the next general runner cleaned the ignored output, log inspection found
+      one listening event and 191 requests: token POST 200 (11), profile GET
+      200 (26)/401 (1)/503 (2), PUT 200 (3)/400 (1)/401 (2)/503 (1).
+    source: >-
+      tests/profile.spec.ts; playwright.profile.config.ts;
+      postman/simulations/profile.sim.yaml; postman/mocks/profile-gateway/default.js
+    updated_at: "2026-11-05"
+  - id: profile-phone-error-is-synthetic
+    status: supported
+    claim: >-
+      The injected phone validation response tests field-error placement only;
+      the backend update DTO at develop-contract-20261103 does not accept phone updates.
+    reason: >-
+      UpdateProfileRequest declares only fullName, dateOfBirth, gender, address,
+      and email, and ignores unknown fields. The mock's putStatus 400 control
+      deliberately supplies a phone error independently of submitted fields.
+    verification: >-
+      On 2026-11-03, inspected UpdateProfileRequest at origin/develop 6e92bbac
+      and the local profile-gateway handler. This is source evidence; it does not
+      demonstrate that a real backend rejects a profile update because of phone.
+    source: >-
+      origin/develop:be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java:12-33;
+      postman/mocks/profile-gateway/default.js; tests/browser/profile.spec.ts
+    updated_at: "2026-11-03"
+  - id: oidc-profile-integration
+    status: supported
+    claim: >-
+      In the local browser scenarios, the application signs in through the
+      Keycloak code and PKCE flow and sends the resulting Bearer token to GET/PUT
+      users/me; the profile API fixture validates the issued token hash.
+    reason: >-
+      The profile simulation reuses the existing oidc-keycloak member rather than
+      restoring the obsolete API password login. Both mocks share namespaced
+      simulation state for token verification. The source backend controller
+      still returns ApiResponse for GET and PUT users/me and its UpdateProfile
+      DTO retains the five supported editable fields.
+    verification: >-
+      On 2026-11-05 at profile-merge-20261105, read UserController and
+      UpdateProfileRequest from the incoming develop tree, then ran all nine
+      profile browser scenarios against the real Next application. Request
+      history and the simulation log confirm code exchanges and authenticated
+      profile loads/saves, including recoverable failures and 401 expiry. This
+      is local protocol evidence, not real Keycloak or backend runtime evidence.
+    source: >-
+      tests/profile.spec.ts; playwright.profile.config.ts;
+      postman/mocks/profile-gateway/default.js; postman/mocks/oidc-keycloak/default.js;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java
+    updated_at: "2026-11-05"
+  - id: profile-session-renewal-boundary
+    status: supported
+    claim: >-
+      The profile workflow uses the shared token coordinator and originating
+      auth generation for saves, so normal token rotation preserves its cache
+      while an ended session cancels registered updates and rejects late results.
+    reason: >-
+      The merged Provider uses scoped request-context accessors, guarded generic
+      profile mutations and an AbortController registry. The common HTTP boundary
+      owns renewal and one protected-request replay; accountService does not
+      introduce a separate token or session store.
+    verification: >-
+      On 2026-11-05 inspected the profile/session merge at the
+      profile-session-develop-merge fingerprint, including Provider, tokenSession,
+      configs/api.ts and the existing session-restore documentation. This is a
+      source-level ownership/lifecycle finding. The exported source baseline
+      passed 99/99 unit tests; the merged suite passed 138/138, generated DTO
+      drift and fresh-route typecheck passed. The profile page now revalidates
+      on session readiness rather than each token replacement; its fixture
+      validates actual token expiry with the shared controlled clock. The current
+      profile run passed 10/10 and the dedicated OIDC/guest/session run passed
+      24/24; the main browser run passed 31/31. Lint, generated DTO drift,
+      fresh-route typecheck and the isolated production build passed. The
+      build generated all 13 pages, including the silent callback and excluding
+      temporary probe routes. Their evidence is recorded separately from
+      historical profile passes; no live backend/session restoration result
+      is implied.
+    source: >-
+      providers/Provider.tsx; features/tokenSession.ts; configs/api.ts;
+      service/accountService.ts; docs/features/session-restore.md;
+      tests/profile.spec.ts; tests/session.spec.ts; tests/token-retry.test.ts
+    updated_at: "2026-11-05"
+  - id: merged-profile-fixture-expiry-model
+    status: supported
+    claim: >-
+      The reconciled profile HTTP stand-in checks both the issued token hash and token expiry
+      against the Keycloak fixture clock before serving private profile or cart data.
+    reason: >-
+      The incoming fixture adds expiry and controlled-clock checks while the cart branch supplies
+      the shared Problem Details code/type defaults. Both describe the local dependency model;
+      they do not establish live backend acceptance or caller behavior after this merge.
+    verification: >-
+      On 2026-11-05 at cart-profile-develop-reconciliation, compared both profile gateway handlers
+      and the committed GlobalExceptionHandler. Retained the incoming expiry checks and test user
+      inspection route, the branch's error metadata, and both histories above. No browser scenario
+      was run during this source-only reconciliation; runtime evidence is recorded separately below.
+    source: >-
+      postman/mocks/profile-gateway/default.js; postman/mocks/oidc-keycloak/default.js;
+      ../be-project-nexus/lib/common-web/src/main/java/com/group5/common_web/exception/GlobalExceptionHandler.java
+    updated_at: '2026-11-05'
+  - id: merged-cart-profile-browser-flow
+    status: supported
+    claim: >-
+      The merged cart/profile frontend retains dirty profile fields during token renewal and
+      clears local authentication after one renewal and one replay of a persistent save-time 401
+      in the ten local profile browser scenarios exercised.
+    reason: >-
+      The real Next.js caller passed the profile suite against the shared local Keycloak and
+      profile gateway stand-ins. UI assertions and observed HTTP calls establish these caller
+      outcomes under the fixture contract only.
+    verification: >-
+      On 2026-11-05 at cart-profile-develop-reconciliation, npm run test:profile passed 10/10 in
+      38.2 seconds. The profile log contained one listening event and 190 requests: profile GET
+      200 (26)/401 (1)/503 (2), PUT 200 (3)/400 (1)/401 (2)/503 (1), cart GET 200 (9), and token
+      POST 200 (11). The renewal scenario retained dirty fields and saved with the renewed token;
+      persistent PUT 401 retried once and cleared local state without remote logout. Generated DTO
+      drift, lint and fresh-route typecheck passed; unit tests passed 152/152 versus the 147-test
+      branch baseline. No live backend or Keycloak runtime was exercised.
+    source: >-
+      tests/profile.spec.ts; playwright.profile.config.ts; providers/Provider.tsx;
+      test-results/profile-simulation.ndjson (generated, ignored); tests/profile-fixture.mjs
+    updated_at: '2026-11-05'
 fingerprints:
   - id: develop-merge
     date: '2026-11-04'
@@ -121,4 +313,28 @@ fingerprints:
     commit: >-
       e0149a94 with uncommitted merge of origin/develop 1dd23dd3 and Cart/profile/session
       reconciliation
+    cli: 1.73.0
+  - id: develop-contract-20261103
+    date: "2026-11-03"
+    commit: "6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop; source inspected with git show)"
+    cli: "Postman CLI 1.73.0"
+  - id: fixture-edit-20261103
+    date: "2026-11-03"
+    commit: "d1521c1f81890c84fbf4dd7ad316e9a8d0fc5f04 plus uncommitted fixture and frontend integration edits in the isolated profile worktree"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-merge-20261105
+    date: "2026-11-05"
+    commit: "0ee537b3 plus uncommitted merge of develop 0d0a36a4 and profile/auth integration edits"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-guest-cart-conflict-resolution
+    date: "2026-11-05"
+    commit: "b16dc0b2 with uncommitted merge of origin/develop ff2a4986 and HeaderTopBar/playwright conflict resolutions"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-session-develop-merge
+    date: "2026-11-05"
+    commit: "6357abb5 with uncommitted merge of origin/develop 1dd23dd3 and guarded profile/session integration"
+    cli: "Postman CLI 1.73.0"
+  - id: cart-profile-develop-reconciliation
+    date: '2026-11-05'
+    commit: 450acf43 with uncommitted merge of origin/develop 00f94a19 and profile/cart conflict resolutions
     cli: 1.73.0
