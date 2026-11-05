@@ -1,6 +1,8 @@
 # Nexus frontend
 
-Next.js App Router frontend for the Nexus marketplace. The current UI includes registration, Keycloak OIDC sign-in with PKCE, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
+Next.js App Router frontend for the Nexus marketplace. The current UI includes registration, Keycloak OIDC sign-in with PKCE, editable profile details, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal and a shared header count. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
+
+Access, ID and refresh tokens stay in memory. On reload, the client checks the Keycloak SSO session with prompt=none, then loads the profile. One shared renewal coordinator renews before expiry and permits one retry after a protected 401. See [session restore](docs/features/session-restore.md) and [guest cart](docs/features/guest-cart.md).
 
 ## Guest cart
 
@@ -32,6 +34,11 @@ Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUB
 
 Explicit auth/product/cart development fixtures are blocked in production. The auth stub supplies registration/profile responses to injected test adapters; it does not replace the Keycloak redirect flow or provision real accounts.
 
+Signed-in users can open `/profile` from the header or My Nexus, edit supported
+personal information and save to the shared profile/header query. Phone is read-only;
+avatar, password, reputation and penalties await backend support. See the
+[profile page](docs/profile-page.md) and [verification](docs/profile-verification.md).
+
 ## Code layout
 
 ```text
@@ -39,7 +46,7 @@ app/          Route tree, layouts and boundaries
 components/   UI and pure presentation helpers
 configs/      Single api.ts and queryKeys.ts
 features/     Page orchestration, schemas and catalog helpers
-hooks/        useApi.ts and useAuth.ts
+hooks/        Shared API/auth hooks and session-scoped Cart state
 providers/    Provider.tsx
 service/      Pure domain API functions and parsers
 types/        Flat generated DTOs, domain types and application contracts
@@ -60,6 +67,8 @@ npm run lint
 npm run typecheck
 npm run test:auth
 npm run test:catalog
+npm run test:cart
+npm run test:profile
 npm run test:auth:browser
 npm run build
 ```
@@ -72,9 +81,9 @@ Verified rebuild on 2026-10-30: lint, regenerated-route typecheck, generated DTO
 
 ## Contracts and known limits
 
-Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart reuses the shared HTTP boundary and delivered DTO fields. Its `CART_API_BASE_URL` in `service/cartService.ts` is intentionally blank for the user to fill. Merged BE #111 source now has PUT/DELETE mappings, but stale DTO imports/build issues, authentication binding and the bare PUT response still block compatible integration; delivered OpenAPI still documents only GET/POST. Read the [Cart handoff](docs/features/cart.md#api-configuration) and [implementation report](docs/features/cart-page-implementation.md). [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records coordinated release as pending.
+Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart reuses the shared HTTP boundary and delivered DTO fields. Its `CART_API_BASE_URL` in `service/cartService.ts` is intentionally blank for the user to fill. Delivered OpenAPI now includes GET/POST/PUT/DELETE and the controller wraps PUT in the shared envelope. Live authenticated Cart acceptance remains unverified; PUT/DELETE principal binding still differs from GET/POST. Read the [Cart handoff](docs/features/cart.md#api-configuration) and dated [implementation report](docs/features/cart-page-implementation.md). [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records coordinated release as pending.
 
-The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require compatible BE build/contract/auth behavior. Working checkout, payment, auction bidding and password-recovery UI remain outside scope. Full refresh requires signing back in because auth stays in memory.
+The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require authenticated runtime verification. Working checkout, payment, auction bidding and password-recovery UI remain outside scope. Full refresh requires signing back in because auth stays in memory.
 
 Product detail already consumes image URLs from its real GET endpoint. Product cards support optional list images, but the delivered product list response currently has none; those cards keep the placeholder until BE upload task #122 supplies image data. See [product image gallery](docs/features/product-image-gallery.md) for ordering, fallback, reserved media dimensions and verification scope. The API base URL still defaults to `""` when neither public API environment variable is set; service paths use the existing product endpoints.
 

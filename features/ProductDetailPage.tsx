@@ -110,7 +110,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
       setCartMessage(null);
       return;
     }
-    if (!sku || cart.adding || cart.loading || status === "authenticating" || status === "error") return;
+    if (!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error") return;
     setCartMessage(null);
     setSignInPrompt(null);
     const isCurrent = () => activeSession.current?.sessionId === sessionId &&
@@ -210,7 +210,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
           <button
             type="button"
             onClick={() => void handleAddToCart()}
-            disabled={!sku || cart.adding || cart.loading || status === "authenticating" || status === "error"}
+            disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
             {cart.adding ? "Adding…" : "Add to Cart"}

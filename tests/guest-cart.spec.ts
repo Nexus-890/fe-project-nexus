@@ -2,8 +2,8 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 
 // These scenarios exercise the real frontend against the proposed guest/merge
 // contract in the local HTTP fixture. They do not establish backend readiness.
-const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}`;
-const app = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT ?? 3103}`;
+const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
+const app = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3103"}`;
 const productPath = "/products/fixture-tablet-00000004-1111-4111-8111-111111111111";
 const storageKey = "nexus.cart.guest";
 

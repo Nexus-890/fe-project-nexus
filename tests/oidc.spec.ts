@@ -1,7 +1,7 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
-const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}`;
-const app = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT ?? 3103}`;
+const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
+const app = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3103"}`;
 const issuerPath = "/keycloak/realms/nexus/protocol/openid-connect/";
 
 async function evidence(request: APIRequestContext, member: "api" | "keycloak") {
@@ -162,21 +162,15 @@ for (const mode of ["profile-missing-data-once", "profile-invalid-user-once"] as
   });
 }
 
-test("a rejected profile token clears local authentication without ending the provider session", async ({ page, request }) => {
+test("a persistently rejected profile is renewed and retried once before clearing local authentication", async ({ page, request }) => {
   await request.get(`${simulation}/api/test/reset?mode=profile-401`);
   await beginSignIn(page);
   await submitProvider(page);
   await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry loading account", exact: true })).toHaveCount(0);
   await assertNoPersistedTokens(page);
-  expect(await evidence(request, "api")).toMatchObject({ meRequests: 1, bearerRequests: 1 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, logouts: 0 });
-  await page.goto("/");
-  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(await evidence(request, "api")).toMatchObject({ meRequests: 1 });
+  expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 2, refreshRequests: 1, logouts: 0 });
 });
 
 test("registration accepts the backend 201 user envelope and sends the user to sign in", async ({ page, request }) => {

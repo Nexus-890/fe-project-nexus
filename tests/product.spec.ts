@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-const appOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT ?? 3102}`;
-const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}/keycloak`;
+const appOrigin = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3102"}`;
+const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}/keycloak`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,6 +103,23 @@ const installAuth = async (page: Page) => {
         createdAt: "2026-10-30T00:00:00Z",
       }),
     );
+  });
+  // Complete this harness's authenticated header without the separate inbox
+  // fixture rejecting its token and triggering an unrelated session renewal.
+  await page.route("**/api/v1/notifications**", (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    expect(route.request().method()).toBe("GET");
+    expect(account.authorization).toMatch(/^Bearer .+$/);
+    expect(route.request().headers().authorization).toBe(account.authorization);
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/notifications/unread-count")
+      return fulfillJson(route, envelope({ count: 0 }));
+    expect(path).toBe("/api/v1/notifications");
+    return fulfillJson(route, {
+      ...envelope([]),
+      page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    });
   });
   // The authenticated header reads the cart independently of the add-item flow.
   await page.route("**/api/v1/carts/me", (route) => {
@@ -370,7 +387,7 @@ test("logout during a pending cart request keeps the next account free of stale 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(`${appOrigin}/sign-in?returnTo=%2F`);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     account.id = "buyer-2";
     account.name = "Second Buyer";
     await signIn(page, account.name);

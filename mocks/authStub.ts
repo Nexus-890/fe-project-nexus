@@ -42,7 +42,8 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
     throw new Error("The auth stub is disabled in production.");
   }
   const users = new Map<string, StoredUser>();
-  const tokens = new Map<string, string>();
+  // Sessions follow the user identity when their editable email changes.
+  const tokens = new Map<string, StoredUser>();
   const stubId = createRuntimeId();
   const lockedEmails = new Set((options.lockedEmails ?? []).map((email) => email.toLowerCase()));
   let nextUserId = 1;
@@ -72,13 +73,17 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
       }
 
       const now = new Date().toISOString();
+      const gender = validation.data.gender;
+      if (gender !== "MALE" && gender !== "FEMALE" && gender !== "OTHER") {
+        return json(problem(400, "Validation Failed", "The request data is invalid", path, { gender: ["Invalid gender"] }), 400);
+      }
       const user: StoredUser = {
         id: `${stubId}-user-${nextUserId}`,
         email,
         phone: validation.data.phone,
         fullName: validation.data.fullName,
         roles: [options.defaultRole ?? "BUYER"],
-        gender: validation.data.gender,
+        gender,
         address: validation.data.address,
         dateOfBirth: validation.data.dateOfBirth,
         status: "ACTIVE",
@@ -116,7 +121,7 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
       }
 
       const accessToken = `${stubId}.${createRuntimeId()}.${user.id}`;
-      tokens.set(accessToken, email);
+      tokens.set(accessToken, user);
 
       const response: AuthStubLoginResponse = {
         accessToken,
@@ -127,19 +132,34 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
       return json(response);
     }
 
-    if (method === "GET" && path === "/api/v1/users/me") {
+    if ((method === "GET" || method === "PUT") && path === "/api/v1/users/me") {
       const authorization = request.headers.get("Authorization") ?? "";
       const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-      const email = tokens.get(token);
-
-      if (!email) {
-        return json(problem(401, "Unauthorized", "Missing or invalid access token", path), 401);
-      }
-
-      const user = users.get(email);
+      const user = tokens.get(token);
 
       if (!user) {
         return json(problem(401, "Unauthorized", "Missing or invalid access token", path), 401);
+      }
+
+      if (method === "PUT") {
+        const body = await readRequestBody(request);
+        if (!isRecord(body)) {
+          return json(problem(400, "Invalid Request Body", "The request body is invalid or malformed", path), 400);
+        }
+        const validation = validateProfileBody(body);
+        if (!validation.ok) {
+          return validation.fieldErrors
+            ? json(problem(400, "Validation Failed", "The request data is invalid", path, validation.fieldErrors), 400)
+            : json(problem(400, "Invalid Request Body", "The request body is invalid or malformed", path), 400);
+        }
+        const owner = validation.data.email ? users.get(validation.data.email) : undefined;
+        if (owner && owner !== user) {
+          return json(problem(409, "Conflict", "email is already used", path), 409);
+        }
+        // Validate everything before changing the stored object, like BE's atomic update.
+        users.delete(user.email);
+        Object.assign(user, validation.data);
+        users.set(user.email, user);
       }
 
       return json(toUserResponse(user));
@@ -221,6 +241,44 @@ function validateLoginBody(value: Record<string, unknown>): { ok: true; data: Au
       password: readStringField(value, "password"),
     },
   };
+}
+
+type ProfileUpdate = Partial<Pick<UserResponse, "fullName" | "email" | "dateOfBirth" | "gender" | "address">>;
+
+function validateProfileBody(value: Record<string, unknown>): { ok: true; data: ProfileUpdate } | { ok: false; fieldErrors?: FieldErrors } {
+  const data: ProfileUpdate = {};
+  const fieldErrors: FieldErrors = {};
+  for (const field of ["fullName", "email", "address"] as const) {
+    const supplied = value[field];
+    if (supplied === null || supplied === undefined) continue;
+    if (typeof supplied !== "string") return { ok: false };
+    const normalized = supplied.trim();
+    data[field] = field === "email" ? normalized.toLowerCase() : normalized;
+  }
+  if (data.fullName !== undefined && (data.fullName.length < 1 || data.fullName.length > 150)) {
+    fieldErrors.fullName = ["Full name must contain 1 to 150 characters"];
+  }
+  if (data.email !== undefined) {
+    if (data.email.length < 1 || data.email.length > 255) {
+      fieldErrors.email = ["Email must contain 1 to 255 characters"];
+    } else if (!/^[^\s@]+@[^\s@]+$/.test(data.email)) {
+      fieldErrors.email = ["Invalid email address"];
+    }
+  }
+  if (value.gender !== null && value.gender !== undefined) {
+    if (value.gender !== "MALE" && value.gender !== "FEMALE" && value.gender !== "OTHER") return { ok: false };
+    data.gender = value.gender;
+  }
+  if (value.dateOfBirth !== null && value.dateOfBirth !== undefined) {
+    if (typeof value.dateOfBirth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.dateOfBirth)) return { ok: false };
+    const parsed = new Date(`${value.dateOfBirth}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value.dateOfBirth) return { ok: false };
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (value.dateOfBirth > today) fieldErrors.dateOfBirth = ["Date of birth must not be in the future"];
+    data.dateOfBirth = value.dateOfBirth;
+  }
+  return Object.keys(fieldErrors).length ? { ok: false, fieldErrors } : { ok: true, data };
 }
 
 function toUserResponse(user: StoredUser): UserResponse {

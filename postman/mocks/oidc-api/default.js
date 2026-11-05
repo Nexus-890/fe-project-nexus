@@ -10,7 +10,7 @@ const initial = () => ({
   meRequests: 0, bearerRequests: 0, passwordLeaks: 0, loginRequests: 0, registrations: 0,
   guestCreationRequests: 0, guestCreations: 0, guestReads: 0, guestAdds: 0,
   guestBearerLeaks: 0, cartReads: 0, cartAdds: 0, mergeRequests: 0, mergesApplied: 0,
-  mergeKeys: [], mergePaths: [],
+  mergeKeys: [], mergePaths: [], protectedRequests: 0, protectedRetries: 0, protectedCalls: [],
 });
 const user = {
   id: "68000000-0000-4000-8000-000000000003", email: "buyer@nexus.local", phone: "0901234567",
@@ -41,6 +41,7 @@ let mode = "success";
 let guests = {};
 let merged = {};
 let buyerCart = seededCart();
+let protectedAttempts = {};
 
 function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -59,18 +60,25 @@ function problem(res, status, code, title, detail, errors) {
 const total = (cart) => cart.items.reduce((count, item) => count + item.quantity, 0);
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT ?? 3103}`);
+  res.setHeader("Access-Control-Allow-Origin", process.env.NEXUS_TEST_APP_PORT
+    ? `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT}`
+    : process.env.NEXUS_OIDC_APP_ORIGIN || "http://127.0.0.1:3103");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Guest-Token, Idempotency-Key");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
-  const url = new URL(req.url, `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}`);
+  const url = new URL(req.url, `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? process.env.NEXUS_OIDC_SIM_PORT ?? 3913}`);
   if (url.pathname === "/test/reset") {
     evidence = initial();
     mode = url.searchParams.get("mode") || "success";
     guests = {};
     merged = {};
     buyerCart = seededCart();
+    protectedAttempts = {};
     return json(res, {});
+  }
+  if (url.pathname === "/test/control") {
+    if (url.searchParams.has("mode")) mode = url.searchParams.get("mode");
+    return json(res, { mode });
   }
   if (url.pathname === "/test/evidence") return json(res, { ...evidence, buyerQuantity: total(buyerCart) });
   const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
@@ -79,9 +87,31 @@ const server = http.createServer(async (req, res) => {
   const authorization = req.headers.authorization || "";
   const validBearer = async () => {
     const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+    const expiry = await pm.state.get("oidc-keycloak:access-token-expiry");
+    const time = await pm.state.get("oidc-keycloak:clock-time") ?? Date.now();
     return Boolean(authorization.startsWith("Bearer ") && expectedHash
-      && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
+      && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash
+      && typeof expiry === "number" && expiry > Math.floor(time / 1000));
   };
+  if (url.pathname === "/v1/test/protected") {
+    const key = url.searchParams.get("key") || "request";
+    const attempt = (protectedAttempts[key] || 0) + 1;
+    protectedAttempts[key] = attempt;
+    evidence.protectedRequests += 1;
+    if (attempt > 1) evidence.protectedRetries += 1;
+    const bearer = await validBearer();
+    const reject = !bearer || mode === "protected-401-always"
+      || (mode === "protected-401-once" && attempt === 1);
+    evidence.protectedCalls.push({ key, attempt, status: reject ? 401 : 200, bearer });
+    // One first response deliberately arrives after the successful renewal.
+    // The client must reuse the newer token rather than renew a second time.
+    if (reject && attempt === 1 && mode === "protected-401-once") {
+      await new Promise((resolve) => setTimeout(resolve, key === "c" ? 350 : 30));
+    }
+    return reject
+      ? problem(res, 401, "UNAUTHENTICATED", "Unauthorized", "A valid access token is required to access this resource")
+      : json(res, success({ accepted: true, key }));
+  }
   if (url.pathname === "/v1/users/me") {
     evidence.meRequests += 1;
     const bearer = await validBearer();
@@ -178,6 +208,7 @@ const server = http.createServer(async (req, res) => {
   await pm.state.set("oidc-api:evidence", evidence);
   if (url.pathname === "/v1/categories/tree") return json(res, success([]));
   if (url.pathname === "/v1/products") return json(res, success([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
+  if (url.pathname === `/v1/products/${productId}/skus/${skuId}`) return json(res, success(product.skus[0]));
   if (url.pathname === `/v1/products/${productId}`) return json(res, success(product));
   return problem(res, 501, "NOT_IMPLEMENTED", "Not Implemented", "Fixture endpoint not implemented");
 });

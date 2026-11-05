@@ -1,24 +1,34 @@
 import { defineConfig } from "@playwright/test";
 
-const appPort = Number(process.env.NEXUS_TEST_APP_PORT ?? 3102);
+const appOrigin = process.env.NEXUS_TEST_APP_PORT
+  ? `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT}`
+  : process.env.NEXUS_OIDC_APP_ORIGIN || "http://127.0.0.1:3102";
+const appPort = new URL(appOrigin).port || "80";
 const apiPort = Number(process.env.NEXUS_TEST_API_PORT ?? 3911);
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
-const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}/keycloak`;
+const providerPort = process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913";
+const providerOrigin = `http://127.0.0.1:${providerPort}/keycloak`;
+
+// Keep the catalog/notification and OIDC fixture environment aliases aligned.
+process.env.NEXUS_TEST_APP_PORT = appPort;
+process.env.NEXUS_OIDC_APP_ORIGIN = appOrigin;
+process.env.NEXUS_TEST_PROVIDER_PORT = providerPort;
+process.env.NEXUS_OIDC_SIM_PORT = providerPort;
 
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
-  testIgnore: ["**/oidc.spec.ts", "**/guest-cart.spec.ts"],
+  testIgnore: ["**/cart-shared.spec.ts", "**/profile.spec.ts", "**/oidc.spec.ts", "**/guest-cart.spec.ts", "**/session.spec.ts", "**/session-long.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
-  use: { baseURL: `http://127.0.0.1:${appPort}`, channel: "chrome", viewport: { width: 375, height: 812 } },
+  use: { baseURL: appOrigin, channel: "chrome", viewport: { width: 375, height: 812 } },
   webServer: [
     { command: "node tests/oidc-fixture.mjs", url: `${providerOrigin}/health`, reuseExistingServer: false, timeout: 60_000 },
     { command: "node tests/catalog-fixture.mjs", url: `${apiOrigin}/health`, reuseExistingServer: false },
     {
       command: `node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port ${appPort}`,
-      url: `http://127.0.0.1:${appPort}`,
+      url: appOrigin,
       reuseExistingServer: false,
       timeout: 120_000,
       env: {

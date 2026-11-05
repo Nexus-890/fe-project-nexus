@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 
-const appOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT ?? 3102}`;
-const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}/keycloak`;
+const appOrigin = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3102"}`;
+const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}/keycloak`;
 
 // These expected update/remove responses are explicit browser stand-ins. They
 // do not establish live compatibility with #111's current auth/envelope code.
@@ -77,6 +77,23 @@ async function installCart(page: Page, title = productName) {
       address: null, dateOfBirth: null, roles: ["BUYER"], status: "ACTIVE",
       createdAt: "2026-11-02T00:00:00Z",
     }));
+  });
+  // This harness owns the signed-in header's private dependencies. An unrelated
+  // notification fixture must not reject its token and trigger session renewal.
+  await page.route("**/api/v1/notifications**", (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    expect(route.request().method()).toBe("GET");
+    expect(state.account.authorization).toMatch(/^Bearer .+$/);
+    expect(route.request().headers().authorization).toBe(state.account.authorization);
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/notifications/unread-count")
+      return json(route, envelope({ count: 0 }));
+    expect(path).toBe("/api/v1/notifications");
+    return json(route, {
+      ...envelope([]),
+      page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    });
   });
   await page.route("**/api/v1/products/*", (route) => {
     if (new URL(route.request().url()).pathname !== `/api/v1/products/${productId}`)
@@ -194,7 +211,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   expect(state.reads).toEqual([]);
   expect(state.writes).toEqual([]);
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
 });
 
 test("cart displays snapshot unit and line prices with a disabled checkout at desktop", async ({ page }, info) => {
@@ -246,7 +263,7 @@ test("quantity changes subtotal before the response and rejection restores the s
   }
 });
 
-test("successful quantity edit survives navigation and refresh followed by signing back in", async ({ page }) => {
+test("successful quantity edit survives navigation, session restoration and explicit sign-out", async ({ page }) => {
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
   const line = page.getByTestId(`cart-line-${lineId}`);
@@ -265,7 +282,15 @@ test("successful quantity edit survives navigation and refresh followed by signi
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  const readsBeforeRestore = state.reads.length;
   await page.reload();
+  await expect(page.getByText(`Hi ${state.account.name}`, { exact: true })).toBeVisible();
+  await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
   const readsBeforeLogin = state.reads.length;
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
@@ -370,7 +395,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(`${appOrigin}/sign-in?returnTo=%2F`);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";
     await signIn(page, state.account.name);
