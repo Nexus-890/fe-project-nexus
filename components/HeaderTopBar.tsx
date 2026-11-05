@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 
@@ -9,13 +8,11 @@ function HeaderTopBar({
   user,
   authenticating,
   onSignOut,
+  cartQuantity,
   notificationBell,
 }: HeaderProps) {
-  const router = useRouter();
-
   function signOut() {
     onSignOut();
-    router.push("/sign-in");
   }
 
   return (
@@ -124,14 +121,15 @@ function HeaderTopBar({
             </button>
           </nav>
           {notificationBell}
-          <nav aria-label="Shopping cart" className="hidden sm:flex">
-            <button
-              type="button"
-              aria-label="Shopping cart"
+          <nav aria-label="Shopping cart" className="flex">
+            <Link
+              href="/cart"
+              aria-label={cartQuantity === undefined ? "Shopping cart" : `Shopping cart, ${cartQuantity} items`}
               className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
             >
               <ShoppingCart size={19} aria-hidden="true" />
-            </button>
+              {cartQuantity !== undefined && cartQuantity > 0 && <span aria-hidden="true" className="absolute right-0 top-0 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium leading-4 text-primary-foreground">{cartQuantity > 99 ? "99+" : cartQuantity}</span>}
+            </Link>
           </nav>
         </div>
       </div>

@@ -1,14 +1,17 @@
 import { formatVND } from "./formatPrice";
 import Link from "next/link";
+import ProductImage from "./ProductImage";
+import { sortProductImages } from "./productImageUtils";
 
 import type { ProductSummary } from "@/types/catalogResponseType";
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice">;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "images">;
 };
 
 export function ProductCard({ product }: ProductCardProps) {
   const price = formatVND(product.minPrice);
+  const firstImage = sortProductImages(product.images)[0];
 
   return (
     <article
@@ -19,11 +22,15 @@ export function ProductCard({ product }: ProductCardProps) {
         href={`/products/${encodeURIComponent(product.slug)}?id=${encodeURIComponent(product.id)}`}
         className="block min-w-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
       >
-        <div
-          className="h-[232px] bg-muted"
-          role="img"
-          aria-label="Product image placeholder"
-        />
+        <div className="h-[232px] overflow-hidden bg-muted">
+          <ProductImage
+            key={firstImage?.imageUrl ?? "empty"}
+            src={firstImage?.imageUrl}
+            alt={product.name}
+            productName={product.name}
+            loading="lazy"
+          />
+        </div>
         <div className="flex flex-col gap-1.5 px-3 pt-3 pb-[14px]">
           <h3 className="m-0 text-sm font-normal leading-5 [overflow-wrap:anywhere]">
             {product.name}

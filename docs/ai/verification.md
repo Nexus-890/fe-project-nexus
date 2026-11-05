@@ -94,3 +94,48 @@ Verified on `fsa_ChungTQ/chore/196-fe-notification-bell`, starting at `b7b2b945`
 Browser verification used ports 3116/3916 and `.next-catalog-notification`; the runner restored tsconfig and removed its temporary smoke route. The [Postman instructions](../../postman/README.md) and [context](../../postman/simulations/notification.context.yaml) document repeatable HTTP verification. The CLI was signed out, so the simulation was built from repository contracts/source without searching published owner mocks. CLI 1.73.0 does not support `postman status`.
 
 These are local fixture/simulation results. No live gateway or notification service was listening on the checked local ports (8080/8086), so real JWT/privilege enforcement and database persistence remain unverified. This feature branch's backend snapshot predates #109; live testing needs a backend containing those PATCH routes. Next's security advisory remains a separate dependency update.
+
+## OIDC review corrections and develop integration — 2026-11-04
+
+Source branch: fsa_ChungTQ/refactor/239-fe-sign-in-with-keycloak-oidc-pkce, starting at 4c1139ab. Merged origin/develop 0d14ca45 and resolved the frontend rebuild conflicts into its flat structure. The branch now uses configs/api.ts and service/authService.ts; obsolete nested HTTP/auth wrappers were removed after moving the OIDC behavior into Provider.tsx and flat features.
+
+The review finding was confirmed against the committed backend controllers and ApiResponse: GET /api/v1/users/me HTTP 200 and POST /api/v1/auth/register HTTP 201 return {code,message,data}. The old client validated the wrapper as a user. The merged implementation validates the envelope centrally and then validates response.data. Fixtures now emit the actual envelope and delivered field/code/detail validation errors. Native HTTP regressions and browser assertions cover both successful statuses and malformed nested data; callback retries never repeat a successful code exchange.
+
+Executed locally on 2026-11-04:
+
+| Check | Result |
+| --- | --- |
+| npm run test:auth | 64 passed, including native HTTP envelope regressions and OIDC protocol checks |
+| npm run test:auth:browser | 11 passed against local Postman API/Keycloak stand-ins |
+| npm run test:catalog | 20 passed, including the auth acceptance harness, catalog/gallery and authenticated cart/account-switch scenarios |
+| npm run lint | Passed |
+| npm run typecheck | Passed with newly generated isolated route types |
+| npm run generate:types; npm run generate:types:check | Passed after regenerating catalog/commerce DTOs that had drifted from develop's already committed OpenAPI |
+| NEXUS_TEST_DIST_DIR=.next-verify-build npm run build | Passed production compilation, TypeScript and all page generation; no temporary auth-smoke route in production output |
+
+The initial main browser run passed 19/20. The logout/account-switch test interacted before the full provider redirect finished loading; it now waits for the document load before using the normal sign-in Link. All three product cases passed in a focused run, followed by all 20 main scenarios in a full run. The injected auth harness continues to exercise in-memory generation/private-cache races; real provider logout intentionally navigates to a new document.
+
+Installed Next.js 16.4.0 emitted its existing security upgrade reminder. Unchanged retries completed the browser/build checks; no framework upgrade is included. An overlapping temporary smoke-route cleanup invalidated an earlier build attempt, so the final production build was run separately after all fixture servers stopped. Runners restored the checked-in tsconfig and removed the temporary route. Local logs/traces and preexisting cart build output were excluded from Git.
+
+Simulation evidence establishes frontend behavior against locally modeled dependencies. Real backend JWT trust/CORS, live Keycloak authentication/logout and new-account provisioning remain unverified. See the [OIDC simulation context](../../postman/simulations/oidc.context.yaml). Postman CLI 1.73.0 ran the simulation; its status subcommand is unavailable. No mock was published or deployed.
+
+## Notification bell develop integration — 2026-11-05
+
+Merged `origin/develop` at `0d0a36a4` into notification branch `13768ea3` in an isolated worktree. The original profile checkout and its pending merge were preserved. Header conflicts combine the notification bell with develop's mobile/desktop cart link and quantity badge. ShopLayout retains develop's OIDC session, cart query and logout error handling while mounting the notification feature per authenticated session. Backend files match develop; notification types were regenerated from its delivered OpenAPI including both PATCH routes.
+
+Notification browser tests now use the local OIDC code flow and verify the issued Bearer token. Cancellation cases abort the external logout navigation and assert unchanged document lifetime, removed notification UI and canceled pending GET/PATCH requests. Test app/API/provider ports are configurable so separate worktrees do not reset one another's fixtures.
+
+| Check | Result |
+| --- | --- |
+| `npm run generate:types; npm run generate:types:check` | Passed |
+| `npm run lint` / `npm run typecheck` | Passed; no lint warnings |
+| `npm run test:unit` | 80 passed |
+| `npm run test:browser` | 42 passed, including all 12 notification scenarios, cart, catalog, gallery, product and auth harness |
+| `npm run test:auth:browser` | 11 passed |
+| `node scripts/verify-notifications.mjs` against local Postman simulation | Passed; latest ten, bodyless PATCH/204, count 18 → 17 → 0, idempotency, account isolation, encoded IDs and 400/401/403/404/503 propagation; request events included nine bodyless PATCH calls |
+| `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` | Passed compilation, TypeScript and page generation on unchanged retry after the existing Next 16.4.0 security reminder |
+| Visual / Git checks | Mobile and desktop screenshots fit their viewports; `git diff --check` passed and no unmerged index entries remain |
+
+The full browser run used app/API/provider ports 3126/3926/3927 and `.next-catalog-notification`; the dedicated OIDC run used app/provider ports 3127/3927. Both runners cleaned their smoke route. Final build ran after all browser runners stopped, without the temporary route in its production output. The initial dependency junction was replaced with a local dependency copy because Turbopack rejects targets outside its filesystem root; an overlapping early build also failed while a browser runner removed the smoke route. These environment attempts did not require production changes. The final checked-in tsconfig matches develop.
+
+These results cover local HTTP fixtures and Postman stand-ins, not live backend JWT privileges, Keycloak availability or persistence. The existing Next.js security advisory remains an unresolved dependency issue; no framework upgrade is included in this merge resolution.

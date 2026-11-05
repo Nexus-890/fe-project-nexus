@@ -1,6 +1,8 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
 const fixtureOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_API_PORT ?? 3911}`;
+const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}/keycloak`;
+const sessions = new WeakMap<Page, { authorization: string; account: string }>();
 const firstReadPath = "/api/v1/notifications/20000000-0000-4000-8000-000000000001/read";
 type NotificationRequest = {
   method: string;
@@ -18,15 +20,70 @@ const setCase = async (request: APIRequestContext, query: string) => {
 };
 
 async function signIn(page: Page, account = "a") {
+  // Register the provider-issued token with this stateful API fixture before
+  // forwarding the exchange response to the real callback/provider flow.
+  await page.route(`${providerOrigin}/realms/nexus/protocol/openid-connect/token`, async (route) => {
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    const { access_token: accessToken } = await response.json();
+    expect(accessToken).toEqual(expect.any(String));
+    const registered = await page.request.post(`${fixtureOrigin}/test/notifications/session`, {
+      data: { account, accessToken },
+    });
+    expect(registered.ok()).toBe(true);
+    sessions.set(page, { account, authorization: `Bearer ${accessToken}` });
+    await route.fulfill({ response });
+  }, { times: 1 });
   await page.goto("/sign-in");
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/keycloak\/realms\/nexus\/protocol\/openid-connect\/auth\?/);
   await page.getByLabel("Email", { exact: true }).fill(`notification-${account}@example.test`);
   await page.getByLabel("Password", { exact: true }).fill("Fixture123!");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText(`Hi Notification ${account.toUpperCase()}`, { exact: true })).toBeVisible();
+  return sessions.get(page)!.authorization;
 }
 
-test.beforeEach(async ({ request }) => {
-  await request.post(`${fixtureOrigin}/test/notifications/reset`);
+async function signOutAndVerifyCleanup(page: Page, verifyCleanup: () => Promise<void>) {
+  const documentStarted = await page.evaluate(() => performance.timeOrigin);
+  // Cancel the external redirect so these cleanup assertions use the existing
+  // document rather than browser unload; the OIDC suite covers end-session.
+  await page.route(`${providerOrigin}/realms/nexus/protocol/openid-connect/logout?*`, async (route) => {
+    await route.abort("aborted");
+  }, { times: 1 });
+  const logoutFailed = page.waitForEvent("requestfailed", (request) =>
+    new URL(request.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/logout",
+  );
+  await page.getByRole("button", { name: "Sign out", exact: true }).click({ noWaitAfter: true });
+  await logoutFailed;
+  await expect(page.getByRole("dialog", { name: "Notifications", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Notifications/ })).toHaveCount(0);
+  await verifyCleanup();
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStarted);
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+}
+
+test.beforeEach(async ({ request, page }) => {
+  expect((await request.post(`${fixtureOrigin}/test/notifications/reset`)).ok()).toBe(true);
+  expect((await request.get(`${providerOrigin}/test/reset`)).ok()).toBe(true);
+  // Cart deliberately uses the app's same-origin route. Keep the merged header
+  // exercised alongside notifications with its actual scoped Bearer token.
+  await page.route("**/api/v1/carts/me", async (route) => {
+    expect(route.request().method()).toBe("GET");
+    const session = sessions.get(page);
+    expect(session).toBeDefined();
+    expect(route.request().headers().authorization).toBe(session!.authorization);
+    await route.fulfill({ json: { code: 0, message: "response success", data: {
+      id: `notification-cart-${session!.account}`,
+      userId: `notification-user-${session!.account}`,
+      status: "ACTIVE",
+      items: [{
+        id: "cart-line", productId: "1", skuId: "cart-sku", quantity: 2, unitPrice: 150000,
+      }],
+    } } });
+  });
 });
 
 test("anonymous browsing sends no notification request", async ({ page, request }) => {
@@ -39,7 +96,10 @@ test("anonymous browsing sends no notification request", async ({ page, request 
 });
 
 test("authenticated bell shows latest ten, marks opened notifications read and clears all unread", async ({ page, request }, info) => {
-  await signIn(page);
+  const authorization = await signIn(page);
+  const cart = page.getByRole("link", { name: "Shopping cart, 2 items", exact: true });
+  await expect(cart).toBeVisible();
+  await expect(cart).toHaveAttribute("href", "/cart");
   const trigger = page.getByRole("button", { name: /^Notifications/ });
   await expect(trigger).toBeVisible();
   await expect(trigger).toHaveAttribute("aria-label", "Notifications, 18 unread");
@@ -61,7 +121,7 @@ test("authenticated bell shows latest ten, marks opened notifications read and c
   expect(new Set(beforeOpening.map((entry) => entry.path))).toEqual(new Set([
     "/api/v1/notifications", "/api/v1/notifications/unread-count",
   ]));
-  expect(beforeOpening.every((entry) => entry.method === "GET" && entry.authorization === "Bearer notification-fixture-a")).toBe(true);
+  expect(beforeOpening.every((entry) => entry.method === "GET" && entry.authorization === authorization)).toBe(true);
   expect(beforeOpening.find((entry) => entry.path === "/api/v1/notifications")?.query).toEqual({ page: "0", size: "10" });
   expect(beforeOpening.find((entry) => entry.path.endsWith("/unread-count"))?.query).toEqual({});
   const firstUnread = popup.getByRole("button", { name: "A update 24, unread", exact: true });
@@ -76,7 +136,7 @@ test("authenticated bell shows latest ten, marks opened notifications read and c
   await firstRead.click();
   await firstRead.click();
   expect((await evidence(request)).filter((entry) => entry.method === "PATCH")).toEqual([{
-    method: "PATCH", path: firstReadPath, query: {}, authorization: "Bearer notification-fixture-a", canceled: false,
+    method: "PATCH", path: firstReadPath, query: {}, authorization, canceled: false,
   }]);
   const markAllResponse = page.waitForResponse((response) =>
     response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/v1/notifications/read-all",
@@ -91,7 +151,7 @@ test("authenticated bell shows latest ten, marks opened notifications read and c
   expect(afterReadAll.filter((entry) => entry.method === "PATCH").map((entry) => entry.path)).toEqual([
     firstReadPath, "/api/v1/notifications/read-all",
   ]);
-  expect(afterReadAll.every((entry) => entry.authorization === "Bearer notification-fixture-a")).toBe(true);
+  expect(afterReadAll.every((entry) => entry.authorization === authorization)).toBe(true);
   for (const path of ["/api/v1/notifications", "/api/v1/notifications/unread-count"]) {
     expect(afterReadAll.filter((entry) => entry.path === path)).toHaveLength(
       beforeOpening.filter((entry) => entry.path === path).length + 2,
@@ -157,7 +217,7 @@ test("failed read preserves unread state and can be retried by reopening the not
 
 test("failed mark-all preserves unread state and a successful retry clears the full inbox", async ({ page, request }) => {
   await setCase(request, "readAll=error");
-  await signIn(page);
+  const authorization = await signIn(page);
   const trigger = page.getByRole("button", { name: /^Notifications/ });
   await trigger.click();
   const popup = page.getByRole("dialog", { name: "Notifications", exact: true });
@@ -174,7 +234,7 @@ test("failed mark-all preserves unread state and a successful retry clears the f
   await expect(popup.getByRole("button", { name: /, unread$/ })).toHaveCount(0);
   await expect(popup.getByRole("alert")).toHaveCount(0);
   const response = await request.get(`${fixtureOrigin}/api/v1/notifications?page=1&size=10`, {
-    headers: { Authorization: "Bearer notification-fixture-a" },
+    headers: { Authorization: authorization },
   });
   const { data } = await response.json();
   expect(data).toHaveLength(10);
@@ -246,17 +306,15 @@ test("logout cancels a pending inbox and a late old response cannot enter the ne
   await page.getByRole("button", { name: "Notifications, 18 unread", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "Notifications", exact: true });
   await expect(popup.getByText("Loading notifications…", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(popup).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^Notifications/ })).toHaveCount(0);
-  await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === "/api/v1/notifications" && entry.canceled)).toBe(true);
+  await signOutAndVerifyCleanup(page, async () => {
+    await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === "/api/v1/notifications" && entry.canceled)).toBe(true);
+  });
   const anonymousEvidence = await evidence(request);
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await expect(page.locator("#categories > ul > li")).toHaveCount(3);
   expect(await evidence(request)).toEqual(anonymousEvidence);
   await setCase(request, "list=default");
-  await signIn(page, "b");
+  const authorization = await signIn(page, "b");
   await page.getByRole("button", { name: "Notifications, 18 unread", exact: true }).click();
   await expect(popup.getByRole("listitem")).toHaveCount(10);
   await expect(popup.getByRole("button", { name: "B update 24, unread", exact: true })).toBeVisible();
@@ -266,7 +324,7 @@ test("logout cancels a pending inbox and a late old response cannot enter the ne
   expect(new Set(accountRequests.map((entry) => entry.path))).toEqual(new Set([
     "/api/v1/notifications", "/api/v1/notifications/unread-count",
   ]));
-  expect(accountRequests.every((entry) => entry.authorization === "Bearer notification-fixture-b")).toBe(true);
+  expect(accountRequests.every((entry) => entry.authorization === authorization)).toBe(true);
 });
 
 test("logout cancels a pending read and a late mutation cannot change the next account", async ({ page, request }) => {
@@ -276,17 +334,16 @@ test("logout cancels a pending read and a late mutation cannot change the next a
   const popup = page.getByRole("dialog", { name: "Notifications", exact: true });
   await popup.getByRole("button", { name: "A update 24, unread", exact: true }).click();
   await expect.poll(async () => (await evidence(request)).some((entry) => entry.method === "PATCH")).toBe(true);
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(popup).toHaveCount(0);
-  await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === firstReadPath && entry.canceled)).toBe(true);
+  await signOutAndVerifyCleanup(page, async () => {
+    await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === firstReadPath && entry.canceled)).toBe(true);
+  });
   const anonymousEvidence = await evidence(request);
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await expect(page.locator("#categories > ul > li")).toHaveCount(3);
   await expect(page.getByRole("button", { name: /^Notifications/ })).toHaveCount(0);
   expect(await evidence(request)).toEqual(anonymousEvidence);
   await setCase(request, "read=default");
-  await signIn(page, "b");
+  const authorization = await signIn(page, "b");
   const trigger = page.getByRole("button", { name: "Notifications, 18 unread", exact: true });
   await trigger.click();
   await expect(popup.getByRole("button", { name: "B update 24, unread", exact: true })).toBeVisible();
@@ -295,5 +352,5 @@ test("logout cancels a pending read and a late mutation cannot change the next a
   await expect(popup.getByRole("button", { name: /^A update/ })).toHaveCount(0);
   await expect(popup.getByRole("alert")).toHaveCount(0);
   const accountRequests = (await evidence(request)).slice(anonymousEvidence.length);
-  expect(accountRequests.every((entry) => entry.method === "GET" && entry.authorization === "Bearer notification-fixture-b")).toBe(true);
+  expect(accountRequests.every((entry) => entry.method === "GET" && entry.authorization === authorization)).toBe(true);
 });

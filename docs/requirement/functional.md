@@ -18,10 +18,17 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CAT-05 | Execute real free-text search and newest/price sorting | Backend contract gap: delivered ProductController does not accept q/sort |
 | CAT-06 | Display product detail, images, SKU options and selected price | Implemented: ProductDetailPage and gallery/SKU components |
 | CAT-07 | Keep product link resolution and quantity integer/minimum rules | Implemented: detail helpers and QuantityPicker |
+| CAT-08 | Show all product images in sortOrder with selectable thumbnails and wrapping/keyboard navigation | ProductGallery; detail API supplies images; see [gallery scope and evidence](../features/product-image-gallery.md) |
+| CAT-09 | Show the first ordered image on a product card | Frontend supports optional summary images; delivered list API has no images, so live cards retain placeholders until BE #122 provides them |
+| CAT-10 | Show a placeholder for absent images and broken image URLs on detail and cards | Shared ProductImage fallback; acceptance includes HTTP 404 and no uncaught page error |
 | CART-01 | Anonymous add-item click requests sign-in without sending a private API call | Implemented: product detail interaction |
 | CART-02 | Authenticated add-item request sends skuId and quantity only | Implemented frontend mutation/service; real authorization/contract needs integration evidence |
 | CART-03 | Use current-session cache/feedback only; show request failures accurately | Implemented mutation/session policy; tested scenarios determine evidence |
-| CART-04 | Render a full cart, edit/remove items, checkout and pay | Outside current frontend scope |
+| CART-04 | Render Cart lines with snapshot unit/line prices, subtotal and an empty catalog link | Implemented CartPage/components/query/header count; [evidence](../features/cart-page-implementation.md) |
+| CART-05 | Optimistically edit quantity/remove, immediately recalculate and roll back rejected changes | Implemented FE/cache/service calls; merged BE source mappings exist but build/auth/response compatibility blocks live acceptance; tested with explicit HTTP stand-ins |
+| CART-06 | Keep cart contents after refresh and verify responsive/real-API acceptance | Reread after same-user reauthentication; responsive screenshots in report; uninterrupted auth and peer real-API/cart-ID evidence pending |
+| CART-07 | Keep place-order disabled with a visible reason | Implemented in CartSummary; no working checkout implied |
+| CART-08 | Checkout, payment, vouchers, Save for Later and shipping/tax calculations | Outside the Cart page task; design examples are not additional functional scope |
 | NTF-01/02 | Header latest ten notifications and total unread count | Implemented frontend against delivered notification reads; authenticated sessions only |
 | NTF-03/04 | Open one / mark all as read and refresh count | Implemented against #109 PATCH routes; list/count refetch, pending/error handling and session isolation; verified with HTTP stand-ins |
 | ROUTE-01 | Preserve `/login`, `/register` and `/category/[slug]` aliases | Implemented route redirects |

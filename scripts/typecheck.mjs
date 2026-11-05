@@ -33,6 +33,7 @@ try {
       ".next/**",
       ".next-catalog-*/**",
       ".next-verify-build/**",
+      ".next-cart-readiness-build/**",
       "test-results/**",
     ];
     writeFileSync(temporary, JSON.stringify(config, null, 2));

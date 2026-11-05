@@ -43,6 +43,7 @@ const defaultNotificationCase = () => ({ list: "default", count: "default", read
 let notificationCase = defaultNotificationCase();
 let notificationRequests = [];
 let pendingNotifications = [];
+const notificationSessions = new Map();
 
 const fixtureUser = (account) => ({
   id: `10000000-0000-4000-8000-00000000000${account === "a" ? 1 : 2}`,
@@ -94,6 +95,7 @@ const server = createServer(async (req, res) => {
     notificationCase = defaultNotificationCase();
     notificationItems = { a: fixtureNotifications("a"), b: fixtureNotifications("b") };
     notificationRequests = [];
+    notificationSessions.clear();
     return json(res, {});
   }
   if (url.pathname === "/test/notifications/case") {
@@ -111,33 +113,23 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === "/test/notifications/evidence")
     return json(res, notificationRequests);
-  if (url.pathname === "/api/v1/auth/login" && req.method === "POST") {
+  if (url.pathname === "/test/notifications/session" && req.method === "POST") {
     let body = "";
     for await (const chunk of req) body += chunk;
-    const credentials = JSON.parse(body);
-    const account = ["a", "b"].find(
-      (candidate) => credentials.email === fixtureUser(candidate).email,
-    );
-    if (!account || credentials.password !== "Fixture123!")
-      return json(res, { title: "Unauthorized", status: 401 }, 401);
-    return json(res, success({
-      accessToken: `notification-fixture-${account}`,
-      tokenType: "Bearer",
-      expiresIn: 3600,
-    }));
+    const { account, accessToken } = JSON.parse(body);
+    if (!["a", "b"].includes(account) || typeof accessToken !== "string" || !accessToken)
+      return json(res, { title: "Invalid fixture session", status: 400 }, 400);
+    notificationSessions.set(`Bearer ${accessToken}`, account);
+    return json(res, {});
   }
   if (url.pathname === "/api/v1/users/me") {
-    const account = ["a", "b"].find(
-      (candidate) => req.headers.authorization === `Bearer notification-fixture-${candidate}`,
-    );
+    const account = notificationSessions.get(req.headers.authorization);
     return account
       ? json(res, success(fixtureUser(account)))
       : json(res, { title: "Unauthorized", status: 401 }, 401);
   }
   if (url.pathname.startsWith("/api/v1/notifications")) {
-    const account = ["a", "b"].find(
-      (candidate) => req.headers.authorization === `Bearer notification-fixture-${candidate}`,
-    );
+    const account = notificationSessions.get(req.headers.authorization);
     const evidence = {
       method: req.method,
       path: url.pathname,

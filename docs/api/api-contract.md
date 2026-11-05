@@ -10,7 +10,11 @@ Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user
 
 `configs/api.ts` is the only API configuration module. Set `NEXT_PUBLIC_API_URL` to the common backend origin, such as `http://localhost:8080`, then restart Next. Paths supplied by services already include `/api/v1`. An absolute origin is required for server category lookup. The legacy `NEXT_PUBLIC_API_BASE_URL` is a fallback only while local configuration migrates.
 
-Axios uses a 15-second default timeout and JSON Accept header. Caller options cannot redirect a protected request to another origin or replace URL/method/auth/adapter/parser settings. Controlled headers, timeout and parameter serialization remain configurable. Public login/register/catalog calls do not send Bearer; private requests read the current token from the provider-scoped request context. Never put a token in singleton defaults, query keys, or server module state.
+The Cart task explicitly requests an empty service origin. `service/cartService.ts` defines `CART_API_BASE_URL = ""` and passes it through the shared HTTP boundary (explicit context baseUrl wins). Blank means browser same-origin; fill only the origin then restart/rebuild. Auth/catalog origin and single-client ownership are preserved. See [Cart configuration](../features/cart.md#api-configuration).
+
+For same-origin local integration, leave NEXT_PUBLIC_API_URL blank and set server-only `API_PROXY_TARGET` to the gateway origin. Next rewrites `/api/v1/*` to it, while server-side catalog calls use it as their origin fallback. Public origins take precedence for common auth/catalog requests. Restart Next after changing this environment variable; the proxy is disabled when it is absent. Targets must be HTTP(S) origins without credentials, paths, query or hash.
+
+Axios uses a 15-second default timeout and JSON Accept header. Caller options cannot redirect a protected request to another origin or replace URL/method/auth/adapter/parser settings. Controlled headers, timeout and parameter serialization remain configurable. Public register/catalog calls do not send Bearer; private requests read the current token from the provider-scoped request context. Keycloak owns the sign-in redirect and code exchange. Never put a token in singleton defaults, query keys, or server module state.
 
 Preserve endpoint status: reads/updates return 200, creation uses the endpoint's 201, and a 204 has no response body. Handle 204 before parsing JSON. Cancellation propagates separately from ordinary API errors.
 
@@ -39,7 +43,7 @@ Backend catalog/cart monetary fields are JSON numbers serialized from BigDecimal
 | Layer | Public contract |
 | --- | --- |
 | HTTP configuration | `requestApi` performs controlled HTTP and returns the validated envelope; failed requests reject with `ApiError` |
-| Domain service | Named async functions such as `getProducts`, `getProduct`, `getCategoryTree`, `login`, `getMe`, `addCartItem` return parsed data/models |
+| Domain service | Named async functions such as `getProducts`, `getProduct`, `getCategoryTree`, `register`, `getMe`, `addCartItem` return parsed data/models |
 | Query hook | `useApiQuery(request, options)` receives queryKey and a typed service callback; TanStack owns state/cache |
 | Mutation hook | `useApiMutation(request, options)` receives a service callback or typed workflow executor plus mutation/cache options |
 
@@ -61,27 +65,31 @@ Keep every changing request parameter in the key. `select` changes the observer'
 
 Mutation variables use typed `body`, `pathParams`, `query` and controlled config/signal. A `never` generic means that request field is absent. `invalidateKey` and `removeKey` are the names from the new reference: each accepts fixed keys or a resolver based on result/variables. After success, await prefix invalidation with active-query refetch, remove exact keys, then call the caller's onSuccess with all arguments. Preserve onMutate/onError/onSettled and optimistic context. Mutation failure does not run success cache work.
 
-Protected queries carry private-query metadata and session-specific keys. Protected mutations verify the session is still current before success cache work and UI callbacks. Auth's multi-step executor returns a user, so LoginResponse/token never becomes mutation result data. [Authentication](../features/authentication.md) describes the workflow.
+Protected queries carry private-query metadata and session-specific keys. Protected mutations verify the session is still current before success cache work and UI callbacks. OIDC callback exchange stays outside mutation data; profile loading uses the shared query cache. [Authentication](../features/authentication.md) describes the workflow.
 
 ## Frontend endpoint inventory
 
 | Method/path | Consumer and access |
 | --- | --- |
 | POST `/api/v1/auth/register` | Sign-up, public; creation does not sign in |
-| POST `/api/v1/auth/login` | Provider login workflow, public |
 | GET `/api/v1/users/me` | Provider profile, Bearer |
 | GET `/api/v1/categories/tree` | Home, shop navigation, category resolution, public |
 | GET `/api/v1/products` | Category/search listing, public; delivered parameters categoryId/page/size |
 | GET `/api/v1/products/{id}` | Product detail, public |
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
+| GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
+| PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
+| DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
 | GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |
 | GET `/api/v1/notifications/unread-count` | Header total unread count, Bearer + NOTIFICATION.VIEW |
 | PATCH `/api/v1/notifications/{id}/read` | Opening an unread notification, Bearer + NOTIFICATION.VIEW; bodyless 204 |
 | PATCH `/api/v1/notifications/read-all` | Header mark-all action, Bearer + NOTIFICATION.VIEW; bodyless 204 |
 
-Notification mutations use the common origin and the routes implemented by notification-service on `develop` (#109). After a successful bodyless PATCH/204, the feature refetches the list and unread count. The backend snapshot on this feature branch predates #109; run integration against a backend containing those operations. See [notifications](../features/notifications.md).
+Notification mutations use the common origin and the #109 routes included in the merged notification-service controller and delivered OpenAPI. After a successful bodyless PATCH/204, the feature refetches the list and unread count. Live integration requires a running backend containing those operations. See [notifications](../features/notifications.md).
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
+
+The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. The #129 publication branch merged remote `e2411ea4`, which includes BE #111 update/remove source. Its DTO package imports, unresolved symbols/repository calls and authentication-principal binding need correction before a compatible build/runtime can be verified. PUT currently returns bare CartResponse instead of the required envelope; keep FE parsing strict. Confirm response/permissions and update delivered OpenAPI before regenerating wire types or claiming live integration. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
 
 ## Type generation and runtime checks
 

@@ -64,6 +64,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all orders for administration and support
+         * @description Requires ORDER.LIST and either ADMIN or SUPPORT_STAFF. Lists every stored order when filters are omitted. userId identifies the buyer. Supplied userId, sellerId, status, orderType, from and to filters combine with AND. BUYER and SELLER without an allowed management role receive 403 even with ORDER.LIST. from/to filter createdAt using ISO-8601 timestamps with an offset, inclusive at both bounds; from after to returns 400 COMMERCE_INVALID_ORDER_FILTER. Percent-encode a positive offset + as %2B, or use UTC Z. page is zero-based and defaults to 0; size defaults to 10 and must be 1 to 100. Invalid paging returns 400 COMMERCE_INVALID_ORDER_FILTER. Results sort by createdAt DESC then orderNumber DESC. Empty results and pages beyond the end return 200 with empty data and actual page totals.
+         */
+        get: operations["listManagedOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List orders sold by the current seller
+         * @description Requires ORDER.LIST and SELLER. Lists only orders whose persisted seller_id equals the validated JWT subject. Supplied status, from and to filters combine with AND; no userId, sellerId or orderType selector is supported. BUYER receives 403 even with ORDER.LIST. from/to filter createdAt using ISO-8601 timestamps with an offset, inclusive at both bounds; from after to returns 400 COMMERCE_INVALID_ORDER_FILTER. Percent-encode a positive offset + as %2B, or use UTC Z. page is zero-based and defaults to 0; size defaults to 10 and must be 1 to 100. Invalid paging returns 400 COMMERCE_INVALID_ORDER_FILTER. Results sort by createdAt DESC then orderNumber DESC. Empty results and pages beyond the end return 200 with empty data and actual page totals.
+         */
+        get: operations["listSalesOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}": {
         parameters: {
             query?: never;
@@ -337,9 +377,18 @@ export interface components {
             /** Format: uuid */
             orderId: string;
             orderNumber: string;
+            /**
+             * Format: uuid
+             * @description Buyer who placed the order.
+             */
+            userId: string;
             /** Format: uuid */
             sellerId: string;
+            /** @enum {string} */
+            orderType: "STANDARD" | "AUCTION";
             status: components["schemas"]["OrderStatus"];
+            /** Format: date-time */
+            createdAt: string;
             /** @description BigDecimal JSON number; no decimal-string conversion. */
             totalAmount: number;
             items: components["schemas"]["OrderItem"][];
@@ -1143,6 +1192,373 @@ export interface operations {
                 };
             };
             /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    listManagedOrders: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional buyer UUID.
+                 * @example 68000000-0000-4000-8000-000000000002
+                 */
+                userId?: string;
+                /**
+                 * @description Optional seller UUID.
+                 * @example 68000000-0000-4000-8000-000000000003
+                 */
+                sellerId?: string;
+                /**
+                 * @description Optional exact order status.
+                 * @example PENDING
+                 */
+                status?: components["schemas"]["OrderStatus"];
+                /**
+                 * @description Optional exact order type.
+                 * @example STANDARD
+                 */
+                orderType?: "STANDARD" | "AUCTION";
+                /**
+                 * @description Inclusive lower bound on createdAt; timestamp must include an offset.
+                 * @example 2026-11-03T00:00:00Z
+                 */
+                from?: string;
+                /**
+                 * @description Inclusive upper bound on createdAt; must not precede from.
+                 * @example 2026-11-03T23:59:59Z
+                 */
+                to?: string;
+                /**
+                 * @description Zero-based page number.
+                 * @example 0
+                 */
+                page?: number;
+                /**
+                 * @description Page size, from 1 to 100.
+                 * @example 10
+                 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching orders with pagination metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            /** @description INVALID_PARAMETER, COMMERCE_INVALID_ORDER_FILTER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "COMMERCE_INVALID_ORDER_FILTER";
+                    };
+                };
+            };
+            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description FORBIDDEN, COMMERCE_FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description RATE_LIMITED. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the gateway limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description GATEWAY_TIMEOUT. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    listSalesOrders: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional exact order status.
+                 * @example PENDING
+                 */
+                status?: components["schemas"]["OrderStatus"];
+                /**
+                 * @description Inclusive lower bound on createdAt; timestamp must include an offset.
+                 * @example 2026-11-03T00:00:00Z
+                 */
+                from?: string;
+                /**
+                 * @description Inclusive upper bound on createdAt; must not precede from.
+                 * @example 2026-11-03T23:59:59Z
+                 */
+                to?: string;
+                /**
+                 * @description Zero-based page number.
+                 * @example 0
+                 */
+                page?: number;
+                /**
+                 * @description Page size, from 1 to 100.
+                 * @example 10
+                 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching orders with pagination metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            /** @description INVALID_PARAMETER, COMMERCE_INVALID_ORDER_FILTER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "COMMERCE_INVALID_ORDER_FILTER";
+                    };
+                };
+            };
+            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description FORBIDDEN, COMMERCE_FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description RATE_LIMITED. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the gateway limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description GATEWAY_TIMEOUT. */
             504: {
                 headers: {
                     [name: string]: unknown;

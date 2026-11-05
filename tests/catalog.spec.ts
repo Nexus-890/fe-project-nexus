@@ -310,3 +310,36 @@ test("search filters preserve query parameters and Clear All restores the defaul
   ).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(5);
 });
+
+test("header category selection reaches the product API and All Categories clears it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const categoryPicker = page.getByRole("combobox", { name: "Search category" });
+  await categoryPicker.click();
+  await page.getByRole("option", { name: "Headphones", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search for anything" }).fill("wireless & wired");
+  const categoryRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/v1/products" && url.searchParams.get("categoryId") === "headphones";
+  });
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await categoryRequest;
+  await expect(page).toHaveURL(/\/search\?q=wireless\+%26\+wired&category=headphones$/);
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.reload();
+  await expect(categoryPicker).toContainText("Headphones");
+
+  await categoryPicker.click();
+  await page.getByRole("option", { name: "All Categories", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search for anything" }).fill("");
+  const allProductsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/v1/products" && !url.searchParams.has("categoryId");
+  });
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await allProductsRequest;
+  await expect(page).toHaveURL(/\/search$/);
+  await expect(page.getByRole("article")).toHaveCount(5);
+  await expect(categoryPicker).toContainText("All Categories");
+});

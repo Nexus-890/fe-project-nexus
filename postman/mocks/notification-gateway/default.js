@@ -1,5 +1,4 @@
 /* Postman loads local mock handlers as CommonJS. */
-/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Local-only stand-in from delivered notification GET shapes and
  * origin/develop's NotificationController/Service PATCH implementation.

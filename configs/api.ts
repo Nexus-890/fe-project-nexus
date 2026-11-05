@@ -9,7 +9,9 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 import { getCatalogMockFetch } from "../mocks/catalogStub";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+  process.env.NEXT_PUBLIC_API_URL?.trim() ||
+  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+  (typeof window === "undefined" ? process.env.API_PROXY_TARGET?.trim() : "") || "";
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15_000,

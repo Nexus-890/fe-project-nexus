@@ -15,18 +15,20 @@ assumptions:
     reason: >-
       origin/develop's controller defines both PATCH mappings and NO_CONTENT;
       its service checks ownership and changes only unread records. The
-      checked-out branch's delivered OpenAPI describes only the two GET routes.
+      merged delivered OpenAPI now also describes both PATCH routes.
       The mock's write behavior is based on implemented backend source.
     verification: >-
       On 2026-11-03 inspected NotificationController, NotificationService and
       NotificationRepository on origin/develop at 6e92bbac (controller's last
       change f449eeec). This is source evidence, not a live endpoint probe.
+      On 2026-11-05 compared the merged develop 0d0a36a4 controller/service
+      and OpenAPI and regenerated notification DTOs including both PATCH routes.
     source: >-
       origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationController.java;
       origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationService.java;
       origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationRepository.java;
       be-project-nexus/docs/api/openapi/notification-service.yaml
-    updated_at: "2026-11-03"
+    updated_at: "2026-11-05"
 
   - id: frontend-read-status-http-scenarios
     status: supported
@@ -47,13 +49,16 @@ assumptions:
       SERVICE_UNAVAILABLE symbolic code. Evidence contained exactly nine
       bodyless PATCH requests, including an encoded invalid ID, with no hidden
       mutation retry. This does not exercise React cache/UI behavior.
+      Reran on 2026-11-05 after merging develop 0d0a36a4 into notification
+      branch 13768ea3: all script assertions passed again. Postman CLI request
+      events confirmed the real service exercised the dependency over HTTP.
     source: >-
       scripts/verify-notifications.mjs;
       service/notificationService.ts;
       configs/api.ts;
       postman/mocks/notification-gateway/default.js;
       postman/simulations/notification.sim.yaml
-    updated_at: "2026-11-03"
+    updated_at: "2026-11-05"
 
   - id: deployed-notification-integration
     status: unknown
@@ -74,6 +79,10 @@ assumptions:
     updated_at: "2026-11-03"
 
 fingerprints:
+  - id: notification-develop-merge
+    date: "2026-11-05"
+    commit: "13768ea3 merged with develop 0d0a36a4, before merge commit"
+    cli: "Postman CLI 1.73.0; local notification simulation on port 3915"
   - id: notification-fix-local
     date: "2026-11-03"
     commit: "b7b2b945e03a73b63d021028df364df57b845be1 with uncommitted notification fix and simulation"

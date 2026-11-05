@@ -16,7 +16,6 @@ import {
   normalizeMoney,
 } from "../service/catalogService";
 import { formatVND } from "../components/formatPrice";
-import { signInSchema } from "../features/signInSchema";
 import { signUpSchema } from "../features/signUpSchema";
 import { multiplyMoney } from "../mocks/product-detail";
 import type { ApiContext } from "../types/commonRequestType";
@@ -161,7 +160,7 @@ test("money normalization and fixture multiplication retain separate decimal sem
 });
 test("form schemas preserve required fields, password confirmation and terms rules", () => {
   assert.equal(
-    signInSchema.safeParse({ email: "bad", password: "", rememberMe: false })
+    signUpSchema.safeParse({ email: "bad", password: "" })
       .success,
     false,
   );
