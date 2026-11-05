@@ -5,11 +5,15 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  { files: ["postman/mocks/**/*.js"], rules: { "@typescript-eslint/no-require-imports": "off" } },
+  {
+    // Postman loads mock handlers as CommonJS modules.
+    files: ["postman/mocks/**/*.js"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**", ".next-*/**", ".next-cart-*/**", ".next-profile-*/**", ".next-typecheck/**", ".next-verify-build/**", "types/*GeneratedType.ts", ".next-catalog-*/**", "test-results/**", "playwright-report/**",
+    ".next/**", ".next-*/**", "types/*GeneratedType.ts", "test-results/**", "playwright-report/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

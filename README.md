@@ -1,6 +1,6 @@
 # Nexus frontend
 
-Next.js App Router frontend for the Nexus marketplace. The current UI includes registration/login, editable profile details, a shared cart and header count, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, and add-to-cart feedback. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
+Next.js App Router frontend for the Nexus marketplace. The current UI includes registration, Keycloak OIDC sign-in with PKCE, editable profile details, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal and a shared header count. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
 
 ## Development
 
@@ -13,13 +13,17 @@ Copy-Item .env.example .env.local
 
 Set `NEXT_PUBLIC_API_URL` in `.env.local` to the common backend origin, normally `http://localhost:8080`, then run:
 
+For same-origin local integration, use `NEXT_PUBLIC_API_URL=` and `API_PROXY_TARGET=http://localhost:8080` instead. Next proxies browser `/api/v1/*` calls and uses the target for server catalog reads, avoiding browser cross-origin requirements. The Cart service base URL intentionally remains blank; see [Cart configuration](docs/features/cart.md#api-configuration).
+
 ```powershell
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000). Configure an absolute API origin accessible to Next and the browser for server category lookup. Service paths already contain `/api/v1`; do not add the version path to the origin. Restart Next after changing public environment values. Real cross-origin browser calls require backend CORS support.
+Open [localhost:3000](http://localhost:3000). Configure an absolute backend origin either through the proxy or the public direct origin. Service paths already contain `/api/v1`; do not add it to the origin. Restart Next after environment changes. Direct cross-origin browser calls require backend CORS support. The [existing UI/API inventory](docs/features/api-ui-integration.md) separates connected flows from incompatible/undelivered backend contracts or absent screens.
 
-For explicit local fixtures, use the documented `NEXT_PUBLIC_AUTH_STUB`, `NEXT_PUBLIC_PRODUCT_DETAIL_MOCK` and `NEXT_PUBLIC_CART_MOCK` flags in development. These are stand-ins, are blocked in production, and do not prove live API compatibility. The auth fixture has no default account; register first. Access tokens are kept only in memory; a full reload returns to anonymous. Refresh tokens/persistent login are outside current scope.
+Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUBLIC_KEYCLOAK_CLIENT_ID` from `.env.example`. Sign-in opens Keycloak; `/auth/callback` exchanges the code, loads the profile and restores the requested page. See [authentication](docs/features/authentication.md) for local setup and integration limits. Access tokens stay in memory; a full reload returns to anonymous.
+
+Explicit auth/product/cart development fixtures are blocked in production. The auth stub supplies registration/profile responses to injected test adapters; it does not replace the Keycloak redirect flow or provision real accounts.
 
 ## Code layout
 
@@ -28,7 +32,7 @@ app/          Route tree, layouts and boundaries
 components/   UI and pure presentation helpers
 configs/      Single api.ts and queryKeys.ts
 features/     Page orchestration, schemas and catalog helpers
-hooks/        useApi.ts and useAuth.ts
+hooks/        Shared API/auth hooks and session-scoped Cart state
 providers/    Provider.tsx
 service/      Pure domain API functions and parsers
 types/        Flat generated DTOs, domain types and application contracts
@@ -51,6 +55,7 @@ npm run test:auth
 npm run test:catalog
 npm run test:cart
 npm run test:profile
+npm run test:auth:browser
 npm run build
 ```
 
@@ -62,9 +67,9 @@ Verified rebuild on 2026-10-30: lint, regenerated-route typecheck, generated DTO
 
 ## Contracts and known limits
 
-Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart uses the shared gateway origin and delivered DTO fields. [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records approval and coordinated release as pending.
+Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart reuses the shared HTTP boundary and delivered DTO fields. Its `CART_API_BASE_URL` in `service/cartService.ts` is intentionally blank for the user to fill. Delivered OpenAPI now includes GET/POST/PUT/DELETE and the controller wraps PUT in the shared envelope. Live authenticated Cart acceptance remains unverified; PUT/DELETE principal binding still differs from GET/POST. Read the [Cart handoff](docs/features/cart.md#api-configuration) and dated [implementation report](docs/features/cart-page-implementation.md). [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records coordinated release as pending.
 
-The products controller currently accepts categoryId/page/size; real q/sort search behavior remains a contract dependency even though the UI preserves those URL values. The cart supports read/add/update/remove and a synchronized header badge. Checkout, payment, auction bidding and password recovery remain separate work.
+The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require authenticated runtime verification. Working checkout, payment, auction bidding and password-recovery UI remain outside scope. Full refresh requires signing back in because auth stays in memory.
 
 Product detail already consumes image URLs from its real GET endpoint. Product cards support optional list images, but the delivered product list response currently has none; those cards keep the placeholder until BE upload task #122 supplies image data. See [product image gallery](docs/features/product-image-gallery.md) for ordering, fallback, reserved media dimensions and verification scope. The API base URL still defaults to `""` when neither public API environment variable is set; service paths use the existing product endpoints.
 

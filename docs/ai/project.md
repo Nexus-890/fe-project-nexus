@@ -1,6 +1,6 @@
 # Project context
 
-Nexus is a marketplace with an auction channel. The repository contains Spring Cloud business services in `be-project-nexus` and this Next.js frontend in `fe-project-nexus`. The frontend currently implements authentication forms, the shop shell, category browsing, product listings, product details, SKU/quantity selection, and the add-to-cart interaction. Backend services for orders, payments, shipping, inventory, notifications, and auctions do not imply corresponding frontend screens exist.
+Nexus is a marketplace with an auction channel. The repository contains Spring Cloud business services in `be-project-nexus` and this Next.js frontend in `fe-project-nexus`. The frontend implements authentication forms, the shop shell, category browsing, product listings/details, SKU/quantity selection, add-to-cart and the Cart page. Backend services for orders, payments, shipping, inventory, notifications and auctions do not imply corresponding frontend screens exist.
 
 ## Runtime and dependencies
 
@@ -16,7 +16,7 @@ One `configs/api.ts` owns API configuration and HTTP behavior. Pure API function
 | Home | Public category tree/navigation |
 | Category/search | API product listings, category filters, URL paging, loading/error/empty states |
 | Product detail | Product images, SKU choice, price formatting, quantity, anonymous sign-in prompt |
-| Cart | Authenticated add item request and feedback; a complete cart/checkout UI is outside this frontend scope |
+| Cart | Authenticated add and Cart page/header count with snapshot totals, optimistic edit/remove and rollback; blank service origin, merged BE update/remove source pending compatible build/auth/response contract; checkout disabled |
 | Search/sort contract | UI query state exists; the delivered products controller currently accepts categoryId/page/size, so real q/sort behavior remains a backend contract dependency |
 | Local fixtures | Explicit development/test stand-ins; never evidence that the real backend implemented a feature |
 

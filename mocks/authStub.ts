@@ -1,6 +1,18 @@
 import type { FieldErrors, ProblemDetails } from "../types/commonResponseType";
-import type { LoginRequest, RegisterRequest } from "../types/authRequestType";
-import type { LoginResponse, UserResponse } from "../types/authResponseType";
+import type { RegisterRequest } from "../types/authRequestType";
+import type { UserResponse } from "../types/authResponseType";
+
+/** Legacy password login exists only in this explicit test/development fixture. */
+export interface AuthStubLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthStubLoginResponse {
+  accessToken: string;
+  expiresIn: number;
+  tokenType: "Bearer";
+}
 
 export interface AuthStubOptions {
   delayMs?: number;
@@ -111,7 +123,7 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
       const accessToken = `${stubId}.${createRuntimeId()}.${user.id}`;
       tokens.set(accessToken, user);
 
-      const response: LoginResponse = {
+      const response: AuthStubLoginResponse = {
         accessToken,
         expiresIn: options.tokenTtlSeconds ?? 900,
         tokenType: "Bearer",
@@ -207,7 +219,7 @@ function validateRegisterBody(value: Record<string, unknown>): { ok: true; data:
   };
 }
 
-function validateLoginBody(value: Record<string, unknown>): { ok: true; data: LoginRequest } | { ok: false; fieldErrors: FieldErrors } {
+function validateLoginBody(value: Record<string, unknown>): { ok: true; data: AuthStubLoginRequest } | { ok: false; fieldErrors: FieldErrors } {
   const fieldErrors: FieldErrors = {};
 
   if (typeof value.email !== "string" || value.email.trim() === "") {

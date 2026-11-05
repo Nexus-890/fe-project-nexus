@@ -12,6 +12,7 @@ import { type FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "./input";
 import type { CategoryNode } from "@/types/catalogResponseType";
+import { flattenCategories, searchHref } from "@/features/catalogUtils";
 
 export interface SearchBarProps {
   categories: CategoryNode[];
@@ -29,17 +30,26 @@ function SearchBar({
   const routeQuery = searchParams.get("q") ?? "";
   const [draft, setDraft] = useState<string | null>(null);
   const query = draft ?? routeQuery;
-  const categoryOptions = [
-    "All Categories",
-    ...categories.map((item) => item.name),
-  ];
-  const [category, setCategory] = useState<string>("All Categories");
+  const categoryOptions = flattenCategories(categories);
+  const routeCategory = searchParams.get("category") ?? "";
+  const routeState = searchParams.toString();
+  const [categoryDraft, setCategoryDraft] = useState<{
+    routeState: string;
+    value: string;
+  } | null>(null);
+  const category =
+    categoryDraft?.routeState === routeState
+      ? categoryDraft.value
+      : categoryOptions.some((item) => item.slug === routeCategory)
+        ? routeCategory
+        : "";
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
     setDraft(null);
-    router.push(value ? `/search?q=${encodeURIComponent(value)}` : "/search");
+    setCategoryDraft(null);
+    router.push(searchHref({ q: value, category }));
   }
 
   return (
@@ -73,7 +83,7 @@ function SearchBar({
           <Select
             value={category}
             onValueChange={(value) => {
-              if (value !== null) setCategory(value);
+              if (value !== null) setCategoryDraft({ routeState, value });
             }}
           >
             <SelectTrigger
@@ -82,12 +92,16 @@ function SearchBar({
               aria-invalid={categoriesError}
               className="min-w-0 max-w-none overflow-visible rounded-full border-0 bg-transparent px-3 text-neutral-700 shadow-none hover:text-black sm:px-5"
             >
-              <SelectValue />
+              <SelectValue>
+                {categoryOptions.find((item) => item.slug === category)?.name ??
+                  "All Categories"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="w-52" alignItemWithTrigger={false}>
+              <SelectItem value="">All Categories</SelectItem>
               {categoryOptions.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+                <SelectItem key={option.id} value={option.slug}>
+                  {option.name}
                 </SelectItem>
               ))}
             </SelectContent>

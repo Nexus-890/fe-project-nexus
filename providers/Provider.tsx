@@ -9,50 +9,49 @@ import {
 } from "@tanstack/react-query";
 import { createCanceledError, isApiError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
+import { createOidcClient } from "../features/oidc";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
-import { getMe, login, register as registerUser } from "../service/authService";
+import { getMe, register as registerUser } from "../service/authService";
 import { updateProfile as updateAccountProfile } from "../service/accountService";
 import { createAuthStub } from "../mocks/authStub";
 import type { ApiContext } from "../types/commonRequestType";
-import type { ApiResult } from "../types/commonResponseType";
-import type { LoginRequest, RegisterRequest } from "../types/authRequestType";
+import type { ApiError, ApiResult } from "../types/commonResponseType";
+import type { RegisterRequest } from "../types/authRequestType";
 import type { UserResponse } from "../types/authResponseType";
 import type { AuthContextValue, AuthProviderProps } from "../types/authType";
 import type { UpdateProfileRequest } from "../types/accountType";
 
-export const AuthContext = createContext<AuthContextValue | undefined>(
-  undefined,
-);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const privateQuery = (query: Query) =>
   query.meta?.requiresAuth === true || query.queryKey[0] === "auth";
 
-type LoginOperation = {
-  payload: LoginRequest;
-  id: number;
-  controller: AbortController;
-};
+// Provider exceptions can contain callback URLs or tokens. Keep them out of the
+// UI and TanStack caches; report only a sanitized action-level error.
+const redirectError = (title: string): ApiError => ({ kind: "network", status: 0, title });
 
-/** AuthSession is below QueryClientProvider, including in the browser test harness. */
+/** AuthSession is below QueryClientProvider, including in the browser harness. */
 export function AuthSession({
   children,
   baseUrl,
   stub = false,
   fetch: transport,
+  oidc: injectedOidc,
 }: AuthProviderProps) {
   const queryClient = useQueryClient();
+  const [oidc] = useState(() => injectedOidc ?? createOidcClient());
   const [token] = useState(() => {
     let value: string | null = null;
-    return {
-      get: () => value,
-      set: (next: string | null) => {
-        value = next;
-      },
-    };
+    return { get: () => value, set: (next: string | null) => { value = next; } };
   });
   const generation = useRef(0);
-  const pending = useRef<AbortController | null>(null);
   const profileUpdates = useRef(new Set<AbortController>());
+  const mounted = useRef(false);
+  const callback = useRef<{
+    url: string;
+    result: Promise<ApiResult<string>>;
+    retry?: () => Promise<ApiResult<string>>;
+  } | null>(null);
   const [session, setSession] = useState({
     accessToken: null as string | null,
     id: 0,
@@ -79,9 +78,8 @@ export function AuthSession({
     {
       staleTime: 60_000,
       retry: false,
-      // Preserve a failed login profile request until the caller explicitly retries.
-      enabled: (query) =>
-        Boolean(session.accessToken) &&
+      // A failed callback profile request waits for an explicit retry.
+      enabled: (query) => Boolean(session.accessToken) &&
         (query.state.status !== "error" || query.state.data !== undefined),
     },
   );
@@ -90,8 +88,6 @@ export function AuthSession({
 
   const clearSession = useCallback(() => {
     generation.current += 1;
-    pending.current?.abort();
-    pending.current = null;
     profileUpdates.current.forEach((controller) => controller.abort());
     profileUpdates.current.clear();
     token.set(null);
@@ -100,38 +96,6 @@ export function AuthSession({
     queryClient.removeQueries({ predicate: privateQuery });
   }, [queryClient, token]);
 
-  const loginMutation = useApiMutation<UserResponse, LoginOperation>(
-    {
-      mutationKey: ["auth", "login"],
-      isCurrent: ({ id, controller }) =>
-        generation.current === id && !controller.signal.aborted,
-      execute: async ({ payload, id, controller }) => {
-        const isCurrent = () =>
-          generation.current === id && !controller.signal.aborted;
-        const response = await login(payload, {
-          context: requestContext,
-          signal: controller.signal,
-        });
-        if (!isCurrent()) throw createCanceledError();
-        token.set(response.accessToken);
-        setSession({ accessToken: response.accessToken, id, signingIn: true });
-        const user = await queryClient.fetchQuery({
-          queryKey: queryKeys.auth.me(id),
-          queryFn: ({ signal }) => getMe({ context: requestContext, signal }),
-          meta: { requiresAuth: true },
-          staleTime: 60_000,
-          retry: false,
-        });
-        if (!isCurrent()) throw createCanceledError();
-        pending.current = null;
-        setSession({ accessToken: response.accessToken, id, signingIn: false });
-        // Return only the user: the /login access token never enters MutationCache.
-        return user;
-      },
-    },
-    { gcTime: 0, retry: false },
-  );
-
   const registration = useApiMutation<UserResponse, RegisterRequest>(
     {
       mutationKey: ["auth", "register"],
@@ -139,80 +103,132 @@ export function AuthSession({
     },
     { gcTime: 0, retry: false },
   );
-
-  const { mutateAsync: loginAsync, reset: resetLogin } = loginMutation;
   const { mutateAsync: registerAsync, reset: resetRegistration } = registration;
-  const signOut = useCallback(() => {
+
+  const signIn = useCallback(async (returnTo?: string): Promise<ApiResult<void>> => {
     clearSession();
-    resetLogin();
-    resetRegistration();
-  }, [clearSession, resetLogin, resetRegistration]);
+    callback.current = null;
+    const id = generation.current;
+    setSession({ accessToken: null, id, signingIn: true });
+    try {
+      await oidc.signIn(returnTo);
+      return { ok: true, data: undefined };
+    } catch {
+      if (generation.current === id) clearSession();
+      return { ok: false, error: redirectError("Unable to open sign in. Please try again.") };
+    }
+  }, [clearSession, oidc]);
 
-  const signIn = useCallback(
-    async (payload: LoginRequest): Promise<ApiResult<UserResponse>> => {
-      signOut();
-      const id = generation.current;
-      const controller = new AbortController();
-      pending.current = controller;
-      setSession({ accessToken: null, id, signingIn: true });
+  const completeSignIn = useCallback((url: string): Promise<ApiResult<string>> => {
+    // StrictMode replays callback effects. Share one exchange result and retry
+    // only the profile load when its transient failure leaves a valid token.
+    if (callback.current?.url === url) {
+      if (callback.current.retry) {
+        const retry = callback.current.retry;
+        callback.current.retry = undefined;
+        callback.current.result = retry();
+      }
+      return callback.current.result;
+    }
+    clearSession();
+    const id = generation.current;
+    setSession({ accessToken: null, id, signingIn: true });
+    if (typeof window !== "undefined" && window.location.pathname === "/auth/callback")
+      window.history.replaceState(window.history.state, "", "/auth/callback");
+    let destination = "/";
+    const loadProfile = async (): Promise<ApiResult<string>> => {
+      setSession({ accessToken: token.get(), id, signingIn: true });
       try {
-        return {
-          ok: true,
-          data: await loginAsync({ payload, id, controller }),
-        };
+        await queryClient.fetchQuery({
+          queryKey: queryKeys.auth.me(id),
+          queryFn: ({ signal }) => getMe({ context: requestContext, signal }),
+          meta: { requiresAuth: true },
+          staleTime: 60_000,
+          retry: false,
+        });
+        if (generation.current !== id) return { ok: false, error: createCanceledError() };
+        setSession({ accessToken: token.get(), id, signingIn: false });
+        return { ok: true, data: destination };
       } catch (error: unknown) {
-        if (generation.current !== id || controller.signal.aborted)
-          return { ok: false, error: createCanceledError() };
-        if (!isApiError(error)) throw error;
-        if (!token.get() || (error.kind === "http" && error.status === 401)) {
-          signOut();
-        } else {
-          pending.current = null;
+        if (generation.current !== id) return { ok: false, error: createCanceledError() };
+        if (token.get() && !(isApiError(error) && error.status === 401)) {
           setSession({ accessToken: token.get(), id, signingIn: false });
+          if (callback.current?.url === url) callback.current.retry = loadProfile;
+        } else {
+          clearSession();
+          await oidc.clearSession().catch(() => {});
         }
-        return { ok: false, error };
-      } finally {
-        if (generation.current === id) resetLogin();
+        return { ok: false, error: isApiError(error) ? error : redirectError("Unable to load your account. Please try again.") };
       }
-    },
-    [loginAsync, resetLogin, signOut, token],
-  );
-
-  const register = useCallback(
-    async (payload: RegisterRequest): Promise<ApiResult<UserResponse>> => {
+    };
+    const result = (async (): Promise<ApiResult<string>> => {
       try {
-        return { ok: true, data: await registerAsync(payload) };
+        const response = await oidc.completeSignIn(url);
+        if (generation.current !== id) {
+          await oidc.clearSession();
+          return { ok: false, error: createCanceledError() };
+        }
+        token.set(response.accessToken);
+        destination = response.returnTo;
+        return loadProfile();
       } catch (error: unknown) {
-        if (!isApiError(error)) throw error;
-        return { ok: false, error };
-      } finally {
-        resetRegistration();
+        if (generation.current !== id) return { ok: false, error: createCanceledError() };
+        clearSession();
+        await oidc.clearSession().catch(() => {});
+        return { ok: false, error: isApiError(error) ? error : redirectError("Sign in could not be completed. Please try again.") };
       }
-    },
-    [registerAsync, resetRegistration],
-  );
+    })();
+    callback.current = { url, result };
+    return result;
+  }, [clearSession, oidc, queryClient, requestContext, token]);
+
+  const signOut = useCallback(async (): Promise<ApiResult<void>> => {
+    clearSession();
+    callback.current = null;
+    resetRegistration();
+    try {
+      // The adapter retains its in-memory ID token for the end-session request.
+      await oidc.signOut();
+      return { ok: true, data: undefined };
+    } catch {
+      return { ok: false, error: redirectError("Sign out could not be completed. Please try again.") };
+    }
+  }, [clearSession, oidc, resetRegistration]);
+
+  const register = useCallback(async (payload: RegisterRequest): Promise<ApiResult<UserResponse>> => {
+    try {
+      return { ok: true, data: await registerAsync(payload) };
+    } catch (error: unknown) {
+      if (!isApiError(error)) throw error;
+      return { ok: false, error };
+    } finally { resetRegistration(); }
+  }, [registerAsync, resetRegistration]);
 
   useEffect(() => {
-    if (
-      profile.error?.kind === "http" &&
-      profile.error.status === 401 &&
-      session.accessToken
-    )
-      signOut();
-  }, [profile.error, session.accessToken, signOut]);
+    if (profile.error?.kind === "http" && profile.error.status === 401 && session.accessToken) {
+      clearSession();
+      void oidc.clearSession().catch(() => {});
+    }
+  }, [clearSession, oidc, profile.error, session.accessToken]);
 
-  useEffect(
-    () => () => {
-      generation.current += 1;
-      pending.current?.abort();
-      profileUpdates.current.forEach((controller) => controller.abort());
-      profileUpdates.current.clear();
-      token.set(null);
-      void queryClient.cancelQueries({ predicate: privateQuery });
-      queryClient.removeQueries({ predicate: privateQuery });
-    },
-    [queryClient, token],
-  );
+  useEffect(() => {
+    const controllers = profileUpdates.current;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // StrictMode immediately replays setup; only real unmount invalidates work.
+      queueMicrotask(() => {
+        if (mounted.current) return;
+        generation.current += 1;
+        controllers.forEach((controller) => controller.abort());
+        controllers.clear();
+        token.set(null);
+        void oidc.clearSession().catch(() => {});
+        void queryClient.cancelQueries({ predicate: privateQuery });
+        queryClient.removeQueries({ predicate: privateQuery });
+      });
+    };
+  }, [oidc, queryClient, token]);
 
   const retryProfile = useCallback(async (): Promise<ApiResult<UserResponse>> => {
     if (!token.get()) return { ok: false, error: createCanceledError() };
@@ -241,44 +257,30 @@ export function AuthSession({
     } catch (error: unknown) {
       if (!isCurrent()) return { ok: false, error: createCanceledError() };
       if (!isApiError(error)) throw error;
-      if (error.status === 401) signOut();
+      if (error.status === 401) {
+        clearSession();
+        void oidc.clearSession().catch(() => {});
+      }
       return { ok: false, error };
     } finally {
       profileUpdates.current.delete(controller);
     }
-  }, [queryClient, requestContext, signOut, token]);
+  }, [clearSession, oidc, queryClient, requestContext, token]);
   const isSessionCurrent = useCallback(
     (id: number) => generation.current === id && Boolean(token.get()),
     [token],
   );
   const user = session.accessToken ? (profile.data ?? null) : null;
-  const status = session.signingIn
-    ? "authenticating"
-    : user
-      ? "authenticated"
-      : session.accessToken
-        ? profile.isError
-          ? "error"
-          : "authenticating"
-        : "anonymous";
+  const status = session.signingIn ? "authenticating"
+    : user ? "authenticated" : session.accessToken
+      ? profile.isError ? "error" : "authenticating" : "anonymous";
 
   return (
-    <AuthContext.Provider
-      value={{
-        accessToken: session.accessToken,
-        user,
-        status,
-        error: profile.error,
-        requestContext,
-        sessionId: session.id,
-        isSessionCurrent,
-        signIn,
-        register,
-        retryProfile,
-        updateProfile,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={{
+      accessToken: session.accessToken, user, status, error: profile.error,
+      requestContext, sessionId: session.id, isSessionCurrent, signIn,
+      completeSignIn, register, retryProfile, updateProfile, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -289,29 +291,22 @@ function Provider({
   stub = process.env.NEXT_PUBLIC_AUTH_STUB === "true",
   ...settings
 }: AuthProviderProps) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          mutations: { retry: 0 },
-          queries: {
-            gcTime: 5 * 60 * 1_000,
-            staleTime: 30_000,
-            refetchOnWindowFocus: false,
-            retry: (failures, error) =>
-              isApiError(error) &&
-              (error.kind === "network" || error.status >= 500) &&
-              failures < 1,
-          },
-        },
-      }),
-  );
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      mutations: { retry: 0 },
+      queries: {
+        gcTime: 5 * 60 * 1_000,
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+        retry: (failures, error) => isApiError(error) &&
+          (error.kind === "network" || error.status >= 500) && failures < 1,
+      },
+    },
+  }));
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSession {...settings} stub={stub}>
-        {children}
-      </AuthSession>
+      <AuthSession {...settings} stub={stub}>{children}</AuthSession>
     </QueryClientProvider>
   );
 }

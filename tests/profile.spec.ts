@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
-const fixtureUrl = "http://127.0.0.1:3912/api";
+const fixtureUrl = "http://127.0.0.1:3913/api";
+const keycloakUrl = "http://127.0.0.1:3913/keycloak";
 const originalName = "Nguyễn Thị Lan";
 const originalAddress = "227 Nguyễn Văn Cừ, Ward 4, District 5, Ho Chi Minh City";
 
@@ -16,9 +17,11 @@ async function history(request: APIRequestContext): Promise<RecordedRequest[]> {
 
 async function signIn(page: Page) {
   await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Keycloak sign in", exact: true })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("lan.nguyen@example.com");
   await page.getByLabel("Password", { exact: true }).fill("profile-password");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
 }
@@ -46,6 +49,7 @@ async function responsiveChecks(page: Page) {
 }
 
 test.beforeEach(async ({ request }) => {
+  expect((await request.get(`${keycloakUrl}/test/reset`)).ok()).toBe(true);
   expect((await request.post(`${fixtureUrl}/__test/reset`, { data: {} })).ok()).toBe(true);
 });
 

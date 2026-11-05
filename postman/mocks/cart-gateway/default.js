@@ -6,6 +6,7 @@
  * This local fixture uses the repository's backend sources; no published mock is used.
  */
 const http = require("node:http");
+const { createHash } = require("node:crypto");
 
 const user = {
   id: "91300000-1111-4111-8111-111111111111",
@@ -19,7 +20,6 @@ const user = {
   status: "ACTIVE",
   createdAt: "2026-10-01T08:00:00Z",
 };
-const token = "local-cart-fixture-token";
 const productId = "91300001-1111-4111-8111-111111111111";
 const skuId = "91300002-1111-4111-8111-111111111111";
 const secondProductId = "91300007-1111-4111-8111-111111111111";
@@ -123,18 +123,15 @@ const server = http.createServer(async (req, res) => {
     return json(res, await pm.state.get(stateKey("cart")) || cart());
   }
 
-  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated: req.headers.authorization === `Bearer ${token}` });
+  const authorization = req.headers.authorization || "";
+  const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+  const authenticated = Boolean(authorization.startsWith("Bearer ") && expectedHash
+    && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
+  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated });
   const controls = await pm.state.get(stateKey("controls")) || {};
 
   // Simulation strips routeKey /api; callers still use /api/v1/... paths.
-  // @endpoint POST /v1/auth/login
-  if (path === "/v1/auth/login" && req.method === "POST") {
-    if (req.body?.email !== user.email || req.body?.password !== "cart-password") {
-      return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
-    }
-    return cartResponse(res, { accessToken: token, expiresIn: 3600, tokenType: "Bearer" });
-  }
-  if ((path === "/v1/users/me" || path.startsWith(cartPath)) && req.headers.authorization !== `Bearer ${token}`) {
+  if ((path === "/v1/users/me" || path.startsWith(cartPath)) && !authenticated) {
     return json(res, { title: "Unauthorized", status: 401 }, 401);
   }
   // @endpoint GET /v1/users/me

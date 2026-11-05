@@ -66,26 +66,25 @@ const installProduct = async (page: Page) => {
 };
 
 const installAuth = async (page: Page) => {
-  const account = { id: "buyer-1", name: "First Buyer" };
-  await page.route("**/api/v1/auth/login", (route) => {
-    if (route.request().method() === "OPTIONS")
-      return route.fulfill({ status: 204, headers: corsHeaders });
-    expect(route.request().headers().authorization).toBeUndefined();
-    return fulfillJson(
-      route,
-      envelope({
-        accessToken: `browser-token-${account.id}`,
-        expiresIn: 3600,
-        tokenType: "Bearer",
-      }),
-    );
+  const account = {
+    id: "buyer-1",
+    name: "First Buyer",
+    authorization: "",
+  };
+  const issuedTokens = new Set<string>();
+  page.on("response", async (response) => {
+    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+      const body = await response.json();
+      issuedTokens.add(body.access_token);
+    }
   });
-  await page.route("**/api/v1/users/me", (route) => {
+  await page.route("**/api/v1/users/me", async (route) => {
     if (route.request().method() === "OPTIONS")
       return route.fulfill({ status: 204, headers: corsHeaders });
-    expect(route.request().headers().authorization).toBe(
-      `Bearer browser-token-${account.id}`,
-    );
+    const authorization = route.request().headers().authorization;
+    expect(authorization).toMatch(/^Bearer .+$/);
+    await expect.poll(() => issuedTokens.has(authorization.slice("Bearer ".length))).toBe(true);
+    account.authorization = authorization;
     return fulfillJson(
       route,
       envelope({
@@ -102,15 +101,32 @@ const installAuth = async (page: Page) => {
       }),
     );
   });
+  // The authenticated header reads the cart independently of the add-item flow.
+  await page.route("**/api/v1/carts/me", (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    expect(route.request().method()).toBe("GET");
+    expect(account.authorization).toMatch(/^Bearer .+$/);
+    expect(route.request().headers().authorization).toBe(account.authorization);
+    return fulfillJson(route, envelope({
+      id: `header-cart-${account.id}`,
+      userId: account.id,
+      status: "ACTIVE",
+      items: [],
+    }));
+  });
   return account;
 };
 
 const signIn = async (page: Page, name: string) => {
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/keycloak\/realms\/nexus\/protocol\/openid-connect\/auth\?/);
   await page
     .getByRole("textbox", { name: "Email", exact: true })
-    .fill("buyer@example.test");
-  await page.getByLabel("Password", { exact: true }).fill("Password1!");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    .fill("buyer@nexus.local");
+  await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText(`Hi ${name}`, { exact: true })).toBeVisible();
 };
@@ -129,6 +145,10 @@ const openProductFromHome = async (page: Page) => {
     page.getByRole("heading", { name: "Browser product", exact: true }),
   ).toBeVisible();
 };
+
+test.beforeEach(async ({ request }) => {
+  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
+});
 
 test("product SKU, price, quantity and keyboard gallery work before anonymous cart prompts sign-in", async ({
   page,
@@ -173,7 +193,7 @@ test("authenticated cart sends selected SKU and quantity, then displays typed ba
   page,
 }) => {
   await installProduct(page);
-  await installAuth(page);
+  const account = await installAuth(page);
   const calls: Array<{ payload: unknown; token: string | undefined }> = [];
   let rejected = false;
   await page.route("**/api/v1/carts/me/items", (route) => {
@@ -215,7 +235,7 @@ test("authenticated cart sends selected SKU and quantity, then displays typed ba
   expect(calls).toEqual([
     {
       payload: { skuId: "sku-blue", quantity: 3 },
-      token: "Bearer browser-token-buyer-1",
+      token: account.authorization,
     },
   ]);
   rejected = true;
@@ -227,6 +247,7 @@ test("authenticated cart sends selected SKU and quantity, then displays typed ba
     0,
   );
   expect(calls).toHaveLength(2);
+  expect(calls[1]?.token).toBe(account.authorization);
 });
 
 test("logout during a pending cart request keeps the next account free of stale success", async ({
@@ -239,10 +260,12 @@ test("logout during a pending cart request keeps the next account free of stale 
     release = resolve;
   });
   let calls = 0;
+  const authorizations: Array<string | undefined> = [];
   await page.route("**/api/v1/carts/me/items", async (route) => {
     if (route.request().method() === "OPTIONS")
       return route.fulfill({ status: 204, headers: corsHeaders });
     calls += 1;
+    authorizations.push(route.request().headers().authorization);
     if (calls === 1) await delayed;
     await fulfillJson(
       route,
@@ -258,6 +281,7 @@ test("logout during a pending cart request keeps the next account free of stale 
   try {
     await page.goto("/sign-in");
     await signIn(page, account.name);
+    const firstAuthorization = account.authorization;
     await openProductFromHome(page);
     const pending = page.waitForRequest(
       (request) =>
@@ -272,6 +296,10 @@ test("logout during a pending cart request keeps the next account free of stale 
       page.getByRole("button", { name: "Adding…", exact: true }),
     ).toBeDisabled();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:3102\/(?:\?.*)?$/);
+    await page.waitForLoadState("load");
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/sign-in$/);
     account.id = "buyer-2";
     account.name = "Second Buyer";
@@ -291,6 +319,7 @@ test("logout during a pending cart request keeps the next account free of stale 
       page.getByText("Added to cart.", { exact: true }),
     ).toBeVisible();
     expect(calls).toBe(2);
+    expect(authorizations).toEqual([firstAuthorization, account.authorization]);
   } finally {
     release();
   }

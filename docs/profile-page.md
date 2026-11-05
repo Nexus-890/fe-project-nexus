@@ -65,7 +65,7 @@ clearing an existing birth date because the current API cannot clear it.
 the UI shows “Kept private” without inventing or exposing a value.
 
 Backend validation errors use Problem Details with
-`errors: [{ field, message }]`. The existing API client normalizes these errors;
+`errors: [{ field, code, detail }]`. The existing API client normalizes these errors;
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
 Missing or expired sessions redirect to `/sign-in`, including a 401 during save.
@@ -104,12 +104,15 @@ transaction statistics, or penalties.
 | Loading, failure, and cancellation | Skeleton, load retry, preserved edits after save failure, and Cancel are covered. |
 | 375×812 layout | Browser assertions check document width and visible text clipping; mobile screenshot attached below. |
 
-Validation reported for this implementation: `npm run lint` and `npm run build`
+Historical validation reported for the original implementation: `npm run lint` and `npm run build`
 passed; `npm run test:auth` passed 38 tests after the develop integration. `npm run test:profile` runs the real
 Next.js frontend against a local stateful Postman HTTP simulation based on the
 repository's backend DTOs. See [profile verification](profile-verification.md)
 for the browser results and the subsequent successful login/GET/PUT check
-against the running backend using the staging demo buyer account.
+against the running backend using the staging demo buyer account. That dated
+password-login evidence does not establish current Keycloak integration. On
+2026-11-05 the merged OIDC profile simulation passed all 9 scenarios; its
+separate evidence and live limits are recorded in the same report.
 
 The screenshots use simulation data to demonstrate the layout:
 

@@ -1,9 +1,61 @@
 # Cart and shared header count
 
-The /cart route renders the current account's cart with quantity updates, removal, derived totals and typed error/retry states. Product details, the header badge and cart page share one query keyed by session generation. Anonymous visitors make no cart request and see a sign-in prompt. Checkout and payment remain separate work.
+The frontend implements `/cart`, the header cart link/count, product-detail add-item, snapshot prices/totals, optimistic quantity/removal, rollback and empty/loading/error/auth states. Header, detail and Cart page share one query keyed by the current session generation. Checkout stays disabled with a visible reason. Delivered OpenAPI now covers GET/POST/PUT/DELETE and the controller wraps PUT in the common envelope. Live authenticated integration remains unverified. See the dated [implementation report](cart-page-implementation.md) and [initial readiness review](cart-page-readiness.md) for historical findings; their earlier missing-operation/bare-response findings do not describe the current merged contract.
 
-Pure functions in service/cartService.ts call the single configs/api.ts boundary for GET /api/v1/carts/me, POST /api/v1/carts/me/items, PUT /api/v1/carts/me/items/{id} and bodyless DELETE 204. The HTTP boundary validates the success envelope; services validate its data and derive decimal-string line totals/subtotal using integer cents. Wire DTOs remain generated from the delivered commerce OpenAPI.
+## Interaction
 
-hooks/useCart.ts owns the shared query and serialized writes through useApiQuery/useApiMutation. Writes cancel older reads before and after completion, replace the confirmed snapshot and retain originating session guards. Logout/account changes remove private data; late responses cannot restore the badge or report success for another account. Count sums quantities without extra product requests.
+1. Load a validated product detail and choose a SKU and quantity.
+2. An anonymous Add to Cart click shows a sign-in prompt and sends no private request.
+3. An authenticated click invokes the shared mutation with the provider's current request context.
+4. The service sends exactly `{skuId, quantity}` to POST `/api/v1/carts/me/items` through the Cart origin and common HTTP boundary.
+5. A successful current-session response replaces that session's shared cart snapshot and shows feedback. The header sums quantities from the same query without extra product requests. A failure does not show success.
 
-Explicit cart fixture selection stays at the HTTP boundary, is disabled in production, and preserves separate carts for development accounts. Normal operation uses the configured common backend origin. See [cart setup and contract details](../cart-flow.md) and [simulation context](../../postman/simulations/cart.context.yaml).
+Quantity must be an integer greater than zero and skuId must be present. Pending state prevents duplicate button submissions in the current interaction. Mutation retry defaults to zero.
+
+## Delivered response
+
+The backend CartController already exists. Use its delivered OpenAPI and DTOs, wrapped in the shared success envelope:
+
+- Cart: id, userId, status and items.
+- Item: id, productId, skuId, quantity and numeric unitPrice on the wire.
+
+Do not require draft fields such as productName, lineTotal, subtotal, currency or updatedAt when the backend does not emit them. `parseCart` normalizes wire prices into decimal strings and derives line totals/subtotal with integer cents. VND is the shop display convention, not a delivered currency field. The normalized application model remains separate from the generated wire DTO.
+
+## API configuration
+
+The user requested an empty Cart base URL to fill later. Edit this single value in [cartService.ts](../../service/cartService.ts):
+
+```ts
+export const CART_API_BASE_URL = "";
+```
+
+Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths already include that prefix. All Cart calls still use the common `requestApi` Axios boundary for tokens, envelopes, errors and cancellation. An explicitly provided request-context baseUrl takes precedence; otherwise blank means browser same-origin relative requests. It does not fabricate a cart or enable fixtures. Auth/catalog keep their existing `NEXT_PUBLIC_API_URL` configuration. Restart/rebuild after filling the service constant.
+
+| Service | Method/path | Request/success | Backend status |
+| --- | --- | --- | --- |
+| getCart | GET `/api/v1/carts/me` | No body; 200 Cart envelope | Delivered; CART.VIEW + CART.CREATE |
+| addCartItem | POST `/api/v1/carts/me/items` | `{skuId, quantity}`; 201 Cart envelope | Delivered; CART.UPDATE; additive, not set-quantity |
+| updateCartItem | PUT `/api/v1/carts/me/items/{lineId}` | `{quantity}`; 200 Cart envelope | Delivered; CART.UPDATE; sets absolute quantity |
+| removeCartItem | DELETE `/api/v1/carts/me/items/{lineId}` | No body; bodyless 204 | Delivered; CART.REMOVE_ITEM |
+
+The merged [CartController](../../../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/controller/CartController.java) matches these method/path/response shapes. Its PUT/DELETE `CurrentUser` parameters still lack the `@AuthenticationPrincipal` annotation used by GET/POST; authenticated runtime verification is required before claiming those operations work with a real session. A frontend simulation does not resolve that backend binding question.
+
+Fill the origin and verify the delivered contract, ownership and privileges against the running BE. Keep the strict shared success-envelope parser. Calls make real HTTP requests and show failures/rollback when refused. Never substitute the additive POST for edits; it also refreshes snapshot price from catalog. `UpdateCartItemRequest` uses the generated delivered quantity DTO together with the application's line identifier. Regenerate wire types after contract changes rather than hand-editing them.
+
+## Page state and display
+
+[Shared useCart](../../hooks/useCart.ts) composes generic hooks/services for the query, quantity count and serialized writes. The [Cart page wrapper](../../features/useCart.ts) owns page feedback; CartPage enriches optional catalog metadata. [ShopLayout](../../features/ShopLayout.tsx), ProductDetailPage and CartPage observe that same session cart key and protected metadata. A fresh query is shared for 30 seconds. Anonymous users send no private cart GET and see a sign-in prompt. The Cart header link is available on mobile.
+
+[cartUtils](../../features/cartUtils.ts) calculates exact line totals/subtotal with BigInt cents from normalized snapshot unitPrice; `formatVND` renders them. Optional catalog metadata supplies names/images/variants. Failed enrichment leaves a usable identifier/image fallback and Remove control; live catalog SKU prices never replace cart prices. No currency conversion, seller display name or shipping promise is fabricated.
+
+The thin route delegates to CartPage with flat CartLine/CartSummary components. Desktop places the list beside the summary; mobile stacks them with wrapping and 44px targets. The supplied design guides layout. Coupons, Save for Later, seller trust, live price alerts, shipping/tax quotes and working checkout remain outside the task.
+
+Before an edit, cancel the cart GET, snapshot the cache and optimistically patch quantity/removal. Totals/header count change immediately. Disable all cart line controls while the operation settles, including across page remounts, to serialize full-cart responses. PUT success uses the returned cart; DELETE success keeps the removal; settled operations refetch. On rejection, restore the snapshot only if that operation's optimistic value still owns the cache and announce the reason. Removing the last line shows the empty state/catalog link immediately; rejected removal restores it. Manual quantity entry commits on blur/Enter, while plus/minus commit immediately.
+
+## Session and mock boundaries
+
+Cart keys carry the account/session identifier and private-query metadata. Session-generation guards cover success, rollback, invalidation and feedback; an old response cannot repopulate private cache after logout/account switching. Leaving the page aborts pending writes and reconciles the current account. Cancellation does not replace generation checks.
+
+An explicit cart development fixture is selected at the HTTP boundary and blocked in production. It models the delivered envelope and keeps separate carts per development account in memory; see [fixture and simulation setup](../cart-flow.md). It does not establish the current database state. Production never silently enables it.
+
+The backend persists cart data, but full refresh still loses the in-memory auth session. Sign back into the same account to reread its cart. This task adds no token storage, guest cart or auth-restoration protocol. Tests/screenshots use explicit HTTP stand-ins and do not establish deployed authorization/database behavior. Peer real-API add/edit with a recorded cart ID remains pending authenticated runtime verification; see the implementation report for dated evidence.

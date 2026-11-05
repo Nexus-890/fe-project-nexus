@@ -1,5 +1,19 @@
 # Profile verification
 
+Current setup note — 2026-11-05: `npm run test:profile` now starts the frontend on
+port 3103 and the profile API/Keycloak stand-ins on port 3913. It follows the
+Keycloak redirect/callback before profile requests; fixture login no longer
+calls `/api/v1/auth/login`. PUT 401 clears local authentication and returns to
+sign-in without a remote logout redirect. The dated runs below remain historical;
+the [simulation context](../postman/simulations/profile.context.yaml) records the
+migrated setup and its separately recorded evidence.
+
+Current merged-state check on 2026-11-05 passed all 9 browser scenarios in 38.0
+seconds. The simulation recorded profile GET 200 (23)/503 (2), PUT 200 (2)/400
+(1)/401 (1)/503 (1), and eight successful OIDC token exchanges. These checks
+exercise frontend behavior with stand-ins; the historical live run below does
+not validate today's real Keycloak/backend integration.
+
 Validated on 2026-10-20 with the real Next.js frontend and a local stateful
 Postman simulation based on this repository's backend DTOs. Run
 `npm run test:profile` to reproduce. All 9 browser tests passed.

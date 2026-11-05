@@ -1,17 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 import { HEADER_UTILITY_NAVIGATION, ROUTES } from "@/configs/routes";
 
-function HeaderTopBar({ user, authenticating, onSignOut, cartCount }: HeaderProps) {
-  const router = useRouter();
-
+function HeaderTopBar({ user, authenticating, onSignOut, cartQuantity }: HeaderProps) {
   function signOut() {
     onSignOut();
-    router.push(ROUTES.signIn);
   }
 
   return (
@@ -57,11 +53,11 @@ function HeaderTopBar({ user, authenticating, onSignOut, cartCount }: HeaderProp
           <button type="button" aria-label="Notifications" className="relative hidden min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary sm:inline-flex">
             <Bell size={17} aria-hidden="true" />
           </button>
-          <Link href={ROUTES.cart} aria-label={user && cartCount !== undefined ? `Shopping cart, ${cartCount} items` : "Shopping cart"} className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
+          <Link href={ROUTES.cart} aria-label={user && cartQuantity !== undefined ? `Shopping cart, ${cartQuantity} items` : "Shopping cart"} className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary">
             <ShoppingCart size={19} aria-hidden="true" />
-            {user && cartCount !== undefined && cartCount > 0 ? (
+            {user && cartQuantity !== undefined && cartQuantity > 0 ? (
               <span aria-live="polite" aria-atomic="true" className="absolute top-0 right-0 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
-                {cartCount}
+                {cartQuantity > 99 ? "99+" : cartQuantity}
               </span>
             ) : null}
           </Link>

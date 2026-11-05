@@ -18,6 +18,7 @@ import { getMe } from "../service/authService";
 import { createAuthStub } from "../mocks/authStub";
 import { useAuth } from "../hooks/useAuth";
 import type { ApiError, FieldErrors } from "../types/commonResponseType";
+import type { OidcClient } from "../features/oidc";
 import type { RegisterRequest } from "../types/authRequestType";
 
 type DelayRule = {
@@ -62,6 +63,8 @@ type FixturePair = {
 
 type AuthProbeHarness = {
   fetch: typeof globalThis.fetch;
+  oidc: OidcClient;
+  callbackFor(input: { email: string; password: string }): string;
   captureInitialStorage(): void;
   delayNext(
     method: string,
@@ -101,7 +104,7 @@ export default function AuthProbe() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSession baseUrl={API_BASE_URL} fetch={harness.fetch}>
+      <AuthSession baseUrl={API_BASE_URL} fetch={harness.fetch} oidc={harness.oidc}>
         <AuthProbePanel harness={harness} />
       </AuthSession>
     </QueryClientProvider>
@@ -112,6 +115,11 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const fixtures = useMemo(() => createFixtures(), []);
+  const signIn = useCallback(async (input: { email: string; password: string }) => {
+    const started = await auth.signIn("/");
+    if (!started.ok) return started;
+    return auth.completeSignIn(harness.callbackFor(input));
+  }, [auth, harness]);
   const [lastError, setLastError] = useState<ActionError>({
     status: null,
     fieldErrors: null,
@@ -160,14 +168,14 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
   const loginPrimary = useCallback(
     () =>
       run(async () => {
-        const result = await auth.signIn(toLogin(fixtures.primary));
+        const result = await signIn(toLogin(fixtures.primary));
         return result.ok ? null : toActionError(result.error);
       }),
-    [auth, fixtures.primary, run],
+    [fixtures.primary, run, signIn],
   );
 
-  const signOut = useCallback(() => {
-    auth.signOut();
+  const signOut = useCallback(async () => {
+    await auth.signOut();
     setLastError({ status: null, fieldErrors: null });
     rerender();
   }, [auth, rerender]);
@@ -175,7 +183,7 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
   const meAfterLogout = useCallback(
     () =>
       run(async () => {
-        auth.signOut();
+        await auth.signOut();
         try {
           await getMe({ context: auth.requestContext });
           return null;
@@ -220,10 +228,10 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
       run(async () => {
         await ensureRegistered(auth.register, fixtures.primary);
         harness.failNextMe(503);
-        const result = await auth.signIn(toLogin(fixtures.primary));
+        const result = await signIn(toLogin(fixtures.primary));
         return result.ok ? null : toActionError(result.error);
       }),
-    [auth, fixtures.primary, harness, run],
+    [auth, fixtures.primary, harness, run, signIn],
   );
 
   const retryProfile = useCallback(
@@ -242,9 +250,9 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
         await ensureRegistered(auth.register, fixtures.secondary);
         harness.delayNext("POST", LOGIN_PATH, 150, true);
 
-        const first = auth.signIn(toLogin(fixtures.primary));
+        const first = signIn(toLogin(fixtures.primary));
         await wait(10);
-        const second = auth.signIn(toLogin(fixtures.secondary));
+        const second = signIn(toLogin(fixtures.secondary));
         const results = await Promise.allSettled([first, second]);
         const rejected = results.find(
           (result): result is PromiseRejectedResult =>
@@ -265,7 +273,7 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
         }
         return null;
       }),
-    [auth, fixtures.primary, fixtures.secondary, harness, run],
+    [auth, fixtures.primary, fixtures.secondary, harness, run, signIn],
   );
 
   const delayedMeRace = useCallback(
@@ -273,9 +281,9 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
       run(async () => {
         await ensureRegistered(auth.register, fixtures.primary);
         harness.delayNext("GET", ME_PATH, 150, true);
-        const pending = auth.signIn(toLogin(fixtures.primary));
+        const pending = signIn(toLogin(fixtures.primary));
         await wait(10);
-        auth.signOut();
+        await auth.signOut();
         const result = await pending;
         await wait(170);
         if (!result.ok && result.error.kind !== "aborted") {
@@ -283,17 +291,17 @@ function AuthProbePanel({ harness }: { harness: AuthProbeHarness }) {
         }
         return null;
       }),
-    [auth, fixtures.primary, harness, run],
+    [auth, fixtures.primary, harness, run, signIn],
   );
 
   const accountSwitchSecond = useCallback(
     () =>
       run(async () => {
         await ensureRegistered(auth.register, fixtures.secondary);
-        const result = await auth.signIn(toLogin(fixtures.secondary));
+        const result = await signIn(toLogin(fixtures.secondary));
         return result.ok ? null : toActionError(result.error);
       }),
-    [auth, fixtures.secondary, run],
+    [auth, fixtures.secondary, run, signIn],
   );
 
   const state = {
@@ -430,8 +438,33 @@ function createProbeHarness(): AuthProbeHarness {
     return response;
   };
 
+  let callbackId = 0;
+  const callbacks = new Map<string, { email: string; password: string }>();
+  // Test-only adapter issues a fixture token; production sign-in never posts a password.
+  const oidc: OidcClient = {
+    signIn: async () => {},
+    completeSignIn: async (url) => {
+      const input = callbacks.get(url);
+      callbacks.delete(url);
+      if (!input) throw new Error("Unknown test callback");
+      const response = await transport(API_BASE_URL + LOGIN_PATH, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+      });
+      const body = await response.json();
+      if (!response.ok) throw body;
+      return { accessToken: body.data.accessToken, returnTo: "/" };
+    },
+    signOut: async () => {},
+    clearSession: async () => {},
+  };
   return {
     fetch: transport,
+    oidc,
+    callbackFor(input) {
+      const url = "http://auth-smoke.local/auth/callback?code=fixture-" + ++callbackId;
+      callbacks.set(url, input);
+      return url;
+    },
     captureInitialStorage() {
       beforeStorage = readStorageSnapshot();
     },

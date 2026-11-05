@@ -6,7 +6,7 @@ export type HeaderProps = {
   user: UserResponse | null;
   authenticating: boolean;
   onSignOut: () => void;
-  cartCount?: number;
+  cartQuantity?: number;
   categories: CategoryNode[];
   categoriesLoading: boolean;
   categoriesError: boolean;

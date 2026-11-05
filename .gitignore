@@ -51,10 +51,12 @@ next-env.d.ts
 /profile-simulation.err
 !/postman/
 !/postman/**
+/.next-oidc-run/
 
 !.env.example
 
 /.next-typecheck/
 /.next-verify-build/
+/.next-cart-readiness-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json

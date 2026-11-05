@@ -1,206 +1,428 @@
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 
-const fixtureUrl = "http://127.0.0.1:3913/api";
-const productId = "91300001-1111-4111-8111-111111111111";
-const skuId = "91300002-1111-4111-8111-111111111111";
-const productName = "Wireless Headphones Silver";
-// CartResponse contains IDs/prices only; the UI uses its deterministic fallback label.
-const cartItemName = `Product ${productId}`;
-
-type RecordedRequest = {
-  method: string;
-  path: string;
-  body: Record<string, unknown> | null;
-  authenticated: boolean;
+// These expected update/remove responses are explicit browser stand-ins. They
+// do not establish live compatibility with #111's current auth/envelope code.
+const cartPath = "/api/v1/carts/me";
+const lineId = "10000000-0000-4000-8000-000000000001";
+const productId = "20000000-0000-4000-8000-000000000001";
+const skuId = "30000000-0000-4000-8000-000000000001";
+const productName = "Studio headphones in silver";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+};
+type FixtureCart = {
+  id: string;
+  userId: string;
+  status: "ACTIVE";
+  items: Array<{
+    id: string;
+    productId: string;
+    skuId: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+};
+const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
+const json = (route: Route, data: unknown, status = 200) =>
+  route.fulfill({ status, headers: corsHeaders, json: data });
+const deferred = () => {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
 };
 
-async function control(request: APIRequestContext, body: Record<string, unknown>) {
-  expect((await request.post(`${fixtureUrl}/__test/control`, { data: body })).ok()).toBe(true);
+async function installCart(page: Page, title = productName) {
+  const cart: FixtureCart = {
+    id: "40000000-0000-4000-8000-000000000001",
+    userId: "buyer-1",
+    status: "ACTIVE",
+    items: [{ id: lineId, productId, skuId, quantity: 2, unitPrice: 150000 }],
+  };
+  const state = {
+    account: { id: "buyer-1", name: "First Buyer", authorization: "" },
+    carts: new Map<string, FixtureCart>([["buyer-1", cart]]),
+    reads: [] as string[],
+    writes: [] as Array<{ method: string; path: string; body: unknown; token: string | undefined }>,
+    failedReads: false,
+    rejectedUpdate: false,
+    rejectedDelete: false,
+    readGate: undefined as Promise<void> | undefined,
+    updateGate: undefined as Promise<void> | undefined,
+    deleteGate: undefined as Promise<void> | undefined,
+    updateFinished: deferred(),
+    finishedUpdates: 0,
+  };
+  const issuedTokens = new Set<string>();
+  page.on("response", async (response) => {
+    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+      const body = await response.json();
+      issuedTokens.add(body.access_token);
+    }
+  });
+  await page.route("**/api/v1/users/me", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    const authorization = route.request().headers().authorization;
+    expect(authorization).toMatch(/^Bearer .+$/);
+    await expect.poll(() => issuedTokens.has(authorization.slice("Bearer ".length))).toBe(true);
+    state.account.authorization = authorization;
+    return json(route, envelope({
+      id: state.account.id, email: `${state.account.id}@example.test`,
+      fullName: state.account.name, phone: "0901234567", gender: null,
+      address: null, dateOfBirth: null, roles: ["BUYER"], status: "ACTIVE",
+      createdAt: "2026-11-02T00:00:00Z",
+    }));
+  });
+  await page.route("**/api/v1/products/*", (route) => {
+    if (new URL(route.request().url()).pathname !== `/api/v1/products/${productId}`)
+      return json(route, { title: "Not found", status: 404, detail: "Metadata is unavailable." }, 404);
+    return json(route, envelope({
+      id: productId, name: title, slug: `studio-headphones-${productId}`,
+      categoryId: "electronics", sellerId: "seller-1", status: "ACTIVE",
+      minPrice: 999999, description: "Current catalog metadata, not the cart price.",
+      auctionEnable: false,
+      skus: [{
+        id: skuId, productId, skuCode: "SILVER", color: "Silver", size: null,
+        price: 999999, status: "ACTIVE",
+      }],
+      images: [],
+    }));
+  });
+  await page.route("**/api/v1/carts/**", async (route) => {
+    const request = route.request();
+    const method = request.method();
+    if (method === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    const path = new URL(request.url()).pathname;
+    const token = request.headers().authorization;
+    const buyer = state.account.id;
+    expect(token).toBe(state.account.authorization);
+    const currentCart = state.carts.get(buyer)!;
+    if (method === "GET" && path === cartPath) {
+      state.reads.push(buyer);
+      try {
+        await state.readGate;
+        return await (state.failedReads
+          ? json(route, { title: "Unavailable", status: 503, detail: "Cart service is unavailable." }, 503)
+          : json(route, envelope(currentCart)));
+      } catch {
+        // A remount or logout can cancel a deliberately held GET.
+        return;
+      }
+    }
+    const body: unknown = request.postData() ? request.postDataJSON() : null;
+    state.writes.push({ method, path, body, token });
+    if (method === "PUT" && path === `${cartPath}/items/${lineId}`) {
+      const rejected = state.rejectedUpdate;
+      try {
+        await state.updateGate;
+        if (rejected)
+          return await json(route, {
+            title: "Conflict", status: 409, code: "COMMERCE_QUANTITY_REJECTED",
+            detail: "Only two units can be purchased.",
+          }, 409);
+        const quantity = (body as { quantity: number }).quantity;
+        currentCart.items = currentCart.items.map((item) => item.id === lineId ? { ...item, quantity } : item);
+        return await json(route, envelope(currentCart));
+      } catch {
+        // Logout may abort the old account's intercepted request.
+      } finally {
+        state.finishedUpdates += 1;
+        state.updateFinished.resolve();
+      }
+      return;
+    }
+    if (method === "DELETE" && path === `${cartPath}/items/${lineId}`) {
+      await state.deleteGate;
+      if (state.rejectedDelete)
+        return json(route, {
+          title: "Conflict", status: 409, code: "COMMERCE_ITEM_LOCKED",
+          detail: "This cart line cannot be removed right now.",
+        }, 409);
+      currentCart.items = currentCart.items.filter((item) => item.id !== lineId);
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    }
+    return json(route, { title: "Unexpected cart operation", status: 404 }, 404);
+  });
+  return state;
 }
 
-async function reset(request: APIRequestContext, body: Record<string, unknown> = {}) {
-  expect((await request.post(`${fixtureUrl}/__test/reset`, { data: body })).ok()).toBe(true);
-}
-
-async function history(request: APIRequestContext): Promise<RecordedRequest[]> {
-  return (await request.get(`${fixtureUrl}/__test/requests`)).json();
-}
-
-const cartRequests = (requests: RecordedRequest[]) => requests.filter(entry => entry.path.startsWith("/v1/carts/me"));
-const cartLink = (page: Page) => page.locator("header").getByRole("link", { name: /Shopping cart/i });
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill("cart.buyer@example.com");
-  await page.getByLabel("Password", { exact: true }).fill("cart-password");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+async function signIn(page: Page, name: string) {
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/keycloak\/realms\/nexus\/protocol\/openid-connect\/auth\?/);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@nexus.local");
+  await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator("header").getByRole("link", { name: "Hi Cart Buyer" })).toBeVisible();
+  await expect(page.getByText(`Hi ${name}`, { exact: true })).toBeVisible();
 }
 
 async function openCart(page: Page) {
-  await cartLink(page).click();
+  await page.getByRole("link", { name: /^Shopping cart/ }).click();
   await expect(page).toHaveURL(/\/cart$/);
   await expect(page.getByRole("heading", { name: "Cart", exact: true })).toBeVisible();
 }
 
-async function openProduct(page: Page) {
-  await page.locator("main").getByRole("link", { name: "Electronics", exact: true }).click();
-  await page.getByRole("article", { name: productName, exact: true }).getByRole("link").click();
-  await expect(page).toHaveURL(new RegExp(`${productId}$`));
-  await expect(page.getByRole("heading", { name: productName, exact: true })).toBeVisible();
+async function signInAndOpenCart(page: Page, name: string) {
+  await page.goto("/sign-in");
+  await signIn(page, name);
+  await openCart(page);
 }
 
-async function expectCount(page: Page, quantity: number) {
-  await expect(cartLink(page)).toHaveAccessibleName(new RegExp(`Shopping cart.*\\b${quantity}\\s+items?\\b`, "i"));
+async function capture(page: Page, info: TestInfo, name: string) {
+  const path = info.outputPath(name);
+  // Hide development diagnostics only in the exported image, after UI assertions.
+  await page.screenshot({ path, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });
+  await info.attach(name, { path, contentType: "image/png" });
 }
 
-test.beforeEach(async ({ request }) => reset(request));
-
-test("anonymous header has no count and makes no cart request", async ({ page, request }) => {
-  await page.goto("/");
-  await expect(page.locator("main").getByRole("link", { name: "Electronics", exact: true })).toBeVisible();
-  await expect(cartLink(page)).toHaveAccessibleName("Shopping cart");
-  expect(cartRequests(await history(request))).toEqual([]);
-  await openCart(page);
-  await expect(page.getByText(/sign in/i).last()).toBeVisible();
-  expect(cartRequests(await history(request))).toEqual([]);
+test.beforeEach(async ({ request }) => {
+  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
 });
 
-test("quantity two from the product updates the header without reloading", async ({ page, request }) => {
-  await signIn(page);
-  await openProduct(page);
-  await page.getByRole("spinbutton", { name: "Quantity", exact: true }).fill("2");
-  await page.evaluate(() => Object.assign(window, { cartAcceptanceMarker: "same-document" }));
-  const addition = page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === "/api/v1/carts/me/items");
-  await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
-  expect((await addition).status()).toBe(201);
-  await expectCount(page, 2);
-  expect(await page.evaluate(() => (window as typeof window & { cartAcceptanceMarker?: string }).cartAcceptanceMarker)).toBe("same-document");
-
-  const posts = cartRequests(await history(request)).filter(entry => entry.method === "POST");
-  expect(posts).toHaveLength(1);
-  expect(posts[0]).toMatchObject({ path: "/v1/carts/me/items", authenticated: true, body: { skuId, quantity: 2 } });
-  await openCart(page);
-  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expectCount(page, 2);
-});
-
-test("the header and cart list share one authenticated GET", async ({ page, request }) => {
-  await reset(request, { seeded: true, quantity: 3 });
-  await signIn(page);
-  await expectCount(page, 3);
-  await openCart(page);
-  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  const gets = cartRequests(await history(request)).filter(entry => entry.method === "GET");
-  expect(gets).toHaveLength(1);
-  expect(gets[0]).toMatchObject({ path: "/v1/carts/me", authenticated: true });
-});
-
-test("minimal backend DTO sums quantities across lines and derives money totals", async ({ page, request }) => {
-  await reset(request, { seeded: true, quantity: 3, secondQuantity: 2 });
-  const response = page.waitForResponse(entry => entry.request().method() === "GET"
-    && new URL(entry.url()).pathname === "/api/v1/carts/me");
-  await signIn(page);
-  const payload = await (await response).json();
-  expect(Object.keys(payload).sort()).toEqual(["code", "data", "message"]);
-  expect(payload).toMatchObject({ code: 0, message: "response success" });
-  expect(Object.keys(payload.data).sort()).toEqual(["id", "items", "status", "userId"]);
-  expect(payload.data.items).toHaveLength(2);
-  for (const item of payload.data.items) {
-    expect(Object.keys(item).sort()).toEqual(["id", "productId", "quantity", "skuId", "unitPrice"]);
-    expect(typeof item.unitPrice).toBe("number");
-  }
-
-  await expectCount(page, 5);
-  await openCart(page);
-  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expect(page.getByText("Product 91300007-1111-4111-8111-111111111111", { exact: true })).toBeVisible();
-  await expect(page.getByText("Subtotal (5 items)", { exact: true })).toBeVisible();
-  await expect(page.getByText("5.500.001,00 ₫", { exact: true })).toBeVisible();
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(1);
-});
-
-test("updating and removing an item updates the shared header count", async ({ page, request }) => {
-  await reset(request, { seeded: true });
-  await signIn(page);
-  await openCart(page);
-  await expectCount(page, 1);
-  const update = page.waitForResponse(response => response.request().method() === "PUT"
-    && new URL(response.url()).pathname.startsWith("/api/v1/carts/me/items/"));
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
-  expect((await update).status()).toBe(200);
-  await expectCount(page, 2);
-  const updates = cartRequests(await history(request)).filter(entry => entry.method === "PUT");
-  expect(updates).toHaveLength(1);
-  expect(updates[0]).toMatchObject({ body: { quantity: 2 }, authenticated: true });
-  const removal = page.waitForResponse(response => response.request().method() === "DELETE" && new URL(response.url()).pathname.startsWith("/api/v1/carts/me/items/"));
-  await page.getByRole("button", { name: new RegExp(`Remove.*${cartItemName}`, "i") }).click();
-  expect((await removal).status()).toBe(204);
-  await expect(page.getByText(cartItemName, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/your cart is empty/i)).toBeVisible();
-  const removals = cartRequests(await history(request)).filter(entry => entry.method === "DELETE");
-  expect(removals).toHaveLength(1);
-  expect(removals[0].authenticated).toBe(true);
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(2);
-  await expect(cartLink(page)).not.toHaveAccessibleName(/\b[1-9]\d* items?\b/);
-});
-
-test("cart GET failure offers retry and recovers the cart", async ({ page, request }) => {
-  await reset(request, { seeded: true, quantity: 2 });
-  await control(request, { getStatus: 503 });
-  await signIn(page);
-  await openCart(page);
-  await expect(page.locator("main").getByRole("alert")).toContainText(/cart/i);
-  await control(request, { getStatus: 0 });
-  await page.getByRole("button", { name: /retry cart|try again/i }).click();
-  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expectCount(page, 2);
-});
-
-test("failed quantity update preserves the last confirmed cart and can retry", async ({ page, request }) => {
-  await reset(request, { seeded: true });
-  await signIn(page);
-  await openCart(page);
-  await control(request, { writeStatus: 503 });
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
-  await expect(page.locator("main").getByRole("alert")).toBeVisible();
-  await expectCount(page, 1);
-  await control(request, { writeStatus: 0 });
-  await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
-  await expectCount(page, 2);
-});
-
-test("a late add response after sign out cannot restore the cart badge", async ({ page, request }) => {
-  await signIn(page);
-  await openProduct(page);
-  await control(request, { postDelayMs: 1200 });
-  await page.getByRole("spinbutton", { name: "Quantity", exact: true }).fill("2");
-  await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
-  await expect.poll(async () => cartRequests(await history(request)).filter(entry => entry.method === "POST").length).toBe(1);
-  await page.locator("header").getByRole("button", { name: "Sign out", exact: true }).click();
+test("signed-out cart requests sign-in without fetching protected cart data", async ({ page }) => {
+  const state = await installCart(page);
+  await page.goto("/cart");
+  await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
+  await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
+  expect(state.reads).toEqual([]);
+  expect(state.writes).toEqual([]);
+  await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
-  await page.getByRole("link", { name: "Nexus home", exact: true }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await expect.poll(async () => ((await (await request.get(`${fixtureUrl}/__test/cart`)).json()).items[0]?.quantity ?? 0)).toBe(2);
-  await expect(cartLink(page)).toHaveAccessibleName("Shopping cart");
-  await expect(page.locator("header").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(1);
 });
 
-test("cart fits mobile and desktop and captures review screenshots", async ({ page, request }, info) => {
-  await reset(request, { seeded: true, quantity: 2 });
-  await signIn(page);
-  await openCart(page);
-  await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  const screenshotStyle = "nextjs-portal { display: none !important; }";
-  await page.screenshot({ path: info.outputPath("cart-desktop-1440.png"), fullPage: true, style: screenshotStyle });
+test("cart displays snapshot unit and line prices with a disabled checkout at desktop", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 1056 });
+  const state = await installCart(page);
+  await signInAndOpenCart(page, state.account.name);
+  const line = page.getByTestId(`cart-line-${lineId}`);
+  await expect(line).toContainText(productName);
+  await expect(line.getByRole("spinbutton")).toHaveValue("2");
+  await expect(line.getByText("150.000,00 ₫", { exact: true })).toBeVisible();
+  await expect(line.getByText("300.000,00 ₫", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
+  await expect(page.getByRole("main")).not.toContainText("999.999");
+  await expect(page.getByRole("button", { name: /Place order|Proceed to Checkout/i })).toBeDisabled();
+  await expect(page.getByRole("main")).toContainText(/checkout.*not available|order.*not available|coming soon/i);
+  await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName(/2/);
+  expect(state.reads).toContain("buyer-1");
+  await capture(page, info, "cart-desktop-1440.png");
   await page.setViewportSize({ width: 375, height: 812 });
+  await capture(page, info, "cart-mobile-375x812.png");
+});
+
+test("quantity changes subtotal before the response and rejection restores the snapshot", async ({ page }) => {
+  const state = await installCart(page);
+  const gate = deferred();
+  state.updateGate = gate.promise;
+  state.rejectedUpdate = true;
+  try {
+    await signInAndOpenCart(page, state.account.name);
+    const line = page.getByTestId(`cart-line-${lineId}`);
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await line.getByRole("button", { name: /Increase quantity/ }).click();
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+    await expect(line.getByRole("spinbutton")).toHaveValue("3");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await expect.poll(() => state.writes.length).toBe(1);
+    expect(state.writes[0]).toEqual({
+      method: "PUT", path: `${cartPath}/items/${lineId}`,
+      body: { quantity: 3 }, token: state.account.authorization,
+    });
+    gate.resolve();
+    await expect(page.getByText("Only two units can be purchased.", { exact: true })).toBeVisible();
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    expect(state.writes).toHaveLength(1);
+  } finally {
+    gate.resolve();
+  }
+});
+
+test("successful quantity edit survives navigation and refresh followed by signing back in", async ({ page }) => {
+  const state = await installCart(page);
+  await signInAndOpenCart(page, state.account.name);
+  const line = page.getByTestId(`cart-line-${lineId}`);
+  const quantity = line.getByRole("spinbutton");
+  await quantity.fill("");
+  await quantity.press("Tab");
+  await expect(quantity).toHaveValue("2");
+  expect(state.writes).toEqual([]);
+  await quantity.fill("30");
+  await quantity.fill("3");
+  expect(state.writes).toEqual([]);
+  await quantity.press("Enter");
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  await expect.poll(() => state.carts.get("buyer-1")!.items[0].quantity).toBe(3);
+  await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+  await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+  await openCart(page);
+  await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
+  const readsBeforeLogin = state.reads.length;
+  await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
+  await signIn(page, state.account.name);
+  await openCart(page);
+  await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  expect(state.reads.length).toBeGreaterThan(readsBeforeLogin);
+});
+
+test("a rejected last-line removal restores the line, subtotal and API reason", async ({ page }) => {
+  const state = await installCart(page);
+  const gate = deferred();
+  state.deleteGate = gate.promise;
+  state.rejectedDelete = true;
+  try {
+    await signInAndOpenCart(page, state.account.name);
+    const line = page.getByTestId(`cart-line-${lineId}`);
+    await line.getByRole("button", { name: /Remove/ }).click();
+    await expect(line).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Your cart is empty", exact: true })).toBeVisible();
+    await expect.poll(() => state.writes.length).toBe(1);
+    gate.resolve();
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
+    await expect(page.getByText("This cart line cannot be removed right now.", { exact: true })).toBeVisible();
+    await expect(line.getByRole("button", { name: /Remove/ })).toBeEnabled();
+    expect(state.writes).toHaveLength(1);
+  } finally {
+    gate.resolve();
+  }
+});
+
+test("bodyless remove response leaves an empty cart and a working catalog link", async ({ page }) => {
+  const state = await installCart(page);
+  await signInAndOpenCart(page, state.account.name);
+  const line = page.getByTestId(`cart-line-${lineId}`);
+  await line.getByRole("button", { name: /Remove/ }).click();
+  await expect(line).toHaveCount(0);
+  const catalog = page.getByRole("main").getByRole("link", { name: "Browse catalog", exact: true });
+  await expect(catalog).toBeVisible();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]).toEqual({
+    method: "DELETE", path: `${cartPath}/items/${lineId}`,
+    body: null, token: state.account.authorization,
+  });
+  await catalog.click();
+  await expect(page).not.toHaveURL(/\/cart$/);
+  await expect(page.getByRole("main")).toBeVisible();
+});
+
+test("cart load retries and mobile long titles and missing metadata remain usable", async ({ page }, info) => {
+  const state = await installCart(page, `Long product title ${"UnbrokenProductName".repeat(8)} — silver headphones`);
+  const missingLineId = "10000000-0000-4000-8000-000000000002";
+  state.carts.get("buyer-1")!.items.push({
+    id: missingLineId, productId: "20000000-0000-4000-8000-000000000002",
+    skuId: "30000000-0000-4000-8000-000000000002", quantity: 1, unitPrice: 50000,
+  });
+  state.failedReads = true;
+  await signInAndOpenCart(page, state.account.name);
+  const retry = page.getByRole("button", { name: "Retry cart", exact: true });
+  await expect(retry).toBeVisible();
+  await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
+  state.failedReads = false;
+  await retry.click();
+  await expect(page.getByTestId(`cart-line-${lineId}`)).toContainText("UnbrokenProductName");
+  const fallback = page.getByTestId(`cart-line-${missingLineId}`);
+  await expect(fallback.getByRole("button", { name: /Remove/ })).toBeEnabled();
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("350.000,00 ₫");
+  expect(page.viewportSize()).toEqual({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const clipped = await page.locator("main h1:visible, main h2:visible, main p:visible, main button:visible, main a:visible")
-    .evaluateAll(elements => elements.filter(el => el instanceof HTMLElement && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
-      .map(el => (el.textContent ?? "").trim()).filter(Boolean));
+  const clipped = await page.locator("header :visible, main :visible, footer :visible").evaluateAll((elements) =>
+    elements.filter((element) => element instanceof HTMLElement && element.clientWidth > 0 &&
+      element.scrollWidth > element.clientWidth + 1 && !element.closest("script,style,svg,pre"))
+      .map((element) => element.textContent?.trim()).filter(Boolean),
+  );
   expect(clipped).toEqual([]);
-  await page.screenshot({ path: info.outputPath("cart-mobile-375x812.png"), fullPage: true, style: screenshotStyle });
+  const smallTargets = await page.locator(
+    "header a:visible, header button:visible, main a:visible, main button:visible, main input:visible, footer a:visible",
+  ).evaluateAll((elements) => elements.map((element) => ({
+    label: element.getAttribute("aria-label") ?? element.textContent,
+    rect: element.getBoundingClientRect(),
+  })).filter(({ rect }) => rect.width < 44 || rect.height < 44).map(({ label }) => label));
+  expect(smallTargets).toEqual([]);
+  await capture(page, info, "cart-mobile-edge-cases.png");
+});
+
+test("a pending old-account edit cannot restore private cart data after account switching", async ({ page }) => {
+  const state = await installCart(page);
+  const gate = deferred();
+  state.updateGate = gate.promise;
+  state.carts.set("buyer-2", {
+    id: "40000000-0000-4000-8000-000000000002", userId: "buyer-2", status: "ACTIVE", items: [],
+  });
+  try {
+    await signInAndOpenCart(page, state.account.name);
+    await page.getByTestId(`cart-line-${lineId}`).getByRole("button", { name: /Increase quantity/ }).click();
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+    await expect.poll(() => state.writes.length).toBe(1);
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:3102\/(?:\?.*)?$/);
+    await page.waitForLoadState("load");
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    state.account.id = "buyer-2";
+    state.account.name = "Second Buyer";
+    await signIn(page, state.account.name);
+    await openCart(page);
+    await expect(page.getByRole("main").getByRole("link", { name: "Browse catalog", exact: true })).toBeVisible();
+    gate.resolve();
+    await state.updateFinished.promise;
+    await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
+    await expect(page.getByRole("main")).not.toContainText(productName);
+    await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName(/0/);
+    await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+    await openCart(page);
+    await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
+  } finally {
+    gate.resolve();
+  }
+});
+
+test("navigation keeps cart edits locked through reconciliation and ignores a late old rejection", async ({ page }) => {
+  const state = await installCart(page);
+  const updateGate = deferred();
+  const readGate = deferred();
+  state.updateGate = updateGate.promise;
+  state.rejectedUpdate = true;
+  try {
+    await signInAndOpenCart(page, state.account.name);
+    const line = page.getByTestId(`cart-line-${lineId}`);
+    await line.getByRole("button", { name: /Increase quantity/ }).click();
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+    await expect.poll(() => state.writes.length).toBe(1);
+    const initialReads = state.reads.length;
+    state.readGate = readGate.promise;
+    await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+    await expect.poll(() => state.reads.length).toBeGreaterThan(initialReads);
+    await openCart(page);
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await expect(line.getByRole("button", { name: /Remove/ })).toBeDisabled();
+    expect(state.writes).toHaveLength(1);
+    readGate.resolve();
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    state.updateGate = undefined;
+    state.rejectedUpdate = false;
+    await line.getByRole("button", { name: /Increase quantity/ }).click();
+    await expect.poll(() => state.carts.get("buyer-1")!.items[0].quantity).toBe(3);
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+    updateGate.resolve();
+    await expect.poll(() => state.finishedUpdates).toBe(2);
+    await expect(line.getByRole("spinbutton")).toHaveValue("3");
+    await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+    await expect(page.getByText("Only two units can be purchased.", { exact: true })).toHaveCount(0);
+    expect(state.writes).toHaveLength(2);
+  } finally {
+    updateGate.resolve();
+    readGate.resolve();
+  }
 });

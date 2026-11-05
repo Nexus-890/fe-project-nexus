@@ -1,5 +1,7 @@
 simulation: profile-browser
 routing: path
 mocks:
+  - routeKey: keycloak
+    path: ../mocks/oidc-keycloak/config.yaml
   - routeKey: api
     path: ../mocks/profile-gateway/config.yaml

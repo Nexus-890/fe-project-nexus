@@ -3,3 +3,6 @@ routing: path
 mocks:
   - routeKey: api
     path: ../mocks/cart-gateway/config.yaml
+  - name: keycloak
+    routeKey: keycloak
+    path: postman/mocks/oidc-keycloak/config.yaml

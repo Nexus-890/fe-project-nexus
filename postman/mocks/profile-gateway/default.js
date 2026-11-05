@@ -1,6 +1,7 @@
 /* Postman loads mock handlers as CommonJS, including in ESM projects. */
 /** Local profile contract from this repository's UserController and IAM DTOs. */
 const http = require("node:http");
+const { createHash } = require("node:crypto");
 
 const initialUser = {
   id: "9e1018ac-5fb0-47a6-bc3c-3e32a41f49af",
@@ -66,21 +67,16 @@ const server = http.createServer(async (req, res) => {
     return json(res, await pm.state.get("profile-gateway:requests") || []);
   }
 
-  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated: Boolean(req.headers.authorization) });
+  const authorization = req.headers.authorization || "";
+  const expectedHash = await pm.state.get("oidc-keycloak:access-token-hash");
+  const authenticated = Boolean(authorization.startsWith("Bearer ") && expectedHash
+    && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
+  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
-  if (path === "/v1/users/me" && req.headers.authorization !== "Bearer local-profile-fixture-token") {
+  if (["/v1/users/me", "/v1/carts/me"].includes(path) && !authenticated) {
     return json(res, { title: "Unauthorized", status: 401 }, 401);
-  }
-
-  // The simulation strips routeKey /api, preserving the real caller's URL.
-  // @endpoint POST /v1/auth/login
-  if (path === "/v1/auth/login" && req.method === "POST") {
-    if (req.body?.email !== initialUser.email || req.body?.password !== "profile-password") {
-      return json(res, { title: "Unauthorized", status: 401, detail: "Invalid credentials" }, 401);
-    }
-    return success(res, { accessToken: "local-profile-fixture-token", expiresIn: 3600, tokenType: "Bearer" });
   }
 
   // @endpoint GET /v1/users/me

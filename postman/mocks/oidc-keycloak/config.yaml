@@ -1,0 +1,9 @@
+version: 1
+name: nexus-oidc-keycloak
+slug: nexus-oidc-keycloak
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

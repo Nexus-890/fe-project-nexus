@@ -1,5 +1,7 @@
 # Frontend rebuild verification — 2026-10-30
 
+The dated sections below record checks against their named revisions. The 2026-11-05 Cart merge combines the existing OIDC session lifecycle, optimistic Cart page and shared hooks/header count; earlier absent-operation, bare-PUT-response and credential-login descriptions are historical. Current behavior and integration limits are in the [Cart guide](../features/cart.md) and [authentication guide](../features/authentication.md). This merge's checks are recorded in the final section separately from earlier runs.
+
 Branch: `251-fe-rebuild-fe-project-nexus`. The branch was fetched, checked out with its remote tracking branch and fast-forward pulled before edits. Starting revision: `93415a0c`; the working tree was clean. This report describes the locally verified rebuild, not a deployed release.
 
 ## Comparison with the agreed architecture
@@ -99,3 +101,92 @@ Executed on 2026-11-04:
 The earlier unit assertion that subtotal must be absent described the old add-only model; it now asserts exact computed subtotal/line total/currency. All previous wire/body/auth assertions remain. The test-only API/profile fixtures now emit the common envelope, sibling paging metadata and field/code/detail errors. Browser simulations verify caller behavior and do not establish live gateway/auth/commerce connectivity. Historical live profile evidence remains dated separately in docs/profile-verification.md.
 
 Next.js emitted its existing security reminder on first test-server startup; unchanged retries completed the checks. No framework upgrade is included. Temporary auth-smoke routes and tsconfig changes were cleaned by the runners. Preexisting local build/simulation files were preserved and excluded from publication. The parent develop contains intentional Markdown hard-break whitespace in a database document; whitespace verification is scoped to this branch's diff against origin/develop.
+## OIDC review corrections and develop integration — 2026-11-04
+
+Source branch: fsa_ChungTQ/refactor/239-fe-sign-in-with-keycloak-oidc-pkce, starting at 4c1139ab. Merged origin/develop 0d14ca45 and resolved the frontend rebuild conflicts into its flat structure. The branch now uses configs/api.ts and service/authService.ts; obsolete nested HTTP/auth wrappers were removed after moving the OIDC behavior into Provider.tsx and flat features.
+
+The review finding was confirmed against the committed backend controllers and ApiResponse: GET /api/v1/users/me HTTP 200 and POST /api/v1/auth/register HTTP 201 return {code,message,data}. The old client validated the wrapper as a user. The merged implementation validates the envelope centrally and then validates response.data. Fixtures now emit the actual envelope and delivered field/code/detail validation errors. Native HTTP regressions and browser assertions cover both successful statuses and malformed nested data; callback retries never repeat a successful code exchange.
+
+Executed locally on 2026-11-04:
+
+| Check | Result |
+| --- | --- |
+| npm run test:auth | 64 passed, including native HTTP envelope regressions and OIDC protocol checks |
+| npm run test:auth:browser | 11 passed against local Postman API/Keycloak stand-ins |
+| npm run test:catalog | 20 passed, including the auth acceptance harness, catalog/gallery and authenticated cart/account-switch scenarios |
+| npm run lint | Passed |
+| npm run typecheck | Passed with newly generated isolated route types |
+| npm run generate:types; npm run generate:types:check | Passed after regenerating catalog/commerce DTOs that had drifted from develop's already committed OpenAPI |
+| NEXUS_TEST_DIST_DIR=.next-verify-build npm run build | Passed production compilation, TypeScript and all page generation; no temporary auth-smoke route in production output |
+
+The initial main browser run passed 19/20. The logout/account-switch test interacted before the full provider redirect finished loading; it now waits for the document load before using the normal sign-in Link. All three product cases passed in a focused run, followed by all 20 main scenarios in a full run. The injected auth harness continues to exercise in-memory generation/private-cache races; real provider logout intentionally navigates to a new document.
+
+Installed Next.js 16.4.0 emitted its existing security upgrade reminder. Unchanged retries completed the browser/build checks; no framework upgrade is included. An overlapping temporary smoke-route cleanup invalidated an earlier build attempt, so the final production build was run separately after all fixture servers stopped. Runners restored the checked-in tsconfig and removed the temporary route. Local logs/traces and preexisting cart build output were excluded from Git.
+
+Simulation evidence establishes frontend behavior against locally modeled dependencies. Real backend JWT trust/CORS, live Keycloak authentication/logout and new-account provisioning remain unverified. See the [OIDC simulation context](../../postman/simulations/oidc.context.yaml). Postman CLI 1.73.0 ran the simulation; its status subcommand is unavailable. No mock was published or deployed.
+
+## Shared Cart hooks and develop merge — 2026-11-05
+
+Starting revision: `78168f44` on `fsa_ChungTQ/chore/fe-cart-hooks-header-cart-count`.
+Merged `origin/develop` at `0d0a36a4` without rewriting history. Checks below ran
+against the uncommitted merge in an isolated worktree; the original profile
+checkout and its unfinished merge were preserved.
+
+The merged implementation retains Keycloak OIDC, scoped profile updates, the
+optimistic Cart page and blank Cart origin while sharing cart query/count/writes
+through `hooks/useCart.ts`. The Cart-page wrapper owns feedback; shared writes
+serialize optimism and rollback, guard session generations and reconcile an
+aborted same-session operation even after its page unmounts. Delivered PUT and
+DELETE now appear in the spec, and PUT returns the common envelope; earlier
+contract blockers in dated sections do not describe this merged contract.
+
+| Check | Result and scope |
+| --- | --- |
+| Baseline `npm run test:unit` before merging | 66/66 passed at `78168f44` |
+| `npm run generate:types:check` | Passed against the merged delivered OpenAPI |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed with freshly generated isolated route types |
+| `npm run test:unit` | 87/87 passed, including two additional reconciliation/serialization regressions |
+| `npm run test:browser` | 30/30 passed in 1.2 minutes, including retained Cart page, product, catalog and auth acceptance coverage |
+| `npm run test:cart` | 9/9 passed in 47.3 seconds through the local OIDC/Cart HTTP simulation |
+| `npm run test:profile` | 9/9 passed in 38.0 seconds through the local OIDC/profile HTTP simulation |
+| `npm run test:auth:browser` | 11/11 passed in 42.6 seconds through the dedicated OIDC API/Keycloak simulation |
+| `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` | Passed optimized production compilation, TypeScript and all 12 page generations; no temporary auth-smoke route |
+
+The focused Cart suite now lives in `tests/cart-shared.spec.ts`; the main
+`tests/cart.spec.ts` retains the separate optimistic page scenarios. Header and
+page share one initial GET. The combined PUT/DELETE scenario expects three GETs:
+the shared initial read and one authoritative reconciliation after each edit.
+The Cart simulation log confirmed GET 200 (12)/503 (2), POST 201 (2), PUT 200 (2)/
+503 (1), DELETE 204 (1), and eight successful Keycloak token exchanges. Request
+counts summarize the fixture run and are not claims about the live backend.
+
+Initial browser startup encountered the installed Next security reminder and a
+Turbopack rejection of a cross-drive dependency junction. Existing locked
+dependencies were copied into the isolated worktree and unchanged application
+checks then passed; no application configuration or framework version changed
+for those environment failures. The first production-build invocation stopped
+at the same installed Next advisory after page generation; an unchanged retry
+completed with exit code zero. The framework advisory remains a separate
+dependency follow-up.
+
+The profile simulation confirmed GET 200 (23)/503 (2), PUT 200 (2)/400 (1)/401
+(1)/503 (1), and eight successful provider token exchanges. Save-time 401 clears
+local authentication and returns to sign-in without an implicit remote logout.
+The [profile context](../../postman/simulations/profile.context.yaml) separates
+this current fixture evidence from historical password-login/live-backend runs.
+
+The dedicated OIDC log contained one listening event and 125 requests, including
+profile 200 (7)/401 (1)/503 (1), registration 201 (1), token 200 (6)/400 (1) and
+logout 302 (1). The [OIDC context](../../postman/simulations/oidc.context.yaml)
+preserves earlier runs and the current merged-state evidence separately.
+
+All 86 local Markdown links in the edited guides resolve and the scoped staged
+diff passes whitespace checks. These documentation checks preserve the dated
+evidence rather than treating earlier revisions as current acceptance.
+
+No live backend or backend test suite was run for this conflict resolution.
+PUT/DELETE principal binding still differs from GET/POST and needs authenticated
+runtime verification. Peer Cart-ID acceptance and coordinated release remain
+pending; fixture success does not establish either. Current simulation evidence
+is recorded in the [Cart context](../../postman/simulations/cart.context.yaml).

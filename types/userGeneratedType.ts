@@ -1,25 +1,5 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
-    "/api/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Issue an access token
-         * @description Failed logins count toward the configured lockout; an already locked account returns 423. Success resets failed attempts. Does not return a refresh token. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
-         */
-        post: operations["login"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -31,7 +11,7 @@ export interface paths {
         put?: never;
         /**
          * Register with the configured default role
-         * @description Requires self-registration to be enabled. Identity values are normalized before uniqueness checks. Field-validation/password-confirmation workflow changes remain owned by #238. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
+         * @description Requires self-registration to be enabled. Identity values are normalized before uniqueness checks. Creates the Keycloak account with the password and the configured realm role, then stores the profile under the Keycloak user id; the Keycloak account is removed when the profile cannot be stored. Sign-in goes through Keycloak; user-service issues no tokens. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
          */
         post: operations["register"];
         delete?: never;
@@ -54,7 +34,7 @@ export interface paths {
         get: operations["getOwnProfile"];
         /**
          * Update editable fields of the current profile
-         * @description Preserves existing partial-update behavior even though the delivered method is PUT: omitted/null properties retain stored values. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         * @description Preserves existing partial-update behavior even though the delivered method is PUT: omitted/null properties retain stored values. A changed email is also set on the Keycloak account; an email another Keycloak account holds returns 409. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
          */
         put: operations["updateOwnProfile"];
         post?: never;
@@ -154,23 +134,6 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        Login: {
-            /** Format: email */
-            email: string;
-            /** Format: password */
-            password: string;
-        };
-        LoginResult: {
-            /** @description RS256 JWT; opaque to clients except standard claims. Example is intentionally not a real token. */
-            accessToken: string;
-            /**
-             * Format: int64
-             * @description Token lifetime in seconds.
-             */
-            expiresIn: number;
-            /** @enum {string} */
-            tokenType: "Bearer";
-        };
         Register: {
             /**
              * Format: email
@@ -181,7 +144,7 @@ export interface components {
             phone: string;
             /**
              * Format: password
-             * @description At least 8 Java characters, at most 72 UTF-8 bytes (bcrypt input limit).
+             * @description At least 8 characters. Sent only to Keycloak, which applies the realm password policy; user-service stores no password.
              */
             password: string;
             fullName: string;
@@ -213,19 +176,6 @@ export interface components {
              * @description Trimmed and lowercased. Omitted/null retains current value.
              */
             email?: string | null;
-        };
-        LoginResponse: {
-            /**
-             * @description Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved.
-             * @default 0
-             */
-            code: number;
-            /**
-             * @description Omitted or null values default to response success during response construction. Explicit messages are preserved.
-             * @default response success
-             */
-            message: string;
-            data: components["schemas"]["LoginResult"];
         };
         RegisterResponse: {
             /**
@@ -302,184 +252,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "email": "seller@example.com",
-                 *       "password": "example-password"
-                 *     }
-                 */
-                "application/json": components["schemas"]["Login"];
-            };
-        };
-        responses: {
-            /** @description Successful response. */
-            200: {
-                headers: {
-                    /** @description Token/profile data must not be cached. */
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginResponse"];
-                };
-            };
-            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 400;
-                        /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY";
-                    };
-                };
-            };
-            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `USER_INVALID_CREDENTIALS`. */
-            401: {
-                headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
-                    "WWW-Authenticate"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 401;
-                        /** @enum {string} */
-                        code?: "UNAUTHENTICATED" | "USER_INVALID_CREDENTIALS";
-                    };
-                };
-            };
-            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
-            405: {
-                headers: {
-                    /** @description Methods supported by this resource when known. */
-                    Allow?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 405;
-                        /** @enum {string} */
-                        code?: "METHOD_NOT_ALLOWED";
-                    };
-                };
-            };
-            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 415;
-                        /** @enum {string} */
-                        code?: "UNSUPPORTED_MEDIA_TYPE";
-                    };
-                };
-            };
-            /** @description Locked. Codes: `USER_ACCOUNT_LOCKED`. */
-            423: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 423;
-                        /** @enum {string} */
-                        code?: "USER_ACCOUNT_LOCKED";
-                    };
-                };
-            };
-            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
-            429: {
-                headers: {
-                    /** @description When provided by the gateway limiter, delay in seconds before retrying. */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 429;
-                        /** @enum {string} */
-                        code?: "RATE_LIMITED";
-                    };
-                };
-            };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 500;
-                        /** @enum {string} */
-                        code?: "INTERNAL_ERROR";
-                    };
-                };
-            };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 503;
-                        /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
-                    };
-                };
-            };
-            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 504;
-                        /** @enum {string} */
-                        code?: "GATEWAY_TIMEOUT";
-                    };
-                };
-            };
-        };
-    };
     register: {
         parameters: {
             query?: never;
@@ -508,7 +280,7 @@ export interface operations {
             /** @description Created. */
             201: {
                 headers: {
-                    /** @description Token/profile data must not be cached. */
+                    /** @description Profile data must not be cached. */
                     "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
@@ -516,7 +288,7 @@ export interface operations {
                     "application/json": components["schemas"]["RegisterResponse"];
                 };
             };
-            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_IDENTITY_REJECTED`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -526,14 +298,14 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY";
+                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "USER_IDENTITY_REJECTED";
                     };
                 };
             };
             /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
             401: {
                 headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
+                    /** @description Bearer challenge is present for security-layer authentication failure. */
                     "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
@@ -648,7 +420,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_REGISTRATION_ROLE_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_REGISTRATION_ROLE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -658,7 +430,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE" | "USER_REGISTRATION_ROLE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "USER_REGISTRATION_ROLE_UNAVAILABLE" | "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };
@@ -713,7 +485,7 @@ export interface operations {
             /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
             401: {
                 headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
+                    /** @description Bearer challenge is present for security-layer authentication failure. */
                     "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
@@ -814,7 +586,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -824,7 +596,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };
@@ -871,7 +643,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateOwnProfileResponse"];
                 };
             };
-            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_IDENTITY_REJECTED`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -881,14 +653,14 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY";
+                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "USER_IDENTITY_REJECTED";
                     };
                 };
             };
             /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
             401: {
                 headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
+                    /** @description Bearer challenge is present for security-layer authentication failure. */
                     "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
@@ -1017,7 +789,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1027,7 +799,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };
@@ -1085,7 +857,7 @@ export interface operations {
             /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
             401: {
                 headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
+                    /** @description Bearer challenge is present for security-layer authentication failure. */
                     "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
@@ -1186,7 +958,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1196,7 +968,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };
@@ -1223,7 +995,7 @@ export interface operations {
                 q?: string;
                 /** @description Optional user status. */
                 status?: "ACTIVE" | "LOCKED" | "DELETED";
-                /** @description Role code is trimmed and uppercased before filtering. */
+                /** @description Keycloak realm role name, trimmed and uppercased before filtering. */
                 role?: string;
                 /** @description Zero-based page. */
                 page?: number;
@@ -1266,7 +1038,7 @@ export interface operations {
             /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
             401: {
                 headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
+                    /** @description Bearer challenge is present for security-layer authentication failure. */
                     "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
@@ -1353,7 +1125,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1363,7 +1135,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };

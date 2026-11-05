@@ -1,5 +1,7 @@
-import ShoppingCartPage from "@/features/ShoppingCartPage";
+import CartPage from "@/features/CartPage";
 
-export default function Page() {
-  return <ShoppingCartPage />;
+function Page() {
+  return <CartPage />;
 }
+
+export default Page;
