@@ -5,6 +5,7 @@ import {
   resolveApiUrl,
 } from "../configs/api";
 import { normalizeMoney } from "./catalogService";
+import { isGuestToken, readCart, readGuestCart, type CartSnapshot } from "../features/cartSnapshotUtils";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type {
   AddCartItemRequest,
@@ -16,6 +17,7 @@ import type { Cart } from "../types/cartResponseType";
 export const CART_API_BASE_URL = "";
 export const GET_CART_PATH = "/api/v1/carts/me";
 export const ADD_CART_ITEM_PATH = "/api/v1/carts/me/items";
+export const GUEST_CART_PATH = "/api/v1/carts/guest";
 /** #111 source routes; delivered OpenAPI/envelope/auth integration remains pending. */
 export const CART_ITEM_PATH = "/api/v1/carts/me/items/:lineId";
 
@@ -43,6 +45,7 @@ export const parseCart = (value: unknown): Cart => {
     !Array.isArray(value.items)
   )
     throw createInvalidResponseError("Invalid cart");
+  let totalQuantity = 0;
   const items = value.items.map((item) => {
     if (
       !isRecord(item) ||
@@ -54,6 +57,9 @@ export const parseCart = (value: unknown): Cart => {
     ) {
       throw createInvalidResponseError("Invalid cart item");
     }
+    totalQuantity += Number(item.quantity);
+    if (!Number.isSafeInteger(totalQuantity))
+      throw createInvalidResponseError("Invalid cart quantity total");
     const unitPrice = normalizeMoney(item.unitPrice);
     if (unitPrice === null || !/^\d+(?:\.\d{1,2})?$/.test(unitPrice))
       throw createInvalidResponseError("Invalid cart item price");
@@ -130,4 +136,68 @@ export const removeCartItem = async (
     undefined,
     cartRequestOptions(options),
   );
+};
+
+const guestRequestOptions = (
+  options: ServiceRequestOptions,
+  guestToken?: string,
+): ServiceRequestOptions => {
+  if (guestToken !== undefined && !isGuestToken(guestToken))
+    throw createInvalidResponseError("Invalid guest cart credential");
+  return {
+    ...cartRequestOptions(options),
+    auth: false,
+    config: {
+      ...options.config,
+      headers: guestToken === undefined ? {} : { "X-Guest-Token": guestToken },
+    },
+  };
+};
+
+/** Proposed guest contract; disabled by default until the backend delivers it. */
+export const createGuestCart = async (
+  options: ServiceRequestOptions = {},
+): Promise<{ guestToken: string; cart: CartSnapshot }> => {
+  const { data } = await requestApi<unknown>("POST", GUEST_CART_PATH, {}, guestRequestOptions(options));
+  const guest = readGuestCart(data);
+  if (!guest) throw createInvalidResponseError("Invalid guest cart response");
+  return guest;
+};
+
+export const getGuestCart = async (
+  guestToken: string,
+  options: ServiceRequestOptions = {},
+): Promise<CartSnapshot> => {
+  const { data } = await requestApi<unknown>("GET", GUEST_CART_PATH, undefined, guestRequestOptions(options, guestToken));
+  const cart = readCart(data);
+  if (!cart) throw createInvalidResponseError("Invalid guest cart response");
+  return cart;
+};
+
+export const addGuestCartItem = async (
+  guestToken: string,
+  input: AddCartItemRequest,
+  options: ServiceRequestOptions = {},
+): Promise<CartSnapshot> => {
+  if (!isPositiveQuantity(input.quantity) || !isNonBlankId(input.skuId))
+    throw createInvalidResponseError("skuId and a positive quantity are required");
+  const { data } = await requestApi<unknown>("POST", `${GUEST_CART_PATH}/items`,
+    { skuId: input.skuId, quantity: input.quantity }, guestRequestOptions(options, guestToken));
+  const cart = readCart(data);
+  if (!cart) throw createInvalidResponseError("Invalid guest cart response");
+  return cart;
+};
+
+export const mergeGuestCart = async (
+  guestToken: string,
+  mergeKey: string,
+  options: ServiceRequestOptions = {},
+): Promise<Cart> => {
+  if (!isGuestToken(guestToken) || !/^[A-Za-z0-9_-]{16,128}$/.test(mergeKey))
+    throw createInvalidResponseError("Invalid guest cart merge credentials");
+  const { data } = await requestApi<unknown>("POST", "/api/v1/carts/me/merge", {}, {
+    ...cartRequestOptions(options),
+    config: { ...options.config, headers: { "X-Guest-Token": guestToken, "Idempotency-Key": mergeKey } },
+  });
+  return parseCart(data);
 };

@@ -64,6 +64,12 @@ assumptions:
       GET me (503), two PUT me (200), and one each PUT 400, 401 and 503. No
       POST API password login occurred. This re-establishes the UI behavior
       against the new fixtures only; live backend verification remains pending.
+      On 2026-11-05 at profile-guest-cart-conflict-resolution, all nine profile
+      scenarios passed after merging develop ff2a4986. The inspected simulation
+      log contained 23 successful GET me responses, two GET 503 responses,
+      two successful PUT me responses and one each PUT 400, 401 and 503.
+      The run used temporary isolated app/API ports 13103/13913; fixture and
+      test port edits were restored afterwards. This is local fixture evidence.
     source: >-
       tests/profile.spec.ts; playwright.profile.config.ts;
       postman/simulations/profile.sim.yaml; postman/mocks/profile-gateway/default.js
@@ -123,4 +129,8 @@ fingerprints:
   - id: profile-merge-20261105
     date: "2026-11-05"
     commit: "0ee537b3 plus uncommitted merge of develop 0d0a36a4 and profile/auth integration edits"
+    cli: "Postman CLI 1.73.0"
+  - id: profile-guest-cart-conflict-resolution
+    date: "2026-11-05"
+    commit: "b16dc0b2 with uncommitted merge of origin/develop ff2a4986 and HeaderTopBar/playwright conflict resolutions"
     cli: "Postman CLI 1.73.0"

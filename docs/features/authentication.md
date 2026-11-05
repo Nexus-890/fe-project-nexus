@@ -19,7 +19,7 @@ The flat Provider.tsx owns QueryClientProvider and AuthSession. features/oidc.ts
 | Event | Behavior |
 | --- | --- |
 | Start sign-in | Clear the previous local session/private cache and redirect to Keycloak |
-| Callback succeeds | Exchange once, load profile with the issued Bearer, then restore returnTo |
+| Callback succeeds | Exchange once, load profile with the issued Bearer, wait for the cart's guest merge/load attempt, then restore returnTo |
 | StrictMode repeats callback | Share the original exchange result |
 | Profile network/5xx or malformed response | Retain the token, show failure and allow profile retry without exchanging the code again |
 | Current profile returns 401 | Clear local authentication and private cache; do not trigger remote logout implicitly |
@@ -29,6 +29,8 @@ The flat Provider.tsx owns QueryClientProvider and AuthSession. features/oidc.ts
 | Full reload | Return to anonymous; restoration/renewal belongs to #184 |
 
 Access and ID tokens are never persisted to localStorage, sessionStorage or mutation data/query keys. The OIDC transaction state, nonce and verifier use sessionStorage only until callback processing; unrelated entries remain intact. Public catalog cache survives logout. External/auth return destinations are rejected.
+
+The globally mounted CartProvider waits for authenticated profile state before merging saved guest items. A profile retry retains the guest credential and does not exchange the code again. A failed cart merge preserves the guest credential and idempotency key, then returns to the shop with an explicit merge retry. Only the guest-cart credential/key persist in localStorage; authentication tokens remain in memory. See [Guest cart](guest-cart.md) for the proposed guest API and storage/retry behavior.
 
 ## Verification and limits
 

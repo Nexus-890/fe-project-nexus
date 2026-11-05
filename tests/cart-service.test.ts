@@ -161,6 +161,7 @@ test("cart parsing accepts an empty persisted cart and rejects malformed data/en
     { ...cart, id: " " },
     { ...cart, status: "CHECKED_OUT" },
     { ...cart, items: [{ ...cart.items[0], quantity: 0 }] },
+    { ...cart, items: [{ ...cart.items[0], quantity: Number.MAX_SAFE_INTEGER }, cart.items[0]] },
     { ...cart, items: [{ ...cart.items[0], unitPrice: -1 }] },
     { ...cart, items: [{ ...cart.items[0], unitPrice: "0.001" }] },
   ]) assert.throws(() => parseCart(value));
