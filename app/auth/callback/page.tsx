@@ -1,4 +1,4 @@
-import AuthCallbackPage from "@/features/auth/callback/AuthCallbackPage";
+import AuthCallbackPage from "@/features/AuthCallbackPage";
 
 export default function Page() {
   return <AuthCallbackPage />;

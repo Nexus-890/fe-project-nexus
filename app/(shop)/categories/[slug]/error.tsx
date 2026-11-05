@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 
-export default function Error({ retry }: { retry: () => void }) {
+function Error({ retry }: { retry: () => void }) {
   const [retrying, startTransition] = useTransition();
 
   return <section role="alert" className="mx-auto w-full max-w-[1248px] space-y-4 px-4 py-12 sm:px-6">
@@ -14,3 +14,5 @@ export default function Error({ retry }: { retry: () => void }) {
     </button>
   </section>;
 }
+
+export default Error;

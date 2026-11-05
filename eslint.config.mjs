@@ -6,14 +6,14 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // Postman mock handlers are loaded as CommonJS by the CLI runtime.
+    // Postman loads mock handlers as CommonJS modules.
     files: ["postman/mocks/**/*.js"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**", ".next-catalog-*/**", ".next-oidc-run/**", "test-results/**", "playwright-report/**",
+    ".next/**", ".next-oidc-*/**", ".next-cart-*/**", ".next-typecheck/**", ".next-verify-build/**", "types/*GeneratedType.ts", ".next-catalog-*/**", "test-results/**", "playwright-report/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

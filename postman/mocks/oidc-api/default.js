@@ -47,12 +47,16 @@ function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
 }
-const problem = (res, status, title) => json(res, { title, status }, status);
-const envelope = (data) => ({ code: 0, message: "success", data });
+const problem = (res, status, title, errors) => {
+  const code = status === 401 ? "UNAUTHENTICATED" : status === 400 ? "VALIDATION_FAILED" : "SERVICE_UNAVAILABLE";
+  res.writeHead(status, { "Content-Type": "application/problem+json", "Cache-Control": "no-store" });
+  res.end(JSON.stringify({ title, status, code, detail: title, ...(errors ? { errors } : {}) }));
+};
+const envelope = (data, page) => ({ code: 0, message: "response success", data, ...(page ? { page } : {}) });
 const total = (cart) => cart.items.reduce((count, item) => count + item.quantity, 0);
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3103");
+  res.setHeader("Access-Control-Allow-Origin", process.env.NEXUS_OIDC_APP_ORIGIN || "http://127.0.0.1:3103");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Guest-Token, Idempotency-Key");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
@@ -98,7 +102,7 @@ const server = http.createServer(async (req, res) => {
     if (reject && attempt === 1 && mode === "protected-401-once") {
       await new Promise((resolve) => setTimeout(resolve, key === "c" ? 350 : 30));
     }
-    return reject ? problem(res, 401, "Unauthorized") : json(res, { accepted: true, key });
+    return reject ? problem(res, 401, "Unauthorized") : json(res, envelope({ accepted: true, key }));
   }
   if (url.pathname === "/v1/users/me") {
     evidence.meRequests += 1;
@@ -108,13 +112,16 @@ const server = http.createServer(async (req, res) => {
       return problem(res, 503, "Profile temporarily unavailable");
     }
     if (mode === "profile-401") return problem(res, 401, "Unauthorized");
+    if (mode === "profile-missing-data-once" && evidence.meRequests === 1) return json(res, { code: 0, message: "response success" });
+    if (mode === "profile-invalid-user-once" && evidence.meRequests === 1) return json(res, envelope({ ...user, roles: "BUYER" }));
     return bearer ? json(res, envelope(user)) : problem(res, 401, "Unauthorized");
   }
   if (url.pathname === "/v1/auth/register" && req.method === "POST") {
     const fields = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
-    if (!fields.password || !fields.email) return problem(res, 400, "Invalid registration");
+    const errors = ["email", "password"].filter((field) => !fields[field]).map((field) => ({ field, code: "VALIDATION_NOT_BLANK", detail: "cannot be blank!" }));
+    if (errors.length) return problem(res, 400, "Validation Failed", errors);
     evidence.registrations += 1;
-    return json(res, { ...user, email: fields.email, fullName: fields.fullName }, 201);
+    return json(res, envelope({ ...user, email: fields.email, fullName: fields.fullName }), 201);
   }
   if (url.pathname.startsWith("/v1/carts/")) {
     const input = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
@@ -131,20 +138,20 @@ const server = http.createServer(async (req, res) => {
         const cart = emptyCart(randomUUID());
         guests[token] = cart;
         evidence.guestCreations += 1;
-        return json(res, { guestToken: token, cart }, 201);
+        return json(res, envelope({ guestToken: token, cart }), 201);
       }
       const cart = guests[req.headers["x-guest-token"]];
       if (!cart) return problem(res, 404, "Guest cart not found");
       if (url.pathname === "/v1/carts/guest" && req.method === "GET") {
         evidence.guestReads += 1;
-        return json(res, cart);
+        return json(res, envelope(cart));
       }
       if (url.pathname === "/v1/carts/guest/items" && req.method === "POST") {
         if (mode === "guest-disabled") return problem(res, 403, "Guest carts are disabled");
         if (!validItem()) return problem(res, 400, "Invalid cart item");
         add(cart, input);
         evidence.guestAdds += 1;
-        return json(res, cart, 201);
+        return json(res, envelope(cart), 201);
       }
     }
     if (!await validBearer()) return problem(res, 401, "Unauthorized");
@@ -156,7 +163,7 @@ const server = http.createServer(async (req, res) => {
       if (!validItem()) return problem(res, 400, "Invalid cart item");
       add(buyerCart, input);
       evidence.cartAdds += 1;
-      return json(res, buyerCart, 201);
+      return json(res, envelope(buyerCart), 201);
     }
     if (url.pathname === "/v1/carts/me/merge" && req.method === "POST") {
       evidence.mergeRequests += 1;
@@ -168,7 +175,7 @@ const server = http.createServer(async (req, res) => {
       if (mode === "merge-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "Cart merge temporarily unavailable");
       if (merged[key]) {
         if (merged[key].token !== token) return problem(res, 409, "Merge key belongs to another guest cart");
-        return json(res, merged[key].cart);
+        return json(res, envelope(merged[key].cart));
       }
       const guest = guests[token];
       if (!guest) return problem(res, 404, "Guest cart not found");
@@ -178,12 +185,13 @@ const server = http.createServer(async (req, res) => {
       evidence.mergesApplied += 1;
       // Models an atomic server commit whose successful response was lost.
       if (mode === "merge-committed-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "Cart merge response unavailable");
-      return json(res, buyerCart);
+      return json(res, envelope(buyerCart));
     }
   }
-  if (url.pathname === "/v1/categories/tree") return json(res, []);
-  if (url.pathname === "/v1/products") return json(res, { content: [], page: 0, size: 12, totalElements: 0 });
-  if (url.pathname === `/v1/products/${productId}`) return json(res, product);
+  if (url.pathname === "/v1/categories/tree") return json(res, envelope([]));
+  if (url.pathname === "/v1/products") return json(res, envelope([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
+  if (url.pathname === `/v1/products/${productId}/skus/${skuId}`) return json(res, envelope(product.skus[0]));
+  if (url.pathname === `/v1/products/${productId}`) return json(res, envelope(product));
   return problem(res, 501, "Fixture endpoint not implemented");
 });
 server.listen(process.env.PORT);

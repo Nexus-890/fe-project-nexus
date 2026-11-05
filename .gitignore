@@ -43,6 +43,12 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /.next-catalog-*/
-/.next-oidc-run/
+/.next-oidc-*/
 
 !.env.example
+
+/.next-typecheck/
+/.next-verify-build/
+/.next-cart-readiness-build/
+.tsconfig-typecheck.json
+.tsconfig-build.json

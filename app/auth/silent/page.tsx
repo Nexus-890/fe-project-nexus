@@ -1,4 +1,4 @@
-import SilentCallbackPage from "@/features/auth/callback/SilentCallbackPage";
+import SilentCallbackPage from "@/features/SilentCallbackPage";
 
 export default function Page() {
   return <SilentCallbackPage />;

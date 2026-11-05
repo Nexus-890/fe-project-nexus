@@ -1,10 +1,12 @@
 import { Suspense } from "react";
-import SignInPage from "@/features/auth/sign-in/SignInPage";
+import SignInPage from "@/features/SignInPage";
 
-export default function Page() {
+function Page() {
   return (
     <Suspense fallback={<p role="status" className="p-6 text-sm">Loading sign-in…</p>}>
       <SignInPage />
     </Suspense>
   );
 }
+
+export default Page;

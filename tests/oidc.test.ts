@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { test } from "node:test";
 import { InMemoryWebStorage, UserManager, type INavigator, type UserManagerSettings } from "oidc-client-ts";
-import { createOidcClient, safeReturnTo } from "../features/auth/oidc";
+import { createOidcClient, safeReturnTo } from "../features/oidc";
 
 test("return destinations preserve shop paths and reject external/auth destinations", () => {
   assert.equal(safeReturnTo("/products/laptop?variant=blue#details"), "/products/laptop?variant=blue#details");
@@ -454,5 +454,35 @@ test("silent callback only relays the response URL without exchanging a code or 
     assert.equal(harness.exchanges.length, 0);
     assert.equal(await harness.manager().getUser(), null);
     assert.equal(harness.storage.length, 1);
+  } finally { await harness.close(); }
+});
+
+test("clearing a callback during stale-state cleanup cancels it before code exchange", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    const manager = harness.manager();
+    const clearStaleState = manager.clearStaleState.bind(manager);
+    let first = true;
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const completed = new Promise<void>((resolve) => { release = resolve; });
+    manager.clearStaleState = async () => {
+      if (first) {
+        first = false;
+        entered();
+        await completed;
+      }
+      await clearStaleState();
+    };
+    const callback = harness.client.completeSignIn(harness.callback());
+    await started;
+    await harness.client.clearSession();
+    const canceled = assert.rejects(callback, /canceled/);
+    release();
+    await canceled;
+    assert.equal(harness.exchanges.length, 0);
+    assert.equal(await manager.getUser(), null);
   } finally { await harness.close(); }
 });

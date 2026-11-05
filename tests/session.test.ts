@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createTokenSession, renewalDelay } from "../features/auth/token-session";
-import type { OidcClient, OidcSession } from "../features/auth/oidc";
+import { createTokenSession, renewalDelay } from "../features/tokenSession";
+import type { OidcClient, OidcSession } from "../features/oidc";
 
 function session(accessToken = "old-token", subject = "buyer-1"): OidcSession {
   return { accessToken, subject, returnTo: "/products/example", expiresAt: Date.now() / 1000 + 120 };

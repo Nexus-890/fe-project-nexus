@@ -1,6 +1,6 @@
-import ProductDetailPage from "@/features/catalog/ProductDetailPage";
+import ProductDetailPage from "@/features/ProductDetailPage";
 
-export default async function Page({
+async function Page({
   params,
   searchParams,
 }: {
@@ -11,3 +11,5 @@ export default async function Page({
   const productId = Array.isArray(query.id) ? query.id[0] : query.id;
   return <ProductDetailPage slug={slug} productId={productId} />;
 }
+
+export default Page;

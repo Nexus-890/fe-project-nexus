@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createApiClient } from "../lib/api-client";
-import { createCartService } from "../service/cart";
-import { createCartController, type CartIdentity } from "../features/cart/controller";
-import { cartItemCount, readCart, readGuestCart, type CartSnapshot } from "../features/cart/model";
-import { createGuestStorage, GUEST_CART_STORAGE_KEY, type GuestSession } from "../features/cart/guest-storage";
-import type { ApiResult } from "../types/common/response/type";
+import { addCartItem, getCart, createGuestCart, getGuestCart, addGuestCartItem, mergeGuestCart, readCart, readGuestCart } from "../service/cartService";
+import { isApiError } from "../configs/api";
+import type { ApiContext } from "../types/commonRequestType";
+import type { CartSnapshot } from "../types/cartResponseType";
+import { createCartController, type CartIdentity, type CartControllerService } from "../features/cartController";
+import { cartItemCount } from "../features/guestCartUtils";
+import { createGuestStorage, GUEST_CART_STORAGE_KEY, type GuestSession } from "../features/guestCartStorage";
+import type { ApiResult } from "../types/commonResponseType";
 
 const guestSession: GuestSession = {
   token: "guest_cart_credential_1234567890",
@@ -46,7 +48,7 @@ function memoryStorage(): Storage {
 
 function httpFixture(respond: (path: string, method: string) => unknown = () => ({ data: cart(2) })) {
   const calls: Array<{ path: string; method: string; headers: Headers; body: unknown }> = [];
-  const client = createApiClient({
+  const context: ApiContext = {
     baseUrl: "https://api.nexus.test",
     getAccessToken: () => member.accessToken,
     fetch: async (input, init) => {
@@ -60,14 +62,33 @@ function httpFixture(respond: (path: string, method: string) => unknown = () => 
         status: 200, headers: { "Content-Type": "application/json" },
       });
     },
-  });
-  return { calls, service: createCartService({ client }) };
+  };
+  return { calls, service: serviceFixture(context) };
+}
+
+// Adapt the throwing service boundary only in this controller fixture.
+function serviceFixture(context: ApiContext): CartControllerService {
+  const run = async <T,>(action: () => Promise<T>): Promise<ApiResult<T>> => {
+    try { return ok(await action()); }
+    catch (error) {
+      assert.ok(isApiError(error));
+      return { ok: false, error };
+    }
+  };
+  return {
+    getCart: () => run(async () => readCart(await getCart({ context }))!),
+    addCartItem: (input, signal) => run(() => addCartItem(input, { context, signal })),
+    createGuestCart: () => run(() => createGuestCart({ context })),
+    getGuestCart: (token) => run(() => getGuestCart(token, { context })),
+    addGuestCartItem: (token, input) => run(() => addGuestCartItem(token, input, { context })),
+    mergeGuestCart: (token, key) => run(() => mergeGuestCart(token, key, { context })),
+  };
 }
 
 function controllerFixture(options: {
   stored?: GuestSession;
   enabled?: boolean;
-  service?: Partial<ReturnType<typeof createCartService>>;
+  service?: Partial<CartControllerService>;
   storage?: Storage;
 } = {}) {
   const raw = options.storage ?? memoryStorage();
@@ -75,7 +96,7 @@ function controllerFixture(options: {
   if (options.stored) storage.write(options.stored);
   const calls = { creates: 0, guestReads: 0, memberReads: 0, guestAdds: 0, memberAdds: 0, merges: [] as GuestSession[] };
   let guestQuantity = 0;
-  const service: ReturnType<typeof createCartService> = {
+  const service: CartControllerService = {
     createGuestCart: async () => {
       calls.creates++;
       return ok({ guestToken: guestSession.token, cart: cart() });
@@ -103,7 +124,7 @@ function controllerFixture(options: {
 test("guest requests carry only the guest credential while merge includes bearer and a stable idempotency key", async () => {
   const fixture = httpFixture((path, method) => path === "/api/v1/carts/guest" && method === "POST"
     ? { code: 0, message: "success", data: { guestToken: guestSession.token, cart: cart() } }
-    : { code: 0, message: "success", data: cart(3) });
+    : { code: 0, message: "success", data: { ...cart(3), userId: "buyer-1", items: [{ ...cart(3).items[0], productId: "product-1", unitPrice: 150000 }] } });
 
   const created = await fixture.service.createGuestCart();
   assert.equal(created.ok, true);
@@ -464,4 +485,43 @@ test("merge success does not remove a newer guest session written by another tab
   await flush();
   assert.deepEqual(storage.read(), newer);
   assert.equal(controller.getSnapshot().itemCount, 7);
+});
+
+
+test("a new session for the same user invalidates pending cart work", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  let reads = 0;
+  const { controller } = controllerFixture({ service: {
+    addCartItem: async () => pending.promise,
+    getCart: async () => ok(cart(++reads === 1 ? 4 : 2, "member-cart")),
+  } });
+  controller.setIdentity({ ...member, sessionId: 1 });
+  await flush();
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  await flush();
+  controller.setIdentity({ ...member, accessToken: "new-sign-in", sessionId: 2 });
+  pending.resolve(ok(cart(99, "old-session-cart")));
+  assert.equal((await adding).ok, false);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 2);
+  assert.equal(reads, 2);
+});
+
+test("aborting an addition suppresses a late response while retaining the active cart", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const signal = new AbortController();
+  let forwarded: AbortSignal | undefined;
+  const { controller } = controllerFixture({ service: {
+    addCartItem: async (_input, received) => { forwarded = received; return pending.promise; },
+  } });
+  controller.setIdentity(member);
+  await flush();
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 }, signal.signal);
+  await flush();
+  signal.abort();
+  pending.resolve(ok(cart(99)));
+  assert.equal((await adding).ok, false);
+  assert.equal(forwarded, signal.signal);
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  assert.equal(controller.getSnapshot().adding, false);
 });
