@@ -1,4 +1,4 @@
-import { isGuestToken } from "../service/cartService";
+import { isGuestToken } from "./cartSnapshotUtils";
 
 export const GUEST_CART_STORAGE_KEY = "nexus.cart.guest";
 

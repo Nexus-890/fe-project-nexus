@@ -57,9 +57,15 @@ async function assertOnlyGuestSessionPersisted(page: Page) {
   expect(storage).not.toMatch(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\./);
 }
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request, page }) => {
   expect((await request.get(`${simulation}/keycloak/test/reset`)).ok()).toBe(true);
   expect((await request.get(`${simulation}/api/test/reset`)).ok()).toBe(true);
+  // The cart service keeps its configured same-origin default. Forward its
+  // requests over HTTP to the existing dependency simulation for this suite.
+  await page.route(`${app}/api/v1/carts/**`, async (route) => {
+    const response = await route.fetch({ url: `${simulation}${new URL(route.request().url()).pathname}` });
+    await route.fulfill({ response });
+  });
 });
 
 test("signed-out additions create one guest cart and restore its quantity after a reload", async ({ page, request }) => {
@@ -83,7 +89,7 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
   const mergeAt: string[] = [];
   const mergedTokens: string[] = [];
   page.on("request", (req) => {
-    if (req.url() === `${simulation}/api/v1/carts/me/merge` && req.method() === "POST") {
+    if (new URL(req.url()).pathname === "/api/v1/carts/me/merge" && req.method() === "POST") {
       mergeAt.push(new URL(page.url()).pathname);
       mergedTokens.push(req.headers()["x-guest-token"]);
     }
@@ -123,6 +129,34 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
   await expect(badge(page, 0)).toBeVisible();
   expect(await guestSession(page)).toBeNull();
   expect(await evidence(request)).toMatchObject({ mergeRequests: 1, mergesApplied: 1, buyerQuantity: 5 });
+});
+
+test("a temporary profile failure keeps guest items until account retry then merges once", async ({ page, request }) => {
+  await request.get(`${simulation}/api/test/reset?mode=profile-503-once`);
+  const session = await addGuest(page);
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Keycloak sign in", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@nexus.local");
+  await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
+  await expect(page).toHaveURL(`${app}/auth/callback`);
+  const retry = page.getByRole("button", { name: "Retry loading account", exact: true });
+  await expect(retry).toBeVisible();
+  expect(await guestSession(page)).toEqual(session);
+  expect(await evidence(request)).toMatchObject({ meRequests: 1, mergeRequests: 0, mergesApplied: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1 });
+
+  await retry.click();
+  await expect(page).toHaveURL(`${app}${productPath}`);
+  await expect(badge(page, 5)).toBeVisible();
+  expect(await guestSession(page)).toBeNull();
+  expect(await evidence(request)).toMatchObject({
+    meRequests: 2, mergeRequests: 1, mergesApplied: 1, buyerQuantity: 5,
+    mergeKeys: [session.mergeKey],
+  });
+  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, pkceVerified: 1 });
+  await assertOnlyGuestSessionPersisted(page);
 });
 
 for (const mode of ["merge-503-once", "merge-committed-503-once"] as const) {

@@ -25,8 +25,8 @@ type CartSnapshot = { previous: Cart; optimistic: Cart | undefined };
 /** Cart business state composes the generic hooks; the service owns all HTTP. */
 export function useCart() {
   const { status, requestContext, sessionId, isSessionCurrent } = useAuth();
+  const { ready, mergeError, adding } = useGuestCart();
   const client = useQueryClient();
-  const synchronization = useGuestCart();
   const key = queryKeys.cart.me(sessionId);
   const mutationKey = ["cart", sessionId, "edit"];
   const mutating = useIsMutating({ mutationKey, exact: true });
@@ -44,7 +44,7 @@ export function useCart() {
       meta: { requiresAuth: true },
     },
     {
-      enabled: status === "authenticated",
+      enabled: status === "authenticated" && ready && !mergeError && !adding,
       retryOnMount: false,
     },
   );
@@ -163,7 +163,7 @@ export function useCart() {
     // Serialize the whole cart: a late full-cart response/rollback cannot overwrite another edit.
     if (
       active.current ||
-      synchronization.adding || synchronization.loading || synchronization.mergeError ||
+      !ready || mergeError || adding ||
       client.isMutating({ mutationKey, exact: true }) ||
       !isSessionCurrent(sessionId) ||
       !cart.data
@@ -192,7 +192,7 @@ export function useCart() {
 
   return {
     cart,
-    pending: mutating > 0 || synchronization.adding || synchronization.loading || Boolean(synchronization.mergeError),
+    pending: mutating > 0 || !ready || Boolean(mergeError) || adding,
     feedback: feedback?.sessionId === sessionId ? feedback : null,
     updateQuantity: (itemId: string, quantity: number) => changeItem(itemId, quantity),
     removeItem: (itemId: string) => changeItem(itemId),

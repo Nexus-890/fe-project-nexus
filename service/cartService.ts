@@ -5,18 +5,19 @@ import {
   resolveApiUrl,
 } from "../configs/api";
 import { normalizeMoney } from "./catalogService";
+import { isGuestToken, readCart, readGuestCart, type CartSnapshot } from "../features/cartSnapshotUtils";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type {
   AddCartItemRequest,
   UpdateCartItemRequest,
 } from "../types/cartRequestType";
-import type { Cart, CartSnapshot } from "../types/cartResponseType";
+import type { Cart } from "../types/cartResponseType";
 
 /** Fill in the Cart API origin when it is available; paths already include /api/v1. */
 export const CART_API_BASE_URL = "";
 export const GET_CART_PATH = "/api/v1/carts/me";
-export const GUEST_CART_PATH = "/api/v1/carts/guest";
 export const ADD_CART_ITEM_PATH = "/api/v1/carts/me/items";
+export const GUEST_CART_PATH = "/api/v1/carts/guest";
 /** #111 source routes; delivered OpenAPI/envelope/auth integration remains pending. */
 export const CART_ITEM_PATH = "/api/v1/carts/me/items/:lineId";
 
@@ -44,6 +45,7 @@ export const parseCart = (value: unknown): Cart => {
     !Array.isArray(value.items)
   )
     throw createInvalidResponseError("Invalid cart");
+  let totalQuantity = 0;
   const items = value.items.map((item) => {
     if (
       !isRecord(item) ||
@@ -55,6 +57,9 @@ export const parseCart = (value: unknown): Cart => {
     ) {
       throw createInvalidResponseError("Invalid cart item");
     }
+    totalQuantity += Number(item.quantity);
+    if (!Number.isSafeInteger(totalQuantity))
+      throw createInvalidResponseError("Invalid cart quantity total");
     const unitPrice = normalizeMoney(item.unitPrice);
     if (unitPrice === null || !/^\d+(?:\.\d{1,2})?$/.test(unitPrice))
       throw createInvalidResponseError("Invalid cart item price");
@@ -66,8 +71,6 @@ export const parseCart = (value: unknown): Cart => {
       unitPrice,
     };
   });
-  if (!Number.isSafeInteger(items.reduce((total, item) => total + item.quantity, 0)))
-    throw createInvalidResponseError("Cart quantity exceeds the safe integer range");
   return { id: value.id, userId: value.userId, status: value.status, items };
 };
 export const getCart = async (
@@ -135,67 +138,66 @@ export const removeCartItem = async (
   );
 };
 
+const guestRequestOptions = (
+  options: ServiceRequestOptions,
+  guestToken?: string,
+): ServiceRequestOptions => {
+  if (guestToken !== undefined && !isGuestToken(guestToken))
+    throw createInvalidResponseError("Invalid guest cart credential");
+  return {
+    ...cartRequestOptions(options),
+    auth: false,
+    config: {
+      ...options.config,
+      headers: guestToken === undefined ? {} : { "X-Guest-Token": guestToken },
+    },
+  };
+};
 
-/** Proposed guest handoff; feature flag stays off until BE delivers these routes. */
-export const isGuestToken = (value: unknown): value is string =>
-  typeof value === "string" && /^[A-Za-z0-9_-]{16,255}$/.test(value);
-
-export const readCart = (value: unknown): CartSnapshot | null => {
-  const cart = isRecord(value) && "data" in value ? value.data : value;
-  if (!isRecord(cart) || !isNonBlankId(cart.id) || cart.status !== "ACTIVE" || !Array.isArray(cart.items)) return null;
-  let total = 0;
-  for (const item of cart.items) {
-    if (!isRecord(item) || !isNonBlankId(item.id) || !isNonBlankId(item.skuId)
-      || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1) return null;
-    total += Number(item.quantity);
-    if (!Number.isSafeInteger(total)) return null;
-  }
-  return { id: cart.id, status: "ACTIVE", items: cart.items.map((item) => ({
-    id: item.id, skuId: item.skuId, quantity: item.quantity,
-  })) };
-};
-export const readGuestCart = (value: unknown): { guestToken: string; cart: CartSnapshot } | null => {
-  if (!isRecord(value) || !isGuestToken(value.guestToken)) return null;
-  const cart = readCart(value.cart);
-  return cart ? { guestToken: value.guestToken, cart } : null;
-};
-const requireGuestToken = (token: string) => {
-  if (!isGuestToken(token)) throw createInvalidResponseError("Invalid guest cart credential");
-};
-const guestOptions = (options: ServiceRequestOptions, token?: string): ServiceRequestOptions => ({
-  ...cartRequestOptions(options), auth: false,
-  config: { ...options.config, headers: token ? { "X-Guest-Token": token } : {} },
-});
-const parseCartSnapshot = (value: unknown): CartSnapshot => {
-  const cart = readCart(value);
-  if (!cart) throw createInvalidResponseError("Invalid guest cart response");
-  return cart;
-};
-export const createGuestCart = async (options: ServiceRequestOptions = {}): Promise<{ guestToken: string; cart: CartSnapshot }> => {
-  const { data } = await requestApi<unknown>("POST", GUEST_CART_PATH, {}, guestOptions(options));
+/** Proposed guest contract; disabled by default until the backend delivers it. */
+export const createGuestCart = async (
+  options: ServiceRequestOptions = {},
+): Promise<{ guestToken: string; cart: CartSnapshot }> => {
+  const { data } = await requestApi<unknown>("POST", GUEST_CART_PATH, {}, guestRequestOptions(options));
   const guest = readGuestCart(data);
   if (!guest) throw createInvalidResponseError("Invalid guest cart response");
   return guest;
 };
-export const getGuestCart = async (token: string, options: ServiceRequestOptions = {}): Promise<CartSnapshot> => {
-  requireGuestToken(token);
-  const { data } = await requestApi<unknown>("GET", GUEST_CART_PATH, undefined, guestOptions(options, token));
-  return parseCartSnapshot(data);
+
+export const getGuestCart = async (
+  guestToken: string,
+  options: ServiceRequestOptions = {},
+): Promise<CartSnapshot> => {
+  const { data } = await requestApi<unknown>("GET", GUEST_CART_PATH, undefined, guestRequestOptions(options, guestToken));
+  const cart = readCart(data);
+  if (!cart) throw createInvalidResponseError("Invalid guest cart response");
+  return cart;
 };
-export const addGuestCartItem = async (token: string, input: AddCartItemRequest, options: ServiceRequestOptions = {}): Promise<CartSnapshot> => {
-  requireGuestToken(token);
+
+export const addGuestCartItem = async (
+  guestToken: string,
+  input: AddCartItemRequest,
+  options: ServiceRequestOptions = {},
+): Promise<CartSnapshot> => {
   if (!isPositiveQuantity(input.quantity) || !isNonBlankId(input.skuId))
     throw createInvalidResponseError("skuId and a positive quantity are required");
-  const { data } = await requestApi<unknown>("POST", GUEST_CART_PATH + "/items",
-    { skuId: input.skuId, quantity: input.quantity }, guestOptions(options, token));
-  return parseCartSnapshot(data);
+  const { data } = await requestApi<unknown>("POST", `${GUEST_CART_PATH}/items`,
+    { skuId: input.skuId, quantity: input.quantity }, guestRequestOptions(options, guestToken));
+  const cart = readCart(data);
+  if (!cart) throw createInvalidResponseError("Invalid guest cart response");
+  return cart;
 };
-export const mergeGuestCart = async (token: string, mergeKey: string, options: ServiceRequestOptions = {}): Promise<Cart> => {
-  requireGuestToken(token);
-  if (!/^[A-Za-z0-9_-]{16,128}$/.test(mergeKey)) throw createInvalidResponseError("Invalid cart merge key");
+
+export const mergeGuestCart = async (
+  guestToken: string,
+  mergeKey: string,
+  options: ServiceRequestOptions = {},
+): Promise<Cart> => {
+  if (!isGuestToken(guestToken) || !/^[A-Za-z0-9_-]{16,128}$/.test(mergeKey))
+    throw createInvalidResponseError("Invalid guest cart merge credentials");
   const { data } = await requestApi<unknown>("POST", "/api/v1/carts/me/merge", {}, {
     ...cartRequestOptions(options),
-    config: { ...options.config, headers: { "X-Guest-Token": token, "Idempotency-Key": mergeKey } },
+    config: { ...options.config, headers: { "X-Guest-Token": guestToken, "Idempotency-Key": mergeKey } },
   });
   return parseCart(data);
 };

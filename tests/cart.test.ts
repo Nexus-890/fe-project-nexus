@@ -1,11 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addCartItem, getCart, createGuestCart, getGuestCart, addGuestCartItem, mergeGuestCart, readCart, readGuestCart } from "../service/cartService";
 import { isApiError } from "../configs/api";
-import type { ApiContext } from "../types/commonRequestType";
-import type { CartSnapshot } from "../types/cartResponseType";
+import { addCartItem, addGuestCartItem, createGuestCart, getCart, getGuestCart, mergeGuestCart } from "../service/cartService";
 import { createCartController, type CartIdentity, type CartControllerService } from "../features/cartController";
-import { cartItemCount } from "../features/guestCartUtils";
+import { cartItemCount, readCart, readGuestCart, type CartSnapshot } from "../features/cartSnapshotUtils";
 import { createGuestStorage, GUEST_CART_STORAGE_KEY, type GuestSession } from "../features/guestCartStorage";
 import type { ApiResult } from "../types/commonResponseType";
 
@@ -46,12 +44,20 @@ function memoryStorage(): Storage {
   };
 }
 
-function httpFixture(respond: (path: string, method: string) => unknown = () => ({ data: cart(2) })) {
+const fullCart = (quantity = 2) => ({
+  ...cart(quantity), userId: "buyer-1", items: cart(quantity).items.map((item) => ({ ...item, productId: "product-1", unitPrice: 150000.5 })),
+});
+const asResult = async <T,>(action: () => Promise<T>): Promise<ApiResult<T>> => {
+  try { return ok(await action()); }
+  catch (error) { if (isApiError(error)) return { ok: false, error }; throw error; }
+};
+
+function httpFixture(respond: (path: string, method: string) => unknown = () => ({ code: 0, message: "success", data: fullCart() })) {
   const calls: Array<{ path: string; method: string; headers: Headers; body: unknown }> = [];
-  const context: ApiContext = {
+  const context = {
     baseUrl: "https://api.nexus.test",
     getAccessToken: () => member.accessToken,
-    fetch: async (input, init) => {
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       const method = init?.method ?? "GET";
       calls.push({
@@ -63,26 +69,15 @@ function httpFixture(respond: (path: string, method: string) => unknown = () => 
       });
     },
   };
-  return { calls, service: serviceFixture(context) };
-}
-
-// Adapt the throwing service boundary only in this controller fixture.
-function serviceFixture(context: ApiContext): CartControllerService {
-  const run = async <T,>(action: () => Promise<T>): Promise<ApiResult<T>> => {
-    try { return ok(await action()); }
-    catch (error) {
-      assert.ok(isApiError(error));
-      return { ok: false, error };
-    }
+  const service: CartControllerService = {
+    getCart: () => asResult(async () => readCart(await getCart({ context }))!),
+    addCartItem: (input) => asResult(async () => readCart(await addCartItem(input, { context }))!),
+    createGuestCart: () => asResult(() => createGuestCart({ context })),
+    getGuestCart: (token) => asResult(() => getGuestCart(token, { context })),
+    addGuestCartItem: (token, input) => asResult(() => addGuestCartItem(token, input, { context })),
+    mergeGuestCart: (token, mergeKey) => asResult(async () => readCart(await mergeGuestCart(token, mergeKey, { context }))!),
   };
-  return {
-    getCart: () => run(async () => readCart(await getCart({ context }))!),
-    addCartItem: (input, signal) => run(() => addCartItem(input, { context, signal })),
-    createGuestCart: () => run(() => createGuestCart({ context })),
-    getGuestCart: (token) => run(() => getGuestCart(token, { context })),
-    addGuestCartItem: (token, input) => run(() => addGuestCartItem(token, input, { context })),
-    mergeGuestCart: (token, key) => run(() => mergeGuestCart(token, key, { context })),
-  };
+  return { calls, service };
 }
 
 function controllerFixture(options: {
@@ -124,7 +119,7 @@ function controllerFixture(options: {
 test("guest requests carry only the guest credential while merge includes bearer and a stable idempotency key", async () => {
   const fixture = httpFixture((path, method) => path === "/api/v1/carts/guest" && method === "POST"
     ? { code: 0, message: "success", data: { guestToken: guestSession.token, cart: cart() } }
-    : { code: 0, message: "success", data: { ...cart(3), userId: "buyer-1", items: [{ ...cart(3).items[0], productId: "product-1", unitPrice: 150000 }] } });
+    : { code: 0, message: "success", data: fullCart(3) });
 
   const created = await fixture.service.createGuestCart();
   assert.equal(created.ok, true);
@@ -171,6 +166,9 @@ test("malformed quantities and overflowing header totals are rejected", () => {
     { id: "two", skuId: "sku-2", quantity: 1 },
   ] }), null);
   assert.equal(readCart({ ...cart(1), items: [{ id: "item-1", quantity: 1 }] }), null);
+  assert.equal(readCart({ ...cart(), id: " " }), null);
+  assert.equal(readCart({ ...cart(1), items: [{ ...cart(1).items[0], id: " " }] }), null);
+  assert.equal(readCart({ ...cart(1), items: [{ ...cart(1).items[0], skuId: " " }] }), null);
   assert.equal(readCart({ ...cart(), status: "MERGED" }), null);
   assert.equal(readGuestCart({ guestToken: "short", cart: cart() }), null);
 });
@@ -258,45 +256,23 @@ test("callback identity replay merges once, publishes the merged total and clear
   assert.equal(calls.merges.length, 1);
 });
 
-test("same-user token renewal preserves the merged cart without resetting the badge or merging again", async () => {
-  const { controller, storage, calls } = controllerFixture({ stored: guestSession });
-  controller.setIdentity(member);
-  await flush();
-  assert.equal(controller.getSnapshot().itemCount, 7);
-  assert.equal(storage.read(), null);
-  const changes: ReturnType<typeof controller.getSnapshot>[] = [];
-  const unsubscribe = controller.subscribe(() => { changes.push(controller.getSnapshot()); });
-  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
-  await flush();
-  unsubscribe();
-  assert.equal(controller.getSnapshot().itemCount, 7);
-  assert.equal(controller.getSnapshot().loading, false);
-  assert.equal(controller.getSnapshot().owner, "user:buyer-1");
-  assert.equal(calls.merges.length, 1);
-  assert.equal(calls.memberReads, 0);
-  assert.deepEqual(changes, []);
-});
-
-test("same-user token renewal keeps an in-flight member addition active and publishes its result", async () => {
+test("reauthenticating the same account resets cart readiness and ignores the previous session merge", async () => {
   const pending = deferred<ApiResult<CartSnapshot>>();
-  const { controller, calls } = controllerFixture({ service: {
-    addCartItem: async () => pending.promise,
+  let merges = 0;
+  const { controller, storage } = controllerFixture({ stored: guestSession, service: {
+    mergeGuestCart: async () => ++merges === 1 ? pending.promise : ok(cart(8)),
   } });
-  controller.setIdentity(member);
+  controller.setIdentity({ ...member, sessionId: 1 });
   await flush();
-  assert.equal(controller.getSnapshot().itemCount, 4);
-  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  controller.setIdentity({ ...member, sessionId: 2 });
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:2");
+  assert.equal(controller.getSnapshot().loading, true);
+  assert.equal(controller.getSnapshot().itemCount, 0);
+  pending.resolve(ok(cart(99)));
   await flush();
-  assert.equal(controller.getSnapshot().adding, true);
-  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
-  assert.equal(controller.getSnapshot().adding, true);
-  assert.equal(controller.getSnapshot().itemCount, 4);
-  pending.resolve(ok(cart(6, "member-cart")));
-  assert.equal((await adding).ok, true);
-  assert.equal(controller.getSnapshot().itemCount, 6);
-  assert.equal(controller.getSnapshot().adding, false);
-  assert.equal(calls.memberReads, 1);
-  assert.equal(calls.merges.length, 0);
+  assert.equal(merges, 2);
+  assert.equal(controller.getSnapshot().itemCount, 8);
+  assert.equal(storage.read(), null);
 });
 
 test("ambiguous merge failure retains the credential and key; explicit retry uses that key and clears only on success", async () => {
@@ -485,6 +461,72 @@ test("merge success does not remove a newer guest session written by another tab
   await flush();
   assert.deepEqual(storage.read(), newer);
   assert.equal(controller.getSnapshot().itemCount, 7);
+});
+
+test("same-user token renewal preserves the merged cart without resetting the badge or merging again", async () => {
+  const { controller, storage, calls } = controllerFixture({ stored: guestSession });
+  const identity = { ...member, sessionId: 1 };
+  controller.setIdentity(identity);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(storage.read(), null);
+  const changes: ReturnType<typeof controller.getSnapshot>[] = [];
+  const unsubscribe = controller.subscribe(() => { changes.push(controller.getSnapshot()); });
+  controller.setIdentity({ ...identity, accessToken: "renewed-memory-token" });
+  await flush();
+  unsubscribe();
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:1");
+  assert.equal(calls.merges.length, 1);
+  assert.equal(calls.memberReads, 0);
+  assert.deepEqual(changes, []);
+});
+
+test("same-user token renewal keeps an in-flight member addition active and publishes its result", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const { controller, calls } = controllerFixture({ service: {
+    addCartItem: async () => pending.promise,
+  } });
+  controller.setIdentity(member);
+  await flush();
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  const adding = controller.addItem({ skuId: "sku-1", quantity: 2 });
+  await flush();
+  assert.equal(controller.getSnapshot().adding, true);
+  controller.setIdentity({ ...member, accessToken: "renewed-memory-token" });
+  assert.equal(controller.getSnapshot().adding, true);
+  assert.equal(controller.getSnapshot().itemCount, 4);
+  pending.resolve(ok(cart(6, "member-cart")));
+  assert.equal((await adding).ok, true);
+  assert.equal(controller.getSnapshot().itemCount, 6);
+  assert.equal(controller.getSnapshot().adding, false);
+  assert.equal(calls.memberReads, 1);
+  assert.equal(calls.merges.length, 0);
+});
+
+test("token rotation during guest merge preserves readiness, guest credentials and the single pending merge", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  let merges = 0;
+  const { controller, storage } = controllerFixture({
+    stored: guestSession,
+    service: {
+      mergeGuestCart: async () => { merges++; return pending.promise; },
+    },
+  });
+  const identity = { ...member, sessionId: 1 };
+  controller.setIdentity(identity);
+  await flush();
+  controller.setIdentity({ ...identity, accessToken: "renewed-memory-token" });
+  assert.equal(controller.getSnapshot().loading, true);
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:1");
+  assert.deepEqual(storage.read(), guestSession);
+  pending.resolve(ok(cart(7)));
+  await flush();
+  assert.equal(merges, 1);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(controller.getSnapshot().itemCount, 7);
+  assert.equal(storage.read(), null);
 });
 
 

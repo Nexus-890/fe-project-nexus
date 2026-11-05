@@ -25,6 +25,7 @@ export default defineConfig({
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: "nexus-web",
         NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_CART_MOCK: "false",
+        NEXT_PUBLIC_GUEST_CART_ENABLED: "false",
       },
     },
   ],

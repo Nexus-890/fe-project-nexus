@@ -4,17 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronRight, House } from "lucide-react";
 import { isApiError } from "@/configs/api";
 import { queryKeys } from "@/configs/queryKeys";
-import { useApiMutation, useApiQuery } from "@/hooks/useApi";
+import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
-import { formatVND } from "@/components/formatPrice";
 import { useGuestCart } from "@/hooks/useGuestCart";
+import { formatVND } from "@/components/formatPrice";
 import { getProduct } from "@/service/catalogService";
 import {
   mockProductDetail,
   USE_PRODUCT_DETAIL_MOCK,
 } from "@/mocks/product-detail";
-import type { AddCartItemRequest } from "@/types/cartRequestType";
-import type { CartSnapshot } from "@/types/cartResponseType";
 import type { ProductSku } from "@/types/catalogResponseType";
 import SKUSelector from "@/components/SKUSelector";
 import QuantityPicker from "@/components/QuantityPicker";
@@ -24,13 +22,6 @@ interface ProductDetailPageProps {
   slug: string;
   productId?: string;
 }
-
-type CartOperation = {
-  input: AddCartItemRequest;
-  sessionId: number;
-  guest: boolean;
-  controller: AbortController;
-};
 
 const UUID_SUFFIX =
   /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -70,63 +61,17 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   );
   const [selectedSkuId, setSelectedSkuId] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [signInPrompt, setSignInPrompt] = useState(false);
+  const [signInPrompt, setSignInPrompt] = useState<number | null>(null);
   const [cartMessage, setCartMessage] = useState<{
     sessionId: number;
     text: string;
   } | null>(null);
-  const pendingCart = useRef<AbortController | null>(null);
+  const activeSession = useRef<{ sessionId: number; status: typeof status } | null>(null);
 
-  useEffect(
-    () => () => {
-      pendingCart.current?.abort();
-    },
-    [sessionId],
-  );
-
-  const addToCart = useApiMutation<CartSnapshot, CartOperation>(
-    {
-      mutationKey: ["cart", sessionId, "add-item"],
-      execute: async (operation) => {
-        const result = await cart.addItem(operation.input, operation.controller.signal);
-        if (!result.ok) throw result.error;
-        return result.data;
-      },
-      isCurrent: (operation) =>
-        (operation.guest ? status === "anonymous" && sessionId === operation.sessionId : isSessionCurrent(operation.sessionId)) &&
-        !operation.controller.signal.aborted,
-      invalidateKey: (_data, operation) => operation.guest ? [] : [queryKeys.cart.me(operation.sessionId)],
-    },
-    {
-      onSuccess: (_cart, operation) => {
-        setCartMessage({
-          sessionId: operation.sessionId,
-          text: "Added to cart.",
-        });
-        setSignInPrompt(false);
-      },
-      onError: (error, operation) => {
-        if (
-          (operation.guest ? status !== "anonymous" || sessionId !== operation.sessionId : !isSessionCurrent(operation.sessionId)) ||
-          operation.controller.signal.aborted
-        )
-          return;
-        if (operation.guest && isApiError(error) && (error.status === 401 || error.status === 403)) {
-          setSignInPrompt(true);
-          setCartMessage(null);
-          return;
-        }
-        setCartMessage({
-          sessionId: operation.sessionId,
-          text: isApiError(error)
-            ? error.detail || error.title
-            : "Unable to add this item to cart.",
-        });
-      },
-    },
-  );
-  const addingToCurrentCart =
-    addToCart.isPending && addToCart.variables?.sessionId === sessionId;
+  useEffect(() => {
+    activeSession.current = { sessionId, status };
+    return () => { activeSession.current = null; };
+  }, [sessionId, status]);
 
   if (!id) {
     return (
@@ -159,23 +104,37 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const price = formatVND(sku?.price ?? null);
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (status === "anonymous" && !cart.guestEnabled) {
-      setSignInPrompt(true);
+      setSignInPrompt(sessionId);
       setCartMessage(null);
       return;
     }
-    if (!sku || !cart.ready || cart.adding || status === "restoring" || status === "authenticating" || status === "error") return;
+    if (!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error") return;
     setCartMessage(null);
-    pendingCart.current?.abort();
-    const controller = new AbortController();
-    pendingCart.current = controller;
-    addToCart.mutate({
-      input: { skuId: sku.id, quantity },
-      sessionId,
-      guest: status === "anonymous",
-      controller,
-    });
+    setSignInPrompt(null);
+    const isCurrent = () => activeSession.current?.sessionId === sessionId &&
+      activeSession.current.status === status &&
+      (status !== "authenticated" || isSessionCurrent(sessionId));
+    try {
+      const result = await cart.addItem({ skuId: sku.id, quantity });
+      if (!isCurrent()) return;
+      if (result.ok) {
+        setCartMessage({ sessionId, text: "Added to cart." });
+      } else if (result.error.kind !== "aborted") {
+        if (status === "anonymous" && (result.error.status === 401 || result.error.status === 403)) {
+          setSignInPrompt(sessionId);
+        } else {
+          setCartMessage({ sessionId, text: isApiError(result.error)
+            ? result.error.detail || result.error.title
+            : "Unable to add this item to cart." });
+        }
+      }
+    } catch {
+      if (isCurrent()) {
+        setCartMessage({ sessionId, text: "Unable to add this item to cart. Please try again." });
+      }
+    }
   };
 
   return (
@@ -250,14 +209,14 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
           <button
             type="button"
-            onClick={handleAddToCart}
-            disabled={!sku || addingToCurrentCart || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
+            onClick={() => void handleAddToCart()}
+            disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            {addingToCurrentCart ? "Adding…" : "Add to Cart"}
+            {cart.adding ? "Adding…" : "Add to Cart"}
           </button>
 
-          {signInPrompt ? (
+          {signInPrompt === sessionId ? (
             <p
               role="status"
               className="rounded-md border border-border bg-muted p-3 text-sm"

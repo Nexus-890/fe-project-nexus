@@ -4,6 +4,13 @@ Next.js App Router frontend for the Nexus marketplace. The current UI includes r
 
 Access, ID and refresh tokens stay in memory. On reload, the client checks the Keycloak SSO session with prompt=none, then loads the profile. One shared renewal coordinator renews before expiry and permits one retry after a protected 401. See [session restore](docs/features/session-restore.md) and [guest cart](docs/features/guest-cart.md).
 
+## Guest cart
+
+See [Guest cart and merge on sign-in](docs/features/guest-cart.md) for the shared header
+count, persistence through Keycloak and merge retry flow. Guest carts are
+disabled by default because the backend guest/merge endpoints are not yet
+delivered. The document records the proposed API and local HTTP verification.
+
 ## Development
 
 Use the repository's Node requirement and install the locked dependencies:

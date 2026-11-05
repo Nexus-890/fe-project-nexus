@@ -15,7 +15,6 @@ function ShopLayout({ children }: { children: ReactNode }) {
     queryKey: queryKeys.catalog.tree,
     service: (signal) => getCategoryTree({ signal }),
   });
-
   const [signOutError, setSignOutError] = useState(false);
 
   async function endSession() {

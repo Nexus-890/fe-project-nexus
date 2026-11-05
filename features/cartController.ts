@@ -1,19 +1,17 @@
 import type { AddCartItemRequest } from "../types/cartRequestType";
 import type { ApiResult } from "../types/commonResponseType";
-import { cartItemCount } from "./guestCartUtils";
-import type { CartSnapshot } from "../types/cartResponseType";
+import { cartItemCount, type CartSnapshot } from "./cartSnapshotUtils";
 import type { GuestStorage } from "./guestCartStorage";
 
+export type CartIdentity = { status: string; userId: string | null; accessToken: string | null; sessionId?: number };
 export interface CartControllerService {
   getCart: () => Promise<ApiResult<CartSnapshot>>;
   addCartItem: (input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
   createGuestCart: (signal?: AbortSignal) => Promise<ApiResult<{ guestToken: string; cart: CartSnapshot }>>;
-  getGuestCart: (guestToken: string, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
-  addGuestCartItem: (guestToken: string, input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
-  mergeGuestCart: (guestToken: string, mergeKey: string) => Promise<ApiResult<CartSnapshot>>;
+  getGuestCart: (token: string, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
+  addGuestCartItem: (token: string, input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
+  mergeGuestCart: (token: string, mergeKey: string) => Promise<ApiResult<CartSnapshot>>;
 }
-
-export type CartIdentity = { status: string; userId: string | null; accessToken: string | null; sessionId?: number };
 export interface CartState {
   owner: string | null;
   itemCount: number;
@@ -24,7 +22,7 @@ export interface CartState {
 }
 
 export const identityOwner = (identity: CartIdentity): string | null =>
-  identity.status === "authenticated" && identity.userId ? `user:${identity.userId}`
+  identity.status === "authenticated" && identity.userId ? `user:${identity.userId}${identity.sessionId === undefined ? "" : `:${identity.sessionId}`}`
     : identity.status === "anonymous" ? "guest" : null;
 
 const failure = (title: string, status = 0): ApiResult<never> => ({
@@ -35,7 +33,7 @@ const failure = (title: string, status = 0): ApiResult<never> => ({
 export function createCartController(options: {
   storage: GuestStorage;
   guestEnabled: boolean;
-  service: CartControllerService;
+  service: CartControllerService | ((getIdentity: () => CartIdentity) => CartControllerService);
   randomId?: () => string;
   withLock?: <T>(action: () => Promise<T>) => Promise<T>;
 }) {
@@ -45,7 +43,7 @@ export function createCartController(options: {
   const serverState = state;
   const subscribers = new Set<() => void>();
   let queue: Promise<unknown> = Promise.resolve();
-  const service = options.service;
+  const service = typeof options.service === "function" ? options.service(() => identity) : options.service;
   const lock = options.withLock ?? (<T>(action: () => Promise<T>) => action());
   const randomId = options.randomId ?? (() => globalThis.crypto.randomUUID());
   const update = (patch: Partial<CartState>) => {
@@ -119,8 +117,7 @@ export function createCartController(options: {
   function setIdentity(next: CartIdentity): void {
     if (identity.status === next.status && identity.userId === next.userId && identity.accessToken === next.accessToken && identity.sessionId === next.sessionId) return;
     if (identity.status === "authenticated" && next.status === "authenticated" && identity.userId === next.userId && identity.sessionId === next.sessionId) {
-      // A renewed token belongs to the same cart. Keep the count and any
-      // in-flight operation instead of reloading/merging on every rotation.
+      // Token rotation keeps the same cart session and its pending work.
       identity = next;
       return;
     }
@@ -144,23 +141,23 @@ export function createCartController(options: {
     }
     if (state.adding || state.loading) return Promise.resolve(failure("Please wait for your cart."));
     update({ adding: true, error: null });
-    return enqueue(async () => {
+    return enqueue<ApiResult<CartSnapshot>>(async () => {
       try {
-        if (!current(id) || signal?.aborted) return failure("Your session changed. Please try again.");
+        if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
         let result: ApiResult<CartSnapshot>;
         if (owner === "guest") {
           let guest = options.storage.read();
           if (!guest) {
             const created = await service.createGuestCart(signal);
             if (!created.ok) return created;
-            if (!current(id) || signal?.aborted) return failure("Your session changed. Please try again.");
+            if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
             guest = { token: created.data.guestToken, mergeKey: randomId() };
             // Fail before adding if persistence is unavailable: otherwise the
             // user's items would be lost when Keycloak navigates away.
             options.storage.write(guest);
           }
           result = await service.addGuestCartItem(guest.token, input, signal);
-          if (!current(id) || signal?.aborted) return failure("Your session changed. Please try again.");
+          if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
           if (!result.ok && (result.error.status === 404 || result.error.status === 410)) {
             options.storage.clear(guest);
             update({ itemCount: 0 });
@@ -171,7 +168,7 @@ export function createCartController(options: {
           if (state.mergeError) return failure("Please retry merging your saved items first.");
           result = await service.addCartItem(input, signal);
         }
-        if (!current(id) || signal?.aborted) return failure("Your session changed. Please try again.");
+        if (!current(id) || signal?.aborted) return { ok: false, error: { kind: "aborted", status: 0, title: "Your session changed. Please try again." } };
         if (result.ok) showCart(result.data);
         return result;
       } catch {

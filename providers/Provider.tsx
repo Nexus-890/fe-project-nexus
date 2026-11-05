@@ -11,7 +11,6 @@ import { API_BASE_URL, createCanceledError, isApiError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
 import { createOidcClient } from "../features/oidc";
 import { createTokenSession, renewalDelay } from "../features/tokenSession";
-import { CartProvider } from "./CartProvider";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { getMe, register as registerUser } from "../service/authService";
 import { createAuthStub } from "../mocks/authStub";
@@ -20,6 +19,7 @@ import type { ApiError, ApiResult } from "../types/commonResponseType";
 import type { RegisterRequest } from "../types/authRequestType";
 import type { UserResponse } from "../types/authResponseType";
 import type { AuthContextValue, AuthProviderProps } from "../types/authType";
+import CartProvider from "./CartProvider";
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -352,7 +352,9 @@ function Provider({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSession {...settings} stub={stub}><CartProvider>{children}</CartProvider></AuthSession>
+      <AuthSession {...settings} stub={stub}>
+        <CartProvider>{children}</CartProvider>
+      </AuthSession>
     </QueryClientProvider>
   );
 }
