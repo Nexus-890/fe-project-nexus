@@ -508,6 +508,27 @@ assumptions:
       Inspected current default-browser simulation log and observed real discovery, authorization,
       token and logout HTTP requests. Historical wall-clock acceptance was not repeated; modeled
       expiry passed. Live provider/backend integration remains unverified.
+
+      On 2026-11-05, at fingerprint session-restore-cart-develop-merge, the final merged frontend
+      passed all 133 unit tests, 24 dedicated OIDC/guest/session browser cases and 31 general
+      browser cases. The new unit regression preserves one pending guest merge through token
+      rotation; all prior cart tests remain. Lint, fresh isolated route typecheck and generated DTO
+      drift check passed. The auth browser run used app port 3137, simulation port 3947 and
+      .next-oidc-merge; its log was inspected before the general runner replaced it: 447 request
+      events, including 216 Keycloak and 231 API requests, profile 200/401/503, merge 200/503,
+      registration 201, token 200/400 and protected GET 200/401. The final general run recorded 155
+      Keycloak request events, including 15 successful token POSTs; application API calls used
+      explicit HTTP fixtures. Default-port attempts encountered existing Next upgrade reminders, a
+      navigation timeout and another worktree occupying the ports. The final general run used
+      temporary port-only substitutions 3138/3948/3949 and .next-catalog-merge; exact tracked
+      test/config bytes were restored afterwards, with assertions unchanged. These results establish
+      caller behavior against local stand-ins. No live backend/Keycloak acceptance or repeat of the
+      historical five-minute wall-clock run was performed.
+
+      The final NEXUS_TEST_DIST_DIR=.next-session-merge-build npm run build passed compilation,
+      TypeScript and static generation on unchanged retry after the existing Next 16.4.0 security
+      reminder. Production route output contains neither auth-smoke nor session-probe. No dependency
+      upgrade was performed.
     source: >-
       docs/features/session-restore.md; tests/session.spec.ts; tests/guest-cart.spec.ts;
       tests/cart.spec.ts; tests/token-retry.test.ts; tests/auth-acceptance.mjs;
@@ -543,4 +564,10 @@ fingerprints:
   - id: session-restore-develop-integration
     date: '2026-11-05'
     commit: 71bc1b6b with merge of origin/develop 0d0a36a4 and reviewed integration fixes
+    cli: 1.73.0
+  - id: session-restore-cart-develop-merge
+    date: '2026-11-05'
+    commit: >-
+      d7a4090d with uncommitted merge of origin/develop cfe10dfa; follow-up backend changes leave
+      frontend source unchanged
     cli: 1.73.0

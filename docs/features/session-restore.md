@@ -165,3 +165,26 @@ The harness waits for the outer application restore before recording its storage
 Initial attempts hit a dependency junction unsupported by Turbopack, old generated output, Windows manifest file locks and Next's existing security reminder. Fresh local dependencies, isolated output and sequential final gates completed successfully. Next 16.4.0 still reports its existing security advisory; no dependency upgrade is included.
 
 This run verifies the client against local fixtures. Live Keycloak/backend acceptance remains unverified; guest/merge endpoints remain proposed and disabled by default. The historical five-minute wall-clock run above was not repeated after this merge; the controlled-clock expiry scenario passed.
+
+## Cart integration conflict resolution (2026-11-05)
+
+Merged the session branch at `3a81af99` with develop's guest-cart integration at `d757d972`, then incorporated the backend-only develop updates through `cfe10dfa`. Kept develop's flat cart helpers, scoped readiness, shared private cache, stale-response guards and product navigation behavior. Kept this branch's silent restoration and shared renewal coordinator. Same-user token rotation retains the session generation, cart count and pending add/merge; a new login or logout invalidates them. Removed the redundant snapshot type/count helper after migrating its consumers.
+
+Added coverage for token rotation during a pending guest merge. All earlier cart regression cases remain. Application cart requests use the provider's configured API origin and shared token-renewal context. Guest routes remain a proposed contract with the feature disabled by default.
+
+| Check | Result |
+| --- | --- |
+| `npm run test:auth` | 133 passed |
+| `npm run test:auth:browser` | 24 passed: OIDC, guest cart, restoration, concurrent 401s, retry cap, failure, modeled expiry and logout |
+| `npm run test:catalog -- --max-failures=1` with isolated ports | 31 passed: auth acceptance, cart, catalog, gallery and product |
+| `npm run generate:types:check` | Passed |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed with fresh isolated route types |
+| `NEXUS_TEST_DIST_DIR=.next-session-merge-build; npm run build` | Passed compilation, TypeScript and static generation; production routes contain neither test probe |
+| `git diff --check` and documentation links | Passed |
+
+Auth browser verification used app port 3137, simulation port 3947 and `.next-oidc-merge`. Inspected 447 simulation request events: 216 Keycloak and 231 API calls, including successful and rejected token/profile/protected requests, guest merge success/failure and registration. The general suite used temporary substitutions for app/catalog/simulation ports 3138/3948/3949 and `.next-catalog-merge`; all tracked test/config bytes were restored afterwards and assertions were unchanged. Its final simulation log contained 155 Keycloak events, including 15 successful token POSTs; application API calls used explicit HTTP fixtures.
+
+Earlier attempts encountered Next's existing upgrade reminder, a category navigation timeout and default ports occupied by another worktree. Unchanged retries with isolated ports passed. The production build also passed on retry after the existing Next 16.4.0 security reminder; dependencies were not upgraded as part of this conflict resolution.
+
+These checks verify frontend behavior against the existing local HTTP stand-ins. Live Keycloak/backend acceptance and the historical five-minute wall-clock scenario were not repeated. Detailed run scope is recorded in the `session-restore-cart-develop-merge` simulation fingerprint.
