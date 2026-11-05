@@ -139,3 +139,23 @@ Notification browser tests now use the local OIDC code flow and verify the issue
 The full browser run used app/API/provider ports 3126/3926/3927 and `.next-catalog-notification`; the dedicated OIDC run used app/provider ports 3127/3927. Both runners cleaned their smoke route. Final build ran after all browser runners stopped, without the temporary route in its production output. The initial dependency junction was replaced with a local dependency copy because Turbopack rejects targets outside its filesystem root; an overlapping early build also failed while a browser runner removed the smoke route. These environment attempts did not require production changes. The final checked-in tsconfig matches develop.
 
 These results cover local HTTP fixtures and Postman stand-ins, not live backend JWT privileges, Keycloak availability or persistence. The existing Next.js security advisory remains an unresolved dependency issue; no framework upgrade is included in this merge resolution.
+
+## Notification bell with latest guest-cart/event-log develop — 2026-11-05
+
+Develop advanced from `0d0a36a4` to `ff2a4986` after the preceding resolution, adding guest-cart (`d757d972`) and event-log changes. A fresh local `git merge --no-commit --no-ff origin/develop` from notification commit `3a7dac88` reproduced conflicts in five files: HeaderTopBar, the documentation router, auth browser config, OIDC API fixture and simulation context.
+
+The resolution preserves develop's sign-in return destination, global CartProvider/guest merge, callback readiness and new event-log backend alongside the session-scoped notification bell. The automatic merge also removed ShopLayout's `sessionId` binding while retaining its notification key; the binding was restored. Guest fixture CORS retains both custom guest headers and configurable ports. Notification DTOs were regenerated for the expanded delivered event/audit-log OpenAPI. Backend files match `ff2a4986` exactly.
+
+Executed after resolving this merge:
+
+| Check | Result |
+| --- | --- |
+| Generated types / lint / fresh route typecheck | Passed |
+| `npm run test:unit` | 101 passed |
+| `npm run test:browser` | All 43 passed, including all 12 notification scenarios and current cart/product/catalog/gallery/auth cases |
+| `npm run test:auth:browser` | All 17 passed: 6 guest-cart and 11 OIDC cases |
+| `node be-project-nexus/docs/api/check-contract.mjs` | All 45 controller operations match delivered OpenAPI, including 7 notification-service operations |
+| `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` | Passed compilation, TypeScript and all page generation; unchanged retry after the existing Next 16.4.0 advisory reminder |
+| Git/source review | No conflict markers or unmerged entries; whitespace check passed; OIDC/cart production files retained from develop |
+
+Main browser ports were 3126/3926/3927; dedicated auth ports were 3127/3927. Its final simulation log recorded 261 request events. Runners cleaned the smoke route, and final build ran separately after browser cleanup. Existing simulation histories were preserved; the new [context entry](../../postman/simulations/oidc.context.yaml) records this run's scope. These remain local fixture results; live backend JWT, guest merge and persistence are not established. No framework security upgrade is included.

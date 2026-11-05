@@ -2,6 +2,13 @@
 
 Next.js App Router frontend for the Nexus marketplace. The current UI includes registration, Keycloak OIDC sign-in with PKCE, an in-memory auth session, shop/category navigation, product listings/details, SKU/quantity/image selection, add-to-cart feedback and a Cart page with optimistic quantity/removal. See the [documentation index](docs/index.md) for architecture, contracts and feature scope.
 
+## Guest cart
+
+See [Guest cart and merge on sign-in](docs/features/guest-cart.md) for the shared header
+count, persistence through Keycloak and merge retry flow. Guest carts are
+disabled by default because the backend guest/merge endpoints are not yet
+delivered. The document records the proposed API and local HTTP verification.
+
 ## Development
 
 Use the repository's Node requirement and install the locked dependencies:

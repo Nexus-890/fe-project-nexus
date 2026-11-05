@@ -6,7 +6,7 @@ const simulationOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_POR
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "oidc.spec.ts",
+  testMatch: ["oidc.spec.ts", "guest-cart.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
@@ -36,6 +36,7 @@ export default defineConfig({
         NEXT_PUBLIC_AUTH_STUB: "false",
         NEXT_PUBLIC_PRODUCT_DETAIL_MOCK: "false",
         NEXT_PUBLIC_CART_MOCK: "false",
+        NEXT_PUBLIC_GUEST_CART_ENABLED: "true",
         NEXT_PUBLIC_KEYCLOAK_URL: `${simulationOrigin}/keycloak`,
         NEXT_PUBLIC_KEYCLOAK_REALM: "nexus",
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: "nexus-web",

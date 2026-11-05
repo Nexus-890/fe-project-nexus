@@ -18,6 +18,7 @@ import type { ApiError, ApiResult } from "../types/commonResponseType";
 import type { RegisterRequest } from "../types/authRequestType";
 import type { UserResponse } from "../types/authResponseType";
 import type { AuthContextValue, AuthProviderProps } from "../types/authType";
+import CartProvider from "./CartProvider";
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -269,7 +270,9 @@ function Provider({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSession {...settings} stub={stub}>{children}</AuthSession>
+      <AuthSession {...settings} stub={stub}>
+        <CartProvider>{children}</CartProvider>
+      </AuthSession>
     </QueryClientProvider>
   );
 }

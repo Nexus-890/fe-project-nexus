@@ -80,6 +80,66 @@ export interface paths {
         patch: operations["markAllNotificationsAsRead"];
         trace?: never;
     };
+    "/api/v1/event-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search retained domain events
+         * @description Filters combine with AND. Pagination is zero-based; deterministic newest-first ordering uses id as tie-breaker. Event log summary excludes payload; detail requires its own privilege. Audit is a database view of UserUpdated, UserDeleted, UserRoleAssigned, OrderRefundRequested, OrderRefundCompleted and SystemConfigUpdated. Config is recorded through the in-process recorder; cross-service delivery is owned by #217. Password events belong to Keycloak.
+         */
+        get: operations["listEventLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/event-logs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read full original event envelope
+         * @description Filters combine with AND. Pagination is zero-based; deterministic newest-first ordering uses id as tie-breaker. Event log summary excludes payload; detail requires its own privilege. Audit is a database view of UserUpdated, UserDeleted, UserRoleAssigned, OrderRefundRequested, OrderRefundCompleted and SystemConfigUpdated. Config is recorded through the in-process recorder; cross-service delivery is owned by #217. Password events belong to Keycloak.
+         */
+        get: operations["getEventLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List critical user, role, refund and config changes
+         * @description Filters combine with AND. Pagination is zero-based; deterministic newest-first ordering uses id as tie-breaker. Event log summary excludes payload; detail requires its own privilege. Audit is a database view of UserUpdated, UserDeleted, UserRoleAssigned, OrderRefundRequested, OrderRefundCompleted and SystemConfigUpdated. Config is recorded through the in-process recorder; cross-service delivery is owned by #217. Password events belong to Keycloak.
+         */
+        get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -140,6 +200,73 @@ export interface components {
                 /** Format: int64 */
                 count: number;
             };
+        };
+        EventLogSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            eventId: string;
+            eventType: string;
+            aggregateType?: string | null;
+            aggregateId: string;
+            /** Format: uuid */
+            operatorId?: string | null;
+            traceId: string;
+            topic?: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        EventLogDetail: {
+            event: components["schemas"]["EventLogSummary"];
+            /** @description Unchanged domain payload; any JSON value. */
+            payload: unknown;
+            /** @description Complete original envelope, including unknown fields. */
+            envelope: {
+                [key: string]: unknown;
+            };
+            /** @description Original JSON text. Null for historical rows recorded before #192. */
+            rawEnvelope?: string | null;
+        };
+        AuditLog: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            eventId: string;
+            /** Format: uuid */
+            actorId?: string | null;
+            action: string;
+            entityType?: string | null;
+            entityId: string;
+            traceId: string;
+            /** Format: date-time */
+            occurredAt: string;
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        EventLogListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["EventLogSummary"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        EventLogDetailResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["EventLogDetail"];
+        };
+        AuditLogListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["AuditLog"][];
+            page: components["schemas"]["PageInfo"];
         };
     };
     responses: never;
@@ -675,6 +802,499 @@ export interface operations {
                         status?: 500;
                         /** @enum {string} */
                         code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+        };
+    };
+    listEventLogs: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive literal substring across event metadata and original envelope. */
+                q?: string;
+                eventType?: string;
+                aggregateType?: string;
+                aggregateId?: string;
+                operatorId?: string;
+                /** @description Inclusive occurredAt bound; from must be <= to. */
+                from?: string;
+                /** @description Inclusive occurredAt bound; from must be <= to. */
+                to?: string;
+                sort?: "occurredAt,asc" | "occurredAt,desc" | "receivedAt,asc" | "receivedAt,desc" | "eventType,asc" | "eventType,desc";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventLogListResponse"];
+                };
+            };
+            /** @description Invalid filters/pagination: NOTIFICATION_DATA_INVALID. Query conversion: INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "NOTIFICATION_DATA_INVALID" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description A valid bearer token is required. Code: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getEventLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Log row id returned by list; distinct from eventId. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventLogDetailResponse"];
+                };
+            };
+            /** @description Invalid filters/pagination: NOTIFICATION_DATA_INVALID. Query conversion: INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "NOTIFICATION_DATA_INVALID" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description A valid bearer token is required. Code: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Event log not found. Code: NOTIFICATION_EVENT_LOG_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "NOTIFICATION_EVENT_LOG_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    listAuditLogs: {
+        parameters: {
+            query?: {
+                actorId?: string;
+                /** @description Exact eventType, e.g. UserRoleAssigned or OrderRefundCompleted. */
+                action?: string;
+                entityType?: string;
+                entityId?: string;
+                /** @description Inclusive occurredAt bound; from must be <= to. */
+                from?: string;
+                /** @description Inclusive occurredAt bound; from must be <= to. */
+                to?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogListResponse"];
+                };
+            };
+            /** @description Invalid filters/pagination: NOTIFICATION_DATA_INVALID. Query conversion: INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "NOTIFICATION_DATA_INVALID" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description A valid bearer token is required. Code: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
                     };
                 };
             };

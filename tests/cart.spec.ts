@@ -370,7 +370,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL(`${appOrigin}/sign-in?returnTo=%2F`);
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";
     await signIn(page, state.account.name);

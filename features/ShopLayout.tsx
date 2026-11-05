@@ -6,17 +6,12 @@ import NotificationBellFeature from "@/features/NotificationBellFeature";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
+import { useGuestCart } from "@/hooks/useGuestCart";
 import { getCategoryTree } from "@/service/catalogService";
-import { getCart } from "@/service/cartService";
-import { getCartQuantity } from "@/features/cartUtils";
 
 function ShopLayout({ children }: { children: ReactNode }) {
-  const { user, status, signOut, requestContext, sessionId } = useAuth();
-  const cart = useApiQuery({
-    queryKey: queryKeys.cart.me(sessionId),
-    service: (signal) => getCart({ context: requestContext, signal }),
-    meta: { requiresAuth: true },
-  }, { enabled: status === "authenticated" });
+  const { user, status, signOut, sessionId } = useAuth();
+  const cart = useGuestCart();
   const categories = useApiQuery({
     queryKey: queryKeys.catalog.tree,
     service: (signal) => getCategoryTree({ signal }),
@@ -39,7 +34,7 @@ function ShopLayout({ children }: { children: ReactNode }) {
         user={user}
         authenticating={status === "authenticating"}
         onSignOut={() => void endSession()}
-        cartQuantity={cart.data ? getCartQuantity(cart.data.items) : undefined}
+        cartQuantity={cart.itemCount}
         categories={categories.data ?? []}
         categoriesLoading={categories.isPending}
         categoriesError={categories.isError}
@@ -50,6 +45,17 @@ function ShopLayout({ children }: { children: ReactNode }) {
           ) : null
         }
       />
+      {cart.error ? (
+        <p role="alert" className="border-b border-border bg-muted px-4 py-3 text-center text-sm">{cart.error}</p>
+      ) : null}
+      {cart.mergeError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-center gap-3 border-b border-danger/30 bg-red-100 px-4 py-3 text-sm text-danger">
+          <span>Your guest cart could not be merged. Your items are saved for another attempt.</span>
+          <button type="button" onClick={() => void cart.retryMerge()} disabled={cart.loading} className="min-h-11 font-medium underline disabled:opacity-50">
+            {cart.loading ? "Merging cart…" : "Retry merging cart"}
+          </button>
+        </div>
+      ) : null}
       {signOutError ? (
         <div role="alert" className="flex flex-wrap items-center justify-center gap-3 border-b border-danger/30 bg-red-100 px-4 py-3 text-sm text-danger">
           <span>Unable to finish signing out. Please try again.</span>

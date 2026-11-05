@@ -253,6 +253,73 @@ test("authenticated cart sends selected SKU and quantity, then displays typed ba
   expect(calls[1]?.token).toBe(account.authorization);
 });
 
+test("navigation during a member add cannot replace its result with an older cart read", async ({ page }) => {
+  await installProduct(page);
+  const account = await installAuth(page);
+  let releaseAdd = () => {};
+  let releaseRead = () => {};
+  const pendingAdd = new Promise<void>((resolve) => { releaseAdd = resolve; });
+  const pendingRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+  let adding = false;
+  let reads = 0;
+  let finishedReads = 0;
+  let adds = 0;
+  const cart = {
+    id: "member-cart", userId: account.id, status: "ACTIVE",
+    items: [{ id: "member-line", productId: "1", skuId: "sku-red", quantity: 1, unitPrice: 150000 }],
+  };
+  await page.route("**/api/v1/carts/me", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    reads += 1;
+    const snapshot = structuredClone(cart);
+    try {
+      if (adding) await pendingRead;
+      await fulfillJson(route, envelope(snapshot));
+    } catch {
+      // A successful add cancels any older in-flight cart read.
+    } finally {
+      finishedReads += 1;
+    }
+  });
+  await page.route("**/api/v1/carts/me/items", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    adds += 1;
+    await pendingAdd;
+    cart.items[0].quantity += 1;
+    await fulfillJson(route, envelope(cart), 201);
+  });
+  try {
+    await page.goto("/sign-in");
+    await signIn(page, account.name);
+    await openProductFromHome(page);
+    await page.clock.install();
+    // Make the existing snapshot stale so mounting CartPage would refetch it.
+    await page.clock.fastForward(31_000);
+    const readsBeforeAdd = reads;
+    adding = true;
+    await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
+    await expect.poll(() => adds).toBe(1);
+    await page.getByRole("link", { name: /^Shopping cart/ }).click();
+    const line = page.getByTestId("cart-line-member-line");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await page.clock.runFor(100);
+    expect(reads).toBe(readsBeforeAdd);
+    releaseAdd();
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    adding = false;
+    releaseRead();
+    await expect.poll(() => finishedReads).toBe(reads);
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 2 items");
+  } finally {
+    releaseAdd();
+    releaseRead();
+  }
+});
+
 test("logout during a pending cart request keeps the next account free of stale success", async ({
   page,
 }) => {
@@ -303,7 +370,7 @@ test("logout during a pending cart request keeps the next account free of stale 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL(`${appOrigin}/sign-in?returnTo=%2F`);
     account.id = "buyer-2";
     account.name = "Second Buyer";
     await signIn(page, account.name);
