@@ -1,117 +1,124 @@
 purpose:
   stands_in_for: Local HTTP cart gateway with catalog fixtures and the shared Keycloak OIDC stand-in.
   unblocks: Frontend cart hooks, shared header count and cart page regression checks.
-
 assumptions:
   - id: compact-cart-envelope
     status: supported
-    claim: Cart GET, POST and PUT return a compact Cart DTO in an ApiResponse envelope with numeric unitPrice.
-    reason: The delivered backend controller, DTOs and current OpenAPI agree; the previous rich draft fixture did not match them.
+    claim: >-
+      Cart GET, POST and PUT return a compact Cart DTO in an ApiResponse envelope with numeric
+      unitPrice.
+    reason: >-
+      The delivered backend controller, DTOs and current OpenAPI agree; the previous rich draft
+      fixture did not match them.
     verification: >-
-      On 2026-11-03 inspected origin/develop at the backend-contract fingerprint.
-      GET returns 200, POST 201 and PUT 200 with code/message/data. DELETE returns
-      204 without a body. Cart has id/userId/status/items; each item has
-      id/productId/skuId/quantity/unitPrice. No display metadata or totals are supplied.
-      This is source/spec evidence, not a request to a running backend.
-      On 2026-11-05 the shared-cart-oidc-merge inspection confirmed the same
-      GET/POST/PUT envelope and bodyless DELETE shapes in the merged delivered
-      spec/controller. PUT/DELETE CurrentUser parameters still differ from the
-      authenticated-principal annotations used by GET/POST; source shape does
-      not establish successful real authenticated binding.
+      On 2026-11-03 inspected origin/develop at the backend-contract fingerprint. GET returns 200,
+      POST 201 and PUT 200 with code/message/data. DELETE returns 204 without a body. Cart has
+      id/userId/status/items; each item has id/productId/skuId/quantity/unitPrice. No display
+      metadata or totals are supplied. This is source/spec evidence, not a request to a running
+      backend. On 2026-11-05 the shared-cart-oidc-merge inspection confirmed the same GET/POST/PUT
+      envelope and bodyless DELETE shapes in the merged delivered spec/controller. PUT/DELETE
+      CurrentUser parameters still differ from the authenticated-principal annotations used by
+      GET/POST; source shape does not establish successful real authenticated binding.
     source: >-
       origin/develop:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/controller/CartController.java;
       cart/dto/response/CartResponse.java; cart/dto/response/CartItemResponse.java;
       be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java;
       be-project-nexus/docs/api/openapi/commerce-service.yaml
-    updated_at: "2026-11-05"
-
+    updated_at: '2026-11-05'
   - id: frontend-against-compact-http-fixture
     status: supported
-    claim: The frontend shares one cart GET and sums quantities correctly in the local compact-payload scenarios exercised.
+    claim: >-
+      The frontend shares one cart GET and sums quantities correctly in the local compact-payload
+      scenarios exercised.
     reason: The real frontend ran against the HTTP simulation with frontend cart/product mocks disabled.
     verification: >-
-      On 2026-11-03, at the frontend-fix fingerprint, npm run test:cart passed
-      all 9 browser tests. Verified quantity two without reload; two lines with
-      quantities 3 and 2 give count 5 and subtotal 5500001.00; header/cart share
-      one GET; PUT updates the badge; DELETE 204 triggers one refresh; anonymous
-      pages make no cart calls; failed writes preserve confirmed state; late
-      responses after sign-out do not restore the count; mobile/desktop fit.
-      cart-simulation.ndjson contains listening and Cart GET/POST/PUT/DELETE
-      request events, including the compact numeric-price envelope. The 46
-      passing unit tests also cover malformed envelopes, DTO validation, exact
-      decimal totals and concurrent reads. These results establish caller
-      behavior against this stand-in only.
-      On 2026-11-04, at the develop-merge fingerprint, npm run test:cart passed
-      all 9 scenarios again in 34.2 seconds against the flattened frontend and
-      shared requestApi boundary. All auth/catalog/cart success fixtures now use
-      the delivered envelope; product lists retain sibling page metadata.
-      The 8 migrated cart API tests and concurrent-read/write regression passed
-      in the unit run. Log inspection confirmed GET cart 200 (9) and 503 (2),
-      POST item 201 (2), PUT item 200 (2) and 503 (1), and DELETE item 204 (1).
-      Mobile/desktop screenshots and clipping assertions passed; both ports
-      stopped after cleanup. The first Next dev start stopped for the existing
-      advisory reminder; an unchanged retry produced the passing run.
-      Those runs used the pre-OIDC shared Cart suite. On 2026-11-05 it moved
-      from tests/cart.spec.ts to tests/cart-shared.spec.ts while the main suite
-      retains the independent Cart page optimism/rollback scenarios in
-      tests/cart.spec.ts. The shared suite now follows the provider redirect
-      and callback; its current execution evidence must be recorded separately.
-      On 2026-11-05, at the shared-cart-oidc-merge fingerprint, npm run test:cart
-      passed 9/9 in 47.3 seconds through the provider redirect/callback and
-      local HTTP simulation. The header/page share one initial GET; the combined
-      update/remove scenario has three total GETs: initial plus one authoritative
-      reconciliation after PUT and one after DELETE. The log contains one
-      listening event; Cart GET 200 (12) and 503 (2), POST 201 (2), PUT 200 (2)
-      and 503 (1), DELETE 204 (1), and Keycloak token POST 200 (8).
-      Unit tests passed 87/87, including optimistic rollback, cross-observer
-      serialization and same-session unmount reconciliation. Main browser
-      validation passed 30/30, retaining independent Cart-page regressions.
-      These are caller outcomes against local stand-ins, not live backend
-      authentication/database evidence.
-      On 2026-11-05, at the shared-cart-guest-reconciliation fingerprint,
-      npm run test:cart passed 9/9 in 47.5 seconds after consolidating adds
-      and header reads into CartProvider and member edits into features/useCart.
-      The single initial shared GET and exact totals assertions still pass.
-      Cart log counts were GET 200 (12)/503 (3), POST 201 (2), PUT 200 (2)/503
-      (1), DELETE 204 (1), with eight successful OIDC token exchanges.
-      The third failed GET comes from the provider's initial load before the
-      shared observer's retry. No real backend was exercised.
-    source: >-
-      tests/cart-shared.spec.ts (historically tests/cart.spec.ts);
-      tests/cart-api.test.ts; tests/cart-query.test.ts;
-      postman/mocks/cart-gateway/default.js; playwright.cart.config.ts;
-      cart-simulation.ndjson (generated, ignored)
-    updated_at: "2026-11-05"
+      On 2026-11-03, at the frontend-fix fingerprint, npm run test:cart passed all 9 browser tests.
+      Verified quantity two without reload; two lines with quantities 3 and 2 give count 5 and
+      subtotal 5500001.00; header/cart share one GET; PUT updates the badge; DELETE 204 triggers one
+      refresh; anonymous pages make no cart calls; failed writes preserve confirmed state; late
+      responses after sign-out do not restore the count; mobile/desktop fit. cart-simulation.ndjson
+      contains listening and Cart GET/POST/PUT/DELETE request events, including the compact
+      numeric-price envelope. The 46 passing unit tests also cover malformed envelopes, DTO
+      validation, exact decimal totals and concurrent reads. These results establish caller behavior
+      against this stand-in only. On 2026-11-04, at the develop-merge fingerprint, npm run test:cart
+      passed all 9 scenarios again in 34.2 seconds against the flattened frontend and shared
+      requestApi boundary. All auth/catalog/cart success fixtures now use the delivered envelope;
+      product lists retain sibling page metadata. The 8 migrated cart API tests and
+      concurrent-read/write regression passed in the unit run. Log inspection confirmed GET cart 200
+      (9) and 503 (2), POST item 201 (2), PUT item 200 (2) and 503 (1), and DELETE item 204 (1).
+      Mobile/desktop screenshots and clipping assertions passed; both ports stopped after cleanup.
+      The first Next dev start stopped for the existing advisory reminder; an unchanged retry
+      produced the passing run. Those runs used the pre-OIDC shared Cart suite. On 2026-11-05 it
+      moved from tests/cart.spec.ts to tests/cart-shared.spec.ts while the main suite retains the
+      independent Cart page optimism/rollback scenarios in tests/cart.spec.ts. The shared suite now
+      follows the provider redirect and callback; its current execution evidence must be recorded
+      separately. On 2026-11-05, at the shared-cart-oidc-merge fingerprint, npm run test:cart passed
+      9/9 in 47.3 seconds through the provider redirect/callback and local HTTP simulation. The
+      header/page share one initial GET; the combined update/remove scenario has three total GETs:
+      initial plus one authoritative reconciliation after PUT and one after DELETE. The log contains
+      one listening event; Cart GET 200 (12) and 503 (2), POST 201 (2), PUT 200 (2) and 503 (1),
+      DELETE 204 (1), and Keycloak token POST 200 (8). Unit tests passed 87/87, including optimistic
+      rollback, cross-observer serialization and same-session unmount reconciliation. Main browser
+      validation passed 30/30, retaining independent Cart-page regressions. These are caller
+      outcomes against local stand-ins, not live backend authentication/database evidence. On
+      2026-11-05, at the shared-cart-guest-reconciliation fingerprint, npm run test:cart passed 9/9
+      in 47.5 seconds after consolidating adds and header reads into CartProvider and member edits
+      into features/useCart. The single initial shared GET and exact totals assertions still pass.
+      Cart log counts were GET 200 (12)/503 (3), POST 201 (2), PUT 200 (2)/503 (1), DELETE 204 (1),
+      with eight successful OIDC token exchanges. The third failed GET comes from the provider's
+      initial load before the shared observer's retry. No real backend was exercised.
 
+      On 2026-11-05, the shared-cart-session-reconciliation run passed all nine focused Cart cases
+      in 42.9 seconds at isolated app/simulation ports 3144/3955. Cart GET 200 (12)/503 (3), POST
+      201 (2), PUT 200 (2)/503 (1), DELETE 204 (1), and eight successful provider token exchanges
+      were observed. Shared initial GET, quantity sums, rollback, and late logout response
+      assertions passed after integrating session restoration. Port substitutions were restored
+      after the runner. No live backend was used.
+    source: >-
+      tests/cart-shared.spec.ts (historically tests/cart.spec.ts); tests/cart-api.test.ts;
+      tests/cart-query.test.ts; postman/mocks/cart-gateway/default.js; playwright.cart.config.ts;
+      cart-simulation.ndjson (generated, ignored)
+    updated_at: '2026-11-05'
   - id: live-backend-integration
     status: unknown
-    claim: A running gateway and commerce service accept the current frontend session and return the documented Cart payload.
-    reason: The local suite substitutes auth/catalog/cart HTTP responses and does not start the real backend.
+    claim: >-
+      A running gateway and commerce service accept the current frontend session and return the
+      documented Cart payload.
+    reason: >-
+      The local suite substitutes auth/catalog/cart HTTP responses and does not start the real
+      backend.
     verification: >-
-      No live backend request was made in this change. A signed-in run against
-      the gateway with cart mocks disabled is still needed to establish actual
-      authentication, permissions, gateway routing and backend connectivity.
+      No live backend request was made in this change. A signed-in run against the gateway with cart
+      mocks disabled is still needed to establish actual authentication, permissions, gateway
+      routing and backend connectivity.
     source: playwright.cart.config.ts; service/cartService.ts; configs/api.ts
-    updated_at: "2026-11-03"
-
+    updated_at: '2026-11-03'
 fingerprints:
   - id: backend-contract
-    date: "2026-11-03"
-    commit: "6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop)"
-    cli: "1.73.0"
+    date: '2026-11-03'
+    commit: 6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop)
+    cli: 1.73.0
   - id: frontend-fix
-    date: "2026-11-03"
-    commit: "f5e651d1 plus uncommitted Cart contract fix and regression tests"
-    cli: "1.73.0; postman status is unavailable in this installed CLI"
+    date: '2026-11-03'
+    commit: f5e651d1 plus uncommitted Cart contract fix and regression tests
+    cli: 1.73.0; postman status is unavailable in this installed CLI
   - id: develop-merge
-    date: "2026-11-04"
-    commit: "05bc5a10 with uncommitted merge of origin/develop 0d14ca45 and flat cart/profile migration"
-    cli: "1.73.0"
+    date: '2026-11-04'
+    commit: 05bc5a10 with uncommitted merge of origin/develop 0d14ca45 and flat cart/profile migration
+    cli: 1.73.0
   - id: shared-cart-oidc-merge
-    date: "2026-11-05"
-    commit: "78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile integration"
-    cli: "1.73.0"
+    date: '2026-11-05'
+    commit: >-
+      78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile
+      integration
+    cli: 1.73.0
   - id: shared-cart-guest-reconciliation
-    date: "2026-11-05"
-    commit: "b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration"
-    cli: "1.73.0"
+    date: '2026-11-05'
+    commit: b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration
+    cli: 1.73.0
+  - id: shared-cart-session-reconciliation
+    date: '2026-11-05'
+    commit: >-
+      e0149a94 with uncommitted merge of origin/develop 1dd23dd3 and Cart/profile/session
+      reconciliation
+    cli: 1.73.0

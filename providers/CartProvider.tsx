@@ -54,23 +54,23 @@ function CartProvider({ children }: { children: ReactNode }) {
     storage: createGuestStorage(() => window.localStorage),
     withLock: withGuestLock,
     service: (getIdentity) => {
-      const memberResult = async (action: () => Promise<Cart>, adding = false) => {
+      const memberResult = async (action: () => Promise<Cart>, adding = false, signal?: AbortSignal) => {
         const id = getIdentity().sessionId;
         return cartResult(async () => {
-          if (id === undefined || !isSessionCurrent(id)) throw createCanceledError();
+          if (id === undefined || !isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
           if (adding) {
             if (queryClient.isMutating({ mutationKey: ["cart", id, "edit"], exact: true }))
               throw { kind: "network", status: 0, title: "Please wait for your cart." };
             await queryClient.cancelQueries({ queryKey: queryKeys.cart.me(id), exact: true });
-            if (!isSessionCurrent(id)) throw createCanceledError();
+            if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
           }
           const cart = await action();
-          if (!isSessionCurrent(id)) throw createCanceledError();
+          if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
           if (adding) {
             // A route mounted during the POST may have started another read.
             // Cancel its older snapshot before publishing the committed cart.
             await queryClient.cancelQueries({ queryKey: queryKeys.cart.me(id), exact: true });
-            if (!isSessionCurrent(id)) throw createCanceledError();
+            if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
           }
           // CartPage, the header, and post-login merges share the same private cache.
           queryClient.setQueryData(queryKeys.cart.me(id), cart);
@@ -83,10 +83,10 @@ function CartProvider({ children }: { children: ReactNode }) {
       });
       return {
         getCart: () => memberResult(() => getCart({ context: memberContext() })),
-        addCartItem: (input) => memberResult(() => addCartItem(input, { context: memberContext() }), true),
-        createGuestCart: () => cartResult(() => createGuestCart({ context: requestContext })),
-        getGuestCart: (token) => cartResult(() => getGuestCart(token, { context: requestContext })),
-        addGuestCartItem: (token, input) => cartResult(() => addGuestCartItem(token, input, { context: requestContext })),
+        addCartItem: (input, signal) => memberResult(() => addCartItem(input, { context: memberContext(), signal }), true, signal),
+        createGuestCart: (signal) => cartResult(() => createGuestCart({ context: requestContext, signal })),
+        getGuestCart: (token, signal) => cartResult(() => getGuestCart(token, { context: requestContext, signal })),
+        addGuestCartItem: (token, input, signal) => cartResult(() => addGuestCartItem(token, input, { context: requestContext, signal })),
         mergeGuestCart: (token, mergeKey) => memberResult(() => mergeGuestCart(token, mergeKey, { context: memberContext() })),
       };
     },

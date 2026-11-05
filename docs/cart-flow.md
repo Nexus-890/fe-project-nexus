@@ -65,7 +65,9 @@ SKUs with quantity one, exported during the earlier local buyer seed run. It is
 fixture data and does not establish the current database state.
 Other accounts start with an empty mock cart. Mock edits persist in module memory
 per account for the running browser document; they do not write to PostgreSQL.
-A full reload also ends the existing in-memory authentication session.
+A full reload clears the in-memory mock state, then checks Keycloak SSO to
+restore authentication before reading the account cart again. Authentication
+tokens remain in memory; see [session restore](features/session-restore.md).
 
 To reset this buyer's active cart and regenerate the snapshot, run from the
 repository root with the migrated `nexus-postgres` container running:

@@ -53,6 +53,7 @@ function mountCart(
       roles: ["BUYER"], status: "ACTIVE", gender: null, address: null, dateOfBirth: null,
       createdAt: "2026-10-20T00:00:00Z",
     },
+    renewAccessToken: async () => { throw new Error("Unexpected token renewal"); },
     signOut: () => { throw new Error("Unexpected sign out"); },
     signIn: async () => { throw new Error("Unexpected sign in"); },
     completeSignIn: async () => { throw new Error("Unexpected sign in callback"); },

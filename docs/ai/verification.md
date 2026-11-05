@@ -232,3 +232,47 @@ an opt-in flag; no live backend or backend tests were run for this merge.
 The production build also passed after the unchanged advisory retry. All 59
 local Markdown links in the changed guides resolve, the three simulation
 context YAML files parse, and staged whitespace checks pass.
+
+## Cart hooks after the session-restoration update — 2026-11-05
+
+While the follow-up was being verified, develop advanced again from `cfe10dfa`
+to `1dd23dd3`, adding session restoration and renewal. The already published
+`e0149a94` merged cleanly against `cfe10dfa`; the post-push fetch identified
+12 new conflicts against the newer target. This subsequent merge preserves
+both integrations instead of reverting the session work.
+
+The common HTTP boundary keeps captured requests, same-session renewal and a
+single protected replay after 401. CartProvider keeps its cancellation signals,
+current mock identity, query freshness and edit locks. Header/cart loading waits
+for restoration. Profile update retains its abort registry, generation guards,
+stable retry callback and cache publication, using the new token coordinator.
+Successful token rotation keeps the same generation; renewal failure aborts
+profile work and clears private caches. Profile saves use the same renewal path.
+
+| Check | Result |
+| --- | --- |
+| `npm run test:unit` | 147/147 passed |
+| `npm run test:auth:browser -- --max-failures=2` | 24/24 passed in 1.4 minutes: OIDC, guest merge and session cases |
+| General browser runner with isolated ports | 31/31 passed in 1.7 minutes |
+| Focused Cart runner with isolated ports | 9/9 passed in 42.9 seconds |
+| Focused profile runner with isolated ports | 9/9 passed in 42.6 seconds |
+| `npm run lint`; `npm run generate:types:check` | Passed |
+| `npm run typecheck` | Passed with fresh route types |
+
+Auth verification used environment-supported ports 3141/3951. The general,
+profile and Cart runners temporarily substituted only ports/output directories,
+restoring every tracked file byte afterwards. Their app/simulation ports were
+3142/3952 (catalog 3953), 3143/3954 and 3144/3955 respectively. Assertions were
+unchanged. Default ports overlapped another worktree's server; new output
+folders also required unchanged retries after Next's existing advisory.
+
+Simulation contexts retain all earlier histories and append the current
+`shared-cart-session-reconciliation` fingerprint. The optional five-minute
+wall-clock scenario was not repeated; controlled-clock expiry and renewal
+passed. No real backend or backend tests were run for this frontend integration.
+
+Final production build passed with `NEXUS_TEST_DIST_DIR=.next-verify-build`
+after the unchanged advisory retry, including TypeScript and all 13 page
+generations. Production output contains `/auth/silent` and neither temporary
+probe route. All 48 local links in the changed guides resolve, simulation
+contexts parse, and whitespace checks pass.

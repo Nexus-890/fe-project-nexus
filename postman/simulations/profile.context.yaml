@@ -1,122 +1,124 @@
 purpose:
   stands_in_for: >-
-    The repository's user-service profile endpoints, shared shop shell and
-    Keycloak redirect/callback dependencies. The API fixture is derived from
-    committed backend controllers, ApiResponse and DTOs; the reused local
-    oidc-keycloak member derives from the committed realm/protocol fixture.
-    No published mock is used.
+    The repository's user-service profile endpoints, shared shop shell and Keycloak
+    redirect/callback dependencies. The API fixture is derived from committed backend controllers,
+    ApiResponse and DTOs; the reused local oidc-keycloak member derives from the committed
+    realm/protocol fixture. No published mock is used.
   unblocks: >-
-    Browser validation of the real frontend's profile read/update flow using a
-    local Postman HTTP stand-in with stateful saves and injected failures.
+    Browser validation of the real frontend's profile read/update flow using a local Postman HTTP
+    stand-in with stateful saves and injected failures.
 assumptions:
   - id: delivered-profile-contract
     status: supported
     claim: >-
-      The delivered profile GET and PUT return UserResponse inside the shared
-      code/message/data envelope; UpdateProfileRequest omits phone.
+      The delivered profile GET and PUT return UserResponse inside the shared code/message/data
+      envelope; UpdateProfileRequest omits phone.
     reason: >-
-      The backend UserController, ApiResponse and generated request/response DTOs
-      define this contract. Frontend accountService validates the nested user.
-      The injected phone validation error exercises UI field-error placement,
-      rather than claiming the current backend supports phone updates.
+      The backend UserController, ApiResponse and generated request/response DTOs define this
+      contract. Frontend accountService validates the nested user. The injected phone validation
+      error exercises UI field-error placement, rather than claiming the current backend supports
+      phone updates.
     verification: >-
-      On 2026-11-04 inspected the origin/develop user-service contract at the
-      develop-merge fingerprint and migrated all success fixtures to envelopes,
-      with field/code/detail validation errors. The browser assertions verify
-      readonly phone is omitted from the changed-fields-only PUT body.
-      On 2026-11-05 inspected the same envelope/field shapes after merging
-      origin/develop at the shared-cart-develop-merge fingerprint; the API
-      fixture retains them while replacing credential login with OIDC.
+      On 2026-11-04 inspected the origin/develop user-service contract at the develop-merge
+      fingerprint and migrated all success fixtures to envelopes, with field/code/detail validation
+      errors. The browser assertions verify readonly phone is omitted from the changed-fields-only
+      PUT body. On 2026-11-05 inspected the same envelope/field shapes after merging origin/develop
+      at the shared-cart-develop-merge fingerprint; the API fixture retains them while replacing
+      credential login with OIDC.
     source: >-
       ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java;
       ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/dto/UpdateProfileRequest.java;
       ../be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java;
       service/accountService.ts; tests/profile.spec.ts; postman/mocks/profile-gateway/default.js
-    updated_at: "2026-11-05"
+    updated_at: '2026-11-05'
   - id: frontend-profile-against-http-fixture
     status: supported
     claim: >-
-      In the nine local scenarios, profile reads, changed-field updates, shared
-      header data, error feedback and session cleanup behave as asserted.
+      In the nine local scenarios, profile reads, changed-field updates, shared header data, error
+      feedback and session cleanup behave as asserted.
     reason: >-
-      Playwright runs the real Next.js app through its shared API transport.
-      The fixture checks the issued local Bearer token, persists profile edits
-      and controls response timing/status; it does not run the real backend.
+      Playwright runs the real Next.js app through its shared API transport. The fixture checks the
+      issued local Bearer token, persists profile edits and controls response timing/status; it does
+      not run the real backend.
     verification: >-
-      On 2026-11-04 npm run test:profile passed all 9 scenarios in 35.9 seconds
-      at the develop-merge fingerprint. Covered anonymous redirect, profile
-      entry GET, exact changed PUT fields, header update, cancel, client
-      validation, field errors, delayed loading skeleton, expired-session PUT,
-      GET/PUT retries and mobile/desktop screenshots with no clipped text.
-      Log inspection confirmed GET profile 200 (23) and 503 (2), PUT profile
-      200 (2), 400 (1), 401 (1) and 503 (1). Both ports stopped and tsconfig was
-      restored by the runner. Initial Next startup stopped for the existing
-      advisory reminder; an unchanged retry produced the passing run.
-      This is historical pre-OIDC profile-suite evidence. The 2026-11-05
-      redirect/callback migration requires its own browser run below before
-      claiming the updated flow passes.
-      On 2026-11-05, at the shared-cart-develop-merge fingerprint, npm run
-      test:profile passed all 9 scenarios in 38.0 seconds through the OIDC
-      redirect/callback. Log inspection confirmed one listening event,
-      GET profile 200 (23)/503 (2), PUT profile 200 (2)/400 (1)/401 (1)/503 (1),
-      and eight Keycloak token POST 200 responses. This verifies the migrated
-      caller against its HTTP stand-ins, including expired-save local cleanup;
-      it does not revalidate the dated live-backend evidence.
+      On 2026-11-04 npm run test:profile passed all 9 scenarios in 35.9 seconds at the develop-merge
+      fingerprint. Covered anonymous redirect, profile entry GET, exact changed PUT fields, header
+      update, cancel, client validation, field errors, delayed loading skeleton, expired-session
+      PUT, GET/PUT retries and mobile/desktop screenshots with no clipped text. Log inspection
+      confirmed GET profile 200 (23) and 503 (2), PUT profile 200 (2), 400 (1), 401 (1) and 503 (1).
+      Both ports stopped and tsconfig was restored by the runner. Initial Next startup stopped for
+      the existing advisory reminder; an unchanged retry produced the passing run. This is
+      historical pre-OIDC profile-suite evidence. The 2026-11-05 redirect/callback migration
+      requires its own browser run below before claiming the updated flow passes. On 2026-11-05, at
+      the shared-cart-develop-merge fingerprint, npm run test:profile passed all 9 scenarios in 38.0
+      seconds through the OIDC redirect/callback. Log inspection confirmed one listening event, GET
+      profile 200 (23)/503 (2), PUT profile 200 (2)/400 (1)/401 (1)/503 (1), and eight Keycloak
+      token POST 200 responses. This verifies the migrated caller against its HTTP stand-ins,
+      including expired-save local cleanup; it does not revalidate the dated live-backend evidence.
     source: >-
-      tests/profile.spec.ts; playwright.profile.config.ts;
-      postman/mocks/profile-gateway/default.js;
+      tests/profile.spec.ts; playwright.profile.config.ts; postman/mocks/profile-gateway/default.js;
       profile-simulation.ndjson (generated, ignored); test-results/profile (ignored)
-    updated_at: "2026-11-05"
+    updated_at: '2026-11-05'
   - id: oidc-profile-fixture-wiring
     status: supported
     claim: >-
-      The current local profile suite is configured to exercise Keycloak's
-      redirect/callback flow and accepts only the issued stand-in Bearer for
-      profile/cart requests, rather than substituting a password-login route.
+      The current local profile suite is configured to exercise Keycloak's redirect/callback flow
+      and accepts only the issued stand-in Bearer for profile/cart requests, rather than
+      substituting a password-login route.
     reason: >-
-      The profile simulation reuses the oidc-keycloak member and its shared
-      access-token hash; profile-gateway compares the request token hash before
-      serving private data. Test setup resets both members between scenarios.
+      The profile simulation reuses the oidc-keycloak member and its shared access-token hash;
+      profile-gateway compares the request token hash before serving private data. Test setup resets
+      both members between scenarios.
     verification: >-
       On 2026-11-05 inspected profile.sim.yaml, profile-gateway/default.js,
-      playwright.profile.config.ts and tests/profile.spec.ts at the
-      shared-cart-develop-merge fingerprint. The app uses port 3103 and both
-      simulation members route through port 3913. npm run test:profile then
-      passed 9/9 in 38.0 seconds; eight successful provider authorization/token
-      exchanges preceded authenticated API calls. A PUT 401 returned to local
-      sign-in without a remote logout request in the simulation log.
-      On 2026-11-05, at the shared-cart-guest-reconciliation fingerprint,
-      npm run test:profile passed 9/9 in 42.5 seconds with CartProvider mounted.
-      Its log contains one listening event, profile GET 200 (23)/503 (2),
-      profile PUT 200 (2)/400 (1)/401 (1)/503 (1), and eight successful OIDC
-      token exchanges. These are local fixture results; no backend was started.
+      playwright.profile.config.ts and tests/profile.spec.ts at the shared-cart-develop-merge
+      fingerprint. The app uses port 3103 and both simulation members route through port 3913. npm
+      run test:profile then passed 9/9 in 38.0 seconds; eight successful provider
+      authorization/token exchanges preceded authenticated API calls. A PUT 401 returned to local
+      sign-in without a remote logout request in the simulation log. On 2026-11-05, at the
+      shared-cart-guest-reconciliation fingerprint, npm run test:profile passed 9/9 in 42.5 seconds
+      with CartProvider mounted. Its log contains one listening event, profile GET 200 (23)/503 (2),
+      profile PUT 200 (2)/400 (1)/401 (1)/503 (1), and eight successful OIDC token exchanges. These
+      are local fixture results; no backend was started.
+
+      On 2026-11-05, the shared-cart-session-reconciliation run passed all nine profile cases in
+      42.6 seconds at isolated ports 3143/3954. Profile GET 200 (23)/503 (2)/401 (1), PUT 200
+      (2)/400 (1)/401 (2)/503 (1), and nine token exchanges were observed. The persistent save-time
+      401 now traverses shared token renewal and one replay before local auth cleanup. Port
+      substitutions were restored; this remains local fixture evidence.
     source: >-
-      tests/profile.spec.ts; playwright.profile.config.ts;
-      postman/simulations/profile.sim.yaml;
-      postman/mocks/profile-gateway/default.js;
-      postman/mocks/oidc-keycloak/default.js
-    updated_at: "2026-11-05"
+      tests/profile.spec.ts; playwright.profile.config.ts; postman/simulations/profile.sim.yaml;
+      postman/mocks/profile-gateway/default.js; postman/mocks/oidc-keycloak/default.js
+    updated_at: '2026-11-05'
   - id: live-profile-backend
     status: unknown
     claim: >-
-      The running gateway/user service accepts the frontend session and persists
-      profile edits under actual authentication and permissions.
+      The running gateway/user service accepts the frontend session and persists profile edits under
+      actual authentication and permissions.
     reason: The local run substitutes HTTP dependencies and does not start the backend.
     verification: >-
-      No live-backend request was made for this migration. A signed-in profile
-      read/update against the deployed gateway is still needed.
+      No live-backend request was made for this migration. A signed-in profile read/update against
+      the deployed gateway is still needed.
     source: service/accountService.ts; playwright.profile.config.ts
-    updated_at: "2026-11-04"
+    updated_at: '2026-11-04'
 fingerprints:
   - id: develop-merge
-    date: "2026-11-04"
-    commit: "05bc5a10 with uncommitted merge of origin/develop 0d14ca45 and flat cart/profile migration"
-    cli: "1.73.0"
+    date: '2026-11-04'
+    commit: 05bc5a10 with uncommitted merge of origin/develop 0d14ca45 and flat cart/profile migration
+    cli: 1.73.0
   - id: shared-cart-develop-merge
-    date: "2026-11-05"
-    commit: "78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile integration"
-    cli: "1.73.0"
+    date: '2026-11-05'
+    commit: >-
+      78168f44 with uncommitted merge of origin/develop 0d0a36a4 and shared Cart/OIDC/profile
+      integration
+    cli: 1.73.0
   - id: shared-cart-guest-reconciliation
-    date: "2026-11-05"
-    commit: "b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration"
-    cli: "1.73.0"
+    date: '2026-11-05'
+    commit: b0fc9331 with uncommitted merge of origin/develop ff2a4986 and shared Cart/guest integration
+    cli: 1.73.0
+  - id: shared-cart-session-reconciliation
+    date: '2026-11-05'
+    commit: >-
+      e0149a94 with uncommitted merge of origin/develop 1dd23dd3 and Cart/profile/session
+      reconciliation
+    cli: 1.73.0

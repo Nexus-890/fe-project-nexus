@@ -69,8 +69,9 @@ Backend validation errors use Problem Details with
 the form displays each known field's message next to its input and connects it
 with `aria-describedby`. Duplicate-email 409 errors map to the email field.
 Missing or expired sessions redirect to `/sign-in`, including a 401 during save.
-The existing auth implementation holds tokens in memory, so a full browser
-refresh also returns to sign-in; persistent sessions are outside this change.
+Authentication tokens stay in memory. A full reload checks Keycloak SSO and
+restores the profile before authenticated requests resume; shared renewal may
+replay a protected request once after a 401. See [session restore](features/session-restore.md).
 
 ## Backend dependencies
 

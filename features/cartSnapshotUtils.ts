@@ -14,12 +14,12 @@ export function responseData(value: unknown): unknown {
 
 export function readCart(value: unknown): CartSnapshot | null {
   const cart = responseData(value);
-  if (!record(cart) || typeof cart.id !== "string" || !cart.id || cart.status !== "ACTIVE"
+  if (!record(cart) || typeof cart.id !== "string" || !cart.id.trim() || cart.status !== "ACTIVE"
     || !Array.isArray(cart.items)) return null;
   let total = 0;
   for (const item of cart.items) {
-    if (!record(item) || typeof item.id !== "string" || !item.id
-      || typeof item.skuId !== "string" || !item.skuId
+    if (!record(item) || typeof item.id !== "string" || !item.id.trim()
+      || typeof item.skuId !== "string" || !item.skuId.trim()
       || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1) return null;
     total += Number(item.quantity);
     if (!Number.isSafeInteger(total)) return null;

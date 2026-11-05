@@ -23,13 +23,13 @@ Do not require draft fields such as productName, lineTotal, subtotal, currency o
 
 ## API configuration
 
-The user requested an empty Cart base URL to fill later. Edit this single value in [cartService.ts](../../service/cartService.ts):
+Application cart calls use `NEXT_PUBLIC_API_URL` from the auth provider's scoped request context, sharing its current token and renewal coordinator. Direct service calls without a context origin use this fallback in [cartService.ts](../../service/cartService.ts):
 
 ```ts
 export const CART_API_BASE_URL = "";
 ```
 
-Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths already include that prefix. All Cart calls still use the common `requestApi` Axios boundary for tokens, envelopes, errors and cancellation. An explicitly provided request-context baseUrl takes precedence; otherwise blank means browser same-origin relative requests. It does not fabricate a cart or enable fixtures. Auth/catalog keep their existing `NEXT_PUBLIC_API_URL` configuration. Restart/rebuild after filling the service constant.
+Supply only the origin (scheme/host/port), without `/api/v1`; endpoint paths already include that prefix. All Cart calls use the common `requestApi` Axios boundary for tokens, envelopes, errors and cancellation. A request-context baseUrl takes precedence over the fallback; without one, blank means browser same-origin relative requests. Changing the fallback does not override the provider's configured API origin or enable fixtures. Restart/rebuild after changing configuration.
 
 | Service | Method/path | Request/success | Backend status |
 | --- | --- | --- | --- |
@@ -58,4 +58,6 @@ Cart keys carry the account/session identifier and private-query metadata. Sessi
 
 An explicit cart development fixture is selected at the HTTP boundary and blocked in production. It models the delivered envelope and keeps separate carts per development account in memory; see [fixture and simulation setup](../cart-flow.md). It does not establish the current database state. Production never silently enables it.
 
-The backend persists cart data, but full refresh still loses the in-memory auth session. Sign back into the same account to reread its cart. Guest credentials persist separately when the guest feature is enabled; access/ID tokens remain in memory and auth restoration remains #184. Tests/screenshots use explicit HTTP stand-ins and do not establish deployed authorization/database behavior. Peer real-API add/edit with a recorded cart ID remains pending authenticated runtime verification; see the implementation report for dated evidence.
+On full reload, the provider checks the Keycloak SSO session with `prompt=none` and reloads the profile before reading the account's cart. The cart page shows account loading during restoration; product additions wait until auth and cart readiness settle. Same-session token renewal preserves the cart cache and header count, and protected cart requests share one renewal and at most one replay after a 401. Renewal failure or explicit logout clears the private cache; explicit logout also prevents reload from restoring that session until the next sign-in. See [session restore](session-restore.md).
+
+Guest credentials persist separately when the guest feature is enabled; access, ID and refresh tokens remain in memory. Tests/screenshots use explicit HTTP stand-ins and do not establish deployed authorization/database behavior. Peer real-API add/edit with a recorded cart ID remains pending compatible BE build/contract/auth behavior; see the implementation report for current evidence.

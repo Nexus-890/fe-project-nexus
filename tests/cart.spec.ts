@@ -191,7 +191,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   expect(state.reads).toEqual([]);
   expect(state.writes).toEqual([]);
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
 });
 
 test("cart displays snapshot unit and line prices with a disabled checkout at desktop", async ({ page }, info) => {
@@ -243,7 +243,7 @@ test("quantity changes subtotal before the response and rejection restores the s
   }
 });
 
-test("successful quantity edit survives navigation and refresh followed by signing back in", async ({ page }) => {
+test("successful quantity edit survives navigation, session restoration and explicit sign-out", async ({ page }) => {
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
   const line = page.getByTestId(`cart-line-${lineId}`);
@@ -262,7 +262,15 @@ test("successful quantity edit survives navigation and refresh followed by signi
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  const readsBeforeRestore = state.reads.length;
   await page.reload();
+  await expect(page.getByText(`Hi ${state.account.name}`, { exact: true })).toBeVisible();
+  await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
   const readsBeforeLogin = state.reads.length;
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
@@ -367,7 +375,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL("http://127.0.0.1:3102/sign-in?returnTo=%2F");
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";
     await signIn(page, state.account.name);
