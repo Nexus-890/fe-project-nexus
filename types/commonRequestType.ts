@@ -7,6 +7,8 @@ export type ApiRequestConfig = Pick<
 export type ApiContext = {
   baseUrl?: string;
   getAccessToken?: () => string | null;
+  renewAccessToken?: (failedToken: string) => Promise<string | null>;
+  getSessionId?: () => number;
   fetch?: typeof globalThis.fetch;
 };
 export type ServiceRequestOptions = {

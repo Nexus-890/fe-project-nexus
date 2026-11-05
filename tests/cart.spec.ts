@@ -193,7 +193,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   expect(state.reads).toEqual([]);
   expect(state.writes).toEqual([]);
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
 });
 
 test("cart displays snapshot unit and line prices with a disabled checkout at desktop", async ({ page }, info) => {
@@ -245,7 +245,7 @@ test("quantity changes subtotal before the response and rejection restores the s
   }
 });
 
-test("successful quantity edit survives navigation, a reload that restores the session, and signing back in", async ({ page }) => {
+test("successful quantity edit survives navigation, session restoration and explicit sign-out", async ({ page }) => {
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
   const line = page.getByTestId(`cart-line-${lineId}`);
@@ -265,15 +265,17 @@ test("successful quantity edit survives navigation, a reload that restores the s
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
   // The HttpOnly cookie restores the session on reload, so the cart is read again with a fresh token.
-  const readsBeforeReload = state.reads.length;
+  const readsBeforeRestore = state.reads.length;
   await page.reload();
   await expect(page.getByText(`Hi ${state.account.name}`, { exact: true })).toBeVisible();
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
-  expect(state.reads.length).toBeGreaterThan(readsBeforeReload);
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   // Wait for the Keycloak end-session redirect to land back on the home page before navigating.
   await expect(page).toHaveURL("http://127.0.0.1:3102/");
   await page.waitForLoadState();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
   const readsBeforeLogin = state.reads.length;
@@ -379,7 +381,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";
     await signIn(page, state.account.name);

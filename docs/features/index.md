@@ -10,3 +10,6 @@
 These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Order checkout, payment, shipping, auction bidding, forgotten-password recovery and persistent/refresh-token login are outside the current frontend implementation scope.
 
 Use [functional requirements](../requirement/functional.md) to assess coverage, [API contract](../api/api-contract.md) to check request/response behavior, and the owning feature/component source to confirm current details.
+
+- [Session restore and silent renewal](session-restore.md)
+- [Guest cart and merge after sign-in](guest-cart.md)

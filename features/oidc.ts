@@ -11,13 +11,17 @@ import type { SessionResponse } from "../types/authResponseType";
 export interface OidcSession {
   accessToken: string;
   returnTo: string;
+  expiresAt: number;
+  subject: string;
 }
 
 export interface OidcClient {
   signIn(returnTo?: string): Promise<void>;
   completeSignIn(url: string): Promise<OidcSession>;
-  /** Lấy lại phiên sau khi tải lại trang bằng cookie HttpOnly. Ném lỗi nếu không còn phiên. */
-  restore(): Promise<OidcSession>;
+  /** Lấy lại phiên sau khi tải lại trang bằng cookie HttpOnly. null: không có cookie phiên. */
+  restoreSession(): Promise<OidcSession | null>;
+  /** Đổi cookie lấy access token mới cho đúng người đang đăng nhập. Ném lỗi nếu phiên đã hết. */
+  renewSession(): Promise<OidcSession>;
   signOut(): Promise<void>;
   clearSession(): Promise<void>;
 }
@@ -98,7 +102,8 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
   let browser: BrowserContext | undefined;
   let generation = 0;
   let logoutHint: string | undefined;
-  let restoring: Promise<OidcSession> | undefined;
+  let subject: string | undefined;
+  let refreshing: Promise<SessionResponse | null> | undefined;
 
   const getManager = () => {
     if (manager) return manager;
@@ -125,6 +130,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
       disablePKCE: false,
       loadUserInfo: false,
       filterProtocolClaims: false,
+      // làm mới đi qua cookie của gateway, không dùng iframe prompt=none của thư viện
       automaticSilentRenew: false,
       monitorSession: false,
       monitorAnonymousSession: false,
@@ -167,19 +173,33 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
     };
   };
 
-  /** Kiểm tra token gateway trả về; nonce chỉ có ở lần đăng nhập, lúc khôi phục phiên thì không kiểm. */
-  const verify = (tokens: SessionResponse, nonce?: string): string => {
+  /** Kiểm tra token gateway trả về; nonce chỉ có ở lần đăng nhập, lúc khôi phục hay làm mới thì không kiểm. */
+  const verify = (tokens: SessionResponse, returnTo: string, nonce?: string): OidcSession => {
     if (!tokens.accessToken || !Number.isFinite(tokens.expiresIn) || tokens.expiresIn <= 0)
       throw new Error(INVALID_RESPONSE);
     const claims = decodeClaims(tokens.idToken);
     const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
     if (claims.iss !== settings!.authority || !audiences.includes(settings!.client_id)
       || (audiences.length > 1 && claims.azp !== settings!.client_id)
+      || typeof claims.sub !== "string" || !claims.sub
       || typeof claims.exp !== "number" || !Number.isFinite(claims.exp)
       || claims.exp <= Date.now() / 1000) throw new Error(INVALID_RESPONSE);
     if (nonce !== undefined && claims.nonce !== nonce)
       throw new Error("The sign-in response nonce does not match this sign-in.");
-    return tokens.accessToken;
+    return {
+      accessToken: tokens.accessToken,
+      returnTo,
+      // tính từ expiresIn chứ không đọc exp trong token: đồng hồ máy khách lệch cũng không hẹn giờ sai
+      expiresAt: Date.now() / 1000 + tokens.expiresIn,
+      subject: claims.sub,
+    };
+  };
+
+  // StrictMode, timer và các 401 song song có thể cùng gọi: dùng chung một lần gọi để cookie chỉ xoay một lần
+  const refresh = (): Promise<SessionResponse | null> => {
+    if (!options.refreshSession) return Promise.reject(new Error("No session refresh is configured."));
+    refreshing ??= withSessionLock(options.refreshSession).finally(() => { refreshing = undefined; });
+    return refreshing;
   };
 
   return {
@@ -187,6 +207,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
       const current = getManager();
       const id = ++generation;
       logoutHint = undefined;
+      subject = undefined;
       await current.removeUser();
       await current.clearStaleState();
       if (generation !== id) throw new Error("Sign-in was canceled.");
@@ -198,44 +219,60 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
 
     async completeSignIn(url) {
       const current = getManager();
-      const id = generation;
+      // A callback establishes a new local session and invalidates an older
+      // callback or restore still awaiting the gateway.
+      const id = ++generation;
       try {
         // The library otherwise consumes matching state regardless of its age.
         // Expire abandoned transactions before allowing any code exchange.
         await current.clearStaleState();
+        if (generation !== id) throw new Error("Sign-in was canceled.");
         const callback = await readCallback(url);
         if (!options.exchangeCode) throw new Error("No session exchange is configured.");
         const tokens = await options.exchangeCode(callback.grant);
         if (generation !== id) throw new Error("Sign-in was canceled.");
-        const accessToken = verify(tokens, callback.nonce);
+        const session = verify(tokens, callback.returnTo, callback.nonce);
         logoutHint = tokens.idToken;
-        return { accessToken, returnTo: callback.returnTo };
+        subject = session.subject;
+        return session;
       } catch (error) {
+        if (generation === id) subject = undefined;
         await current.removeUser();
         throw error;
       }
     },
 
-    restore() {
-      // StrictMode chạy effect hai lần: dùng chung lần gọi đang chạy để refresh token không bị xoay hai lần
-      restoring ??= (async () => {
-        const current = getManager();
-        const id = generation;
-        if (!options.refreshSession) throw new Error("No session refresh is configured.");
-        const tokens = await withSessionLock(options.refreshSession);
-        if (!tokens) throw new Error("There is no session to restore.");
-        // đăng nhập hay đăng xuất khác đã chạy trong lúc chờ thì bỏ kết quả này
-        if (generation !== id) throw new Error("Session restore was superseded.");
-        const accessToken = verify(tokens);
-        await current.clearStaleState();
-        logoutHint = tokens.idToken;
-        return { accessToken, returnTo: "/" };
-      })().finally(() => { restoring = undefined; });
-      return restoring;
+    async restoreSession() {
+      const current = getManager();
+      const id = generation;
+      const tokens = await refresh();
+      if (!tokens) return null;
+      // đăng nhập hay đăng xuất khác đã chạy trong lúc chờ thì bỏ kết quả này
+      if (generation !== id) throw new Error("Session restore was superseded.");
+      const session = verify(tokens, "/");
+      await current.clearStaleState();
+      logoutHint = tokens.idToken;
+      subject = session.subject;
+      return session;
+    },
+
+    async renewSession() {
+      if (!subject) throw new Error("There is no active session to renew.");
+      const id = generation;
+      const tokens = await refresh();
+      // không còn cookie: tab khác đã đăng xuất
+      if (!tokens) throw new Error("The session could not be renewed.");
+      if (generation !== id) throw new Error("Session renewal was superseded.");
+      const session = verify(tokens, "/");
+      // tab khác đã đăng nhập tài khoản khác, cookie giờ là của người đó
+      if (session.subject !== subject) throw new Error("The session user changed.");
+      logoutHint = tokens.idToken;
+      return session;
     },
 
     async signOut() {
       generation += 1;
+      subject = undefined;
       const current = getManager();
       // Gateway xóa cookie và kết thúc phiên Keycloak bằng refresh token. Lỗi ở đây không được chặn việc đăng xuất.
       await options.endSession?.().catch(() => {});
@@ -251,6 +288,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
 
     async clearSession() {
       generation += 1;
+      subject = undefined;
       logoutHint = undefined;
       if (!manager) return;
       await manager.removeUser();

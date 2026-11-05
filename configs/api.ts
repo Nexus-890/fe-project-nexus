@@ -116,6 +116,27 @@ const normalizeHttpError = (
   };
 };
 
+const throwIfAborted = (signal?: AbortSignal): void => {
+  if (signal?.aborted) throw new DOMException("Request canceled", "AbortError");
+};
+
+// Cancel only this request's wait; other callers can still share the renewal.
+const abortable = <T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> => {
+  if (!signal) return pending;
+  throwIfAborted(signal);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Request canceled", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then((value) => {
+      signal.removeEventListener("abort", abort);
+      resolve(value);
+    }, (error: unknown) => {
+      signal.removeEventListener("abort", abort);
+      reject(error);
+    });
+  });
+};
+
 /** One HTTP boundary for browser and server services; preserves page metadata. */
 export const requestApi = async <T>(
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
@@ -139,10 +160,15 @@ export const requestApi = async <T>(
   headers.delete("Authorization");
   if (method !== "GET" && body !== undefined)
     headers.set("Content-Type", "application/json");
-  if (options.auth !== false) {
-    const token = context.getAccessToken?.();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
+  const sentToken = options.auth !== false ? context.getAccessToken?.() : null;
+  const sessionId = sentToken ? context.getSessionId?.() : undefined;
+  if (sentToken) headers.set("Authorization", `Bearer ${sentToken}`);
+  const isCurrentSession = () =>
+    !sentToken || sessionId === undefined || context.getSessionId?.() === sessionId;
+  const ensureCurrent = () => {
+    throwIfAborted(options.signal);
+    if (!isCurrentSession()) throw createCanceledError();
+  };
   const fetch = getCatalogMockFetch(path) ?? context.fetch;
   const config: AxiosRequestConfig = {
     timeout: options.config?.timeout ?? api.defaults.timeout,
@@ -170,7 +196,36 @@ export const requestApi = async <T>(
     validateStatus: () => true,
   };
   try {
-    const response = await api.request<string>(config);
+    let response = await api.request<string>(config);
+    throwIfAborted(options.signal);
+    // A sibling renewal may already have cleared this session. Its late 401
+    // remains an API failure, but must not start renewal for a newer session.
+    if (response.status !== 401) ensureCurrent();
+    if (response.status === 401 && isCurrentSession() && sentToken && context.renewAccessToken && context.getAccessToken?.()) {
+      let replacement: string | null = null;
+      try {
+        replacement = await abortable(
+          Promise.resolve().then(() => context.renewAccessToken!(sentToken)),
+          options.signal,
+        );
+      } catch {
+        // Provider exceptions can contain credentials. Retain the API's error.
+        throwIfAborted(options.signal);
+      }
+      throwIfAborted(options.signal);
+      if (replacement) {
+        ensureCurrent();
+        if (context.getAccessToken?.() === replacement) {
+          const retryHeaders = new AxiosHeaders(headers);
+          retryHeaders.set("Authorization", `Bearer ${replacement}`);
+          // Replay this captured request once; a second 401 cannot renew again.
+          response = await api.request<string>({ ...config, headers: retryHeaders });
+          ensureCurrent();
+        }
+      }
+      // A failed renewal can clear the session and advance its generation.
+      // Preserve the original 401; no stale success or replay is possible here.
+    }
     let value: unknown;
     try {
       value = response.data

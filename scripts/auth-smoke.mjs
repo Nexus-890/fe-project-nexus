@@ -16,18 +16,26 @@ const routeDir = path.join(root, "app", "auth-smoke");
 const pagePath = path.join(routeDir, "page.tsx");
 const pageSource = `import AuthProbe from "../../tests/AuthProbe";\n\nexport default function AuthSmokePage() {\n  return <AuthProbe />;\n}\n`;
 
+const routes = [
+  { routeDir, pagePath, pageSource },
+  {
+    routeDir: path.join(root, "app", "session-probe"),
+    pagePath: path.join(root, "app", "session-probe", "page.tsx"),
+    pageSource: 'import { notFound } from "next/navigation";\nimport SessionProbe from "../../tests/SessionProbe";\n\nexport default function SessionProbePage() {\n  if (process.env.NODE_ENV === "production" || process.env.NEXUS_TEST_AUTH_PROBE !== "true") notFound();\n  return <SessionProbe />;\n}\n',
+  },
+];
 const command = process.argv[2];
 
 if (command === "prepare") {
-  prepare();
+  for (const route of routes) prepare(route);
 } else if (command === "cleanup") {
-  cleanup();
+  for (const route of routes) cleanup(route);
 } else {
   help();
   process.exitCode = command ? 1 : 0;
 }
 
-function prepare() {
+function prepare({ routeDir, pagePath, pageSource }) {
   if (existsSync(pagePath)) {
     const existing = readFileSync(pagePath, "utf8");
     if (existing !== pageSource) {
@@ -35,16 +43,16 @@ function prepare() {
         `Refusing to overwrite existing non-generated route: ${relative(pagePath)}`,
       );
     }
-    printReady("already prepared");
+    printReady("already prepared", pagePath);
     return;
   }
 
   mkdirSync(routeDir, { recursive: true });
   writeFileSync(pagePath, pageSource, "utf8");
-  printReady("prepared");
+  printReady("prepared", pagePath);
 }
 
-function cleanup() {
+function cleanup({ routeDir, pagePath, pageSource }) {
   if (!existsSync(pagePath)) {
     console.log("auth-smoke route is already absent.");
     return;
@@ -64,7 +72,7 @@ function cleanup() {
   console.log(`Removed ${relative(pagePath)}.`);
 }
 
-function printReady(status) {
+function printReady(status, pagePath) {
   console.log(`Auth smoke route ${status}: ${relative(pagePath)}`);
   console.log("Run Next locally, then open: http://localhost:3000/auth-smoke");
   console.log(

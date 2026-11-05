@@ -51,9 +51,13 @@ async function protocolHarness() {
   ].join(".");
   let lastIssued = "";
   let refreshes = 0;
+  let accessTokenSuffix = "";
+  let expiresIn = 3600;
+  let refreshError: unknown;
+  let pendingRefresh: { started(): void; wait: Promise<void> } | null = null;
   const tokens = (): SessionResponse => {
     lastIssued = idToken();
-    return { accessToken: token, idToken: lastIssued, expiresIn: 3600 };
+    return { accessToken: token + accessTokenSuffix, idToken: lastIssued, expiresIn };
   };
   const navigator: INavigator = {
     async prepare() {
@@ -96,6 +100,10 @@ async function protocolHarness() {
     },
     refreshSession: async () => {
       refreshes += 1;
+      const pending = pendingRefresh;
+      pendingRefresh = null;
+      if (pending) { pending.started(); await pending.wait; }
+      if (refreshError) throw refreshError;
       // gateway trả 204 khi không có cookie
       if (!hasCookieSession) return null;
       return tokens();
@@ -120,6 +128,16 @@ async function protocolHarness() {
     failLogout: () => { failNextLogout = true; },
     failEndSession: () => { endSessionFails = true; },
     setCookieSession: (value: boolean) => { hasCookieSession = value; },
+    setAccessTokenSuffix: (value: string) => { accessTokenSuffix = value; },
+    setExpiresIn: (value: number) => { expiresIn = value; },
+    failRefresh: (error: unknown) => { refreshError = error; },
+    pauseRefresh() {
+      let release!: () => void;
+      let started!: () => void;
+      const entered = new Promise<void>((resolve) => { started = resolve; });
+      pendingRefresh = { started, wait: new Promise<void>((resolve) => { release = resolve; }) };
+      return { entered, release };
+    },
     async close() {
       await client.clearSession();
     },
@@ -142,8 +160,11 @@ test("code redirect and exchange use S256/state/nonce and keep tokens only in me
     assert.equal(harness.settings().monitorSession, false);
     assert.equal(harness.settings().loadUserInfo, false);
 
+    const before = Date.now() / 1000;
     const result = await harness.client.completeSignIn(harness.callback());
-    assert.deepEqual(result, { accessToken: harness.token, returnTo: "/products/laptop?variant=blue#details" });
+    const { expiresAt, ...rest } = result;
+    assert.deepEqual(rest, { accessToken: harness.token, returnTo: "/products/laptop?variant=blue#details", subject: "buyer-id" });
+    assert.ok(expiresAt >= before + 3600 && expiresAt <= Date.now() / 1000 + 3600, "lifetime comes from expiresIn");
     // Mã và verifier đi thẳng tới gateway, trình duyệt không nhận refresh token nào
     assert.equal(harness.grants.length, 1);
     const grant = harness.grants[0];
@@ -250,9 +271,13 @@ test("restore returns the access token from the cookie session and keeps the ID-
   const harness = await protocolHarness();
   try {
     harness.setCookieSession(true);
-    const restored = await harness.client.restore();
+    const restored = await harness.client.restoreSession();
     const issued = harness.lastIssued();
-    assert.deepEqual(restored, { accessToken: harness.token, returnTo: "/" });
+    assert.ok(restored);
+    assert.equal(restored.accessToken, harness.token);
+    assert.equal(restored.returnTo, "/");
+    assert.equal(restored.subject, "buyer-id");
+    assert.ok(restored.expiresAt > Date.now() / 1000);
     assert.equal(harness.storage.length, 1, "restoring a session writes nothing to web storage");
     await harness.client.signOut();
     assert.equal(harness.redirects[0].searchParams.get("id_token_hint"), issued);
@@ -263,21 +288,131 @@ test("concurrent restores share one gateway refresh so the rotated token is used
   const harness = await protocolHarness();
   try {
     harness.setCookieSession(true);
-    const [first, second] = await Promise.all([harness.client.restore(), harness.client.restore()]);
-    assert.deepEqual(first, second);
+    const [first, second] = await Promise.all([harness.client.restoreSession(), harness.client.restoreSession()]);
+    assert.equal(first?.accessToken, second?.accessToken);
     assert.equal(harness.refreshes(), 1);
-    await harness.client.restore();
+    await harness.client.restoreSession();
     assert.equal(harness.refreshes(), 2, "a later restore calls the gateway again");
   } finally { await harness.close(); }
 });
 
-test("restore fails without a cookie session and rejects an invalid identity token", async () => {
+test("restore without a cookie session is anonymous, and an invalid identity token is rejected", async () => {
   const harness = await protocolHarness();
   try {
-    await assert.rejects(harness.client.restore(), /no session to restore/);
+    assert.equal(await harness.client.restoreSession(), null);
     harness.setCookieSession(true);
     harness.setClaims({ aud: "another-client" });
-    await assert.rejects(harness.client.restore(), /invalid sign-in response/);
+    await assert.rejects(harness.client.restoreSession(), /invalid sign-in response/);
+  } finally { await harness.close(); }
+});
+
+test("renewal goes through the gateway cookie and returns the new token and lifetime", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    await harness.client.completeSignIn(harness.callback());
+    harness.setAccessTokenSuffix("-renewed");
+    harness.setExpiresIn(120);
+    const renewed = await harness.client.renewSession();
+    assert.equal(renewed.accessToken, `${harness.token}-renewed`);
+    assert.equal(renewed.subject, "buyer-id");
+    assert.ok(renewed.expiresAt >= Date.now() / 1000 + 119 && renewed.expiresAt <= Date.now() / 1000 + 120);
+    assert.equal(harness.refreshes(), 1);
+    assert.equal(harness.redirects.length, 1, "renewal needs no Keycloak navigation or iframe");
+    assert.equal(harness.storage.length, 1, "renewal writes nothing to web storage");
+  } finally { await harness.close(); }
+});
+
+test("a timer renewal and a restore running together share one gateway refresh", async () => {
+  const harness = await protocolHarness();
+  try {
+    harness.setCookieSession(true);
+    await harness.client.restoreSession();
+    const [renewed, restored] = await Promise.all([harness.client.renewSession(), harness.client.restoreSession()]);
+    assert.equal(renewed.accessToken, restored?.accessToken);
+    assert.equal(harness.refreshes(), 2);
+  } finally { await harness.close(); }
+});
+
+test("renewal is refused without a cookie, for another user, or with invalid claims", async () => {
+  for (const mode of ["no-cookie", "changed-subject", "invalid-claims"] as const) {
+    const harness = await protocolHarness();
+    try {
+      await harness.client.signIn();
+      await harness.client.completeSignIn(harness.callback());
+      if (mode === "no-cookie") harness.setCookieSession(false);
+      if (mode === "changed-subject") harness.setClaims({ sub: "another-user" });
+      if (mode === "invalid-claims") harness.setClaims({ iss: "https://another-provider.example/realms/nexus" });
+      await assert.rejects(harness.client.renewSession(), /could not be renewed|user changed|invalid sign-in response/);
+    } finally { await harness.close(); }
+  }
+});
+
+test("a gateway outage during renewal surfaces the API error so the caller can keep the session", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    await harness.client.completeSignIn(harness.callback());
+    harness.failRefresh({ kind: "http", status: 503, title: "Service Unavailable" });
+    await assert.rejects(harness.client.renewSession(), (error: { status?: number }) => error.status === 503);
+  } finally { await harness.close(); }
+});
+
+test("sign-out and explicit clear prevent a later renewal from reaching the gateway", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    await harness.client.completeSignIn(harness.callback());
+    await harness.client.signOut();
+    await assert.rejects(harness.client.renewSession(), /no active session/);
+    await harness.client.clearSession();
+    await assert.rejects(harness.client.renewSession(), /no active session/);
+    assert.equal(harness.refreshes(), 0);
+  } finally { await harness.close(); }
+});
+
+test("a renewal response arriving after sign-out cannot bring the session back", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    await harness.client.completeSignIn(harness.callback());
+    const response = harness.pauseRefresh();
+    const renewed = harness.client.renewSession();
+    await response.entered;
+    await harness.client.signOut();
+    harness.setCookieSession(true);
+    response.release();
+    await assert.rejects(renewed, /superseded/);
+    await assert.rejects(harness.client.renewSession(), /no active session/);
+  } finally { await harness.close(); }
+});
+
+test("clearing a callback during stale-state cleanup cancels it before the gateway exchange", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    const manager = harness.manager();
+    const clearStaleState = manager.clearStaleState.bind(manager);
+    let first = true;
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const completed = new Promise<void>((resolve) => { release = resolve; });
+    manager.clearStaleState = async () => {
+      if (first) {
+        first = false;
+        entered();
+        await completed;
+      }
+      await clearStaleState();
+    };
+    const callback = harness.client.completeSignIn(harness.callback());
+    await started;
+    await harness.client.clearSession();
+    const canceled = assert.rejects(callback, /canceled/);
+    release();
+    await canceled;
+    assert.equal(harness.grants.length, 0);
   } finally { await harness.close(); }
 });
 

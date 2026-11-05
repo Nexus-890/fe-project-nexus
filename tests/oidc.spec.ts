@@ -1,7 +1,7 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
-const simulation = "http://127.0.0.1:3913";
-const app = "http://127.0.0.1:3103";
+const simulation = `http://127.0.0.1:${process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
+const app = process.env.NEXUS_OIDC_APP_ORIGIN || "http://127.0.0.1:3103";
 const issuerPath = "/keycloak/realms/nexus/protocol/openid-connect/";
 const sessionPaths = new Set(["/api/v1/auth/session", "/api/v1/auth/refresh"]);
 
@@ -91,7 +91,7 @@ test("code + PKCE accepts the backend 200 profile envelope, returns to the reque
   await assertNoPersistedTokens(page);
   await page.screenshot({ path: info.outputPath("signed-in.png"), fullPage: true });
 
-  expect(await evidence(request, "keycloak")).toMatchObject({ passwordSubmissions: 1, tokenRequests: 1, pkceVerified: 1, sessions: 1 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ passwordSubmissions: 1, codeExchanges: 1, pkceVerified: 1, sessions: 1 });
   expect(await evidence(request, "api")).toMatchObject({
     meRequests: 1, bearerRequests: 1, loginRequests: 0, passwordLeaks: 0, sessionExchanges: 1, csrfRejected: 0, cookieLeaks: 0,
   });
@@ -115,7 +115,7 @@ test("code + PKCE accepts the backend 200 profile envelope, returns to the reque
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
   await assertNoPersistedTokens(page);
   expect(await evidence(request, "api")).toMatchObject({ meRequests: 1, passwordLeaks: 0 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ refreshes: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 0 });
   await beginSignIn(page);
   await expect(page.getByRole("heading", { name: "Keycloak sign in" })).toBeVisible();
 });
@@ -130,14 +130,14 @@ for (const mode of ["bad-state", "denied", "token-error"] as const) {
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
     await assertNoPersistedTokens(page);
     expect(await evidence(request, "api")).toMatchObject({ meRequests: 0, loginRequests: 0, passwordLeaks: 0 });
-    expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: mode === "token-error" ? 1 : 0 });
+    expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: mode === "token-error" ? 1 : 0 });
   });
 }
 
 test("rejects unsolicited callbacks before token exchange", async ({ page, request }) => {
   await page.goto("/auth/callback?code=unsolicited&state=missing");
   await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: 0 });
   expect(await evidence(request, "api")).toMatchObject({ meRequests: 0 });
 });
 
@@ -154,7 +154,7 @@ test("a reload restores the session from the HttpOnly cookie, rotates it and ref
   const second = await sessionCookie(page);
   expect(second?.value).toBeTruthy();
   expect(second?.value).not.toBe(first?.value);
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, refreshes: 1, refreshRejected: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: 1, refreshRequests: 1, refreshRejected: 0 });
   expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2, sessionRefreshes: 1, cookieLeaks: 0 });
 
   // A copied refresh token works once at most: the rotated-out value is refused and its cookie cleared.
@@ -163,14 +163,14 @@ test("a reload restores the session from the HttpOnly cookie, rotates it and ref
   });
   expect(replay.status()).toBe(401);
   expect(replay.headers()["set-cookie"]).toContain("Max-Age=0");
-  expect(await evidence(request, "keycloak")).toMatchObject({ refreshRejected: 1 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 2, refreshRejected: 1 });
 
   // Without the CSRF header the gateway refuses before touching Keycloak.
   const forged = await request.post(`${simulation}/api/v1/auth/refresh`, {
     headers: { Cookie: `nexus_rt=${second?.value}`, Origin: app },
   });
   expect(forged.status()).toBe(403);
-  expect(await evidence(request, "keycloak")).toMatchObject({ refreshes: 1 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 2, refreshRejected: 1 });
 });
 
 test("ignores external return destinations", async ({ page, request }) => {
@@ -194,7 +194,7 @@ test("retries a temporary profile failure without exchanging the code again", as
   await expect(page).toHaveURL(`${app}/?source=profile-retry`);
   await expect(page.getByText("Hi Fixture Buyer", { exact: true })).toBeVisible();
   expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, pkceVerified: 1, logouts: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: 1, pkceVerified: 1, logouts: 0 });
 });
 
 for (const mode of ["profile-missing-data-once", "profile-invalid-user-once"] as const) {
@@ -211,29 +211,30 @@ for (const mode of ["profile-missing-data-once", "profile-invalid-user-once"] as
     await expect(page).toHaveURL(`${app}/?source=profile-contract-retry`);
     await expect(page.getByText("Hi Fixture Buyer", { exact: true })).toBeVisible();
     expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2 });
-    expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, pkceVerified: 1 });
+    expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: 1, pkceVerified: 1 });
   });
 }
 
-test("a rejected profile token clears local authentication without ending the provider session", async ({ page, request }) => {
+test("a persistently rejected profile is renewed and retried once before clearing local authentication", async ({ page, request }) => {
   await request.get(`${simulation}/api/test/reset?mode=profile-401`);
   await beginSignIn(page);
   await submitProvider(page);
   await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry loading account", exact: true })).toHaveCount(0);
   await assertNoPersistedTokens(page);
-  expect(await evidence(request, "api")).toMatchObject({ meRequests: 1, bearerRequests: 1 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ tokenRequests: 1, logouts: 0 });
-  // The cookie is still valid at Keycloak, so each page load restores once, the profile refuses the
-  // token again and the page stays signed out. No retry loop within a page load.
+  // The first 401 renews once through the cookie and replays the request once; the second 401 ends the session.
+  expect(await evidence(request, "api")).toMatchObject({ meRequests: 2, bearerRequests: 2, sessionRefreshes: 1 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ codeExchanges: 1, refreshRequests: 1, logouts: 0 });
+  // The cookie is still valid at Keycloak, so each page load restores, renews once more on the 401 and then
+  // stays signed out. No retry loop within a page load.
   await page.goto("/");
-  await expect.poll(async () => (await evidence(request, "api")).meRequests).toBe(2);
+  await expect.poll(async () => (await evidence(request, "api")).meRequests).toBe(4);
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
   await page.reload();
-  await expect.poll(async () => (await evidence(request, "api")).meRequests).toBe(3);
+  await expect.poll(async () => (await evidence(request, "api")).meRequests).toBe(6);
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(await evidence(request, "keycloak")).toMatchObject({ refreshes: 2, logouts: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 5, logouts: 0 });
 });
 
 test("registration accepts the backend 201 user envelope and sends the user to sign in", async ({ page, request }) => {
@@ -256,5 +257,5 @@ test("registration accepts the backend 201 user envelope and sends the user to s
   await expect(page).toHaveURL(`${app}/sign-in`);
   await expect(page.getByRole("button", { name: "Continue to sign in", exact: true })).toBeVisible();
   expect(await evidence(request, "api")).toMatchObject({ registrations: 1, loginRequests: 0, meRequests: 0, passwordLeaks: 0 });
-  expect(await evidence(request, "keycloak")).toMatchObject({ authorizations: 0, tokenRequests: 0 });
+  expect(await evidence(request, "keycloak")).toMatchObject({ authorizations: 0, codeExchanges: 0 });
 });

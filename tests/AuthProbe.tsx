@@ -81,6 +81,8 @@ const LOGIN_PATH = "/api/v1/auth/login";
 const ME_PATH = "/api/v1/users/me";
 
 export default function AuthProbe() {
+  const outerAuth = useAuth();
+  const outerRestoring = outerAuth.status === "restoring";
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -94,13 +96,18 @@ export default function AuthProbe() {
   const [, refreshAfterStorageCapture] = useState(0);
 
   useEffect(() => {
+    // The application provider's session restore may clear stale OIDC
+    // transactions. Capture the fixture baseline only after it has finished.
+    if (outerRestoring) return;
     harness.captureInitialStorage();
     const timer = window.setTimeout(
       () => refreshAfterStorageCapture((value) => value + 1),
       0,
     );
     return () => window.clearTimeout(timer);
-  }, [harness]);
+  }, [harness, outerRestoring]);
+
+  if (outerRestoring) return <p role="status">Preparing authentication checks…</p>;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -452,10 +459,16 @@ function createProbeHarness(): AuthProbeHarness {
       });
       const body = await response.json();
       if (!response.ok) throw body;
-      return { accessToken: body.data.accessToken, returnTo: "/" };
+      return {
+        accessToken: body.data.accessToken,
+        returnTo: "/",
+        expiresAt: Date.now() / 1000 + 3600,
+        subject: input.email,
+      };
     },
     // The fixture has no cookie session, so a page load always starts anonymous.
-    restore: async () => { throw new Error("No stored session"); },
+    restoreSession: async () => null,
+    renewSession: async () => { throw new Error("Fixture session cannot be renewed"); },
     signOut: async () => {},
     clearSession: async () => {},
   };
