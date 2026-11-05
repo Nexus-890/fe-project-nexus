@@ -454,6 +454,8 @@ function createProbeHarness(): AuthProbeHarness {
       if (!response.ok) throw body;
       return { accessToken: body.data.accessToken, returnTo: "/" };
     },
+    // The fixture has no cookie session, so a page load always starts anonymous.
+    restore: async () => { throw new Error("No stored session"); },
     signOut: async () => {},
     clearSession: async () => {},
   };

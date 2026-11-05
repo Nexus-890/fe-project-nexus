@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { requestApi, isApiError } from "../configs/api";
-import { getMe, register } from "../service/authService";
+import api, { requestApi, isApiError } from "../configs/api";
+import { createSession, endSession, getMe, refreshSession, register } from "../service/authService";
 import * as authService from "../service/authService";
 import { createAuthStub } from "../mocks/authStub";
 import type { AuthStubLoginRequest, AuthStubLoginResponse } from "../mocks/authStub";
@@ -845,6 +845,68 @@ test("native transport rejects caller socket/transport/redirect escape hatches",
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test("session calls send the app header and the cookie, never a Bearer, and return only short-lived tokens", async () => {
+  const seen: Array<{ url: string; method: string | undefined; headers: Headers; body: unknown }> = [];
+  const withCredentials: Array<boolean | undefined> = [];
+  // The injected fetch has no Request class, so Axios drops `credentials`; read the flag it was asked to apply.
+  const interceptor = api.interceptors.request.use((config) => {
+    withCredentials.push(config.withCredentials);
+    return config;
+  });
+  const session = { accessToken: "access", idToken: "id", expiresIn: 3600 };
+  const context = {
+    baseUrl: "http://localhost:8080",
+    // Một token đang có trong bộ nhớ cũng không được gửi kèm: các endpoint này xác thực bằng cookie hoặc mã
+    getAccessToken: () => "token-in-memory",
+    fetch: (async (input, init) => {
+      seen.push({
+        url: String(input), method: init?.method, headers: new Headers(init?.headers), body: init?.body,
+      });
+      return String(input).endsWith("/logout") ? new Response(null, { status: 204 }) : success(session);
+    }) satisfies typeof fetch,
+  };
+  const grant = { code: "one-time-code", codeVerifier: "v".repeat(64), redirectUri: "http://localhost:3000/auth/callback" };
+
+  try {
+    assert.deepEqual(await createSession(grant, { context }), session);
+    assert.deepEqual(await refreshSession({ context }), session);
+    await endSession({ context });
+  } finally {
+    api.interceptors.request.eject(interceptor);
+  }
+
+  assert.deepEqual(seen.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
+    "POST /api/v1/auth/session", "POST /api/v1/auth/refresh", "POST /api/v1/auth/logout",
+  ]);
+  assert.deepEqual(withCredentials, [true, true, true], "the browser must send the HttpOnly cookie");
+  for (const call of seen) {
+    assert.equal(call.headers.get("X-Requested-With"), "nexus-web");
+    assert.equal(call.headers.get("Authorization"), null);
+  }
+  assert.deepEqual(JSON.parse(String(seen[0]?.body)), grant);
+  assert.equal(seen[1]?.body, undefined);
+});
+
+test("refresh without a session cookie (gateway 204) means no session, not an error", async () => {
+  const anonymous = { fetch: (async () => new Response(null, { status: 204 })) satisfies typeof fetch };
+  assert.equal(await refreshSession({ context: anonymous }), null);
+});
+
+test("a refused session call is a typed 401 and a body without tokens is an invalid response", async () => {
+  const refused = { fetch: (async () => problem({ status: 401, title: "Unauthorized", code: "UNAUTHENTICATED" }, 401)) satisfies typeof fetch };
+  await assert.rejects(refreshSession({ context: refused }), errorIs((error) => {
+    assert.equal(error.kind, "http");
+    assert.equal(error.status, 401);
+    assert.equal(error.code, "UNAUTHENTICATED");
+  }));
+  for (const data of [{}, { accessToken: "a", idToken: "", expiresIn: 1 }, { accessToken: "a", idToken: "i", expiresIn: 0 }]) {
+    await assert.rejects(
+      refreshSession({ context: { fetch: (async () => success(data)) satisfies typeof fetch } }),
+      errorIs((error) => assert.equal(error.kind, "invalid-response")),
     );
   }
 });

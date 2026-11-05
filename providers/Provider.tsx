@@ -11,7 +11,13 @@ import { createCanceledError, isApiError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
 import { createOidcClient } from "../features/oidc";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
-import { getMe, register as registerUser } from "../service/authService";
+import {
+  createSession,
+  endSession,
+  getMe,
+  refreshSession,
+  register as registerUser,
+} from "../service/authService";
 import { createAuthStub } from "../mocks/authStub";
 import type { ApiContext } from "../types/commonRequestType";
 import type { ApiError, ApiResult } from "../types/commonResponseType";
@@ -37,22 +43,9 @@ export function AuthSession({
   oidc: injectedOidc,
 }: AuthProviderProps) {
   const queryClient = useQueryClient();
-  const [oidc] = useState(() => injectedOidc ?? createOidcClient());
   const [token] = useState(() => {
     let value: string | null = null;
     return { get: () => value, set: (next: string | null) => { value = next; } };
-  });
-  const generation = useRef(0);
-  const mounted = useRef(false);
-  const callback = useRef<{
-    url: string;
-    result: Promise<ApiResult<string>>;
-    retry?: () => Promise<ApiResult<string>>;
-  } | null>(null);
-  const [session, setSession] = useState({
-    accessToken: null as string | null,
-    id: 0,
-    signingIn: false,
   });
   const [requestContext] = useState<ApiContext>(() => {
     if (stub && process.env.NODE_ENV === "production")
@@ -64,6 +57,26 @@ export function AuthSession({
       getAccessToken: token.get,
       fetch: stub ? createAuthStub() : transport,
     };
+  });
+  // Adapter đổi mã, khôi phục phiên và đăng xuất qua gateway bằng đúng requestContext này
+  const [oidc] = useState(() => injectedOidc ?? createOidcClient({
+    exchangeCode: (grant) => createSession(grant, { context: requestContext }),
+    refreshSession: () => refreshSession({ context: requestContext }),
+    endSession: () => endSession({ context: requestContext }),
+  }));
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  const callback = useRef<{
+    url: string;
+    result: Promise<ApiResult<string>>;
+    retry?: () => Promise<ApiResult<string>>;
+  } | null>(null);
+  // signingIn bắt đầu là true: đang hỏi gateway xem cookie còn phiên không. Trạng thái "authenticating" giữ trang
+  // không đẩy người dùng sang /sign-in trước khi biết kết quả.
+  const [session, setSession] = useState({
+    accessToken: null as string | null,
+    id: 0,
+    signingIn: true,
   });
 
   const profile = useApiQuery<UserResponse>(
@@ -203,6 +216,24 @@ export function AuthSession({
       void oidc.clearSession().catch(() => {});
     }
   }, [clearSession, oidc, profile.error, session.accessToken]);
+
+  // Tải lại trang thì token trong bộ nhớ mất. Hỏi gateway: còn cookie phiên thì nhận access token mới, không thì ẩn danh.
+  useEffect(() => {
+    // trang callback tự đổi mã lấy phiên mới, không gọi refresh song song kẻo cookie cũ ghi đè cookie mới
+    if (typeof window !== "undefined" && window.location.pathname === "/auth/callback") return;
+    const id = generation.current;
+    let active = true;
+    oidc.restore().then((restored) => {
+      // đăng nhập hoặc đăng xuất khác đã chạy trong lúc chờ thì bỏ kết quả này
+      if (!active || generation.current !== id) return;
+      token.set(restored.accessToken);
+      setSession({ accessToken: restored.accessToken, id, signingIn: false });
+    }).catch(() => {
+      if (!active || generation.current !== id) return;
+      setSession((current) => ({ ...current, signingIn: false }));
+    });
+    return () => { active = false; };
+  }, [oidc, token]);
 
   useEffect(() => {
     mounted.current = true;

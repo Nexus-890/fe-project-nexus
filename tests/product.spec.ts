@@ -73,9 +73,11 @@ const installAuth = async (page: Page) => {
   };
   const issuedTokens = new Set<string>();
   page.on("response", async (response) => {
-    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+    // The gateway exchanges the code; the browser receives the access token in its envelope.
+    // 204 is an anonymous refresh with no body.
+    if (["/api/v1/auth/session", "/api/v1/auth/refresh"].includes(new URL(response.url()).pathname) && response.status() === 200) {
       const body = await response.json();
-      issuedTokens.add(body.access_token);
+      issuedTokens.add(body.data.accessToken);
     }
   });
   await page.route("**/api/v1/users/me", async (route) => {

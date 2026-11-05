@@ -181,6 +181,33 @@ assumptions:
       features/ShopLayout.tsx; features/useCart.ts;
       test-results/oidc-simulation.ndjson (local ignored run evidence)
     updated_at: "2026-11-04"
+  - id: gateway-session-cookie
+    status: supported
+    claim: >-
+      With the gateway session endpoints of #252 the browser never calls the
+      Keycloak token endpoint, holds no refresh token, and restores the session
+      on reload from an HttpOnly cookie that rotates on every refresh.
+    reason: >-
+      The API stand-in models api-gateway SessionController: it checks the
+      X-Requested-With header and Origin, exchanges the code and refresh token
+      with the provider stand-in, and sets nexus_rt (HttpOnly, SameSite=Lax,
+      Path=/api/v1/auth). The provider stand-in rotates refresh tokens like the
+      realm (revokeRefreshToken, refreshTokenMaxReuse=0). Secure is left off
+      because the suite runs on plain http. The real gateway is covered by its
+      own SessionControllerTest, not by this suite.
+    verification: >-
+      On 2026-11-05 ran npm run test:auth:browser: 12 scenarios passed,
+      including reload restore with a rotated cookie, refusal of the old value,
+      403 without the CSRF header, cookie revocation on logout and no cookie
+      sent to /api/v1/users/me. npm run test:browser passed all 30 scenarios
+      with the catalog fixture forwarding /api/v1/auth/* to the stand-in.
+      Several starts stopped for the existing Next.js security reminder;
+      unchanged retries passed.
+    source: >-
+      postman/mocks/oidc-api/default.js; postman/mocks/oidc-keycloak/default.js;
+      tests/oidc.spec.ts; tests/catalog-fixture.mjs;
+      ../be-project-nexus/api-gateway/src/main/java/com/group5/apigateway/session/SessionController.java
+    updated_at: "2026-11-05"
 fingerprints:
   - id: oidc-browser-implementation
     date: "2026-11-03"

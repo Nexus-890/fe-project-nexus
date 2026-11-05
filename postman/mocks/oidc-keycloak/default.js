@@ -12,7 +12,11 @@ const callbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/
 const subject = "68000000-0000-4000-8000-000000000003";
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...keys.publicKey.export({ format: "jwk" }), kid: "fixture-key", use: "sig", alg: "RS256" };
-const initialEvidence = () => ({ authorizations: 0, passwordSubmissions: 0, tokenRequests: 0, pkceVerified: 0, logouts: 0, sessions: 0 });
+// tokenRequests counts authorization-code exchanges only; refresh grants are counted in refreshes/refreshRejected.
+const initialEvidence = () => ({
+  authorizations: 0, passwordSubmissions: 0, tokenRequests: 0, pkceVerified: 0, logouts: 0, sessions: 0,
+  refreshes: 0, refreshRejected: 0, revocations: 0,
+});
 
 function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -28,6 +32,21 @@ function jwt(claims) {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const unsigned = `${encode({ alg: "RS256", kid: "fixture-key", typ: "JWT" })}.${encode(claims)}`;
   return `${unsigned}.${sign("RSA-SHA256", Buffer.from(unsigned), keys.privateKey).toString("base64url")}`;
+}
+
+async function issueTokens(refreshTokens, idClaims) {
+  const now = Math.floor(Date.now() / 1000);
+  const claims = { iss: issuer, sub: subject, iat: now, exp: now + 3600, auth_time: now, sid: "fixture-session" };
+  const accessToken = jwt({ ...claims, aud: "nexus-services", roles: ["BUYER"], privileges: ["PROFILE.VIEW"] });
+  const refreshToken = randomUUID();
+  refreshTokens[refreshToken] = { issuedAt: now };
+  await pm.state.set("oidc-keycloak:refresh-tokens", refreshTokens);
+  await pm.state.set("oidc-keycloak:access-token-hash", createHash("sha256").update(accessToken).digest("hex"));
+  return {
+    access_token: accessToken, token_type: "Bearer", expires_in: 3600, scope: "openid profile email",
+    refresh_token: refreshToken, refresh_expires_in: 1800,
+    id_token: jwt({ ...claims, aud: "nexus-web", ...idClaims, email: "buyer@nexus.local", name: "Fixture Buyer" }),
+  };
 }
 
 function fields(req) {
@@ -48,6 +67,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/test/reset") {
     await pm.state.set("oidc-keycloak:evidence", initialEvidence());
     await pm.state.set("oidc-keycloak:codes", {});
+    await pm.state.set("oidc-keycloak:refresh-tokens", {});
     await pm.state.set("oidc-keycloak:access-token-hash", null);
     await pm.state.set("oidc-keycloak:mode", url.searchParams.get("mode") || "success");
     return json(res, {});
@@ -100,6 +120,34 @@ const server = http.createServer(async (req, res) => {
       return redirect(res, destination.href);
     }
   }
+  if (url.pathname === "/realms/nexus/protocol/openid-connect/token" && req.method === "POST"
+      && fields(req).get("grant_type") === "refresh_token") {
+    // Matches the realm: revokeRefreshToken=true, refreshTokenMaxReuse=0. A used token is gone.
+    const form = fields(req);
+    const stored = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
+    const entry = stored[form.get("refresh_token")];
+    delete stored[form.get("refresh_token")];
+    if (!entry || form.get("client_id") !== "nexus-web") {
+      await pm.state.set("oidc-keycloak:refresh-tokens", stored);
+      evidence.refreshRejected += 1;
+      await save();
+      return json(res, { error: "invalid_grant", error_description: "Token is not active" }, 400);
+    }
+    evidence.refreshes += 1;
+    await save();
+    return json(res, await issueTokens(stored, {}));
+  }
+  if (url.pathname === "/realms/nexus/protocol/openid-connect/logout" && req.method === "POST") {
+    // Back-channel logout the gateway sends with the refresh token from its cookie.
+    const form = fields(req);
+    const stored = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
+    if (stored[form.get("refresh_token")]) evidence.revocations += 1;
+    delete stored[form.get("refresh_token")];
+    await pm.state.set("oidc-keycloak:refresh-tokens", stored);
+    await save();
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
   if (url.pathname === "/realms/nexus/protocol/openid-connect/token" && req.method === "POST") {
     evidence.tokenRequests += 1;
     const form = fields(req);
@@ -116,14 +164,8 @@ const server = http.createServer(async (req, res) => {
     evidence.pkceVerified += 1;
     await save();
     if (mode === "token-error") return json(res, { error: "invalid_grant", error_description: "Fixture exchange rejected" }, 400);
-    const now = Math.floor(Date.now() / 1000);
-    const claims = { iss: issuer, sub: subject, iat: now, exp: now + 3600, auth_time: now, sid: "fixture-session" };
-    const accessToken = jwt({ ...claims, aud: "nexus-services", roles: ["BUYER"], privileges: ["PROFILE.VIEW"] });
-    await pm.state.set("oidc-keycloak:access-token-hash", createHash("sha256").update(accessToken).digest("hex"));
-    return json(res, {
-      access_token: accessToken, token_type: "Bearer", expires_in: 3600, scope: "openid profile email",
-      id_token: jwt({ ...claims, aud: "nexus-web", nonce: code.nonce, email: "buyer@nexus.local", name: "Fixture Buyer" }),
-    });
+    const stored = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
+    return json(res, await issueTokens(stored, { nonce: code.nonce }));
   }
   if (url.pathname === "/realms/nexus/protocol/openid-connect/logout") {
     if (!url.searchParams.get("id_token_hint")) return json(res, { error: "id_token_hint_required" }, 400);
