@@ -40,6 +40,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/carts/me/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the quantity of an own cart item
+         * @description Replaces the quantity of an item in the JWT subject active cart, rather than incrementing it. Existing unitPrice is preserved. Missing or inactive carts and missing or foreign items return 404 NOT_FOUND. No ADMIN ownership bypass.
+         */
+        put: operations["updateOwnCartItem"];
+        post?: never;
+        /**
+         * Remove an own cart item
+         * @description Removes an item from the JWT subject active cart. Missing or inactive carts and missing or foreign items return 404 NOT_FOUND. No ADMIN ownership bypass. Success has no response body.
+         */
+        delete: operations["removeOwnCartItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/carts/me/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calculate current cart pricing (CRT-05)
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         */
+        get: operations["getCartPricing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/carts/me/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate the current cart (CRT-06)
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         */
+        post: operations["validateCart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview checkout without creating an order (ORD-02)
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns 400 COMMERCE_CART_EMPTY. Item issues are returned with 200 for buyer review; this call does not place an order. Shipping/payment inputs are validated but are not persisted.
+         */
+        post: operations["previewCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders": {
         parameters: {
             query?: never;
@@ -204,34 +288,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/carts/me/items/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Replace the quantity of an item in the current cart
-         * @description Uses the JWT subject active cart only. Missing, inactive or foreign cart items return 404. Quantity is replaced, not incremented. Existing unitPrice is preserved.
-         */
-        put: operations["updateOwnCartItem"];
-        post?: never;
-        /**
-         * Remove an item from the current cart
-         * @description Uses the JWT subject active cart only. Missing, inactive or foreign cart items return 404. Success has no body.
-         */
-        delete: operations["removeOwnCartItem"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        UpdateCartItem: {
+            /** Format: int32 */
+            quantity: number;
+        };
+        CartPricing: {
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            subtotal: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            taxAmount: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            discountAmount: number;
+            /** @description Always null until shipping quote #201 is delivered, including above FREE_SHIPPING_THRESHOLD. */
+            estimatedShippingFee: number | null;
+            /** @description subtotal + taxAmount - discountAmount. Unknown shipping is excluded until #201. */
+            total: number;
+        };
+        CartIssue: {
+            /** Format: uuid */
+            itemId: string;
+            /** Format: uuid */
+            skuId: string;
+            /**
+             * @description OUT_OF_STOCK is reserved for INV-03 integration. PRODUCT_INACTIVE also covers catalog 404 and an inactive SKU.
+             * @enum {string}
+             */
+            code: "OUT_OF_STOCK" | "PRICE_CHANGED" | "PRODUCT_INACTIVE";
+        };
+        CartValidation: {
+            valid: boolean;
+            issues: components["schemas"]["CartIssue"][];
+        };
+        CheckoutPreviewItem: {
+            /** Format: uuid */
+            itemId: string;
+            /** Format: uuid */
+            productId: string;
+            /** Format: uuid */
+            skuId: string;
+            quantity: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            unitPrice: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            lineTotal: number;
+        };
+        CheckoutPreview: {
+            items: components["schemas"]["CheckoutPreviewItem"][];
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            subtotal: number;
+            /** @description Unknown until #201; explicitly null. */
+            shippingFee: number | null;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            taxAmount: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            discountAmount: number;
+            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            total: number;
+            issues: components["schemas"]["CartIssue"][];
+        };
+        CheckoutPreviewRequest: {
+            shippingAddress: components["schemas"]["ShippingAddress"];
+            /**
+             * @description Trimmed before validation; uses the supported order payment method.
+             * @enum {string}
+             */
+            paymentMethod: "SEPAY";
+            /** @description Optional; accepted and ignored under D01. No promotion is applied or persisted. */
+            promoCode?: string;
+        };
+        CartPricingEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["CartPricing"];
+        };
+        CartValidationEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["CartValidation"];
+        };
+        CheckoutPreviewEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["CheckoutPreview"];
+        };
         Problem: {
             /** Format: uri-reference */
             type: string;
@@ -795,6 +944,905 @@ export interface operations {
                         status?: 500;
                         /** @enum {string} */
                         code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR";
+                    };
+                };
+            };
+            /** @description Bad Gateway. Codes: `COMMERCE_INVALID_CATALOG_RESPONSE`. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 502;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_CATALOG_RESPONSE";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    updateOwnCartItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Cart item ID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "quantity": 2
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateCartItem"];
+            };
+        };
+        responses: {
+            /** @description Updated current cart. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "c8000000-0000-4000-8000-000000000004",
+                     *         "userId": "68000000-0000-4000-8000-000000000002",
+                     *         "status": "ACTIVE",
+                     *         "items": [
+                     *           {
+                     *             "id": "c8000000-0000-4000-8000-000000000005",
+                     *             "productId": "c8000000-0000-4000-8000-000000000002",
+                     *             "skuId": "c8000000-0000-4000-8000-000000000003",
+                     *             "quantity": 2,
+                     *             "unitPrice": 150000
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["GetOwnCartResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `INVALID_PARAMETER`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_QUANTITY" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: `NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 415;
+                        /** @enum {string} */
+                        code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    removeOwnCartItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Cart item ID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: `NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getCartPricing: {
+        parameters: {
+            query?: {
+                /** @description Accepted and ignored (D01). */
+                promoCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current calculated result; nested items/issues are part of one resource, with no page metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartPricingEnvelope"];
+                };
+            };
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `INVALID_PARAMETER`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_QUANTITY" | "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_INVALID_PRICING_CONFIGURATION`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR" | "COMMERCE_INVALID_PRICING_CONFIGURATION";
+                    };
+                };
+            };
+            /** @description Bad Gateway. Codes: `COMMERCE_INVALID_CATALOG_RESPONSE`. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 502;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_CATALOG_RESPONSE";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    validateCart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current calculated result; nested items/issues are part of one resource, with no page metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartValidationEnvelope"];
+                };
+            };
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_QUANTITY";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_INVALID_PRICING_CONFIGURATION`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR" | "COMMERCE_INVALID_PRICING_CONFIGURATION";
+                    };
+                };
+            };
+            /** @description Bad Gateway. Codes: `COMMERCE_INVALID_CATALOG_RESPONSE`. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 502;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_CATALOG_RESPONSE";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    previewCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "shippingAddress": {
+                 *         "recipientName": "Buyer",
+                 *         "phoneNumber": "0901234567",
+                 *         "addressLine": "123 Street",
+                 *         "ward": "Ward",
+                 *         "district": "District",
+                 *         "city": "HCM",
+                 *         "countryCode": "VN"
+                 *       },
+                 *       "paymentMethod": "SEPAY",
+                 *       "promoCode": "IGNORED-D01"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CheckoutPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Current calculated result; nested items/issues are part of one resource, with no page metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreviewEnvelope"];
+                };
+            };
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `COMMERCE_CART_EMPTY`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "COMMERCE_INVALID_QUANTITY" | "COMMERCE_CART_EMPTY" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 415;
+                        /** @enum {string} */
+                        code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_INVALID_PRICING_CONFIGURATION`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR" | "COMMERCE_INVALID_PRICING_CONFIGURATION";
                     };
                 };
             };
@@ -2411,300 +3459,6 @@ export interface operations {
                 };
             };
             /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 500;
-                        /** @enum {string} */
-                        code?: "INTERNAL_ERROR";
-                    };
-                };
-            };
-        };
-    };
-    updateOwnCartItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Cart item ID. */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "quantity": 2
-                 *     }
-                 */
-                "application/json": {
-                    /** Format: int32 */
-                    quantity: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Current cart with the replaced item quantity. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetOwnCartResponse"];
-                };
-            };
-            /** @description INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, COMMERCE_INVALID_QUANTITY. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 400;
-                        /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "COMMERCE_INVALID_QUANTITY";
-                    };
-                };
-            };
-            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 401;
-                        /** @enum {string} */
-                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
-                    };
-                };
-            };
-            /** @description FORBIDDEN. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 403;
-                        /** @enum {string} */
-                        code?: "FORBIDDEN";
-                    };
-                };
-            };
-            /** @description NOT_FOUND. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 404;
-                        /** @enum {string} */
-                        code?: "NOT_FOUND";
-                    };
-                };
-            };
-            /** @description METHOD_NOT_ALLOWED. */
-            405: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 405;
-                        /** @enum {string} */
-                        code?: "METHOD_NOT_ALLOWED";
-                    };
-                };
-            };
-            /** @description NOT_ACCEPTABLE. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description UNSUPPORTED_MEDIA_TYPE. */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 415;
-                        /** @enum {string} */
-                        code?: "UNSUPPORTED_MEDIA_TYPE";
-                    };
-                };
-            };
-            /** @description RATE_LIMITED. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 429;
-                        /** @enum {string} */
-                        code?: "RATE_LIMITED";
-                    };
-                };
-            };
-            /** @description INTERNAL_ERROR. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 500;
-                        /** @enum {string} */
-                        code?: "INTERNAL_ERROR";
-                    };
-                };
-            };
-        };
-    };
-    removeOwnCartItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Cart item ID. */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Item removed; no response body. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 400;
-                        /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
-                    };
-                };
-            };
-            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 401;
-                        /** @enum {string} */
-                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
-                    };
-                };
-            };
-            /** @description FORBIDDEN. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 403;
-                        /** @enum {string} */
-                        code?: "FORBIDDEN";
-                    };
-                };
-            };
-            /** @description NOT_FOUND. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 404;
-                        /** @enum {string} */
-                        code?: "NOT_FOUND";
-                    };
-                };
-            };
-            /** @description METHOD_NOT_ALLOWED. */
-            405: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 405;
-                        /** @enum {string} */
-                        code?: "METHOD_NOT_ALLOWED";
-                    };
-                };
-            };
-            /** @description NOT_ACCEPTABLE. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description RATE_LIMITED. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 429;
-                        /** @enum {string} */
-                        code?: "RATE_LIMITED";
-                    };
-                };
-            };
-            /** @description INTERNAL_ERROR. */
             500: {
                 headers: {
                     [name: string]: unknown;
