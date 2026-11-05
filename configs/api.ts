@@ -209,9 +209,14 @@ export const requestApi = async <T>(
           Promise.resolve().then(() => context.renewAccessToken!(sentToken)),
           options.signal,
         );
-      } catch {
+      } catch (error) {
         // Provider exceptions can contain credentials. Retain the API's error.
         throwIfAborted(options.signal);
+        // GIA HẠN LỖI TẠM THỜI (503/504/MẤT MẠNG): BÁO LỖI ĐÓ, KHÔNG TRẢ 401 KẺO GIAO DIỆN ĐĂNG XUẤT
+        if (isApiError(error) && (error.kind === "network" || error.status >= 500)) {
+          ensureCurrent();
+          throw { kind: error.kind, status: error.status, title: error.title } satisfies ApiError;
+        }
       }
       throwIfAborted(options.signal);
       if (replacement) {

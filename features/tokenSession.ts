@@ -1,4 +1,5 @@
 import { isApiError } from "../configs/api";
+import type { ApiError } from "../types/commonResponseType";
 import type { OidcClient, OidcSession } from "./oidc";
 
 interface TokenSessionOptions {
@@ -48,8 +49,15 @@ export function createTokenSession(options: TokenSessionOptions) {
           throw new Error("Invalid renewed session");
         }
       } catch (error) {
-        // gateway trả 503/504 hay mất mạng: cookie vẫn còn nên giữ phiên, lần 401 hoặc lần hẹn giờ sau sẽ thử lại
-        if (isApiError(error) && (error.kind === "network" || error.status >= 500)) return null;
+        // GATEWAY TRẢ 503/504 HAY MẤT MẠNG: COOKIE VẪN CÒN NÊN GIỮ PHIÊN, NÉM LỖI GỌN ĐỂ REQUEST BÁO LỖI TẠM THỜI THAY VÌ 401
+        if (isApiError(error) && (error.kind === "network" || error.status >= 500)) {
+          if (generation !== id) return null;
+          throw {
+            kind: error.kind === "network" ? "network" : "http",
+            status: error.status,
+            title: "Session renewal is temporarily unavailable.",
+          } satisfies ApiError;
+        }
         if (generation === id) {
           clear();
           options.onFailure();

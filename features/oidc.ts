@@ -90,9 +90,11 @@ const decodeClaims = (idToken: string): Record<string, unknown> => {
 
 // Hai tab làm mới cùng lúc sẽ gửi chung một refresh token, tab đến sau bị Keycloak từ chối vì mỗi token chỉ dùng một lần.
 // Khóa theo origin để tab đến sau chờ, rồi gửi đi cookie mới nhất (trình duyệt đính cookie tại lúc gửi).
+// Đổi mã đăng nhập và đăng xuất cũng lấy khóa này, để refresh cũ của tab khác không ghi đè cookie của chúng.
 const withSessionLock = async <T,>(task: () => Promise<T>): Promise<T> => {
   if (typeof navigator === "undefined" || !navigator.locks) return task();
-  return navigator.locks.request("nexus-session-refresh", task).then((result) => result);
+  // BỌC ASYNC: TASK NÉM LỖI ĐỒNG BỘ THÌ KHÓA VẪN ĐƯỢC NHẢ (NODE KHÔNG NHẢ NẾU CALLBACK THROW NGAY)
+  return navigator.locks.request("nexus-session-refresh", async () => task()).then((result) => result);
 };
 
 /** Creating the adapter is SSR-safe; browser state is read only on an action. */
@@ -228,8 +230,13 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
         await current.clearStaleState();
         if (generation !== id) throw new Error("Sign-in was canceled.");
         const callback = await readCallback(url);
-        if (!options.exchangeCode) throw new Error("No session exchange is configured.");
-        const tokens = await options.exchangeCode(callback.grant);
+        const exchangeCode = options.exchangeCode;
+        if (!exchangeCode) throw new Error("No session exchange is configured.");
+        // CHUNG KHÓA VỚI REFRESH: REFRESH CŨ CỦA TAB KHÁC XONG TRƯỚC RỒI MỚI ĐẶT COOKIE CỦA TÀI KHOẢN MỚI
+        const tokens = await withSessionLock(() => {
+          if (generation !== id) throw new Error("Sign-in was canceled.");
+          return exchangeCode(callback.grant);
+        });
         if (generation !== id) throw new Error("Sign-in was canceled.");
         const session = verify(tokens, callback.returnTo, callback.nonce);
         logoutHint = tokens.idToken;
@@ -271,11 +278,16 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
     },
 
     async signOut() {
-      generation += 1;
+      const id = ++generation;
       subject = undefined;
       const current = getManager();
       // Gateway xóa cookie và kết thúc phiên Keycloak bằng refresh token. Lỗi ở đây không được chặn việc đăng xuất.
-      await options.endSession?.().catch(() => {});
+      // CHUNG KHÓA VỚI REFRESH: REFRESH ĐANG CHẠY Ở TAB KHÁC KHÔNG ĐẶT LẠI COOKIE SAU KHI ĐÃ XÓA
+      await withSessionLock(async () => {
+        if (generation !== id) throw new Error("Sign-out was superseded.");
+        await options.endSession?.().catch(() => {});
+      });
+      if (generation !== id) throw new Error("Sign-out was superseded.");
       await current.removeUser();
       await current.clearStaleState();
       // Giữ ID-token hint trong biến cục bộ: xóa token trong bộ nhớ không làm Keycloak mất khả năng nhận ra phiên.

@@ -293,13 +293,25 @@ export function AuthSession({
 
   useEffect(() => {
     if (!session.accessToken || !session.expiresAt) return;
-    const timer = window.setTimeout(() => { void tokens.renew(); }, renewalDelay(session.expiresAt));
+    let stopped = false;
+    let failures = 0;
+    let timer: number | undefined;
+    const renew = () => {
+      tokens.renew().catch(() => {
+        if (stopped) return;
+        // GATEWAY TẠM LỖI: PHIÊN VẪN GIỮ, THỬ LẠI SAU 2s, 4s, 8s... TỐI ĐA 30s
+        window.clearTimeout(timer);
+        timer = window.setTimeout(renew, Math.min(30_000, 2_000 * 2 ** failures++));
+      });
+    };
+    timer = window.setTimeout(renew, renewalDelay(session.expiresAt));
     const checkExpiry = () => {
-      if (document.visibilityState !== "hidden" && session.expiresAt * 1000 - Date.now() <= 60_000) void tokens.renew();
+      if (document.visibilityState !== "hidden" && session.expiresAt * 1000 - Date.now() <= 60_000) renew();
     };
     window.addEventListener("focus", checkExpiry);
     document.addEventListener("visibilitychange", checkExpiry);
     return () => {
+      stopped = true;
       window.clearTimeout(timer);
       window.removeEventListener("focus", checkExpiry);
       document.removeEventListener("visibilitychange", checkExpiry);

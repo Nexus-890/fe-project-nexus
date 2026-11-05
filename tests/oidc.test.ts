@@ -379,11 +379,75 @@ test("a renewal response arriving after sign-out cannot bring the session back",
     const response = harness.pauseRefresh();
     const renewed = harness.client.renewSession();
     await response.entered;
-    await harness.client.signOut();
+    const signedOut = harness.client.signOut();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.endSessions(), 0, "logout waits until the refresh has written its cookie");
     harness.setCookieSession(true);
     response.release();
     await assert.rejects(renewed, /superseded/);
+    await signedOut;
+    assert.equal(harness.endSessions(), 1, "logout then clears the cookie the refresh wrote");
     await assert.rejects(harness.client.renewSession(), /no active session/);
+  } finally { await harness.close(); }
+});
+
+// Tab khác đang giữ khóa phiên: refresh của nó phải xong (đặt cookie cũ) trước khi tab này đặt cookie mới.
+function holdSessionLockInAnotherTab() {
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const held = navigator.locks.request("nexus-session-refresh", () => {
+    entered();
+    return new Promise<void>((resolve) => { release = resolve; });
+  });
+  return { started, release: () => { release(); return held; } };
+}
+
+test("a sign-in waits for another tab's refresh before the gateway sets the new account's cookie", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    const otherTab = holdSessionLockInAnotherTab();
+    await otherTab.started;
+    const signedIn = harness.client.completeSignIn(harness.callback());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.grants.length, 0, "the code exchange waits for the other tab");
+    await otherTab.release();
+    assert.equal((await signedIn).subject, "buyer-id");
+    assert.equal(harness.grants.length, 1);
+  } finally { await harness.close(); }
+});
+
+test("a sign-in canceled while waiting for another tab never exchanges its code", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    const otherTab = holdSessionLockInAnotherTab();
+    await otherTab.started;
+    const signedIn = harness.client.completeSignIn(harness.callback());
+    const canceled = assert.rejects(signedIn, /canceled/);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await harness.client.clearSession();
+    await otherTab.release();
+    await canceled;
+    assert.equal(harness.grants.length, 0);
+  } finally { await harness.close(); }
+});
+
+test("a sign-out waits for another tab's refresh so the cleared cookie is not written back", async () => {
+  const harness = await protocolHarness();
+  try {
+    await harness.client.signIn();
+    await harness.client.completeSignIn(harness.callback());
+    const otherTab = holdSessionLockInAnotherTab();
+    await otherTab.started;
+    const signedOut = harness.client.signOut();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.endSessions(), 0, "logout waits for the other tab");
+    await otherTab.release();
+    await signedOut;
+    assert.equal(harness.endSessions(), 1);
+    assert.equal(harness.redirects[1].pathname, "/logout");
   } finally { await harness.close(); }
 });
 

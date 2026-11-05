@@ -157,13 +157,32 @@ test("gateway outage or network loss during renewal keeps the session for the ne
     return session("new-token");
   });
   context.coordinator.start(session());
-  for (let attempt = 0; attempt < outages.length; attempt++) {
-    assert.equal(await context.coordinator.renewAccessToken("old-token"), null);
+  for (const outage of outages) {
+    await assert.rejects(context.coordinator.renewAccessToken("old-token"), (error: unknown) => {
+      assert.deepEqual(error, {
+        kind: outage.kind, status: outage.status, title: "Session renewal is temporarily unavailable.",
+      });
+      return true;
+    });
     assert.equal(context.coordinator.getAccessToken(), "old-token");
   }
   assert.equal(context.failures, 0);
   assert.equal(await context.coordinator.renew(), "new-token");
   assert.equal(context.renewals, 4);
+});
+
+test("a late outage from an old session neither throws nor touches a newer user's session", async () => {
+  const pending = deferred<OidcSession>();
+  const context = fixture(() => pending.promise);
+  context.coordinator.start(session());
+  const renewal = context.coordinator.renew();
+  await Promise.resolve();
+  const otherUser = session("other-user-token", "buyer-2");
+  context.coordinator.start(otherUser);
+  pending.reject({ kind: "http", status: 503, title: "Service Unavailable", detail: "upstream secret" });
+  assert.equal(await renewal, null);
+  assert.deepEqual(context.coordinator.getSession(), otherUser);
+  assert.equal(context.failures, 0);
 });
 
 test("unknown tokens and tokens from a prior interactive login cannot trigger renewal", async () => {

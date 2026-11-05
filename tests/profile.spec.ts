@@ -181,6 +181,22 @@ test("a persistently rejected PUT renews once, retries once and clears local aut
   });
 });
 
+test("a session refresh the gateway cannot serve keeps the user signed in and the edits", async ({ page, request }) => {
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  await control(request, { putStatus: 401, refreshStatus: 503 });
+  await page.getByLabel("Full Name", { exact: true }).fill("Lan after the outage");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(page.getByRole("form", { name: "Personal information", exact: true }).getByRole("alert")).toBeVisible();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan after the outage");
+  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await control(request, { putStatus: 0, refreshStatus: 0 });
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(page.locator("header").getByRole("link", { name: "Hi Lan after the outage" })).toBeVisible();
+});
+
 test("GET failure shows a retry and recovers the real form", async ({ page, request }) => {
   await signIn(page);
   await control(request, { getStatus: 503 });
@@ -226,8 +242,7 @@ test("token renewal preserves dirty profile fields without starting another prof
   // dirty form. A normal proactive refresh should leave that form untouched.
   await control(request, { getStatus: 503 });
   const renewed = page.waitForResponse(response =>
-    new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token"
-    && response.request().postData()?.includes("grant_type=refresh_token") === true);
+    new URL(response.url()).pathname === "/api/v1/auth/refresh" && response.request().method() === "POST");
   await clockTime(request, pausedAt + 60_000);
   await page.clock.runFor(60_000);
   const tokenResponse = await renewed;
