@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createApiClient } from "../lib/api-client";
-import { createCartService } from "../service/cart";
-import { createCartController, type CartIdentity } from "../features/cart/controller";
-import { cartItemCount, readCart, readGuestCart, type CartSnapshot } from "../features/cart/model";
-import { createGuestStorage, GUEST_CART_STORAGE_KEY, type GuestSession } from "../features/cart/guest-storage";
-import type { ApiResult } from "../types/common/response/type";
+import { isApiError } from "../configs/api";
+import { addCartItem, addGuestCartItem, createGuestCart, getCart, getGuestCart, mergeGuestCart } from "../service/cartService";
+import { createCartController, type CartIdentity, type CartControllerService } from "../features/cartController";
+import { cartItemCount, readCart, readGuestCart, type CartSnapshot } from "../features/cartSnapshotUtils";
+import { createGuestStorage, GUEST_CART_STORAGE_KEY, type GuestSession } from "../features/guestCartStorage";
+import type { ApiResult } from "../types/commonResponseType";
 
 const guestSession: GuestSession = {
   token: "guest_cart_credential_1234567890",
@@ -44,12 +44,20 @@ function memoryStorage(): Storage {
   };
 }
 
-function httpFixture(respond: (path: string, method: string) => unknown = () => ({ data: cart(2) })) {
+const fullCart = (quantity = 2) => ({
+  ...cart(quantity), userId: "buyer-1", items: cart(quantity).items.map((item) => ({ ...item, productId: "product-1", unitPrice: 150000.5 })),
+});
+const asResult = async <T,>(action: () => Promise<T>): Promise<ApiResult<T>> => {
+  try { return ok(await action()); }
+  catch (error) { if (isApiError(error)) return { ok: false, error }; throw error; }
+};
+
+function httpFixture(respond: (path: string, method: string) => unknown = () => ({ code: 0, message: "success", data: fullCart() })) {
   const calls: Array<{ path: string; method: string; headers: Headers; body: unknown }> = [];
-  const client = createApiClient({
+  const context = {
     baseUrl: "https://api.nexus.test",
     getAccessToken: () => member.accessToken,
-    fetch: async (input, init) => {
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       const method = init?.method ?? "GET";
       calls.push({
@@ -60,14 +68,22 @@ function httpFixture(respond: (path: string, method: string) => unknown = () => 
         status: 200, headers: { "Content-Type": "application/json" },
       });
     },
-  });
-  return { calls, service: createCartService({ client }) };
+  };
+  const service: CartControllerService = {
+    getCart: () => asResult(async () => readCart(await getCart({ context }))!),
+    addCartItem: (input) => asResult(async () => readCart(await addCartItem(input, { context }))!),
+    createGuestCart: () => asResult(() => createGuestCart({ context })),
+    getGuestCart: (token) => asResult(() => getGuestCart(token, { context })),
+    addGuestCartItem: (token, input) => asResult(() => addGuestCartItem(token, input, { context })),
+    mergeGuestCart: (token, mergeKey) => asResult(async () => readCart(await mergeGuestCart(token, mergeKey, { context }))!),
+  };
+  return { calls, service };
 }
 
 function controllerFixture(options: {
   stored?: GuestSession;
   enabled?: boolean;
-  service?: Partial<ReturnType<typeof createCartService>>;
+  service?: Partial<CartControllerService>;
   storage?: Storage;
 } = {}) {
   const raw = options.storage ?? memoryStorage();
@@ -75,7 +91,7 @@ function controllerFixture(options: {
   if (options.stored) storage.write(options.stored);
   const calls = { creates: 0, guestReads: 0, memberReads: 0, guestAdds: 0, memberAdds: 0, merges: [] as GuestSession[] };
   let guestQuantity = 0;
-  const service: ReturnType<typeof createCartService> = {
+  const service: CartControllerService = {
     createGuestCart: async () => {
       calls.creates++;
       return ok({ guestToken: guestSession.token, cart: cart() });
@@ -103,7 +119,7 @@ function controllerFixture(options: {
 test("guest requests carry only the guest credential while merge includes bearer and a stable idempotency key", async () => {
   const fixture = httpFixture((path, method) => path === "/api/v1/carts/guest" && method === "POST"
     ? { code: 0, message: "success", data: { guestToken: guestSession.token, cart: cart() } }
-    : { code: 0, message: "success", data: cart(3) });
+    : { code: 0, message: "success", data: fullCart(3) });
 
   const created = await fixture.service.createGuestCart();
   assert.equal(created.ok, true);
@@ -235,6 +251,25 @@ test("callback identity replay merges once, publishes the merged total and clear
   controller.setIdentity({ ...member });
   await flush();
   assert.equal(calls.merges.length, 1);
+});
+
+test("reauthenticating the same account resets cart readiness and ignores the previous session merge", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  let merges = 0;
+  const { controller, storage } = controllerFixture({ stored: guestSession, service: {
+    mergeGuestCart: async () => ++merges === 1 ? pending.promise : ok(cart(8)),
+  } });
+  controller.setIdentity({ ...member, sessionId: 1 });
+  await flush();
+  controller.setIdentity({ ...member, sessionId: 2 });
+  assert.equal(controller.getSnapshot().owner, "user:buyer-1:2");
+  assert.equal(controller.getSnapshot().loading, true);
+  assert.equal(controller.getSnapshot().itemCount, 0);
+  pending.resolve(ok(cart(99)));
+  await flush();
+  assert.equal(merges, 2);
+  assert.equal(controller.getSnapshot().itemCount, 8);
+  assert.equal(storage.read(), null);
 });
 
 test("ambiguous merge failure retains the credential and key; explicit retry uses that key and clears only on success", async () => {

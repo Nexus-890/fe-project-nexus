@@ -1,7 +1,8 @@
 purpose:
   stands_in_for: >-
     Local Keycloak OIDC endpoints and the profile/registration API, derived from
-    infra/local-dev/keycloak/realm-nexus.json, service/auth.ts and UserResponse.
+    infra/local-dev/keycloak/realm-nexus.json, the backend user-service controllers
+    and ApiResponse/UserResponse contract. Frontend callers use service/authService.ts.
     The CLI is signed out, so published owner mocks were not searched or pulled.
   unblocks: >-
     Real browser verification of the Next.js sign-in callback, PKCE exchange,
@@ -9,7 +10,7 @@ purpose:
     and the real services are unavailable. Uses one-port routing because browser
     fetch and navigation are configured with explicit local dependency origins.
     Also exercises guest-cart persistence and callback merge against the
-    explicitly proposed guest contract recorded in docs/guest-cart.md.
+    explicitly proposed guest contract recorded in docs/features/guest-cart.md.
 assumptions:
   - id: keycloak-code-pkce-contract
     status: supported
@@ -28,12 +29,12 @@ assumptions:
     source: >-
       ../be-project-nexus/infra/local-dev/keycloak/realm-nexus.json;
       ../be-project-nexus/infra/local-dev/keycloak/README.md;
-      postman/mocks/oidc-keycloak/default.js; tests/browser/oidc.spec.ts
+      postman/mocks/oidc-keycloak/default.js; tests/oidc.spec.ts
     updated_at: "2026-11-03"
   - id: simulated-browser-flow
     status: supported
     claim: >-
-      In the nine local browser scenarios, the real Next.js client uses code
+      In the eleven local browser scenarios, the real Next.js client uses code
       exchange with PKCE, restores safe return destinations, sends the issued
       access token to the API and clears local authentication on logout.
     reason: >-
@@ -42,6 +43,10 @@ assumptions:
       verifier against the authorization challenge; the API compares the Bearer
       token hash with the access token actually issued. These are caller
       integration checks under the fixture contract, not live provider proof.
+      The 2026-11-04 run uses the backend success envelope instead of the raw
+      user bodies used in the historical 2026-11-03 run.
+      The 2026-11-05 merge run preserves those eleven OIDC cases alongside
+      six guest-cart cases using the same HTTP dependency stand-ins.
     verification: >-
       On 2026-11-03 ran npx playwright test --config playwright.auth.config.ts
       against the dirty frontend implementation fingerprint: 9 tests passed
@@ -57,30 +62,66 @@ assumptions:
       and 3913 were no longer listening after Playwright cleanup. A prior
       attempt stopped because Next.js displayed its package security update
       reminder; retry ran the unchanged application successfully.
+      On 2026-11-04 ran npm run test:auth:browser against the dirty
+      oidc-envelope-merge fingerprint: all 11 scenarios passed in 29.4 seconds.
+      The browser explicitly received GET /api/v1/users/me HTTP 200 and POST
+      /api/v1/auth/register HTTP 201 with {code:0,message:"response success",data:user}.
+      Sign-in returned to its requested page and registration navigated to
+      sign-in. Missing envelope data and malformed user roles each produced
+      the callback error, then succeeded on manual profile retry with exactly
+      one code exchange. Inspected 137 simulation request events, including
+      profile responses 200 (7), 401 (1) and 503 (1), registration 201 (1),
+      token responses 200 (6) and 400 (1), and logout 302 (1). Ports 3103 and
+      3913 stopped after cleanup and tsconfig.json was restored. The first
+      attempt stopped for the existing Next.js advisory reminder; an unchanged
+      retry produced the passing run. Postman CLI 1.73.0 rejects postman status
+      as an unknown command; its local simulation command ran successfully.
+      On 2026-11-05, at the dirty guest-cart-develop-merge fingerprint, the
+      final npm run test:auth:browser passed all 17 scenarios in 41.5 seconds:
+      11 OIDC and 6 guest cases. An earlier attempt overlapped live source
+      Hot Refresh; the stable final implementation passed on rerun. The
+      existing Next.js 16.4 security reminder also required unchanged startup
+      retries. The final auth simulation log contained 236 request events;
+      it was inspected before the subsequent general browser runner cleaned
+      the ignored log. No detailed per-endpoint event counts were recorded
+      for this run. This establishes caller behavior against the stand-ins,
+      not live Keycloak or backend integration.
     source: >-
-      tests/browser/oidc.spec.ts; playwright.auth.config.ts;
+      tests/oidc.spec.ts; playwright.auth.config.ts;
       postman/mocks/oidc-keycloak/default.js; postman/mocks/oidc-api/default.js;
       test-results/oidc-simulation.ndjson (local ignored run evidence)
-    updated_at: "2026-11-03"
+    updated_at: "2026-11-05"
   - id: backend-keycloak-token-support
-    status: contradicted
+    status: unknown
     claim: >-
       The current committed backend accepts Keycloak tokens and provisions new
       registrations in Keycloak.
     reason: >-
-      The gateway and user-service still trust user-service issuer/JWKS, and
-      registration hashes a password into the local database without calling
-      Keycloak. The browser API fixture models the intended integration so the
-      frontend can be tested; it does not establish backend readiness.
+      Incoming origin/develop 59631cd6 configures gateway and user-service
+      trust against Keycloak and implements registration through its admin
+      client. This source migration supersedes the 6e92bbac contradiction,
+      but no backend runtime test or live Keycloak integration was run during
+      this merge verification. The browser API fixture establishes frontend
+      behavior against its model, not live backend token acceptance or
+      registration provisioning.
     verification: >-
       On 2026-11-03 inspected the committed gateway/user-service configurations
-      and registration service at 6e92bbac. Realm README assigns the issuer/JWKS
-      migration to issue 237 and the user-service auth migration to issue 238.
+      and registration service at 6e92bbac: both still trusted user-service
+      issuer/JWKS and registration stored a local password without calling
+      Keycloak. The realm README then assigned those migrations to issues
+      237 and 238. On 2026-11-04 inspected incoming origin/develop 59631cd6:
+      gateway and user-service now configure Keycloak issuer/JWKS; user-service
+      configures the Keycloak admin client; registration creates the Keycloak
+      user, assigns its realm role and stores the profile, with deletion
+      compensation if role assignment or profile persistence fails. The
+      historical contradiction no longer describes this source. Real token
+      acceptance and registration against running backend/Keycloak services
+      remain unverified; live integration is required to settle the claim.
     source: >-
       ../be-project-nexus/config-service/src/main/resources/config/api-gateway.yml;
       ../be-project-nexus/config-service/src/main/resources/config/user-service.yml;
       ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserService.java
-    updated_at: "2026-11-03"
+    updated_at: "2026-11-04"
   - id: real-keycloak-rp-logout
     status: unknown
     claim: >-
@@ -99,7 +140,7 @@ assumptions:
       Simulated browser logout establishes caller behavior only.
     source: >-
       ../be-project-nexus/infra/local-dev/keycloak/realm-nexus.json;
-      features/auth/oidc.ts; postman/mocks/oidc-keycloak/default.js;
+      features/oidc.ts; postman/mocks/oidc-keycloak/default.js;
       https://github.com/keycloak/keycloak/blob/26.7.5/services/src/main/java/org/keycloak/protocol/oidc/OIDCAdvancedConfigWrapper.java;
       https://github.com/keycloak/keycloak/blob/26.7.5/services/src/main/java/org/keycloak/protocol/oidc/endpoints/LogoutEndpoint.java
     updated_at: "2026-11-03"
@@ -110,18 +151,24 @@ assumptions:
       item ID, SKU ID and integer quantities needed by the header count.
     reason: >-
       Current Java DTOs define these fields. The frontend count model accepts
-      the actual numeric-price payload and an optional data envelope without
-      requiring the extra fields present only in the older frontend draft.
+      the actual numeric-price payload without requiring the extra fields
+      present only in the older frontend draft. The merged HTTP boundary
+      requires the delivered success envelope for cart responses.
     verification: >-
       On 2026-11-03 inspected CartResponse.java and CartItemResponse.java at
       4c1139ab. Unit tests accept delivered and draft payloads and reject invalid
       or overflowing quantities. The member GET fixture returns an envelope;
       additions and merges return bare DTO-shaped data.
+      That describes the historical 2026-11-03 fixture. On 2026-11-05 the
+      merged fixture returns strict {code,message,data} envelopes for member,
+      guest and merge successes. The final 94 unit/transport tests and
+      17-scenario auth browser run passed against the merged implementation;
+      the latter exercised numeric snapshot prices in enveloped cart responses.
     source: >-
       ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/dto/response/CartResponse.java;
       ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/dto/response/CartItemResponse.java;
-      features/cart/model.ts; tests/cart.test.ts
-    updated_at: "2026-11-03"
+      features/cartSnapshotUtils.ts; tests/cart.test.ts
+    updated_at: "2026-11-05"
   - id: simulated-guest-cart-flow
     status: supported
     claim: >-
@@ -129,7 +176,7 @@ assumptions:
       session through reload and Keycloak, merges once before returning to the
       shop, and retries a failed merge using the original idempotency key.
     reason: >-
-      The five guest browser scenarios exercise real browser HTTP and the
+      The six guest browser scenarios exercise real browser HTTP and the
       existing OIDC flow, including provider PKCE checks. They assert quantities,
       storage and request evidence. Backend support is not established by these
       stand-ins.
@@ -149,12 +196,32 @@ assumptions:
       test observation used an unsupported redirect interception point; it was
       corrected to inspect storage on the provider page. Next's pre-existing
       security reminder caused startup/build attempts to exit; retries completed.
+      On 2026-11-05, at the dirty guest-cart-develop-merge fingerprint, the
+      final npm run test:auth:browser passed all 17 cases in 41.5 seconds,
+      including six guest cases and eleven OIDC cases. Guest cases retained
+      the reload, mobile quantity, redirect persistence, one callback merge,
+      logout, disabled-cart and same-key pre-/post-commit failure checks.
+      The added profile-503 recovery case confirmed no merge before explicit
+      account retry, then one merge with the saved key and one code exchange.
+      Same-origin cart requests were forwarded over HTTP to the simulation,
+      preserving the intentionally blank Cart service origin. Successes used
+      strict backend envelopes. The final auth log contained 236 request
+      events before the general browser runner cleaned that ignored output.
+      An earlier auth attempt overlapped source Hot Refresh; rerunning stable
+      final source passed. Existing security reminders required unchanged
+      startup/build retries. All 94 unit/transport tests, generate:types:check,
+      fresh route typecheck and lint passed; lint ignored the existing
+      unrelated .next-profile-run/** output. The isolated production build
+      with NEXUS_TEST_DIST_DIR=.next-verify-build passed unchanged retry.
+      The final npm run test:browser -- --max-failures=1 passed 31 cases in
+      57.0 seconds. No live backend or Keycloak integration was run.
     source: >-
-      tests/browser/guest-cart.spec.ts; tests/browser/oidc.spec.ts;
+      tests/guest-cart.spec.ts; tests/oidc.spec.ts;
       tests/cart.test.ts; postman/mocks/oidc-api/default.js;
       test-results/oidc-simulation.ndjson (ignored local evidence);
-      docs/guest-cart.md; fingerprint guest-cart-implementation
-    updated_at: "2026-11-03"
+      docs/features/guest-cart.md; fingerprint guest-cart-implementation;
+      fingerprint guest-cart-develop-merge
+    updated_at: "2026-11-05"
   - id: backend-guest-merge-api-present
     status: contradicted
     claim: >-
@@ -177,7 +244,7 @@ assumptions:
       ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/cart/service/CartService.java;
       ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
       ../be-project-nexus/api-gateway/src/main/java/com/group5/apigateway/config/RouteConfig.java;
-      docs/guest-cart.md
+      docs/features/guest-cart.md
     updated_at: "2026-11-03"
   - id: real-merge-is-atomic-and-idempotent
     status: unknown
@@ -193,10 +260,82 @@ assumptions:
       frontend reuse of the same key, and the stand-in applied quantities once.
       Provider-side verification requires the delivered merge endpoint and
       tests of concurrent calls, ownership and key retention.
+      The 2026-11-05 guest-cart-develop-merge browser run again demonstrated
+      frontend key reuse in the pre-commit and committed-response failure
+      scenarios. It does not settle real backend atomicity or retention;
+      this provider claim remains unknown.
     source: >-
-      docs/guest-cart.md; postman/mocks/oidc-api/default.js;
-      tests/browser/guest-cart.spec.ts; features/cart/controller.ts
-    updated_at: "2026-11-03"
+      docs/features/guest-cart.md; postman/mocks/oidc-api/default.js;
+      tests/guest-cart.spec.ts; features/cartController.ts
+    updated_at: "2026-11-05"
+  - id: backend-user-success-envelope
+    status: supported
+    claim: >-
+      The committed backend wraps GET /api/v1/users/me HTTP 200 and POST
+      /api/v1/auth/register HTTP 201 user payloads in {code,message,data}.
+    reason: >-
+      Both user-service controllers call ApiResponse.of. That record always
+      serializes code, message and data, defaulting to code 0 and message
+      response success. The previous API fixture returned raw users, so its
+      historical passing browser run did not establish envelope compatibility.
+    verification: >-
+      On 2026-11-04 inspected origin/develop 0d14ca45 ApiResponse,
+      AuthController.register and UserController.getMe. Updated the local API
+      fixture to the delivered contract and added explicit browser assertions
+      for 200 profile and 201 registration envelopes plus missing-data and
+      malformed-user retries. The merged implementation accepted both valid
+      envelopes in the 2026-11-04 simulated-browser-flow run, while rejecting
+      the missing data and invalid user before a successful manual retry.
+    source: >-
+      ../be-project-nexus/lib/common-core/src/main/java/com/group5/common_core/model/ApiResponse.java;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/AuthController.java;
+      ../be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java;
+      postman/mocks/oidc-api/default.js; tests/oidc.spec.ts
+    updated_at: "2026-11-04"
+  - id: cart-oidc-merge-integration
+    status: supported
+    claim: >-
+      The merged frontend preserves snapshot cart totals, optimistic edits,
+      rollback and account isolation when sign-in and logout use OIDC in the
+      local browser scenarios exercised.
+    reason: >-
+      Cart browser tests traverse the actual PKCE redirect and callback against
+      the existing Postman Keycloak stand-in. Profile and cart requests are
+      checked against its issued access tokens. Cart responses and delayed
+      writes are explicit Playwright HTTP fixtures, not live backend evidence.
+    verification: >-
+      On 2026-11-04, at the cart-oidc-develop-merge fingerprint, npm run
+      test:browser passed all 30 scenarios, including all 9 cart scenarios.
+      After isolating the header cart GET in the product/OIDC suites, npm run
+      test:browser -- product.spec.ts passed all 3 product scenarios and npm run
+      test:auth:browser passed all 11 OIDC scenarios in 28.1 seconds. The final
+      OIDC simulation log contained 124 request events, including profile 200
+      (7), 401 (1), 503 (1), registration 201 (1), token 200 (6), token 400 (1)
+      and logout 302 (1). Header cart fixtures kept those reads off the local
+      gateway proxy. Initial browser starts stopped for the existing Next.js
+      security reminder; unchanged retries passed. No live backend was tested.
+      On 2026-11-05, at the dirty guest-cart-develop-merge fingerprint,
+      npm run test:browser -- --max-failures=1 passed all 31 cases in
+      57.0 seconds: 9 Cart, 4 Product, 7 Gallery, 10 Catalog and the auth
+      acceptance harness. The added Product case covers navigation during a
+      pending add, preserving the destination page's cart feedback isolation.
+      Two outdated sign-in URL assertions were updated to the preserved
+      return destination, /sign-in?returnTo=%2F. An inherited gallery 404 case
+      initially stalled with the page still showing Loading product; it passed
+      unchanged in the final run. The dedicated auth suite separately passed
+      all 17 OIDC/guest cases. The final general simulation log contained 86
+      request events, including fourteen Keycloak token POST responses with
+      HTTP 200. Only the Keycloak member was exercised by the general suite;
+      its application API calls used Playwright HTTP fixtures. The preceding
+      auth run's 236-event log was cleaned by this runner, so the final log
+      cannot re-establish that auth run's event counts. A final postman status
+      attempt returned unknown command on CLI 1.73.0; no simulation setup was
+      changed. These remain local HTTP fixture results.
+    source: >-
+      tests/cart.spec.ts; tests/product.spec.ts; tests/oidc.spec.ts;
+      features/ShopLayout.tsx; features/useCart.ts;
+      test-results/oidc-simulation.ndjson (local ignored run evidence)
+    updated_at: "2026-11-05"
 fingerprints:
   - id: oidc-browser-implementation
     date: "2026-11-03"
@@ -205,4 +344,16 @@ fingerprints:
   - id: guest-cart-implementation
     date: "2026-11-03"
     commit: "4c1139ab with uncommitted guest-cart frontend implementation on codex/guest-cart-merge"
+    cli: "1.73.0"
+  - id: oidc-envelope-merge
+    date: "2026-11-04"
+    commit: "4c1139ab with uncommitted merge of origin/develop 0d14ca45 and envelope/OIDC fixes"
+    cli: "1.73.0"
+  - id: cart-oidc-develop-merge
+    date: "2026-11-04"
+    commit: "a0922206 with uncommitted merge of origin/develop 59631cd6 and cart/OIDC conflict resolutions"
+    cli: "1.73.0"
+  - id: guest-cart-develop-merge
+    date: "2026-11-05"
+    commit: "726da961 with uncommitted merge of origin/develop 0d0a36a4 and guest-cart/frontend conflict resolutions"
     cli: "1.73.0"

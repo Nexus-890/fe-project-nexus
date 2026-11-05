@@ -46,3 +46,9 @@ next-env.d.ts
 /.next-oidc-run/
 
 !.env.example
+
+/.next-typecheck/
+/.next-verify-build/
+/.next-cart-readiness-build/
+.tsconfig-typecheck.json
+.tsconfig-build.json

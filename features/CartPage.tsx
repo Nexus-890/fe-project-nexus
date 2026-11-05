@@ -1,0 +1,205 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowLeft, ShoppingBag } from "lucide-react";
+import CartLine from "../components/CartLine";
+import CartSummary from "../components/CartSummary";
+import { queryKeys } from "../configs/queryKeys";
+import { useApiQuery } from "../hooks/useApi";
+import { useAuth } from "../hooks/useAuth";
+import { getProduct } from "../service/catalogService";
+import { getCartQuantity, getCartSubtotal } from "./cartUtils";
+import { useCart } from "./useCart";
+import type { CartItem } from "../types/cartResponseType";
+
+type CartLineWithDetailsProps = {
+  item: CartItem;
+  pending: boolean;
+  onQuantityChange: (quantity: number) => void;
+  onRemove: () => void;
+};
+
+function CartLineWithDetails(props: CartLineWithDetailsProps) {
+  const product = useApiQuery(
+    {
+      queryKey: queryKeys.catalog.product(props.item.productId),
+      service: (signal) => getProduct(props.item.productId, { signal }),
+    },
+    { staleTime: 60_000, retry: false },
+  );
+  // Catalog metadata is optional. Prices and quantities always come from the cart.
+  return <CartLine {...props} product={product.data} />;
+}
+
+function CartPage() {
+  const { status, sessionId, error, retryProfile } = useAuth();
+  return (
+    <section
+      className="mx-auto w-full max-w-[1248px] px-4 py-8 sm:px-6 lg:py-9"
+      aria-labelledby="cart-title"
+    >
+      <h1 id="cart-title" className="text-heading-32">
+        Cart
+      </h1>
+      {status === "authenticated" ? (
+        <CartContents key={sessionId} />
+      ) : status === "authenticating" ? (
+        <p role="status" className="py-12 text-muted-foreground">
+          Loading your account…
+        </p>
+      ) : status === "error" ? (
+        <div className="mt-6 rounded-sm border border-border p-6">
+          <p role="alert">
+            {error?.detail || "Unable to load your account. Please try again."}
+          </p>
+          <button
+            type="button"
+            className="mt-4 min-h-11 rounded-sm border border-border px-4"
+            onClick={() => void retryProfile()}
+          >
+            Retry account
+          </button>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-sm border border-border px-6 py-12 text-center">
+          <ShoppingBag
+            className="mx-auto mb-4 text-muted-foreground"
+            size={40}
+            aria-hidden="true"
+          />
+          <h2 className="text-heading-20">Sign in to view your cart</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your saved items will be waiting when you sign in.
+          </p>
+          <Link
+            href="/sign-in"
+            className="mt-6 inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm bg-primary px-6 text-sm font-medium text-primary-foreground"
+          >
+            Sign in
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CartContents() {
+  const { cart, pending, feedback, updateQuantity, removeItem } = useCart();
+  const quantity = getCartQuantity(cart.data?.items ?? []);
+  const items = cart.data?.items ?? [];
+
+  if (!cart.data && cart.isPending)
+    return (
+      <p role="status" className="py-12 text-muted-foreground">
+        Loading your cart…
+      </p>
+    );
+  if (!cart.data)
+    return (
+      <div className="mt-6 rounded-sm border border-border p-6">
+        <h2 className="text-heading-20">Unable to load your cart</h2>
+        <p
+          role="alert"
+          className="mt-2 break-words text-sm text-muted-foreground"
+        >
+          {cart.error?.detail || "Please try again in a moment."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void cart.refetch()}
+          className="mt-4 min-h-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary"
+        >
+          Retry cart
+        </button>
+      </div>
+    );
+
+  return (
+    <>
+      <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
+        {quantity} {quantity === 1 ? "item" : "items"}
+      </p>
+      {feedback && (
+        <p
+          role={feedback.error ? "alert" : "status"}
+          className={`mt-5 rounded-sm border p-4 text-sm break-words ${feedback.error ? "border-danger text-danger" : "border-border text-foreground"}`}
+        >
+          {feedback.text}
+        </p>
+      )}
+      {cart.isError && (
+        <div className="mt-4 rounded-sm border border-border p-4 text-sm">
+          <p role="alert">
+            We couldn’t refresh your cart. Your last saved items are shown.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => void cart.refetch()}
+            className="min-h-11 px-2 font-medium text-primary disabled:opacity-50"
+          >
+            Retry cart
+          </button>
+        </div>
+      )}
+      {items.length ? (
+        <div className="mt-6 grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div
+            className="min-w-0 space-y-4"
+            aria-label="Cart items"
+            aria-busy={pending}
+          >
+            {items.map((item) => (
+              <CartLineWithDetails
+                key={item.id}
+                item={item}
+                pending={pending}
+                onQuantityChange={(next) => updateQuantity(item.id, next)}
+                onRemove={() => removeItem(item.id)}
+              />
+            ))}
+            <Link
+              href="/search"
+              className="inline-flex min-h-11 items-center gap-2 text-sm font-medium hover:text-primary"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />Continue shopping
+            </Link>
+          </div>
+          <CartSummary
+            quantity={quantity}
+            subtotal={getCartSubtotal(items)}
+            pending={pending}
+          />
+        </div>
+      ) : (
+        <div
+          className="mt-6 rounded-sm border border-border px-6 py-14 text-center"
+          aria-busy={pending}
+        >
+          <ShoppingBag
+            className="mx-auto mb-4 text-muted-foreground"
+            size={44}
+            aria-hidden="true"
+          />
+          <h2 className="text-heading-24">Your cart is empty</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Find something you love and add it to your cart.
+          </p>
+          {pending && (
+            <p role="status" className="mt-3 text-sm text-muted-foreground">
+              Updating your cart…
+            </p>
+          )}
+          <Link
+            href="/search"
+            className="mt-6 inline-flex min-h-11 items-center justify-center rounded-sm bg-primary px-6 text-sm font-medium text-primary-foreground"
+          >
+            Browse catalog
+          </Link>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default CartPage;

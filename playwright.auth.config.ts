@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests/browser",
+  testDir: "./tests",
   testMatch: ["oidc.spec.ts", "guest-cart.spec.ts"],
   fullyParallel: false,
   workers: 1,
@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "node tests/browser/oidc-fixture.mjs",
+      command: "node tests/oidc-fixture.mjs",
       url: "http://127.0.0.1:3913/keycloak/health",
       reuseExistingServer: false,
       timeout: 60_000,

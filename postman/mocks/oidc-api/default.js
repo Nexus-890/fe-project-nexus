@@ -46,8 +46,16 @@ function json(res, body, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
 }
-const problem = (res, status, title) => json(res, { title, status }, status);
-const envelope = (data) => ({ code: 0, message: "success", data });
+const success = (data, page) => ({ code: 0, message: "response success", data, ...(page ? { page } : {}) });
+function problem(res, status, code, title, detail, errors) {
+  res.writeHead(status, { "Content-Type": "application/problem+json", "Cache-Control": "no-store" });
+  const problemType = { VALIDATION_FAILED: "validation-error", UNAUTHENTICATED: "unauthorized" }[code]
+    || code.toLowerCase().replaceAll("_", "-");
+  res.end(JSON.stringify({
+    type: `urn:problem:${problemType}`,
+    title, status, code, detail, ...(errors ? { errors } : {}),
+  }));
+}
 const total = (cart) => cart.items.reduce((count, item) => count + item.quantity, 0);
 
 const server = http.createServer(async (req, res) => {
@@ -79,16 +87,28 @@ const server = http.createServer(async (req, res) => {
     const bearer = await validBearer();
     if (bearer) evidence.bearerRequests += 1;
     if (mode === "profile-503-once" && evidence.meRequests === 1) {
-      return problem(res, 503, "Profile temporarily unavailable");
+      return problem(res, 503, "SERVICE_UNAVAILABLE", "Service Unavailable", "Profile temporarily unavailable");
     }
-    if (mode === "profile-401") return problem(res, 401, "Unauthorized");
-    return bearer ? json(res, user) : problem(res, 401, "Unauthorized");
+    if (mode === "profile-401" || !bearer) {
+      return problem(res, 401, "UNAUTHENTICATED", "Unauthorized", "A valid access token is required to access this resource");
+    }
+    if (mode === "profile-missing-data-once" && evidence.meRequests === 1) {
+      return json(res, { code: 0, message: "response success" });
+    }
+    if (mode === "profile-invalid-user-once" && evidence.meRequests === 1) {
+      return json(res, success({ ...user, roles: "BUYER" }));
+    }
+    return json(res, success(user));
   }
   if (url.pathname === "/v1/auth/register" && req.method === "POST") {
     const fields = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
-    if (!fields.password || !fields.email) return problem(res, 400, "Invalid registration");
+    const errors = ["email", "password"].filter((field) => !fields[field]).map((field) => ({
+      field, code: "VALIDATION_NOT_BLANK", detail: "cannot be blank!",
+    }));
+    if (errors.length) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "The request data is invalid", errors);
     evidence.registrations += 1;
-    return json(res, { ...user, email: fields.email, fullName: fields.fullName }, 201);
+    await pm.state.set("oidc-api:evidence", evidence);
+    return json(res, success({ ...user, email: fields.email, fullName: fields.fullName }), 201);
   }
   if (url.pathname.startsWith("/v1/carts/")) {
     const input = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
@@ -96,68 +116,69 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/v1/carts/guest")) {
       if (authorization) {
         evidence.guestBearerLeaks += 1;
-        return problem(res, 400, "Guest requests must not carry an account token");
+        return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Guest requests must not carry an account token");
       }
       if (url.pathname === "/v1/carts/guest" && req.method === "POST") {
         evidence.guestCreationRequests += 1;
-        if (mode === "guest-disabled") return problem(res, 403, "Guest carts are disabled");
+        if (mode === "guest-disabled") return problem(res, 403, "FORBIDDEN", "Forbidden", "Guest carts are disabled");
         const token = `guest-${randomUUID()}`;
         const cart = emptyCart(randomUUID());
         guests[token] = cart;
         evidence.guestCreations += 1;
-        return json(res, { guestToken: token, cart }, 201);
+        return json(res, success({ guestToken: token, cart }), 201);
       }
       const cart = guests[req.headers["x-guest-token"]];
-      if (!cart) return problem(res, 404, "Guest cart not found");
+      if (!cart) return problem(res, 404, "CART_NOT_FOUND", "Not Found", "Guest cart not found");
       if (url.pathname === "/v1/carts/guest" && req.method === "GET") {
         evidence.guestReads += 1;
-        return json(res, cart);
+        return json(res, success(cart));
       }
       if (url.pathname === "/v1/carts/guest/items" && req.method === "POST") {
-        if (mode === "guest-disabled") return problem(res, 403, "Guest carts are disabled");
-        if (!validItem()) return problem(res, 400, "Invalid cart item");
+        if (mode === "guest-disabled") return problem(res, 403, "FORBIDDEN", "Forbidden", "Guest carts are disabled");
+        if (!validItem()) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Invalid cart item");
         add(cart, input);
         evidence.guestAdds += 1;
-        return json(res, cart, 201);
+        return json(res, success(cart), 201);
       }
     }
-    if (!await validBearer()) return problem(res, 401, "Unauthorized");
+    if (!await validBearer()) return problem(res, 401, "UNAUTHENTICATED", "Unauthorized", "A valid access token is required to access this resource");
     if (url.pathname === "/v1/carts/me" && req.method === "GET") {
       evidence.cartReads += 1;
-      return json(res, envelope(buyerCart));
+      return json(res, success(buyerCart));
     }
     if (url.pathname === "/v1/carts/me/items" && req.method === "POST") {
-      if (!validItem()) return problem(res, 400, "Invalid cart item");
+      if (!validItem()) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Invalid cart item");
       add(buyerCart, input);
       evidence.cartAdds += 1;
-      return json(res, buyerCart, 201);
+      return json(res, success(buyerCart), 201);
     }
     if (url.pathname === "/v1/carts/me/merge" && req.method === "POST") {
       evidence.mergeRequests += 1;
       const token = req.headers["x-guest-token"];
       const key = req.headers["idempotency-key"];
-      if (!token || typeof key !== "string" || !key) return problem(res, 400, "Guest token and idempotency key are required");
+      if (!token || typeof key !== "string" || !key) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Guest token and idempotency key are required");
       evidence.mergeKeys.push(key);
       evidence.mergePaths.push(url.pathname);
-      if (mode === "merge-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "Cart merge temporarily unavailable");
+      if (mode === "merge-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "SERVICE_UNAVAILABLE", "Service Unavailable", "Cart merge temporarily unavailable");
       if (merged[key]) {
-        if (merged[key].token !== token) return problem(res, 409, "Merge key belongs to another guest cart");
-        return json(res, merged[key].cart);
+        if (merged[key].token !== token) return problem(res, 409, "IDEMPOTENCY_CONFLICT", "Conflict", "Merge key belongs to another guest cart");
+        return json(res, success(merged[key].cart));
       }
       const guest = guests[token];
-      if (!guest) return problem(res, 404, "Guest cart not found");
+      if (!guest) return problem(res, 404, "CART_NOT_FOUND", "Not Found", "Guest cart not found");
       for (const item of guest.items) add(buyerCart, item);
       merged[key] = { token, cart: JSON.parse(JSON.stringify(buyerCart)) };
       delete guests[token];
       evidence.mergesApplied += 1;
       // Models an atomic server commit whose successful response was lost.
-      if (mode === "merge-committed-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "Cart merge response unavailable");
-      return json(res, buyerCart);
+      if (mode === "merge-committed-503-once" && evidence.mergeRequests === 1) return problem(res, 503, "SERVICE_UNAVAILABLE", "Service Unavailable", "Cart merge response unavailable");
+      return json(res, success(buyerCart));
     }
   }
-  if (url.pathname === "/v1/categories/tree") return json(res, []);
-  if (url.pathname === "/v1/products") return json(res, { content: [], page: 0, size: 12, totalElements: 0 });
-  if (url.pathname === `/v1/products/${productId}`) return json(res, product);
-  return problem(res, 501, "Fixture endpoint not implemented");
+  await pm.state.set("oidc-api:evidence", evidence);
+  if (url.pathname === "/v1/categories/tree") return json(res, success([]));
+  if (url.pathname === "/v1/products") return json(res, success([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
+  if (url.pathname === `/v1/products/${productId}`) return json(res, success(product));
+  return problem(res, 501, "NOT_IMPLEMENTED", "Not Implemented", "Fixture endpoint not implemented");
 });
 server.listen(process.env.PORT);

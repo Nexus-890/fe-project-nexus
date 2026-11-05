@@ -7,7 +7,8 @@ const { createHash, generateKeyPairSync, randomUUID, sign } = require("node:cryp
 const origin = "http://127.0.0.1:3913/keycloak";
 const issuer = `${origin}/realms/nexus`;
 const protocol = `${issuer}/protocol/openid-connect`;
-const callback = "http://127.0.0.1:3103/auth/callback";
+const appOrigins = new Set(["http://127.0.0.1:3102", "http://127.0.0.1:3103"]);
+const callbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/callback`));
 const subject = "68000000-0000-4000-8000-000000000003";
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...keys.publicKey.export({ format: "jwk" }), kid: "fixture-key", use: "sig", alg: "RS256" };
@@ -34,7 +35,8 @@ function fields(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3103");
+  if (appOrigins.has(req.headers.origin)) res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
@@ -63,7 +65,7 @@ const server = http.createServer(async (req, res) => {
   const mode = await pm.state.get("oidc-keycloak:mode") || "success";
   if (url.pathname === "/realms/nexus/protocol/openid-connect/auth") {
     const params = url.searchParams;
-    if (params.get("client_id") !== "nexus-web" || params.get("redirect_uri") !== callback
+    if (params.get("client_id") !== "nexus-web" || !callbacks.has(params.get("redirect_uri"))
         || params.get("response_type") !== "code" || params.get("code_challenge_method") !== "S256"
         || !params.get("code_challenge") || !params.get("state") || !params.get("scope")?.split(" ").includes("openid")) {
       return json(res, { error: "invalid_request" }, 400);
@@ -81,7 +83,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST") {
       if (!fields(req).get("password")) return json(res, { error: "invalid_credentials" }, 400);
       evidence.passwordSubmissions += 1;
-      const destination = new URL(callback);
+      const destination = new URL(params.get("redirect_uri"));
       destination.searchParams.set("state", mode === "bad-state" ? "tampered-state" : params.get("state"));
       destination.searchParams.set("iss", issuer);
       if (mode === "denied") {
@@ -125,8 +127,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === "/realms/nexus/protocol/openid-connect/logout") {
     if (!url.searchParams.get("id_token_hint")) return json(res, { error: "id_token_hint_required" }, 400);
-    const target = new URL(url.searchParams.get("post_logout_redirect_uri") || "http://127.0.0.1:3103/");
-    if (target.origin !== "http://127.0.0.1:3103") return json(res, { error: "invalid_redirect_uri" }, 400);
+    let target;
+    try {
+      target = new URL(url.searchParams.get("post_logout_redirect_uri") || "http://127.0.0.1:3103/");
+    } catch {
+      return json(res, { error: "invalid_redirect_uri" }, 400);
+    }
+    if (!appOrigins.has(target.origin) || target.username || target.password) return json(res, { error: "invalid_redirect_uri" }, 400);
     evidence.logouts += 1;
     evidence.sessions = 0;
     await save();
