@@ -276,3 +276,45 @@ after the unchanged advisory retry, including TypeScript and all 13 page
 generations. Production output contains `/auth/silent` and neither temporary
 probe route. All 48 local links in the changed guides resolve, simulation
 contexts parse, and whitespace checks pass.
+
+## Cart hooks after the profile integration — 2026-11-05
+
+Merged `origin/develop` at `00f94a19` into the Cart hooks branch at `450acf43`.
+The overlapping profile implementation caused content and add/add conflicts.
+The resolution retains shared Cart cache/edit locks, header count and accessible
+navigation, while adopting the profile update mutation and session-aware form
+loading from develop. Route constants stay in `configs/routes.ts`; the duplicate
+`route.ts` is removed. Symbolic duplicate-email handling is preserved.
+
+During verification, develop advanced to `cf81caf6` with gateway route and
+permission changes. That update merged cleanly after the profile resolution at
+`287e4108`. No additional frontend source changes were needed. The generated DTO
+drift check and production build were run against this final combined tree.
+
+| Check | Result |
+| --- | --- |
+| Clean pre-merge `450acf43`: `npm run test:auth` | 147/147 passed |
+| Integrated `npm run test:auth` | 152/152 passed |
+| `npm run generate:types:check` | Passed before and after the gateway update |
+| `npm run lint`; `npm run typecheck` | Passed; route types regenerated |
+| `npm run test:cart` | 9/9 passed in 41.4 seconds |
+| `npm run test:profile` | 10/10 passed in 38.2 seconds |
+| `npm run test:auth:browser` | 24/24 passed in 1.1 minutes |
+| `npm run test:catalog` | 31/31 passed in 1.2 minutes |
+| `NEXUS_TEST_DIST_DIR=.next-verify-build npm run build` | Passed compilation, TypeScript and all 13 pages |
+
+Browser coverage includes shared header/page cart reads, quantity/removal,
+late responses after sign-out, guest merging, restoration and renewal, profile
+401 replay limits and preserving dirty profile fields during token renewal.
+The catalog run also exercises the auth acceptance harness and product UI.
+Temporary auth/session probes were cleaned before the production build.
+
+An orphaned OIDC fixture process initially occupied port 3913; its parent test
+runner had exited, so the fixture tree was stopped before rerunning. Existing
+Next.js security reminders interrupted the first dev/build invocations; unchanged
+retries produced the passing results above. No dependency upgrade is included.
+
+Postman request logs confirm the Cart and profile dependency paths ran; current
+results are appended to their simulation contexts. These checks use local HTTP
+stand-ins, including the opt-in proposed guest endpoints. No live backend or
+backend tests were run, and coordinated release remains pending.
