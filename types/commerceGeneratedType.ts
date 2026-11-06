@@ -9,7 +9,7 @@ export interface paths {
         };
         /**
          * Get or create the current active cart
-         * @description With a valid bearer token, use the JWT subject cart and require the listed privileges; X-Guest-Token is ignored. Without bearer authentication, use an enabled guest cart identified by X-Guest-Token. Invalid bearer tokens return 401 without guest fallback. Guest tokens are signed opaque owner capabilities and expire after configured inactivity (7 days by default); viewing does not extend inactivity. Quantities are integers 1..999; add sums duplicates and rejects totals above 999. Cart operations do not reserve stock. Authenticated reads get or create an active cart; guest reads never create a cart.
+         * @description Returns200 even when first access creates the cart. One active cart per user is protected by a database unique index. Gateway primary privilege is CART.VIEW; downstream additionally checks CART.CREATE. Access: requires CART.VIEW AND CART.CREATE. Ownership/business restriction: JWT subject only; guest carts are not supported.
          */
         get: operations["getOwnCart"];
         put?: never;
@@ -31,7 +31,7 @@ export interface paths {
         put?: never;
         /**
          * Add a SKU to the current cart
-         * @description With a valid bearer token, use the JWT subject cart and require the listed privileges; X-Guest-Token is ignored. Without bearer authentication, use an enabled guest cart identified by X-Guest-Token. Invalid bearer tokens return 401 without guest fallback. Guest tokens are signed opaque owner capabilities and expire after configured inactivity (7 days by default); viewing does not extend inactivity. Quantities are integers 1..999; add sums duplicates and rejects totals above 999. Cart operations do not reserve stock. Items must belong to the resolved active cart.
+         * @description Fetches current SKU from catalog, then atomically inserts or increases existing quantity and refreshes unitPrice. Both a new line and an increased line return201. A missing/invisible or invisible catalog SKU returns404. A malformed catalog envelope/data is502 COMMERCE_INVALID_CATALOG_RESPONSE. Other Feign failures return503 COMMERCE_CATALOG_UNAVAILABLE. No inventory/stock check is introduced. Access: requires CART.UPDATE. Ownership/business restriction: JWT subject active cart only; caller cannot choose userId/cartId.
          */
         post: operations["addCartItem"];
         delete?: never;
@@ -49,14 +49,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * Replace the quantity of an item in the current cart
-         * @description With a valid bearer token, use the JWT subject cart and require the listed privileges; X-Guest-Token is ignored. Without bearer authentication, use an enabled guest cart identified by X-Guest-Token. Invalid bearer tokens return 401 without guest fallback. Guest tokens are signed opaque owner capabilities and expire after configured inactivity (7 days by default); viewing does not extend inactivity. Quantities are integers 1..999; add sums duplicates and rejects totals above 999. Cart operations do not reserve stock. Items must belong to the resolved active cart. Replaces the quantity rather than incrementing it; existing unitPrice is preserved. Missing or inactive carts and missing or foreign items return the documented 404 cart error. No ADMIN ownership bypass.
+         * Replace the quantity of an own cart item
+         * @description Replaces the quantity of an item in the JWT subject active cart, rather than incrementing it. Existing unitPrice is preserved. Missing or inactive carts and missing or foreign items return 404 NOT_FOUND. No ADMIN ownership bypass.
          */
         put: operations["updateOwnCartItem"];
         post?: never;
         /**
-         * Remove an item from the current cart
-         * @description With a valid bearer token, use the JWT subject cart and require the listed privileges; X-Guest-Token is ignored. Without bearer authentication, use an enabled guest cart identified by X-Guest-Token. Invalid bearer tokens return 401 without guest fallback. Guest tokens are signed opaque owner capabilities and expire after configured inactivity (7 days by default); viewing does not extend inactivity. Quantities are integers 1..999; add sums duplicates and rejects totals above 999. Cart operations do not reserve stock. Items must belong to the resolved active cart. Missing or inactive carts and missing or foreign items return the documented 404 cart error. No ADMIN ownership bypass. Success has no response body.
+         * Remove an own cart item
+         * @description Removes an item from the JWT subject active cart. Missing or inactive carts and missing or foreign items return 404 NOT_FOUND. No ADMIN ownership bypass. Success has no response body.
          */
         delete: operations["removeOwnCartItem"];
         options?: never;
@@ -288,46 +288,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/carts/guest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create an anonymous guest cart
-         * @description Create an empty ACTIVE guest cart with userId null. Requires ALLOW_GUEST_CART=true and a configured shared signing key. Returns a fresh signed opaque guestToken; retain it and send X-Guest-Token on the four cart read/item operations. Tokens expire with cart inactivity and cannot be reused after merge. Does not create a login session or reserve inventory.
-         */
-        post: operations["createGuestCart"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/carts/me/merge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Merge a guest cart into the authenticated buyer cart once
-         * @description After the Keycloak callback, the frontend submits its stored guestToken. Requires ALLOW_GUEST_CART and CART_MERGE_ON_LOGIN. Atomically lock the guest source and buyer destination, create destination if absent, sum duplicate SKU quantities and cap at 999 with QUANTITY_CAPPED in issues. SKU identity canonically determines its seller; no caller seller ID is accepted. Existing buyer line prices are retained; new lines keep guest prices. Retain missing/inactive catalog lines with PRODUCT_INACTIVE, self-purchase lines with SELF_PURCHASE and changed prices with PRICE_CHANGED. Catalog outages/malformed responses roll back all effects and allow retry. Retire source as MERGED; replay, expired and unknown tokens return the same 404. Cart quantity does not reserve stock or clamp to available inventory; actual stock checks await inventory integration and remain mandatory at checkout. Empty guest carts may merge. Concurrent guest writes and merges serialize on the same owner row.
-         */
-        post: operations["mergeGuestCart"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -354,10 +314,10 @@ export interface components {
             /** Format: uuid */
             skuId: string;
             /**
-             * @description QUANTITY_CAPPED: merged quantity limited to 999. SELF_PURCHASE: retained seller-owned line. PRODUCT_INACTIVE covers catalog 404 or inactive SKU/product. PRICE_CHANGED requires review. OUT_OF_STOCK is reserved for real inventory integration; merge does not claim stock availability.
+             * @description OUT_OF_STOCK is reserved for INV-03 integration. PRODUCT_INACTIVE also covers catalog 404 and an inactive SKU.
              * @enum {string}
              */
-            code: "OUT_OF_STOCK" | "PRICE_CHANGED" | "PRODUCT_INACTIVE" | "QUANTITY_CAPPED" | "SELF_PURCHASE";
+            code: "OUT_OF_STOCK" | "PRICE_CHANGED" | "PRODUCT_INACTIVE";
         };
         CartValidation: {
             valid: boolean;
@@ -460,40 +420,17 @@ export interface components {
             code: string;
             detail: string;
         };
-        MergeGuestCart: {
-            guestToken: string;
-        };
-        GuestCart: {
-            /** @description Signed opaque owner token; treat as a secret. */
-            guestToken: string;
-            cart: components["schemas"]["Cart"];
-        };
-        GuestCartEnvelope: {
-            /**
-             * @description Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved.
-             * @default 0
-             */
-            code: number;
-            /**
-             * @description Omitted or null values default to response success during response construction. Explicit messages are preserved.
-             * @default response success
-             */
-            message: string;
-            data: components["schemas"]["GuestCart"];
-        };
         Cart: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            userId: string | null;
+            userId: string;
             /**
-             * @description The resolved or merged destination cart is ACTIVE; retired guest source is not returned.
+             * @description Both delivered operations return the current active cart.
              * @enum {string}
              */
             status: "ACTIVE";
             items: components["schemas"]["CartItem"][];
-            /** @description Merge findings; empty for ordinary cart operations. Revalidate at checkout. */
-            issues?: components["schemas"]["CartIssue"][];
         };
         CartItem: {
             /** Format: uuid */
@@ -701,10 +638,7 @@ export interface operations {
     getOwnCart: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Required when no bearer token is supplied. Obtain from POST /api/v1/carts/guest. Never log or expose this owner capability. */
-                "X-Guest-Token"?: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -749,7 +683,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`. */
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -759,21 +693,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED";
-                    };
-                };
-            };
-            /** @description Not Found. Codes: `COMMERCE_GUEST_CART_NOT_FOUND`. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 404;
-                        /** @enum {string} */
-                        code?: "COMMERCE_GUEST_CART_NOT_FOUND";
+                        code?: "FORBIDDEN";
                     };
                 };
             };
@@ -823,7 +743,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`, `COMMERCE_INVALID_CONFIGURATION`. */
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`. */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -833,7 +753,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 500;
                         /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION" | "COMMERCE_INVALID_CONFIGURATION";
+                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR";
                     };
                 };
             };
@@ -870,10 +790,7 @@ export interface operations {
     addCartItem: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Required when no bearer token is supplied. Obtain from POST /api/v1/carts/guest. Never log or expose this owner capability. */
-                "X-Guest-Token"?: string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -928,7 +845,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`. */
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -938,11 +855,11 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED";
+                        code?: "FORBIDDEN";
                     };
                 };
             };
-            /** @description Not Found. Codes: `COMMERCE_SKU_NOT_FOUND`, `COMMERCE_GUEST_CART_NOT_FOUND`. */
+            /** @description Not Found. Codes: `COMMERCE_SKU_NOT_FOUND`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -952,7 +869,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 404;
                         /** @enum {string} */
-                        code?: "COMMERCE_SKU_NOT_FOUND" | "COMMERCE_GUEST_CART_NOT_FOUND";
+                        code?: "COMMERCE_SKU_NOT_FOUND";
                     };
                 };
             };
@@ -1016,7 +933,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`, `COMMERCE_INVALID_CONFIGURATION`. */
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`. */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1026,7 +943,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 500;
                         /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION" | "COMMERCE_INVALID_CONFIGURATION";
+                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR";
                     };
                 };
             };
@@ -1077,10 +994,7 @@ export interface operations {
     updateOwnCartItem: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Required when no bearer token is supplied. Obtain from POST /api/v1/carts/guest. Never log or expose this owner capability. */
-                "X-Guest-Token"?: string;
-            };
+            header?: never;
             path: {
                 /** @description Cart item ID. */
                 id: string;
@@ -1098,16 +1012,36 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Current cart with the replaced item quantity. */
+            /** @description Updated current cart. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "c8000000-0000-4000-8000-000000000004",
+                     *         "userId": "68000000-0000-4000-8000-000000000002",
+                     *         "status": "ACTIVE",
+                     *         "items": [
+                     *           {
+                     *             "id": "c8000000-0000-4000-8000-000000000005",
+                     *             "productId": "c8000000-0000-4000-8000-000000000002",
+                     *             "skuId": "c8000000-0000-4000-8000-000000000003",
+                     *             "quantity": 2,
+                     *             "unitPrice": 150000
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["GetOwnCartResponse"];
                 };
             };
-            /** @description INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, COMMERCE_INVALID_QUANTITY. */
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `INVALID_PARAMETER`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1117,13 +1051,15 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "COMMERCE_INVALID_QUANTITY";
+                        code?: "COMMERCE_INVALID_QUANTITY" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "INVALID_PARAMETER";
                     };
                 };
             };
-            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
             401: {
                 headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1135,7 +1071,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`. */
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1145,11 +1081,11 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED";
+                        code?: "FORBIDDEN";
                     };
                 };
             };
-            /** @description Not Found. Codes: `COMMERCE_GUEST_CART_NOT_FOUND`, `COMMERCE_CART_NOT_FOUND`. */
+            /** @description Not Found. Codes: `NOT_FOUND`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1159,13 +1095,15 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 404;
                         /** @enum {string} */
-                        code?: "COMMERCE_GUEST_CART_NOT_FOUND" | "COMMERCE_CART_NOT_FOUND";
+                        code?: "NOT_FOUND";
                     };
                 };
             };
-            /** @description METHOD_NOT_ALLOWED. */
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
             405: {
                 headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1177,7 +1115,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description NOT_ACCEPTABLE. */
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
             406: {
                 headers: {
                     [name: string]: unknown;
@@ -1191,7 +1129,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description UNSUPPORTED_MEDIA_TYPE. */
+            /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1205,9 +1143,11 @@ export interface operations {
                     };
                 };
             };
-            /** @description RATE_LIMITED. */
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
             429: {
                 headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1219,7 +1159,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`, `COMMERCE_INVALID_CONFIGURATION`. */
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1229,7 +1169,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 500;
                         /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION" | "COMMERCE_INVALID_CONFIGURATION";
+                        code?: "INTERNAL_ERROR";
                     };
                 };
             };
@@ -1266,10 +1206,7 @@ export interface operations {
     removeOwnCartItem: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description Required when no bearer token is supplied. Obtain from POST /api/v1/carts/guest. Never log or expose this owner capability. */
-                "X-Guest-Token"?: string;
-            };
+            header?: never;
             path: {
                 /** @description Cart item ID. */
                 id: string;
@@ -1278,14 +1215,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Item removed; no response body. */
+            /** @description Removed; no response body. */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1295,13 +1232,15 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
+                        code?: "INVALID_PARAMETER";
                     };
                 };
             };
-            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
             401: {
                 headers: {
+                    /** @description Bearer challenge for security-layer authentication failures. */
+                    "WWW-Authenticate"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1313,7 +1252,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`. */
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1323,11 +1262,11 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED";
+                        code?: "FORBIDDEN";
                     };
                 };
             };
-            /** @description Not Found. Codes: `COMMERCE_GUEST_CART_NOT_FOUND`, `COMMERCE_CART_NOT_FOUND`. */
+            /** @description Not Found. Codes: `NOT_FOUND`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1337,13 +1276,15 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 404;
                         /** @enum {string} */
-                        code?: "COMMERCE_GUEST_CART_NOT_FOUND" | "COMMERCE_CART_NOT_FOUND";
+                        code?: "NOT_FOUND";
                     };
                 };
             };
-            /** @description METHOD_NOT_ALLOWED. */
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
             405: {
                 headers: {
+                    /** @description Supported methods when known. */
+                    Allow?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1355,23 +1296,11 @@ export interface operations {
                     };
                 };
             };
-            /** @description NOT_ACCEPTABLE. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description RATE_LIMITED. */
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
             429: {
                 headers: {
+                    /** @description Seconds to wait when supplied by the gateway. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1383,7 +1312,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`, `COMMERCE_INVALID_CONFIGURATION`. */
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1393,7 +1322,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 500;
                         /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION" | "COMMERCE_INVALID_CONFIGURATION";
+                        code?: "INTERNAL_ERROR";
                     };
                 };
             };
@@ -3540,348 +3469,6 @@ export interface operations {
                         status?: 500;
                         /** @enum {string} */
                         code?: "INTERNAL_ERROR";
-                    };
-                };
-            };
-        };
-    };
-    createGuestCart: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Guest cart created. */
-            201: {
-                headers: {
-                    /** @description no-store */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GuestCartEnvelope"];
-                };
-            };
-            /** @description Bad Request. Codes: `INVALID_PARAMETER`. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 400;
-                        /** @enum {string} */
-                        code?: "INVALID_PARAMETER";
-                    };
-                };
-            };
-            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
-            401: {
-                headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
-                    "WWW-Authenticate"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 401;
-                        /** @enum {string} */
-                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
-                    };
-                };
-            };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 403;
-                        /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED";
-                    };
-                };
-            };
-            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
-            405: {
-                headers: {
-                    /** @description Methods supported by this resource when known. */
-                    Allow?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 405;
-                        /** @enum {string} */
-                        code?: "METHOD_NOT_ALLOWED";
-                    };
-                };
-            };
-            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
-            429: {
-                headers: {
-                    /** @description When provided by the gateway limiter, delay in seconds before retrying. */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 429;
-                        /** @enum {string} */
-                        code?: "RATE_LIMITED";
-                    };
-                };
-            };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 500;
-                        /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION";
-                    };
-                };
-            };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 503;
-                        /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
-                    };
-                };
-            };
-            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 504;
-                        /** @enum {string} */
-                        code?: "GATEWAY_TIMEOUT";
-                    };
-                };
-            };
-        };
-    };
-    mergeGuestCart: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MergeGuestCart"];
-            };
-        };
-        responses: {
-            /** @description Merged buyer cart. Nonblocking issues identify retained lines requiring correction and quantity caps. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetOwnCartResponse"];
-                };
-            };
-            /** @description Invalid JSON, blank/missing token or token longer than 255 characters. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
-            401: {
-                headers: {
-                    /** @description Bearer challenge is present for security-layer authentication failure. A domain login error does not promise this header. */
-                    "WWW-Authenticate"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 401;
-                        /** @enum {string} */
-                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
-                    };
-                };
-            };
-            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_GUEST_CART_DISABLED`, `COMMERCE_CART_MERGE_DISABLED`, `COMMERCE_FORBIDDEN`. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 403;
-                        /** @enum {string} */
-                        code?: "FORBIDDEN" | "COMMERCE_GUEST_CART_DISABLED" | "COMMERCE_CART_MERGE_DISABLED" | "COMMERCE_FORBIDDEN";
-                    };
-                };
-            };
-            /** @description Not Found. Codes: `COMMERCE_GUEST_CART_NOT_FOUND`. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 404;
-                        /** @enum {string} */
-                        code?: "COMMERCE_GUEST_CART_NOT_FOUND";
-                    };
-                };
-            };
-            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
-            405: {
-                headers: {
-                    /** @description Methods supported by this resource when known. */
-                    Allow?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 405;
-                        /** @enum {string} */
-                        code?: "METHOD_NOT_ALLOWED";
-                    };
-                };
-            };
-            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
-            406: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 406;
-                        /** @enum {string} */
-                        code?: "NOT_ACCEPTABLE";
-                    };
-                };
-            };
-            /** @description The request must use application/json. */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
-            429: {
-                headers: {
-                    /** @description When provided by the gateway limiter, delay in seconds before retrying. */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 429;
-                        /** @enum {string} */
-                        code?: "RATE_LIMITED";
-                    };
-                };
-            };
-            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`, `COMMERCE_DB_ERROR`, `COMMERCE_INVALID_GUEST_CONFIGURATION`, `COMMERCE_INVALID_CONFIGURATION`, `COMMERCE_INVALID_PRICING_CONFIGURATION`. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 500;
-                        /** @enum {string} */
-                        code?: "INTERNAL_ERROR" | "COMMERCE_DB_ERROR" | "COMMERCE_INVALID_GUEST_CONFIGURATION" | "COMMERCE_INVALID_CONFIGURATION" | "COMMERCE_INVALID_PRICING_CONFIGURATION";
-                    };
-                };
-            };
-            /** @description Bad Gateway. Codes: `COMMERCE_INVALID_CATALOG_RESPONSE`. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 502;
-                        /** @enum {string} */
-                        code?: "COMMERCE_INVALID_CATALOG_RESPONSE";
-                    };
-                };
-            };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 503;
-                        /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
-                    };
-                };
-            };
-            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"] & {
-                        /** @enum {integer} */
-                        status?: 504;
-                        /** @enum {string} */
-                        code?: "GATEWAY_TIMEOUT";
                     };
                 };
             };
