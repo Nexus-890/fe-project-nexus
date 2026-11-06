@@ -12,7 +12,7 @@ The backend now supplies `serverNow` from its injected `Clock`. The frontend sub
 
 The backend also supplies `transferContent`, the exact bank-transfer description placed in the QR, including the configured SePay bank prefix. The transfer memo field copies this full content; the immutable `memoCode` remains selectable as the payment reference. This keeps manual transfers consistent with scanning the QR.
 
-Requests use the current scoped token and a session-specific private query key. Anonymous users receive a sign-in link preserving the return URL. A full reload may require sign-in again because existing auth deliberately keeps credentials in memory. No payment/token is persisted in browser storage. Problem Details show server `detail` and field errors. Failed refreshes remove previous instructions until a valid response arrives, including when retries fail with a different error.
+Requests use the current scoped token and a session-specific private query key. Anonymous users receive a sign-in link preserving the return URL. A full reload restores the access token through the gateway HttpOnly refresh cookie; refused or missing cookies return to the sign-in prompt. No payment/token is persisted in browser storage. Problem Details show server `detail` and field errors. Failed refreshes remove previous instructions until a valid response arrives, including when retries fail with a different error.
 
 ## Acceptance evidence
 
@@ -22,7 +22,7 @@ Requests use the current scoped token and a session-specific private query key. 
 | Copy each payment field | Browser clipboard boundary checks, including denied permission fallback |
 | Device clock one hour ahead still shows about ten minutes | Browser and service tests using serverNow and monotonic elapsed time |
 | Zero produces expired state | Short-deadline browser scenario, QR removal and disabled-copy assertions |
-| Refresh/reload preserves memo | Explicit refresh and reload/sign-in scenarios backed by persistent mock session |
+| Refresh/reload preserves memo | Explicit refresh and cookie-restoration scenarios backed by persistent mock session |
 | Two shops use group total | Browser fixture total `200000 + 150000 = 350000`; actual backend controller test uses two instructions and validates QR amount |
 | QR visible at 375×812, no horizontal scrolling | Browser QR bounds/overflow assertions and captured mobile screenshot |
 
@@ -58,3 +58,9 @@ Deploy the new frontend together with the backend fields `serverNow` and `transf
 The `develop` base does not yet deliver the checkout/order-creation frontend handoff; this work implements the payment destination for a supplied order-group UUID. Success polling/confirmation and replacement expired sessions are outside this issue. The backend deliberately rejects paid, canceled and expired sessions rather than issuing a fresh QR.
 
 The local Docker daemon is unavailable, so payment database/Kafka integration suites and a live end-to-end bank transfer have not been verified. Existing Next.js 16.4.0 tooling reported a dependency security advisory during build; the unchanged retry completed. Framework upgrades are outside this payment change.
+
+## Develop conflict verification — 2026-11-06
+
+Merged current develop `49a7caa8` while preserving its gateway cookie sessions, profile, shared cart and notification code. Kept the payment response fields alongside the newer refund OpenAPI schemas and regenerated all six delivered DTO files. The payment feature shows account loading during restoration, and the simulation reuses the gateway session stand-in for code exchange and refresh. Reload now restores authentication and preserves the payment memo without another sign-in.
+
+`generate:types:check`, lint, typecheck and 178 unit tests passed. The dedicated payment browser suite passed all 9 scenarios in 43.2 seconds with the unchanged Turbopack configuration and local dependencies; the log records successful cookie restoration plus payment 201/503/409 paths. A previous webpack run also passed, but cross-volume dependency junction attempts failed at application startup and were replaced with a local dependency copy. The build tool continues to report the existing Next.js dependency advisory. These checks use local HTTP stand-ins; live backend/bank integration remains unverified.

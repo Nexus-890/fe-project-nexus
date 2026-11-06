@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
-import { requestApi, isApiError } from "../configs/api";
-import { getMe, register } from "../service/authService";
+import api, { requestApi, isApiError } from "../configs/api";
+import { createSession, endSession, getMe, refreshSession, register } from "../service/authService";
 import * as authService from "../service/authService";
+import { updateProfile } from "../service/accountService";
 import { createAuthStub } from "../mocks/authStub";
 import type { AuthStubLoginRequest, AuthStubLoginResponse } from "../mocks/authStub";
 import type { ApiError, ProblemDetails } from "../types/commonResponseType";
@@ -26,6 +27,70 @@ const registerInput: RegisterRequest = {
   address: "1 Test Street",
   dateOfBirth: "1999-01-01",
 };
+
+test("profile PUT persists normalized fields and keeps existing sessions after an email change", async () => {
+  let accessToken: string | null = null;
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  await register(registerInput, options);
+  await assert.rejects(updateProfile({ fullName: "Not allowed" }, options), { kind: "http", status: 401 });
+
+  const firstLogin = await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options);
+  const secondLogin = await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options);
+  accessToken = firstLogin.accessToken;
+  const updated = await updateProfile({
+    fullName: "  Updated Buyer  ", email: "  NEW.BUYER@EXAMPLE.TEST  ",
+    address: "  New street  ", dateOfBirth: "2000-02-29", gender: "FEMALE",
+  }, options);
+  assert.equal(updated.fullName, "Updated Buyer");
+  assert.equal(updated.email, "new.buyer@example.test");
+  assert.equal(updated.address, "New street");
+  assert.equal(updated.phone, registerInput.phone);
+  assert.deepEqual(await getMe(options), updated);
+
+  const ignored = await requestApi<UserResponse>("PUT", "/api/v1/users/me", {
+    fullName: null, email: null, address: null, gender: null, dateOfBirth: null,
+    phone: "invalid", identityNumber: "other", password: "changed", roles: ["ADMIN"], status: "LOCKED",
+  }, options);
+  assert.deepEqual(ignored.data, updated, "null retains values and fields outside UpdateProfileRequest are ignored");
+  accessToken = secondLogin.accessToken;
+  assert.deepEqual(await getMe(options), updated, "all existing sessions keep the same user identity");
+  await assert.rejects(fixtureLogin({ email: registerInput.email, password: registerInput.password }, options), { kind: "http", status: 401 });
+  assert.ok((await fixtureLogin({ email: updated.email, password: registerInput.password }, options)).accessToken,
+    "the login index moves to the new email while password remains unchanged");
+  const cleared = await updateProfile({ address: "  " }, options);
+  assert.equal(cleared.address, "");
+});
+
+test("profile PUT rejects invalid fields and duplicate email without changing any stored values", async () => {
+  let accessToken: string | null = null;
+  const options = { context: { fetch: createAuthStub(), getAccessToken: () => accessToken } };
+  const original = await register(registerInput, options);
+  await register({ ...registerInput, email: "other@example.test", phone: "0900000001", identityNumber: "012345678902" }, options);
+  accessToken = (await fixtureLogin({ email: registerInput.email, password: registerInput.password }, options)).accessToken;
+
+  for (const [payload, field] of [
+    [{ fullName: " " }, "fullName"],
+    [{ email: "invalid" }, "email"],
+    [{ dateOfBirth: "2999-01-01" }, "dateOfBirth"],
+  ] as const) {
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", { address: "Must not persist", ...payload }, options), errorIs((error) => {
+      assert.equal(error.status, 400);
+      assert.ok(error.fieldErrors?.[field]?.length);
+    }));
+    assert.deepEqual(await getMe(options), original);
+  }
+  for (const payload of [{ gender: "UNKNOWN" }, { dateOfBirth: "2000-02-30" }]) {
+    await assert.rejects(requestApi("PUT", "/api/v1/users/me", payload, options), {
+      kind: "http", status: 400, type: "urn:problem:invalid-request-body",
+    });
+  }
+  await assert.rejects(requestApi("PUT", "/api/v1/users/me", { email: " OTHER@EXAMPLE.TEST ", fullName: "Must not persist" }, options), {
+    kind: "http", status: 409, code: "USER_EMAIL_ALREADY_USED",
+  });
+  assert.deepEqual(await getMe(options), original);
+  const sameEmail = await requestApi<UserResponse>("PUT", "/api/v1/users/me", { email: " BUYER@EXAMPLE.TEST " }, options);
+  assert.deepEqual(sameEmail.data, original, "the current user's own email is not a duplicate");
+});
 const success = (data: unknown, status = 200) =>
   new Response(
     JSON.stringify({
@@ -845,6 +910,68 @@ test("native transport rejects caller socket/transport/redirect escape hatches",
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test("session calls send the app header and the cookie, never a Bearer, and return only short-lived tokens", async () => {
+  const seen: Array<{ url: string; method: string | undefined; headers: Headers; body: unknown }> = [];
+  const withCredentials: Array<boolean | undefined> = [];
+  // The injected fetch has no Request class, so Axios drops `credentials`; read the flag it was asked to apply.
+  const interceptor = api.interceptors.request.use((config) => {
+    withCredentials.push(config.withCredentials);
+    return config;
+  });
+  const session = { accessToken: "access", idToken: "id", expiresIn: 3600 };
+  const context = {
+    baseUrl: "http://localhost:8080",
+    // Một token đang có trong bộ nhớ cũng không được gửi kèm: các endpoint này xác thực bằng cookie hoặc mã
+    getAccessToken: () => "token-in-memory",
+    fetch: (async (input, init) => {
+      seen.push({
+        url: String(input), method: init?.method, headers: new Headers(init?.headers), body: init?.body,
+      });
+      return String(input).endsWith("/logout") ? new Response(null, { status: 204 }) : success(session);
+    }) satisfies typeof fetch,
+  };
+  const grant = { code: "one-time-code", codeVerifier: "v".repeat(64), redirectUri: "http://localhost:3000/auth/callback" };
+
+  try {
+    assert.deepEqual(await createSession(grant, { context }), session);
+    assert.deepEqual(await refreshSession({ context }), session);
+    await endSession({ context });
+  } finally {
+    api.interceptors.request.eject(interceptor);
+  }
+
+  assert.deepEqual(seen.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
+    "POST /api/v1/auth/session", "POST /api/v1/auth/refresh", "POST /api/v1/auth/logout",
+  ]);
+  assert.deepEqual(withCredentials, [true, true, true], "the browser must send the HttpOnly cookie");
+  for (const call of seen) {
+    assert.equal(call.headers.get("X-Requested-With"), "nexus-web");
+    assert.equal(call.headers.get("Authorization"), null);
+  }
+  assert.deepEqual(JSON.parse(String(seen[0]?.body)), grant);
+  assert.equal(seen[1]?.body, undefined);
+});
+
+test("refresh without a session cookie (gateway 204) means no session, not an error", async () => {
+  const anonymous = { fetch: (async () => new Response(null, { status: 204 })) satisfies typeof fetch };
+  assert.equal(await refreshSession({ context: anonymous }), null);
+});
+
+test("a refused session call is a typed 401 and a body without tokens is an invalid response", async () => {
+  const refused = { fetch: (async () => problem({ status: 401, title: "Unauthorized", code: "UNAUTHENTICATED" }, 401)) satisfies typeof fetch };
+  await assert.rejects(refreshSession({ context: refused }), errorIs((error) => {
+    assert.equal(error.kind, "http");
+    assert.equal(error.status, 401);
+    assert.equal(error.code, "UNAUTHENTICATED");
+  }));
+  for (const data of [{}, { accessToken: "a", idToken: "", expiresIn: 1 }, { accessToken: "a", idToken: "i", expiresIn: 0 }]) {
+    await assert.rejects(
+      refreshSession({ context: { fetch: (async () => success(data)) satisfies typeof fetch } }),
+      errorIs((error) => assert.equal(error.kind, "invalid-response")),
     );
   }
 });

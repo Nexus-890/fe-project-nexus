@@ -33,10 +33,29 @@ function qrSvg() {
 }
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3104");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {}, 204);
   const url = new URL(req.url, "http://127.0.0.1:3914");
+  // Reuse the current gateway session stand-in, including its HttpOnly cookie.
+  if (url.pathname.startsWith("/v1/auth/")) {
+    const response = await fetch(
+      `http://127.0.0.1:3914/session${url.pathname}${url.search}`,
+      {
+        method: req.method,
+        headers: Object.fromEntries(["content-type", "origin", "cookie", "x-requested-with"]
+          .filter((name) => req.headers[name]).map((name) => [name, req.headers[name]])),
+        ...(req.method === "POST" ? { body: typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}) } : {}),
+      },
+    );
+    for (const cookie of response.headers.getSetCookie()) res.appendHeader("Set-Cookie", cookie);
+    res.writeHead(response.status, {
+      "Content-Type": response.headers.get("Content-Type") || "application/json",
+      "Cache-Control": "no-store",
+    });
+    return res.end(await response.text());
+  }
   if (url.pathname === "/health") return json(res, { ready: true });
   if (url.pathname === "/test/reset") {
     await pm.state.set("payment-api:evidence", initial());
@@ -57,6 +76,12 @@ const server = http.createServer(async (req, res) => {
     return res.end(qrSvg());
   }
   if (url.pathname === "/v1/categories/tree") return json(res, success([]));
+  if (req.method === "GET" && ["/v1/notifications", "/v1/notifications/unread-count"].includes(url.pathname)) {
+    if (!await validBearer(req)) return problem(res, 401, "UNAUTHENTICATED", "A valid access token is required.");
+    return json(res, url.pathname.endsWith("unread-count")
+      ? success({ count: 0 })
+      : { ...success([]), page: { number: 0, size: 10, totalElements: 0, totalPages: 0 } });
+  }
   if (url.pathname === "/v1/users/me") {
     if (!await validBearer(req)) return problem(res, 401, "UNAUTHENTICATED", "A valid access token is required.");
     return json(res, success({

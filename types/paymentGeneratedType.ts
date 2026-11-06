@@ -20,6 +20,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the refund of one order
+         * @description Requires ORDER.REFUND. R1 has at most one refund per order.
+         */
+        get: operations["listRefunds"];
+        put?: never;
+        /**
+         * Request the refund of a cancelled, paid seller order
+         * @description Requires ORDER.REFUND (Admin, Support Staff). One refund per order. The same Idempotency-Key with the same orderId, reason and amount returns the stored refund, even after it is completed; an omitted amount is compared as the full amount paid. Payment-side funding evidence decides whether the order was paid; the order must already be cancelled on the payment side. OrderCancelled already creates the full refund for a paid order, so this endpoint serves cancelled, paid orders that have no refund yet (for example data recovery). An order that already has a refund returns 409 PAYMENT_REFUND_EXISTS; Support completes the existing refund with /complete. Omitted amount means the full amount paid for this order.
+         */
+        post: operations["requestRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/refunds/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record that the manual transfer back to the buyer is done
+         * @description Requires ORDER.REFUND. Records one REFUND payment transaction (MANUAL_TRANSFER) and emits OrderRefundCompleted. Calling it again on a completed refund returns the stored refund without a second transaction or event.
+         */
+        post: operations["completeRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -63,6 +107,63 @@ export interface components {
              * @description Current payment-service time sampled on this response; compare with expiresAt for the countdown
              */
             serverNow: string;
+        };
+        RefundRequest: {
+            /** Format: uuid */
+            orderId: string;
+            /** @description Optional; at most the amount paid for this order. Omitted means the full paid amount. */
+            amount?: number;
+            reason: string;
+        };
+        RefundResultApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: {
+                /** Format: uuid */
+                refundId: string;
+                status: components["schemas"]["RefundStatus"];
+            };
+        };
+        /** @enum {string} */
+        RefundStatus: "REQUESTED" | "COMPLETED";
+        Refund: {
+            /** Format: uuid */
+            refundId: string;
+            /** Format: uuid */
+            orderId: string;
+            /** @example 300000 */
+            amount: number;
+            /** @example VND */
+            currency: string;
+            status: components["schemas"]["RefundStatus"];
+            reason: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            completedAt: string | null;
+        };
+        RefundApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Refund"];
+        };
+        RefundListApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Refund"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
         };
         Problem: {
             type: string;
@@ -159,6 +260,204 @@ export interface operations {
                 };
             };
             /** @description Session is not payable, instructions are inconsistent, or amount cannot be represented as VietQR */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listRefunds: {
+        parameters: {
+            query: {
+                orderId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Zero or one refund for the order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundListApiResponse"];
+                };
+            };
+            /** @description Missing or malformed orderId (INVALID_PARAMETER) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing/invalid bearer token (UNAUTHENTICATED) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing ORDER.REFUND (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    requestRefund: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client key, printable ASCII; keys starting with system are reserved. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefundRequest"];
+            };
+        };
+        responses: {
+            /** @description Refund requested, or the stored refund for a repeated key */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "refundId": "01a1a602-0a8c-7c96-b2bb-1208b9900b76",
+                     *         "status": "REQUESTED"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RefundResultApiResponse"];
+                };
+            };
+            /** @description Missing/invalid Idempotency-Key (PAYMENT_INVALID_REFUND_REQUEST), validation error, or amount above the paid amount (PAYMENT_REFUND_AMOUNT_EXCEEDED) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing/invalid bearer token (UNAUTHENTICATED) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing ORDER.REFUND (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No payment exists for this order (PAYMENT_ORDER_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Order not cancelled or not paid (PAYMENT_ORDER_NOT_REFUNDABLE), order already refunded under another key (PAYMENT_REFUND_EXISTS), or key reused with another body (PAYMENT_REFUND_IDEMPOTENCY_CONFLICT) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    completeRefund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refund completed, or already completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundApiResponse"];
+                };
+            };
+            /** @description Malformed refund id (INVALID_PARAMETER) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing/invalid bearer token (UNAUTHENTICATED) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing ORDER.REFUND (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown refund (PAYMENT_REFUND_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Refund changed by a concurrent request (PAYMENT_REFUND_CONFLICT) */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -1,0 +1,97 @@
+purpose:
+  stands_in_for: >-
+    Local synthetic notification HTTP dependency using delivered GET envelopes
+    and origin/develop's implemented PATCH read/read-all operations.
+  unblocks: >-
+    Repeatable verification of the real frontend notification service's HTTP
+    serialization, 204 handling, read/count refresh and error propagation.
+
+assumptions:
+  - id: notification-read-contract
+    status: supported
+    claim: >-
+      The source backend exposes bodyless PATCH /api/v1/notifications/{id}/read
+      and /api/v1/notifications/read-all returning 204, including no-op repeats.
+    reason: >-
+      origin/develop's controller defines both PATCH mappings and NO_CONTENT;
+      its service checks ownership and changes only unread records. The
+      merged delivered OpenAPI now also describes both PATCH routes.
+      The mock's write behavior is based on implemented backend source.
+    verification: >-
+      On 2026-11-03 inspected NotificationController, NotificationService and
+      NotificationRepository on origin/develop at 6e92bbac (controller's last
+      change f449eeec). This is source evidence, not a live endpoint probe.
+      On 2026-11-05 compared the merged develop 0d0a36a4 controller/service
+      and OpenAPI and regenerated notification DTOs including both PATCH routes.
+    source: >-
+      origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationController.java;
+      origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationService.java;
+      origin/develop:be-project-nexus/notification-service/src/main/java/com/group5/notificationservice/notification/NotificationRepository.java;
+      be-project-nexus/docs/api/openapi/notification-service.yaml
+    updated_at: "2026-11-05"
+
+  - id: frontend-read-status-http-scenarios
+    status: supported
+    claim: >-
+      Against this local stand-in, the real notification service accepts empty
+      204 responses, reads the updated count/list and propagates modeled errors.
+    reason: >-
+      The compiled checked-out service ran through the shared Axios boundary
+      over HTTP. Assertions checked resulting data as well as request evidence;
+      the Postman NDJSON request events confirmed the dependency was exercised.
+    verification: >-
+      On 2026-11-03 ran node scripts/verify-notifications.mjs with fingerprint
+      notification-fix-local. Latest page contained rows 24 through 15; count
+      changed 18 to 17 after one read, stayed 17 after a repeat and reached 0
+      after read-all. Existing read timestamps and account B's count 18 stayed
+      intact. 400, 401, 403, 404 and injected pre-write 503 errors propagated;
+      failed writes left the count unchanged. Both 503 paths preserved the
+      SERVICE_UNAVAILABLE symbolic code. Evidence contained exactly nine
+      bodyless PATCH requests, including an encoded invalid ID, with no hidden
+      mutation retry. This does not exercise React cache/UI behavior.
+      Reran on 2026-11-05 after merging develop 0d0a36a4 into notification
+      branch 13768ea3: all script assertions passed again. Postman CLI request
+      events confirmed the real service exercised the dependency over HTTP.
+      Reran on 2026-11-06 while merging develop 687951d0 into notification
+      branch 20dc2c71: all assertions passed, including exactly nine bodyless
+      PATCH requests and counts 18 to 17 to 0. Postman request events confirmed
+      that the checked-out service and shared Axios boundary ran over HTTP.
+    source: >-
+      scripts/verify-notifications.mjs;
+      service/notificationService.ts;
+      configs/api.ts;
+      postman/mocks/notification-gateway/default.js;
+      postman/simulations/notification.sim.yaml
+    updated_at: "2026-11-06"
+
+  - id: deployed-notification-integration
+    status: unknown
+    claim: >-
+      The deployed gateway and notification service implement the same routes,
+      auth privileges, envelopes and write persistence as the inspected source.
+    reason: >-
+      This verification uses a local synthetic dependency and fixture tokens.
+      No real gateway, JWT validation or database was exercised. The CLI was
+      signed out, so published owner-mock discovery was skipped.
+    verification: >-
+      No live backend request was made on 2026-11-03. A compatible deployment
+      with a real NOTIFICATION.VIEW identity is needed to settle this claim.
+    source: >-
+      postman/README.md;
+      docs/features/notifications.md;
+      be-project-nexus/docs/adr/ADR-008-api-contract.md
+    updated_at: "2026-11-03"
+
+fingerprints:
+  - id: notification-cookie-session-merge
+    date: "2026-11-06"
+    commit: "20dc2c71 with uncommitted merge of develop 687951d0 and reviewed conflict resolutions"
+    cli: "Postman CLI 1.73.0; notification HTTP simulation on port 4018"
+  - id: notification-develop-merge
+    date: "2026-11-05"
+    commit: "13768ea3 merged with develop 0d0a36a4, before merge commit"
+    cli: "Postman CLI 1.73.0; local notification simulation on port 3915"
+  - id: notification-fix-local
+    date: "2026-11-03"
+    commit: "b7b2b945e03a73b63d021028df364df57b845be1 with uncommitted notification fix and simulation"
+    cli: "Postman CLI 1.73.0; node v24.15.0"

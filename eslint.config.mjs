@@ -13,8 +13,9 @@ const eslintConfig = defineConfig([
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**", ".next-oidc-run/**", ".next-cart-*/**", ".next-payment-*/**", ".next-typecheck/**", ".next-verify-build/**", "types/*GeneratedType.ts", ".next-catalog-*/**", "test-results/**", "playwright-report/**",
+    ".next/**", ".next-*/**", "types/*GeneratedType.ts", "test-results/**", "playwright-report/**",
     "out/**",
+    ".next-profile-*/**",
     "build/**",
     "next-env.d.ts",
   ]),

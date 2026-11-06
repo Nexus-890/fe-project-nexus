@@ -7,7 +7,7 @@ const output = createWriteStream("test-results/oidc-simulation.ndjson");
 const errors = createWriteStream("test-results/oidc-simulation.err");
 const simulation = spawn("postman", [
   "simulation", "run", "postman/simulations/oidc.sim.yaml",
-  "--port", "3913", "--no-history", "--output", "ndjson",
+  "--port", process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913", "--no-history", "--output", "ndjson",
 ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 
 simulation.stdout.pipe(output);

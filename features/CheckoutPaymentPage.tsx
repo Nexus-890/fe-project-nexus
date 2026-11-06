@@ -37,7 +37,7 @@ function CheckoutPaymentPage({ orderGroupId }: { orderGroupId: string }) {
         </ol>
       </div>
       {status === "authenticated" ? <PaymentContents key={`${sessionId}:${orderGroupId}`} orderGroupId={orderGroupId} />
-        : status === "authenticating" ? <p role="status" className="py-12 text-muted-foreground">Loading your account…</p>
+        : status === "restoring" || status === "authenticating" ? <p role="status" className="py-12 text-muted-foreground">Loading your account…</p>
           : status === "error" ? <div className="rounded-sm border border-border p-6"><p role="alert">{error?.detail || "Unable to load your account."}</p><button type="button" className={`${buttonClass} mt-4`} onClick={() => void retryProfile()}>Retry account</button></div>
             : <div className="rounded-sm border border-border p-6 sm:p-8">
               <h2 className="text-heading-20">Sign in to continue payment</h2>

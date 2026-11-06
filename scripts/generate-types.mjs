@@ -5,14 +5,17 @@ import openapiTS, { astToString } from "openapi-typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let drift = false;
-for (const [service, output] of [
-  ["user", "userGeneratedType.ts"],
-  ["catalog", "catalogGeneratedType.ts"],
-  ["commerce", "commerceGeneratedType.ts"],
-  ["payment", "paymentGeneratedType.ts"],
+for (const [name, output] of [
+  ["user-service", "userGeneratedType.ts"],
+  ["catalog-service", "catalogGeneratedType.ts"],
+  ["commerce-service", "commerceGeneratedType.ts"],
+  ["notification-service", "notificationGeneratedType.ts"],
+  // refresh-token cookie endpoints of the gateway (#252)
+  ["api-gateway", "gatewayGeneratedType.ts"],
+  ["payment-service", "paymentGeneratedType.ts"],
 ]) {
   const spec = new URL(
-    `../../be-project-nexus/docs/api/openapi/${service}-service.yaml`,
+    `../../be-project-nexus/docs/api/openapi/${name}.yaml`,
     import.meta.url,
   );
   const source =

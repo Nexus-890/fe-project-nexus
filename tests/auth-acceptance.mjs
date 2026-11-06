@@ -40,6 +40,20 @@ export default async function runAuthAcceptance(
       return element && JSON.parse(element.textContent).mutationCount === 0;
     });
   };
+  const readStorage = () => page.evaluate(() => ({
+    entries: [
+      ...Object.entries(localStorage).map(([key, value]) => ["local", key, value]),
+      ...Object.entries(sessionStorage).map(([key, value]) => ["session", key, value]),
+    ].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+  }));
+  let storageBaseline;
+  const assertStorage = async () => {
+    const storage = await readStorage();
+    assert(
+      JSON.stringify(storage.entries) === JSON.stringify(storageBaseline.entries),
+      "Auth changed web storage",
+    );
+  };
 
   try {
     await page.goto(`${baseUrl}/auth-smoke`);
@@ -58,10 +72,12 @@ export default async function runAuthAcceptance(
     });
     await page.reload();
     await page.getByTestId("state").waitFor();
+    storageBaseline = await readStorage();
 
     await click("register");
     await settle();
     await anonymous();
+    await assertStorage();
     checks.push("register does not sign in");
 
     await click("login");
@@ -79,11 +95,8 @@ export default async function runAuthAcceptance(
       loginEvidence.publicLoginHasAuthorization === false,
       "Public login sent a token",
     );
-    assert(
-      loginEvidence.storageUnchanged === true &&
-        loginEvidence.storageHasToken === false,
-      "Auth changed web storage",
-    );
+    await assertStorage();
+    assert(loginEvidence.storageHasToken === false, "Auth persisted a credential in web storage");
     assert(
       !loginEvidence.cacheKeysContainRawToken &&
         !loginEvidence.mutationDataContainsRawToken,
@@ -91,7 +104,7 @@ export default async function runAuthAcceptance(
     );
     checks.push(
       "login GET Bearer",
-      "web storage unchanged",
+      "web storage is unchanged",
       "no token in query keys/mutation data",
     );
 
@@ -106,6 +119,7 @@ export default async function runAuthAcceptance(
     await click("signout");
     await anonymous();
     await settle();
+    await assertStorage();
     assert(
       (await read("evidence")).privateCachedDataCount === 0,
       "Logout kept private profile data",
@@ -157,6 +171,7 @@ export default async function runAuthAcceptance(
       "Profile cache crossed accounts",
     );
     checks.push("account switch isolates cache");
+    await assertStorage();
 
     await click("expired me 401 query invalidation");
     await anonymous();
@@ -176,7 +191,8 @@ export default async function runAuthAcceptance(
     await page.reload();
     await page.getByTestId("state").waitFor();
     await anonymous();
-    checks.push("full refresh is anonymous");
+    checks.push("isolated fixture has no SSO session after full refresh");
+    await assertStorage();
     const preserved = await page.evaluate(() => ({
       local: localStorage.getItem("auth-test-unrelated"),
       session: sessionStorage.getItem("auth-test-unrelated"),

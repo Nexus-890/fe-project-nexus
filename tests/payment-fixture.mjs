@@ -8,7 +8,10 @@ const errors = createWriteStream("test-results/payment-simulation.err");
 const simulation = spawn("postman", [
   "simulation", "run", "postman/simulations/payment.sim.yaml",
   "--port", "3914", "--environment", "postman/environments/Payment.environment.yaml", "--no-history", "--output", "ndjson",
-], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+], {
+  stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+  env: { ...process.env, NEXUS_TEST_PROVIDER_PORT: "3914", NEXUS_TEST_APP_PORT: "3104" },
+});
 simulation.stdout.pipe(output);
 simulation.stderr.pipe(errors);
 simulation.stderr.pipe(process.stderr);

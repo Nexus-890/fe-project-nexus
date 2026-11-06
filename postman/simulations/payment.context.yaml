@@ -95,8 +95,39 @@ assumptions:
       postman/mocks/payment-api/default.js; postman/mocks/oidc-keycloak/default.js;
       docs/features/payment.md; ../be-project-nexus/docs/adr/ADR-008-api-contract.md
     updated_at: "2026-11-04"
+  - id: payment-after-develop-cookie-session
+    status: supported
+    claim: >-
+      The payment page retains the same payment reference after a reload that
+      restores authentication through the current gateway HttpOnly cookie.
+      Existing QR, server-time countdown, expiry and failure-recovery scenarios
+      continue to pass against the local HTTP dependencies after the develop merge.
+    reason: >-
+      The payment simulation now reuses oidc-api as its gateway session member
+      instead of bypassing the gateway token exchange. The real frontend keeps
+      the restoring state until the cookie refresh and profile request finish.
+    verification: >-
+      On 2026-11-06 ran npm run test:payment on the payment-develop-20261106
+      fingerprint: all 9 browser scenarios passed in 43.2 seconds. The original
+      Turbopack configuration was used with local dependencies after Windows
+      junction attempts failed before application startup. Inspected the log:
+      268 dependency requests, 8 gateway code exchanges, one successful
+      cookie refresh on reload, payment 201/503/409 responses, and no unmodeled
+      endpoints. The header notification reads return an empty delivered envelope.
+      Earlier 2026-11-04 reload evidence required sign-in; that assertion has been
+      updated for the gateway cookie lifecycle now merged into develop.
+    source: >-
+      tests/payment.spec.ts; features/CheckoutPaymentPage.tsx;
+      postman/mocks/payment-api/default.js; postman/mocks/oidc-api/default.js;
+      postman/simulations/payment.sim.yaml;
+      test-results/payment-simulation.ndjson (ignored local run evidence)
+    updated_at: "2026-11-06"
 fingerprints:
   - id: payment-qr-countdown
     date: "2026-11-04"
     commit: "origin/develop 0d0a36a4 with uncommitted payment frontend, serverNow and transferContent changes"
+    cli: "1.73.0"
+  - id: payment-develop-20261106
+    date: "2026-11-06"
+    commit: "bbfcb7e8 merged with origin/develop 49a7caa8; uncommitted conflict resolutions and cookie-session fixture updates"
     cli: "1.73.0"

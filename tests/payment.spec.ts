@@ -100,7 +100,7 @@ test("two shops use one QR and selectable copyable group values at 375x812", asy
   await screenshot(page, info, "payment-desktop-1440.png");
 });
 
-test("server deadline survives laptop clock an hour ahead, refresh and reload with reauthentication", async ({ page, request }) => {
+test("server deadline survives laptop clock an hour ahead, refresh and cookie restoration", async ({ page, request }) => {
   await signIn(page);
   await assertQr(page);
   await expect(page.getByTestId("payment-countdown")).toHaveText(/^(10:00|09:5\d)$/);
@@ -114,13 +114,10 @@ test("server deadline survives laptop clock an hour ahead, refresh and reload wi
   await expect(page.getByText(transferContent, { exact: true })).toBeVisible();
   expect(await page.getByTestId("payment-countdown").innerText()).not.toBe("00:00");
   expect(before).not.toBe("00:00");
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Sign in to continue payment" })).toBeVisible();
-  expect((await evidence(request)).paymentRequests).toHaveLength(initialCalls + 1);
-  // Auth is intentionally in memory. A full reload requires signing in again.
   await page.clock.setFixedTime(new Date());
-  await signIn(page);
+  await page.reload();
   await assertQr(page);
+  await expect(page.getByRole("heading", { name: "Sign in to continue payment" })).toHaveCount(0);
   await expect(page.getByText(transferContent, { exact: true })).toBeVisible();
   await expect.poll(async () => (await evidence(request)).paymentRequests.length).toBeGreaterThanOrEqual(initialCalls + 2);
   expect((await evidence(request)).paymentRequests.every((call: { body: { orderGroupId: string } }) => call.body.orderGroupId === groupId)).toBe(true);
