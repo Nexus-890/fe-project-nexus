@@ -175,6 +175,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1:3913");
   if (url.pathname.startsWith('/v1/auth/')) return forwardSession(req, res, url);
   if (url.pathname === "/health") return json(res, { ready: true });
+  if (url.pathname === '/test/qr.svg') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+    return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><path fill="white" d="M0 0h256v256H0z"/><path d="M16 16h224v224H16z"/></svg>');
+  }
   if (url.pathname === "/test/reset") {
     await pm.state.set("checkout-api:options", defaults());
     currentEvidence = initialEvidence();
@@ -274,6 +278,21 @@ const server = http.createServer(async (req, res) => {
       total: subtotal + (shippingFee || 0), issues: [],
     };
     return json(res, options.malformedPreview ? { ...envelope(preview), data: { ...preview, total: "invalid" } } : envelope(preview));
+  }
+  if (url.pathname === '/v1/payments' && req.method === 'POST') {
+    const body = bodyOf(req);
+    const group = evidence.groups.find(entry => entry.group.orderGroupId === body.orderGroupId);
+    if (!group) return problem(res, 404, 'PAYMENT_SESSION_NOT_FOUND', 'No group exists for this payment.');
+    const now = Date.now();
+    group.payment ||= {
+      sessionId: 'ec2a083f-868b-4d3e-9dda-1904a9c7bbdd',
+      qrImageUrl: 'http://127.0.0.1:' + (process.env.NEXUS_CHECKOUT_API_PORT || '3923') + '/api/test/qr.svg',
+      bankAccount: '0000000002', amount: group.group.totalAmount,
+      memoCode: 'NX20261106001', transferContent: 'SEVQR NX20261106001',
+      expiresAt: new Date(now + 600000).toISOString(),
+    };
+    await save();
+    return json(res, envelope({ ...group.payment, serverNow: new Date(now).toISOString() }), 201);
   }
   if (url.pathname === "/v1/orders" && req.method === "POST") {
     const run = orderTail.then(() => placeOrder(req, res, options));

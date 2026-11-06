@@ -24,6 +24,10 @@ export const queryKeys = {
     preview: (sessionId: number, cartSignature: string, destination: CheckoutDestination | null) =>
       ["checkout", sessionId, "preview", cartSignature, destination] as const,
   },
+  payment: {
+    group: (sessionId: number, orderGroupId: string) =>
+      ["payment", sessionId, orderGroupId] as const,
+  },
   notification: {
     all: (sessionId: number) => ["notification", sessionId] as const,
     list: (sessionId: number, filters: NotificationFilters) =>

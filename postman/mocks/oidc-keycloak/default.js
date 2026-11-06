@@ -5,7 +5,7 @@
  */
 const http = require("node:http");
 const { createHash, generateKeyPairSync, randomUUID, sign } = require("node:crypto");
-const origin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? process.env.NEXUS_OIDC_SIM_PORT ?? 3913}/keycloak`;
+const origin = pm.environment.get("fixtureProviderOrigin") || `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? process.env.NEXUS_OIDC_SIM_PORT ?? 3913}/keycloak`;
 const issuer = `${origin}/realms/nexus`;
 const protocol = `${issuer}/protocol/openid-connect`;
 const appOrigins = new Set([
@@ -13,6 +13,7 @@ const appOrigins = new Set([
   process.env.NEXUS_TEST_APP_PORT ? `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT}` : null,
   process.env.NEXUS_OIDC_APP_ORIGIN,
 ].filter(Boolean));
+if (pm.environment.get("fixtureAppOrigin")) appOrigins.add(pm.environment.get("fixtureAppOrigin"));
 const callbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/callback`));
 const subject = "68000000-0000-4000-8000-000000000003";
 const cookieName = "fixture-keycloak-session";

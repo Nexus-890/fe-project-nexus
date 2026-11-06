@@ -1,0 +1,133 @@
+purpose:
+  stands_in_for: >-
+    The payment-service initiation API and the profile/catalog/cart endpoints used
+    by the real Next.js payment page, plus the existing local Keycloak protocol
+    fixture. The payment mock follows the delivered payment OpenAPI and DTOs with
+    the additive serverNow and transferContent fields. Published owner mocks were
+    not searched: no owner workspace was identified, postman status is unsupported
+    by installed CLI 1.73.0, and postman mock list --json returned an empty list.
+  unblocks: >-
+    Browser acceptance for one group QR, selectable/copyable transfer values,
+    a server-derived deadline, expiry, repeat reads and failures while the live
+    backend/Keycloak are unavailable. One-port routing uses explicit browser API
+    and provider origins on 3914 and the application on 3104, preserving existing
+    development sessions on 3913. Payment.environment.yaml configures the shared
+    Keycloak fixture without changing its default origins.
+assumptions:
+  - id: delivered-payment-fields
+    status: supported
+    claim: >-
+      The local backend source contract returns HTTP 201 with ApiResponse.data
+      containing immutable group instructions, a numeric whole-VND amount,
+      serverNow and the exact bank transferContent including any bank prefix.
+    reason: >-
+      The delivered OpenAPI, response record, service and SePay adapter agree on
+      these fields. This supports the source contract; it does not establish
+      that an already deployed service has the additive fields.
+    verification: >-
+      On 2026-11-04 inspected the dirty payment-qr-countdown source fingerprint.
+      The frontend service validates both timing fields and transferContent.
+      The mock returns the stable memo NX20261104001, full transfer content
+      SEVQR NX20261104001 and a total of 350000 from two seeded shop amounts
+      of 200000 and 150000. Backend runtime validation is recorded separately
+      in the payment implementation report, not inferred from this mock.
+    source: >-
+      ../be-project-nexus/docs/api/openapi/payment-service.yaml;
+      ../be-project-nexus/payment-service/src/main/java/com/group5/paymentservice/payment/dto/response/PaymentInitResponse.java;
+      service/paymentService.ts; postman/mocks/payment-api/default.js
+    updated_at: "2026-11-04"
+  - id: payment-browser-acceptance
+    status: supported
+    claim: >-
+      In nine local browser scenarios, the real frontend renders one group QR
+      and selectable values, copies raw account/amount and prefixed memo, keeps
+      the server-derived deadline when the laptop clock is one hour ahead,
+      preserves memo after refresh/reload with reauthentication, expires at zero,
+      and hides stale QR instructions after malformed or failed refreshes.
+    reason: >-
+      Playwright runs the actual Next.js page and Axios boundary against real
+      local HTTP Postman dependency servers. The API compares Bearer hashes with
+      the token issued by the provider fixture and validates the request body.
+      Only the browser clipboard boundary is replaced to inspect copy values and
+      denied permission handling. The group/session and expiry persist in pm.state.
+    verification: >-
+      On 2026-11-04 ran npm run test:payment with the payment-qr-countdown
+      fingerprint: all 9 scenarios passed in 33.2 seconds. Assertions cover
+      signed-out access without a payment request; one QR for two shops; each
+      selectable field and copy value; QR bounds wholly within the initial
+      375x812 viewport and no horizontal overflow; an hour-ahead clock followed
+      by explicit refresh and full reload/sign-in; zero deadline with no QR and
+      disabled copy; clipboard denial; Problem Details 503 with manual recovery;
+      missing serverNow; success then malformed refresh then 503 retry then
+      valid recovery; and 409 non-payable refresh removing prior instructions.
+      Inspected the simulation log: 179 request events (API 125, Keycloak 54),
+      including payment POST 201 (20), 409 (1), 503 (3). Three HTTP 201 bodies
+      intentionally omitted serverNow and were rejected. Development StrictMode
+      can send a canceled idempotent read twice; explicit refresh adds one read.
+      Captured mobile, desktop and expired screenshots. Ports 3104/3914 stopped
+      after cleanup. Earlier attempts were stopped by the existing Next.js
+      security advisory; an unchanged retry reached this passing run. Harness
+      corrections scoped alerts to main (excluding Next's route announcer),
+      reset scroll after clipboard clicks, and measured explicit-refresh calls
+      relative to StrictMode mount reads. No live backend was exercised.
+    source: >-
+      tests/payment.spec.ts; playwright.payment.config.ts;
+      postman/mocks/payment-api/default.js; tests/payment-fixture.mjs;
+      test-results/payment-simulation.ndjson (local ignored evidence);
+      docs/features/payment-evidence/
+    updated_at: "2026-11-04"
+  - id: real-bank-provider-and-deployment
+    status: unknown
+    claim: >-
+      Deployed backend/Keycloak authorization, live CORS, external VietQR image
+      loading/scannability and actual transfer reconciliation match this contract.
+    reason: >-
+      Browser checks use a local protocol fixture and a deterministic QR-shaped
+      SVG. That SVG isolates image/layout behavior and is not a scannable bank
+      instruction. A fixture cannot establish real provider behavior or deployment.
+    verification: >-
+      On 2026-11-04 only the local Postman/browser scenarios were run for this
+      record. No real bank transfer or deployed backend/Keycloak was called.
+      Verify the updated backend fields, current realm/privileges, browser CORS,
+      the provider's actual QR image and transfer matching in the integration
+      environment before recording live compatibility.
+    source: >-
+      postman/mocks/payment-api/default.js; postman/mocks/oidc-keycloak/default.js;
+      docs/features/payment.md; ../be-project-nexus/docs/adr/ADR-008-api-contract.md
+    updated_at: "2026-11-04"
+  - id: payment-after-develop-cookie-session
+    status: supported
+    claim: >-
+      The payment page retains the same payment reference after a reload that
+      restores authentication through the current gateway HttpOnly cookie.
+      Existing QR, server-time countdown, expiry and failure-recovery scenarios
+      continue to pass against the local HTTP dependencies after the develop merge.
+    reason: >-
+      The payment simulation now reuses oidc-api as its gateway session member
+      instead of bypassing the gateway token exchange. The real frontend keeps
+      the restoring state until the cookie refresh and profile request finish.
+    verification: >-
+      On 2026-11-06 ran npm run test:payment on the payment-develop-20261106
+      fingerprint: all 9 browser scenarios passed in 43.2 seconds. The original
+      Turbopack configuration was used with local dependencies after Windows
+      junction attempts failed before application startup. Inspected the log:
+      268 dependency requests, 8 gateway code exchanges, one successful
+      cookie refresh on reload, payment 201/503/409 responses, and no unmodeled
+      endpoints. The header notification reads return an empty delivered envelope.
+      Earlier 2026-11-04 reload evidence required sign-in; that assertion has been
+      updated for the gateway cookie lifecycle now merged into develop.
+    source: >-
+      tests/payment.spec.ts; features/CheckoutPaymentPage.tsx;
+      postman/mocks/payment-api/default.js; postman/mocks/oidc-api/default.js;
+      postman/simulations/payment.sim.yaml;
+      test-results/payment-simulation.ndjson (ignored local run evidence)
+    updated_at: "2026-11-06"
+fingerprints:
+  - id: payment-qr-countdown
+    date: "2026-11-04"
+    commit: "origin/develop 0d0a36a4 with uncommitted payment frontend, serverNow and transferContent changes"
+    cli: "1.73.0"
+  - id: payment-develop-20261106
+    date: "2026-11-06"
+    commit: "bbfcb7e8 merged with origin/develop 49a7caa8; uncommitted conflict resolutions and cookie-session fixture updates"
+    cli: "1.73.0"
