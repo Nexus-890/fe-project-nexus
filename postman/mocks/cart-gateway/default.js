@@ -42,12 +42,8 @@ const product = {
   images: [],
 };
 
-const corsHeaders = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept",
-};
+const appOrigin = "http://127.0.0.1:3104";
+const corsHeaders = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 const stateKey = (name) => `cart-gateway:${name}`;
 let pendingHistoryWrite = Promise.resolve();
 
@@ -93,12 +89,82 @@ function cartResponse(res, value, status = 200, page) {
   return json(res, { code: 0, message: "response success", data: value, ...(page ? { page } : {}) }, status);
 }
 
+// THAY CHO SessionController CỦA GATEWAY (#252): ĐỔI MÃ, LÀM MỚI, ĐĂNG XUẤT QUA COOKIE HttpOnly, CORS CHỈ CHO ORIGIN CỦA APP
+const keycloak = "http://127.0.0.1:3913/keycloak/realms/nexus/protocol/openid-connect";
+const sessionPaths = new Set(["/v1/auth/session", "/v1/auth/refresh", "/v1/auth/logout"]);
+const cookie = (value, maxAge) => `nexus_rt=${value}; Path=/api/v1/auth; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
+const sessionCookie = (req) => (req.headers.cookie || "").split(/;\s*/)
+  .find((part) => part.startsWith("nexus_rt="))?.slice("nexus_rt=".length) || "";
+
+function cors(req, res) {
+  res.setHeader("Vary", "Origin");
+  if (!req.headers.origin) return true;
+  if (req.headers.origin !== appOrigin) return false;
+  res.setHeader("Access-Control-Allow-Origin", appOrigin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  return true;
+}
+
+function keycloakPost(path, form) {
+  return fetch(`${keycloak}/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: "nexus-web", ...form }),
+  });
+}
+
+async function session(req, res, path, controls) {
+  if (req.headers["x-requested-with"] !== "nexus-web") {
+    return json(res, { title: "Forbidden", status: 403, detail: "This request is not allowed from this page" }, 403);
+  }
+  const signedIn = async (response) => {
+    const tokens = await response.json();
+    res.setHeader("Set-Cookie", cookie(tokens.refresh_token, tokens.refresh_expires_in));
+    return json(res, { code: 0, message: "response success",
+      data: { accessToken: tokens.access_token, idToken: tokens.id_token, expiresIn: tokens.expires_in } });
+  };
+  if (path === "/v1/auth/session") {
+    const grant = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+    const response = await keycloakPost("token", {
+      grant_type: "authorization_code", code: grant.code || "",
+      code_verifier: grant.codeVerifier || "", redirect_uri: grant.redirectUri || "",
+    });
+    if (!response.ok) return json(res, { title: "Unauthorized", status: 401, detail: "The sign-in code was rejected" }, 401);
+    return signedIn(response);
+  }
+  if (path === "/v1/auth/refresh") {
+    const refreshToken = sessionCookie(req);
+    if (!refreshToken) {
+      res.writeHead(204, { "Cache-Control": "no-store" });
+      return res.end();
+    }
+    if (controls.refreshStatus) {
+      return json(res, { title: "Service Unavailable", status: controls.refreshStatus, detail: "The sign-in service is not reachable" }, controls.refreshStatus);
+    }
+    const response = await keycloakPost("token", { grant_type: "refresh_token", refresh_token: refreshToken });
+    if (!response.ok) {
+      res.setHeader("Set-Cookie", cookie("", 0));
+      return json(res, { title: "Unauthorized", status: 401, detail: "The session has ended" }, 401);
+    }
+    return signedIn(response);
+  }
+  if (sessionCookie(req)) await keycloakPost("logout", { refresh_token: sessionCookie(req) });
+  res.writeHead(204, { "Set-Cookie": cookie("", 0), "Cache-Control": "no-store" });
+  return res.end();
+}
+
 const pause = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const cartPath = "/v1/carts/me";
 
 const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
-  if (req.method === "OPTIONS") return json(res, {});
+  if (!cors(req, res)) return json(res, { title: "Forbidden", status: 403, detail: "This origin is not allowed" }, 403);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    return res.end();
+  }
   if (path === "/health") return json(res, { ready: true });
 
   if (path === "/__test/reset" && req.method === "POST") {
@@ -121,6 +187,10 @@ const server = http.createServer(async (req, res) => {
   }
   if (path === "/__test/cart") {
     return json(res, await pm.state.get(stateKey("cart")) || cart());
+  }
+
+  if (sessionPaths.has(path) && req.method === "POST") {
+    return session(req, res, path, await pm.state.get(stateKey("controls")) || {});
   }
 
   const authorization = req.headers.authorization || "";

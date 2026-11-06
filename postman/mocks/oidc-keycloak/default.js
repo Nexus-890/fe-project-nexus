@@ -1,6 +1,7 @@
-/* Local Keycloak protocol stand-in. SSO cookies, prompt=none, code+PKCE and
- * rotating refresh grants exercise the real client; they do not prove live
- * provider integration (see oidc.context.yaml).
+/* Local Keycloak protocol stand-in. The browser only opens the login page and
+ * end-session redirect; the gateway stand-in (oidc-api) sends the code+PKCE
+ * exchange, rotating refresh grants and back-channel logout. They do not prove
+ * live provider integration (see oidc.context.yaml).
  */
 const http = require("node:http");
 const { createHash, generateKeyPairSync, randomUUID, sign } = require("node:crypto");
@@ -13,14 +14,13 @@ const appOrigins = new Set([
   process.env.NEXUS_OIDC_APP_ORIGIN,
 ].filter(Boolean));
 const callbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/callback`));
-const silentCallbacks = new Set([...appOrigins].map((appOrigin) => `${appOrigin}/auth/silent`));
 const subject = "68000000-0000-4000-8000-000000000003";
 const cookieName = "fixture-keycloak-session";
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...keys.publicKey.export({ format: "jwk" }), kid: "fixture-key", use: "sig", alg: "RS256" };
 const initialEvidence = () => ({
-  authorizations: 0, silentAuthorizations: 0, silentSuccesses: 0, silentDenied: 0,
-  passwordSubmissions: 0, tokenRequests: 0, codeExchanges: 0, refreshRequests: 0,
+  authorizations: 0, passwordSubmissions: 0, tokenRequests: 0, codeExchanges: 0,
+  refreshRequests: 0, refreshRejected: 0, revocations: 0,
   pkceVerified: 0, logouts: 0, sessions: 0, issuedTokens: 0, issuedLifetimes: [],
 });
 let evidence = initialEvidence();
@@ -44,16 +44,6 @@ function jwt(claims) {
 }
 function fields(req) {
   return typeof req.body === "string" ? new URLSearchParams(req.body) : new URLSearchParams(req.body || {});
-}
-function sessionCookie(req) {
-  return (req.headers.cookie || "").split(";").map((entry) => entry.trim())
-    .find((entry) => entry.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
-}
-async function currentSession(req) {
-  const sessions = await pm.state.get("oidc-keycloak:sessions") || {};
-  const id = sessionCookie(req);
-  const session = id ? sessions[id] : undefined;
-  return session && session.expiresAt > now() ? session : null;
 }
 async function authorize(params, session, res) {
   const destination = new URL(params.get("redirect_uri"));
@@ -86,12 +76,17 @@ async function issueToken(res, session, nonce) {
   const refresh = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
   refresh[refreshToken] = { sessionId: session.id, nonce };
   await pm.state.set("oidc-keycloak:refresh-tokens", refresh);
-  await pm.state.set("oidc-keycloak:access-token-hash", createHash("sha256").update(accessToken).digest("hex"));
+  const accessTokenHash = createHash("sha256").update(accessToken).digest("hex");
+  // Refresh rotation does not revoke an earlier access JWT before its own expiry.
+  const accessTokens = await pm.state.get("oidc-keycloak:access-tokens") || {};
+  accessTokens[accessTokenHash] = claims.exp;
+  await pm.state.set("oidc-keycloak:access-tokens", accessTokens);
+  await pm.state.set("oidc-keycloak:access-token-hash", accessTokenHash);
   await pm.state.set("oidc-keycloak:access-token-expiry", claims.exp);
   evidence.issuedTokens += 1;
   evidence.issuedLifetimes.push(lifetime);
   return json(res, {
-    access_token: accessToken, refresh_token: refreshToken,
+    access_token: accessToken, refresh_token: refreshToken, refresh_expires_in: 1800,
     token_type: "Bearer", expires_in: lifetime, scope: "openid profile email",
     id_token: jwt({ ...claims, aud: "nexus-web", nonce, email: "buyer@nexus.local", name: "Fixture Buyer" }),
   });
@@ -109,7 +104,7 @@ const server = http.createServer(async (req, res) => {
     mode = url.searchParams.get("mode") || "success";
     lifetime = 3600;
     virtualTime = null;
-    for (const key of ["codes", "sessions", "refresh-tokens"]) await pm.state.set(`oidc-keycloak:${key}`, {});
+    for (const key of ["codes", "sessions", "refresh-tokens", "access-tokens"]) await pm.state.set(`oidc-keycloak:${key}`, {});
     for (const key of ["access-token-hash", "access-token-expiry", "clock-time"]) await pm.state.set(`oidc-keycloak:${key}`, null);
     return json(res, {});
   }
@@ -142,25 +137,10 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/realms/nexus/protocol/openid-connect/certs") return json(res, { keys: [jwk] });
   if (url.pathname === "/realms/nexus/protocol/openid-connect/auth") {
     const params = url.searchParams;
-    const silent = params.get("prompt") === "none";
-    if (params.get("client_id") !== "nexus-web" || !(silent ? silentCallbacks : callbacks).has(params.get("redirect_uri"))
+    if (params.get("client_id") !== "nexus-web" || !callbacks.has(params.get("redirect_uri"))
         || params.get("response_type") !== "code" || params.get("code_challenge_method") !== "S256"
         || !params.get("code_challenge") || !params.get("state") || !params.get("scope")?.split(" ").includes("openid")) {
       return json(res, { error: "invalid_request" }, 400);
-    }
-    if (silent && req.method === "GET") {
-      evidence.silentAuthorizations += 1;
-      const session = await currentSession(req);
-      if (!session || mode === "renew-error" || mode === "silent-denied") {
-        const destination = new URL(params.get("redirect_uri"));
-        destination.searchParams.set("state", params.get("state"));
-        destination.searchParams.set("iss", issuer);
-        destination.searchParams.set("error", "login_required");
-        evidence.silentDenied += 1;
-        return redirect(res, destination.href);
-      }
-      evidence.silentSuccesses += 1;
-      return authorize(params, session, res);
     }
     if (req.method === "GET") {
       evidence.authorizations += 1;
@@ -191,13 +171,17 @@ const server = http.createServer(async (req, res) => {
     if (form.get("client_id") !== "nexus-web") return json(res, { error: "invalid_client" }, 400);
     if (form.get("grant_type") === "refresh_token") {
       evidence.refreshRequests += 1;
+      // Matches the realm: revokeRefreshToken=true, refreshTokenMaxReuse=0. A used token is gone.
       const refreshTokens = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
       const refresh = refreshTokens[form.get("refresh_token")];
       delete refreshTokens[form.get("refresh_token")];
       await pm.state.set("oidc-keycloak:refresh-tokens", refreshTokens);
       const sessions = await pm.state.get("oidc-keycloak:sessions") || {};
       const session = refresh ? sessions[refresh.sessionId] : null;
-      if (!session || session.expiresAt <= now() || mode === "renew-error") return json(res, { error: "invalid_grant" }, 400);
+      if (!session || session.expiresAt <= now() || mode === "renew-error") {
+        evidence.refreshRejected += 1;
+        return json(res, { error: "invalid_grant", error_description: "Token is not active" }, 400);
+      }
       return issueToken(res, session, refresh.nonce);
     }
     evidence.codeExchanges += 1;
@@ -214,6 +198,23 @@ const server = http.createServer(async (req, res) => {
     const session = sessions[code.sessionId];
     if (!session || session.expiresAt <= now()) return json(res, { error: "invalid_grant" }, 400);
     return issueToken(res, session, code.nonce);
+  }
+  if (url.pathname === "/realms/nexus/protocol/openid-connect/logout" && req.method === "POST") {
+    // Back-channel logout the gateway sends with the refresh token from its cookie.
+    const refreshTokens = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
+    const refresh = refreshTokens[fields(req).get("refresh_token")];
+    if (refresh) {
+      evidence.revocations += 1;
+      for (const [token, entry] of Object.entries(refreshTokens))
+        if (entry.sessionId === refresh.sessionId) delete refreshTokens[token];
+      await pm.state.set("oidc-keycloak:refresh-tokens", refreshTokens);
+      const sessions = await pm.state.get("oidc-keycloak:sessions") || {};
+      delete sessions[refresh.sessionId];
+      await pm.state.set("oidc-keycloak:sessions", sessions);
+      evidence.sessions = Object.keys(sessions).length;
+    }
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
   }
   if (url.pathname === "/realms/nexus/protocol/openid-connect/logout") {
     if (!url.searchParams.get("id_token_hint")) return json(res, { error: "id_token_hint_required" }, 400);

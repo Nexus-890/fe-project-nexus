@@ -134,6 +134,31 @@ test("network errors never retry or trigger token renewal", async () => {
   assert.equal(renewals, 0);
 });
 
+test("a renewal outage surfaces as that outage instead of the 401, without a replay or provider details", async () => {
+  for (const outage of [
+    { kind: "http", status: 503, title: "Service Unavailable", detail: "upstream secret" },
+    { kind: "http", status: 504, title: "Gateway Timeout", detail: "upstream secret" },
+    { kind: "network", status: 0, title: "Network request failed", detail: "upstream secret" },
+  ]) {
+    let attempts = 0, failures = 0;
+    const tokens = createTokenSession({
+      oidc: { renewSession: async () => { throw outage; } } as unknown as OidcClient,
+      onRenew: () => {}, onFailure: () => { failures++; },
+    });
+    tokens.start({ accessToken: "old-token", subject: "buyer-1", returnTo: "/", expiresAt: Date.now() / 1000 + 120 });
+    const context: ApiContext = {
+      getAccessToken: tokens.getAccessToken, renewAccessToken: tokens.renewAccessToken,
+      fetch: async () => { attempts++; return unauthorized(); },
+    };
+    await assert.rejects(requestApi("PUT", "/me", { fullName: "Lan" }, { context }), errorIs((error) => {
+      assert.deepEqual(error, { kind: outage.kind, status: outage.status, title: "Session renewal is temporarily unavailable." });
+    }));
+    assert.equal(attempts, 1);
+    assert.equal(failures, 0);
+    assert.equal(tokens.getAccessToken(), "old-token");
+  }
+});
+
 test("failed renewal preserves original 401 and hides provider exception details", async () => {
   for (const throws of [false, true]) {
     let attempts = 0;

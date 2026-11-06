@@ -51,7 +51,9 @@ test("home renders the API category tree at mobile and desktop without fetching 
 }, info) => {
   const apiRequests: string[] = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname.startsWith("/api/v1/"))
+    const { pathname } = new URL(request.url());
+    // The page-load session restore (POST /api/v1/auth/refresh, #252) is not catalog data.
+    if (pathname.startsWith("/api/v1/") && !pathname.startsWith("/api/v1/auth/"))
       apiRequests.push(request.url());
   });
   await page.goto("/");

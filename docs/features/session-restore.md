@@ -1,4 +1,9 @@
-# Session restore and silent renew with Keycloak (#184)
+# Session restore and renewal (#184, gateway cookie since #252)
+
+Since #252 every restore and renewal goes through the gateway's HttpOnly session cookie
+(`POST /api/v1/auth/refresh`). The `prompt=none` iframe, `/auth/silent` page and the
+browser-held refresh token described in the history sections below are gone. The renewal
+coordinator, timer and single 401 replay from #184 are unchanged.
 
 ## Readiness
 
@@ -16,41 +21,36 @@ cart #194. The integration below merges `origin/develop` at `0d0a36a4`, includin
 
 The FE inputs are sufficient to implement and test. Full acceptance against the
 real backend remains pending live verification against a running realm
-configured for the chosen frontend origin. This change adds no backend refresh
-endpoint, Nexus refresh cookie, or authentication-token persistence.
+configured for the chosen frontend origin. The refresh endpoint and its cookie
+come from the gateway (#252); the frontend persists no authentication token.
 
 ## Runtime flow
 
 `AuthSession` initially exposes `restoring`. On a regular page load it calls
-`restoreSession()` once, including under StrictMode. The OIDC adapter opens an
-iframe with `prompt=none`, fresh nonce and PKCE, using the provider's SSO cookie.
-Keycloak redirects that iframe to `/auth/silent`; the page sends its response URL
-to the parent with origin checks. The parent validates the transaction and
-exchanges the code. After `/api/v1/users/me` succeeds the status is
-`authenticated`. Expected `login_required` and interaction-required responses
-settle to `anonymous`; the application never redirects to an interactive login
-page for this check.
+`restoreSession()` once, including under StrictMode. The OIDC adapter posts to
+`/api/v1/auth/refresh`; the browser attaches the HttpOnly `nexus_rt` cookie and
+the gateway exchanges it with Keycloak, rotates it and returns only the access
+and ID tokens. A 204 (no cookie) settles to `anonymous`. After
+`/api/v1/users/me` succeeds the status is `authenticated`. The interactive
+`/auth/callback` skips this check and keeps its own code exchange through
+`/api/v1/auth/session`. The sign-in page displays restoration progress until
+the check settles and sends an already authenticated user to the safe requested
+destination. Header actions likewise show restoration progress instead of a
+transient sign-in action.
 
-The silent callback does not start another restore, profile query or cart load.
-The interactive `/auth/callback` keeps its existing code-exchange path. The
-sign-in page displays restoration progress until the check settles and sends
-an already authenticated user to the safe requested destination. Header actions
-likewise show restoration progress instead of a transient sign-in action.
-
-The installed `oidc-client-ts` 3.5.0 supports both silent iframe authorization
-and refresh grants. Its user store stays explicitly `InMemoryWebStorage`.
-`includeIdTokenInSilentRenew=false` prevents ID-token hints being copied into
-persisted transaction state. On reload memory is empty; restoration always
-checks the provider SSO session, not a saved token.
+`oidc-client-ts` only builds the authorization redirect and end-session URL. Its
+user store stays `InMemoryWebStorage` and never holds a user. Restores, the
+timer and parallel 401s share one in-flight refresh, and `navigator.locks`
+serializes refreshes across tabs, so a rotated cookie is never sent twice.
 
 ## Renewal and 401 replay
 
 `features/tokenSession.ts` owns the current token, subject, expiry and one
 shared renewal promise. The provider schedules renewal 60 seconds before expiry
 (half the remaining lifetime for shorter tokens), and checks on focus/visibility
-resume. The SDK's separate automatic renew loop remains off to avoid duplicate
-renewals. Refresh grants use only the refresh token in memory and go directly
-to Keycloak. If none is available, renewal uses the silent iframe.
+resume. The SDK's separate automatic renew loop remains off. Each renewal is the
+same gateway refresh; the browser never sees a refresh token. A renewal that
+returns another subject (another tab signed in as someone else) is refused.
 
 Every protected API client receives the same coordinator through the scoped request context. Cart calls use the
 same `configs/api.ts` HTTP boundary and coordinator. A token-bearing 401 triggers renewal and one replay
@@ -67,35 +67,31 @@ generation and profile cache keys remain stable across normal rotation; cart
 count and pending merge are preserved. Logout or another login invalidates old
 renewal work. An old response cannot overwrite or clear a newer session.
 
-Renew failure clears in-memory credentials and private query caches, returning
-to anonymous. A final 401 from the profile endpoint also clears the session.
+A refused renewal (401, no cookie, another user, invalid claims) clears
+in-memory credentials and private query caches, returning to anonymous. A
+gateway 503/504 or network failure keeps the session: the caller gets its 401
+and the next 401, focus or timer tries again. A final 401 from the profile endpoint also clears the session.
 Other API callers receive their final typed 401. Successful auth responses require the delivered common-core
 `{data, code, message}` envelope; historical bare profile fixtures are rejected.
 
 ## Logout and storage
 
-Explicit logout clears local state immediately, then sends the in-memory ID
-token hint to Keycloak end-session. A token-free sessionStorage marker
-`nexus.auth.logged-out=1` prevents a reload from silently undoing an explicit
-logout even if end-session navigation failed. The next explicit sign-in clears
-that marker. Remote logout success still depends on the provider response.
+Explicit logout clears local state immediately, asks the gateway to revoke the
+refresh token and clear the cookie (a failure there does not block), then sends
+the in-memory ID token hint to Keycloak end-session. A reload after logout finds
+no cookie and stays anonymous, so no browser marker is needed.
 
-Access, refresh and ID tokens, their JWT parts, and ID-token hints are never
-written to localStorage/sessionStorage. Only pending PKCE verifier/state/nonce,
-safe return data, the logout marker and the unrelated guest-cart credential
-may be present. No new application auth cookie is created. A provider SSO
-cookie belongs to Keycloak, not to the frontend token store.
+Access and ID tokens, their JWT parts, and ID-token hints are never written to
+localStorage/sessionStorage, and JavaScript cannot read the refresh token. Only
+pending PKCE verifier/state/nonce, safe return data and the unrelated guest-cart
+credential may be present.
 
 ## Browser/deployment constraints
 
-The realm must allow `/auth/callback`, `/auth/silent`, the post-logout URI and
-the actual frontend web origin. The checked-in localhost wildcard covers both
-callbacks. Production must use HTTPS and matching settings. Provider cookies
-must be available to the iframe and frame policy must permit this use. Browser
-third-party-cookie restrictions or cross-site deployment can prevent silent
-restore; the implementation fails to anonymous instead of looping or exposing
-login in a hidden frame. No claim is made that blocked provider cookies can
-restore a user.
+The realm must allow `/auth/callback`, the post-logout URI and the actual
+frontend web origin. The gateway must list the frontend origin in its CORS
+allow-list with credentials; the cookie is `Secure` by default, so production
+must use HTTPS. No third-party cookie or iframe is involved.
 
 ## Verification
 
@@ -160,7 +156,7 @@ Executed from the isolated worktree with fresh npm ci dependencies:
 
 Auth browser checks used NEXUS_OIDC_APP_ORIGIN=http://127.0.0.1:3134, NEXUS_OIDC_SIM_PORT=3944 and NEXUS_TEST_DIST_DIR=.next-oidc-verify to avoid other worktrees' servers. Postman 1.73.0 ran the committed HTTP stand-ins. Default browser checks also recorded provider discovery, authorization, token and logout requests in the ignored simulation log. Owner-mock discovery was skipped; this run reused the committed local fixtures. The installed CLI does not provide postman status (unknown command).
 
-The harness waits for the outer application restore before recording its storage baseline; only the token-free session logout marker may change. Test routes are generated temporarily and removed after the browser runner. Production route output contains neither test probe.
+The harness waits for the outer application restore before recording its storage baseline; at that time only the token-free session logout marker could change (removed in #252). Test routes are generated temporarily and removed after the browser runner. Production route output contains neither test probe.
 
 Initial attempts hit a dependency junction unsupported by Turbopack, old generated output, Windows manifest file locks and Next's existing security reminder. Fresh local dependencies, isolated output and sequential final gates completed successfully. Next 16.4.0 still reports its existing security advisory; no dependency upgrade is included.
 

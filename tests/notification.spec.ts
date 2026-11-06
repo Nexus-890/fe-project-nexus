@@ -20,12 +20,15 @@ const setCase = async (request: APIRequestContext, query: string) => {
 };
 
 async function signIn(page: Page, account = "a") {
-  // Register the provider-issued token with this stateful API fixture before
-  // forwarding the exchange response to the real callback/provider flow.
-  await page.route(`${providerOrigin}/realms/nexus/protocol/openid-connect/token`, async (route) => {
+  // Register the gateway-issued access token before the real callback/provider
+  // loads the profile. The gateway retains the refresh token in its cookie.
+  await page.route(`${fixtureOrigin}/api/v1/auth/session`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().headers()["x-requested-with"]).toBe("nexus-web");
+    expect(route.request().headers().authorization).toBeUndefined();
     const response = await route.fetch();
     expect(response.ok()).toBe(true);
-    const { access_token: accessToken } = await response.json();
+    const { data: { accessToken } } = await response.json();
     expect(accessToken).toEqual(expect.any(String));
     const registered = await page.request.post(`${fixtureOrigin}/test/notifications/session`, {
       data: { account, accessToken },
@@ -43,6 +46,9 @@ async function signIn(page: Page, account = "a") {
   await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText(`Hi Notification ${account.toUpperCase()}`, { exact: true })).toBeVisible();
+  const cookie = (await page.context().cookies(`${fixtureOrigin}/api/v1/auth/refresh`))
+    .find((entry) => entry.name === "nexus_rt");
+  expect(cookie).toMatchObject({ httpOnly: true, path: "/api/v1/auth" });
   return sessions.get(page)!.authorization;
 }
 

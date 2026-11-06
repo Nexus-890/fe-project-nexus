@@ -36,13 +36,15 @@ async function login(page: Page, destination = probePath) {
   await expect(page.getByTestId("session-user")).toHaveText(subject);
 }
 
+// The gateway exchanges and refreshes tokens; the browser only receives the access and ID tokens.
+// The refresh token stays in the HttpOnly cookie, which the cookie assertion below covers.
 function captureTokenResponses(page: Page) {
   const credentials: string[] = [];
   page.on("response", (response) => {
-    if (!response.url().endsWith("/protocol/openid-connect/token") || !response.ok()) return;
+    if (!/\/api\/v1\/auth\/(?:session|refresh)$/.test(new URL(response.url()).pathname) || response.status() !== 200) return;
     void response.json().then((body) => {
-      for (const key of ["access_token", "refresh_token", "id_token"]) {
-        if (typeof body[key] === "string") credentials.push(body[key]);
+      for (const key of ["accessToken", "idToken"]) {
+        if (typeof body.data?.[key] === "string") credentials.push(body.data[key]);
       }
     }).catch(() => {});
   });
@@ -66,7 +68,7 @@ test.beforeEach(async ({ request }) => {
   expect((await request.get(`${simulation}/api/test/reset`)).ok()).toBe(true);
 });
 
-test("reload restores the same user with prompt=none, stays restoring while profile loads and shows no sign-in page", async ({ page, request }) => {
+test("reload restores the same user from the session cookie, stays restoring while profile loads and shows no sign-in page", async ({ page, request }) => {
   const credentials = captureTokenResponses(page);
   await login(page);
   const before = await evidence(request);
@@ -90,9 +92,8 @@ test("reload restores the same user with prompt=none, stays restoring while prof
   expect(topNavigations).not.toContain("/sign-in");
   expect(await evidence(request)).toMatchObject({
     authorizations: 1, passwordSubmissions: 1,
-    silentAuthorizations: before.silentAuthorizations + 1,
-    silentSuccesses: before.silentSuccesses + 1,
-    codeExchanges: before.codeExchanges + 1,
+    refreshRequests: before.refreshRequests + 1,
+    codeExchanges: before.codeExchanges,
   });
   await assertNoStoredTokens(page, credentials);
 });
@@ -136,7 +137,7 @@ test("opening the cart keeps the account loading UI until session restoration se
   await expect(page.getByText("Loading your account…", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Shopping cart, 3 items", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in to view your cart", exact: true })).toHaveCount(0);
-  expect(await evidence(request)).toMatchObject({ silentSuccesses: before.silentSuccesses + 1 });
+  expect(await evidence(request)).toMatchObject({ refreshRequests: before.refreshRequests + 1 });
 });
 
 test("a request still rejected after retry stops after two sends and one renew", async ({ page, request }) => {
@@ -199,13 +200,13 @@ test("two-minute tokens renew before expiry throughout five minutes of modeled b
   await assertNoStoredTokens(page, credentials);
 });
 
-test("after provider sign-out, reload remains anonymous and does not restore the old SSO session", async ({ page, request }) => {
+test("after sign-out, reload remains anonymous because the gateway cleared the session cookie", async ({ page, request }) => {
   const credentials = captureTokenResponses(page);
   await login(page);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`^${app}/`));
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(await evidence(request)).toMatchObject({ logouts: 1, sessions: 0 });
+  expect(await evidence(request)).toMatchObject({ logouts: 1, sessions: 0, revocations: 1 });
   await page.reload();
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);

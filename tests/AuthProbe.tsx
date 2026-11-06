@@ -96,8 +96,8 @@ export default function AuthProbe() {
   const [, refreshAfterStorageCapture] = useState(0);
 
   useEffect(() => {
-    // The application provider's silent restore owns a temporary OIDC
-    // transaction. Capture the fixture baseline only after it has finished.
+    // The application provider's session restore may clear stale OIDC
+    // transactions. Capture the fixture baseline only after it has finished.
     if (outerRestoring) return;
     harness.captureInitialStorage();
     const timer = window.setTimeout(
@@ -466,9 +466,9 @@ function createProbeHarness(): AuthProbeHarness {
         subject: input.email,
       };
     },
+    // The fixture has no cookie session, so a page load always starts anonymous.
     restoreSession: async () => null,
     renewSession: async () => { throw new Error("Fixture session cannot be renewed"); },
-    completeSilentSignIn: async () => {},
     signOut: async () => {},
     clearSession: async () => {},
   };

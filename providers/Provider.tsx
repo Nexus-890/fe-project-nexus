@@ -12,7 +12,13 @@ import { queryKeys } from "../configs/queryKeys";
 import { createOidcClient } from "../features/oidc";
 import { createTokenSession, renewalDelay } from "../features/tokenSession";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
-import { getMe, register as registerUser } from "../service/authService";
+import {
+  createSession,
+  endSession,
+  getMe,
+  refreshSession,
+  register as registerUser,
+} from "../service/authService";
 import { updateProfile as saveProfile } from "../service/accountService";
 import { createAuthStub } from "../mocks/authStub";
 import type { ApiContext } from "../types/commonRequestType";
@@ -31,22 +37,9 @@ const privateQuery = (query: Query) =>
 // Provider exceptions can contain callback URLs or tokens. Keep them out of the
 // UI and TanStack caches; report only a sanitized action-level error.
 const redirectError = (title: string): ApiError => ({ kind: "network", status: 0, title });
-const LOGGED_OUT_KEY = "nexus.auth.logged-out";
 const emptySession = (id: number, restoring = false) => ({
   accessToken: null as string | null, expiresAt: 0, id, signingIn: false, restoring,
 });
-
-function rememberLogout(loggedOut: boolean): void {
-  try {
-    if (loggedOut) window.sessionStorage.setItem(LOGGED_OUT_KEY, "1");
-    else window.sessionStorage.removeItem(LOGGED_OUT_KEY);
-  } catch { /* Remote end-session still runs if browser storage is blocked. */ }
-}
-
-function explicitlyLoggedOut(): boolean {
-  try { return window.sessionStorage.getItem(LOGGED_OUT_KEY) === "1"; }
-  catch { return false; }
-}
 
 /** AuthSession is below QueryClientProvider, including in the browser harness. */
 export function AuthSession({
@@ -57,7 +50,19 @@ export function AuthSession({
   oidc: injectedOidc,
 }: AuthProviderProps) {
   const queryClient = useQueryClient();
-  const [oidc] = useState(() => injectedOidc ?? createOidcClient());
+  const [gateway] = useState<ApiContext>(() => {
+    if (stub && process.env.NODE_ENV === "production")
+      throw new Error("The auth stub is disabled in production.");
+    if (stub && transport)
+      throw new Error("Choose either the auth stub or an injected fetch.");
+    return { baseUrl: baseUrl ?? API_BASE_URL, fetch: stub ? createAuthStub() : transport };
+  });
+  // Đổi mã, làm mới và đăng xuất đi qua cookie của gateway nên không cần access token trong context này
+  const [oidc] = useState(() => injectedOidc ?? createOidcClient({
+    exchangeCode: (grant) => createSession(grant, { context: gateway }),
+    refreshSession: () => refreshSession({ context: gateway }),
+    endSession: () => endSession({ context: gateway }),
+  }));
   // The coordinator callbacks and request context share this imperative counter.
   const [generation] = useState(() => {
     let value = 0;
@@ -85,19 +90,12 @@ export function AuthSession({
     onRenew: (next) => setSession((previous) => ({ ...previous, accessToken: next.accessToken, expiresAt: next.expiresAt })),
     onFailure: renewalFailed,
   }));
-  const [requestContext] = useState<ApiContext>(() => {
-    if (stub && process.env.NODE_ENV === "production")
-      throw new Error("The auth stub is disabled in production.");
-    if (stub && transport)
-      throw new Error("Choose either the auth stub or an injected fetch.");
-    return {
-      baseUrl: baseUrl ?? API_BASE_URL,
-      getAccessToken: tokens.getAccessToken,
-      renewAccessToken: tokens.renewAccessToken,
-      getSessionId: generation.read,
-      fetch: stub ? createAuthStub() : transport,
-    };
-  });
+  const [requestContext] = useState<ApiContext>(() => ({
+    ...gateway,
+    getAccessToken: tokens.getAccessToken,
+    renewAccessToken: tokens.renewAccessToken,
+    getSessionId: generation.read,
+  }));
 
   const profile = useApiQuery<UserResponse>(
     {
@@ -161,7 +159,6 @@ export function AuthSession({
 
   const signIn = useCallback(async (returnTo?: string): Promise<ApiResult<void>> => {
     clearSession();
-    rememberLogout(false);
     callback.current = null;
     const id = generation.read();
     setSession({ ...emptySession(id), signingIn: true });
@@ -238,7 +235,6 @@ export function AuthSession({
   }, [clearSession, generation, oidc, queryClient, requestContext, tokens]);
 
   const signOut = useCallback(async (): Promise<ApiResult<void>> => {
-    rememberLogout(true);
     clearSession();
     callback.current = null;
     resetRegistration();
@@ -264,12 +260,13 @@ export function AuthSession({
   useEffect(() => {
     if (restoreStarted.current) return;
     restoreStarted.current = true;
-    // The silent callback relays its URL to the parent; it must not open more frames.
-    if (window.location.pathname === "/auth/silent" || window.location.pathname === "/auth/callback") return;
+    // trang callback tự đổi mã lấy phiên mới, không gọi refresh song song kẻo cookie cũ ghi đè cookie mới
+    if (window.location.pathname === "/auth/callback") return;
     const id = generation.read();
     void (async () => {
       try {
-        const restored = await (stub || explicitlyLoggedOut() ? Promise.resolve(null) : oidc.restoreSession());
+        // Tải lại trang thì token trong bộ nhớ mất. Hỏi gateway: còn cookie phiên thì nhận access token mới, không thì ẩn danh.
+        const restored = await (stub ? Promise.resolve(null) : oidc.restoreSession());
         if (generation.read() !== id) return;
         if (!restored) {
           setSession(emptySession(id));
@@ -296,13 +293,25 @@ export function AuthSession({
 
   useEffect(() => {
     if (!session.accessToken || !session.expiresAt) return;
-    const timer = window.setTimeout(() => { void tokens.renew(); }, renewalDelay(session.expiresAt));
+    let stopped = false;
+    let failures = 0;
+    let timer: number | undefined;
+    const renew = () => {
+      tokens.renew().catch(() => {
+        if (stopped) return;
+        // GATEWAY TẠM LỖI: PHIÊN VẪN GIỮ, THỬ LẠI SAU 2s, 4s, 8s... TỐI ĐA 30s
+        window.clearTimeout(timer);
+        timer = window.setTimeout(renew, Math.min(30_000, 2_000 * 2 ** failures++));
+      });
+    };
+    timer = window.setTimeout(renew, renewalDelay(session.expiresAt));
     const checkExpiry = () => {
-      if (document.visibilityState !== "hidden" && session.expiresAt * 1000 - Date.now() <= 60_000) void tokens.renew();
+      if (document.visibilityState !== "hidden" && session.expiresAt * 1000 - Date.now() <= 60_000) renew();
     };
     window.addEventListener("focus", checkExpiry);
     document.addEventListener("visibilitychange", checkExpiry);
     return () => {
+      stopped = true;
       window.clearTimeout(timer);
       window.removeEventListener("focus", checkExpiry);
       document.removeEventListener("visibilitychange", checkExpiry);

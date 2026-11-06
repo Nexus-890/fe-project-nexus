@@ -59,9 +59,11 @@ async function installCart(page: Page, title = productName) {
   };
   const issuedTokens = new Set<string>();
   page.on("response", async (response) => {
-    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+    // The gateway exchanges the code; the browser receives the access token in its envelope.
+    // 204 is an anonymous refresh with no body.
+    if (["/api/v1/auth/session", "/api/v1/auth/refresh"].includes(new URL(response.url()).pathname) && response.status() === 200) {
       const body = await response.json();
-      issuedTokens.add(body.access_token);
+      issuedTokens.add(body.data.accessToken);
     }
   });
   await page.route("**/api/v1/users/me", async (route) => {
@@ -282,6 +284,7 @@ test("successful quantity edit survives navigation, session restoration and expl
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  // The HttpOnly cookie restores the session on reload, so the cart is read again with a fresh token.
   const readsBeforeRestore = state.reads.length;
   await page.reload();
   await expect(page.getByText(`Hi ${state.account.name}`, { exact: true })).toBeVisible();
@@ -289,6 +292,9 @@ test("successful quantity edit survives navigation, session restoration and expl
   await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
   expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  // Wait for the Keycloak end-session redirect to land back on the home page before navigating.
+  await expect(page).toHaveURL(`${appOrigin}/`);
+  await page.waitForLoadState();
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();

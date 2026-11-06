@@ -55,6 +55,14 @@ export function createAuthStub(options: AuthStubOptions = {}): typeof globalThis
     const method = request.method.toUpperCase();
     const path = new URL(request.url).pathname;
 
+    // Cookie phiên của gateway: stub không có Keycloak nên không có phiên nào để khôi phục.
+    if (method === "POST" && path === "/api/v1/auth/refresh") {
+      return new Response(null, { status: 204 });
+    }
+    if (method === "POST" && path === "/api/v1/auth/logout") {
+      return new Response(null, { status: 204 });
+    }
+
     if (method === "POST" && path === "/api/v1/auth/register") {
       const body = await readRequestBody(request);
       if (!isRecord(body)) {

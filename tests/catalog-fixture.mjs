@@ -86,8 +86,33 @@ function json(res, value, status = 200) {
   res.end(status === 204 ? undefined : JSON.stringify(value));
 }
 
+// The gateway session endpoints (#252) live on the OIDC stand-in. Forward them as the gateway
+// would, with headers and cookies intact, so sign-in in this suite gets the same HttpOnly cookie.
+async function forwardSession(req, res, url) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const headers = Object.fromEntries(Object.entries(req.headers)
+    .filter(([name]) => !["host", "connection", "content-length"].includes(name)));
+  const providerPort = process.env.NEXUS_TEST_PROVIDER_PORT ?? process.env.NEXUS_OIDC_SIM_PORT ?? 3913;
+  const upstream = await fetch(`http://127.0.0.1:${providerPort}${url.pathname}`, {
+    method: req.method,
+    headers,
+    body: ["GET", "HEAD", "OPTIONS"].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  res.statusCode = upstream.status;
+  upstream.headers.forEach((value, name) => {
+    if (!["content-length", "content-encoding", "transfer-encoding", "set-cookie"].includes(name))
+      res.setHeader(name, value);
+  });
+  const cookies = upstream.headers.getSetCookie();
+  if (cookies.length) res.setHeader("Set-Cookie", cookies);
+  res.end(Buffer.from(await upstream.arrayBuffer()));
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, fixtureOrigin);
+  if (url.pathname.startsWith("/api/v1/auth/"))
+    return forwardSession(req, res, url).catch(() => json(res, { title: "Bad gateway", status: 502 }, 502));
   if (req.method === "OPTIONS") return json(res, {});
   if (url.pathname === "/health") return json(res, {});
   if (url.pathname === "/test/notifications/reset") {

@@ -52,13 +52,17 @@ assumptions:
       Reran on 2026-11-05 after merging develop 0d0a36a4 into notification
       branch 13768ea3: all script assertions passed again. Postman CLI request
       events confirmed the real service exercised the dependency over HTTP.
+      Reran on 2026-11-06 while merging develop 687951d0 into notification
+      branch 20dc2c71: all assertions passed, including exactly nine bodyless
+      PATCH requests and counts 18 to 17 to 0. Postman request events confirmed
+      that the checked-out service and shared Axios boundary ran over HTTP.
     source: >-
       scripts/verify-notifications.mjs;
       service/notificationService.ts;
       configs/api.ts;
       postman/mocks/notification-gateway/default.js;
       postman/simulations/notification.sim.yaml
-    updated_at: "2026-11-05"
+    updated_at: "2026-11-06"
 
   - id: deployed-notification-integration
     status: unknown
@@ -79,6 +83,10 @@ assumptions:
     updated_at: "2026-11-03"
 
 fingerprints:
+  - id: notification-cookie-session-merge
+    date: "2026-11-06"
+    commit: "20dc2c71 with uncommitted merge of develop 687951d0 and reviewed conflict resolutions"
+    cli: "Postman CLI 1.73.0; notification HTTP simulation on port 4018"
   - id: notification-develop-merge
     date: "2026-11-05"
     commit: "13768ea3 merged with develop 0d0a36a4, before merge commit"

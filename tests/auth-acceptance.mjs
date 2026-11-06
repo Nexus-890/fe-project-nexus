@@ -40,25 +40,18 @@ export default async function runAuthAcceptance(
       return element && JSON.parse(element.textContent).mutationCount === 0;
     });
   };
-  const readStorage = () => page.evaluate(() => {
-    const marker = sessionStorage.getItem("nexus.auth.logged-out");
-    return {
-      validLogoutMarker: marker === null || marker === "1",
-      entries: [
-        ...Object.entries(localStorage).map(([key, value]) => ["local", key, value]),
-        ...Object.entries(sessionStorage)
-          .filter(([key]) => key !== "nexus.auth.logged-out")
-          .map(([key, value]) => ["session", key, value]),
-      ].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
-    };
-  });
+  const readStorage = () => page.evaluate(() => ({
+    entries: [
+      ...Object.entries(localStorage).map(([key, value]) => ["local", key, value]),
+      ...Object.entries(sessionStorage).map(([key, value]) => ["session", key, value]),
+    ].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+  }));
   let storageBaseline;
   const assertStorage = async () => {
     const storage = await readStorage();
-    assert(storage.validLogoutMarker, "Logout marker must contain only the token-free value 1");
     assert(
       JSON.stringify(storage.entries) === JSON.stringify(storageBaseline.entries),
-      "Auth changed web storage outside its token-free logout marker",
+      "Auth changed web storage",
     );
   };
 
@@ -80,7 +73,6 @@ export default async function runAuthAcceptance(
     await page.reload();
     await page.getByTestId("state").waitFor();
     storageBaseline = await readStorage();
-    assert(storageBaseline.validLogoutMarker, "Unexpected initial logout marker value");
 
     await click("register");
     await settle();
@@ -112,7 +104,7 @@ export default async function runAuthAcceptance(
     );
     checks.push(
       "login GET Bearer",
-      "only the token-free session logout marker may change in web storage",
+      "web storage is unchanged",
       "no token in query keys/mutation data",
     );
 

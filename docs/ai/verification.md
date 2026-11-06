@@ -408,3 +408,41 @@ unchanged retries continued, with no framework upgrade included.
 
 These checks use local HTTP fixtures and simulations. Backend source matches
 `36667d69`; no backend test suite or live backend validation was run.
+
+## Notification bell after gateway cookie integration — 2026-11-06
+
+Merged `origin/develop` at `687951d0` into notification branch `20dc2c71`.
+Preserved the notification service, header UI, scoped queries and logout
+cancellation, and retained develop's gateway cookie session implementation.
+Resolved four conflicting files by keeping both notification/gateway type
+generation, notification fixture handlers and credentialed session forwarding.
+Notification sign-in tests now register the gateway's `data.accessToken` before
+profile loading and assert the HttpOnly refresh cookie and CSRF header.
+
+| Check | Result |
+| --- | --- |
+| Clean pre-merge unit tests / generated DTO check | 159/159 passed; no drift |
+| Merged unit tests | 171/171 passed |
+| Final lint / generated DTO check | Passed |
+| Typecheck | Passed with fresh isolated route types |
+| General browser suite | 42/43 initially passed, including all 12 notification scenarios; corrected fixed-port cart logout assertion passed on focused rerun |
+| Final auth/guest/session browser suite | 25/25 passed in 1.0 minute |
+| Notification HTTP simulation | Passed latest-ten paging, nine bodyless PATCH calls, count 18 → 17 → 0, repeat reads, account isolation and modeled errors |
+| Production build | Passed compilation, TypeScript and 12 static page generations; temporary probes excluded |
+
+The general suite used app/API/provider ports 3216/4016/4017. Its only failure
+expected port 3102 after logout despite the configured app port; the assertion
+now uses the existing shared app origin. The dedicated auth suite used ports
+3217/4019 and exposed a separate fixture defect: issuing a new token invalidated
+the previous token hash before its expiry. The mock now tracks individual issued
+token expiries while preserving deliberate 401 modes and clearing state on reset.
+The existing five-minute modeled renewal assertion remained unchanged and passed
+with exactly 15 protected HTTP 200 calls. Handler checks also covered expiry
+boundaries, unknown tokens, reset and forced 401 modes.
+
+The final auth simulation log contained 565 request events, including 86 gateway
+session calls. Notification HTTP verification used port 4018 and the existing
+local synthetic mock. Simulation contexts record these results. Existing Next.js
+security reminders interrupted initial starts/build; unchanged retries passed.
+No dependency upgrade, backend modification beyond the incoming develop commits,
+backend tests or live backend validation is included in this conflict resolution.

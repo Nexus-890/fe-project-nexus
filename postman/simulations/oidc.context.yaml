@@ -9,8 +9,8 @@ purpose:
     unavailable. Uses one-port routing because browser fetch and navigation are configured with
     explicit local dependency origins. Also exercises guest-cart persistence and callback merge
     against the explicitly proposed guest contract recorded in docs/features/guest-cart.md. Session
-    restoration and renewal scenarios reuse these stand-ins with an HttpOnly SSO cookie,
-    prompt=none, rotating refresh grants and controlled failure/expiry conditions. These do not
+    restoration and renewal scenarios reuse these stand-ins with the gateway's HttpOnly session
+    cookie, rotating refresh grants and controlled failure/expiry conditions. These do not
     establish deployed backend readiness.
 assumptions:
   - id: keycloak-code-pkce-contract
@@ -436,6 +436,34 @@ assumptions:
       providers/CartProvider.tsx; features/useCart.ts; test-results/oidc-simulation.ndjson (local
       ignored run evidence)
     updated_at: '2026-11-05'
+  - id: gateway-session-cookie
+    status: supported
+    claim: >-
+      With the gateway session endpoints of #252 the browser never calls the
+      Keycloak token endpoint, holds no refresh token, and restores the session
+      on reload from an HttpOnly cookie that rotates on every refresh.
+    reason: >-
+      The API stand-in models api-gateway SessionController: it checks the
+      X-Requested-With header and Origin, exchanges the code and refresh token
+      with the provider stand-in, and sets nexus_rt (HttpOnly, SameSite=Lax,
+      Path=/api/v1/auth). The provider stand-in rotates refresh tokens like the
+      realm (revokeRefreshToken, refreshTokenMaxReuse=0). Secure is left off
+      because the suite runs on plain http. The real gateway is covered by its
+      own SessionControllerTest, not by this suite.
+    verification: >-
+      On 2026-11-05, after merging develop with #184, npm run test:auth:browser
+      passed 25 scenarios (OIDC, guest cart and session): reload restore with a
+      rotated cookie, refusal of the old value, 403 without the CSRF header,
+      timer and 401 renewal through /api/v1/auth/refresh, cookie revocation on
+      logout and no cookie sent to /api/v1/users/me. npm run test:catalog passed
+      all 31 scenarios with the catalog fixture forwarding /api/v1/auth/* to the
+      stand-in, and npm run test:auth passed 140 unit tests. Several starts
+      stopped for the existing Next.js security reminder; unchanged retries passed.
+    source: >-
+      postman/mocks/oidc-api/default.js; postman/mocks/oidc-keycloak/default.js;
+      tests/oidc.spec.ts; tests/catalog-fixture.mjs;
+      ../be-project-nexus/api-gateway/src/main/java/com/group5/apigateway/session/SessionController.java
+    updated_at: "2026-11-05"
   - id: restore-input-readiness
     status: supported
     claim: >-
@@ -457,46 +485,6 @@ assumptions:
       ../be-project-nexus/config-service/src/main/resources/config/api-gateway.yml;
       ../be-project-nexus/config-service/src/main/resources/config/user-service.yml;
       ../be-project-nexus/config-service/src/main/resources/config/commerce-service.yml
-    updated_at: '2026-11-03'
-  - id: silent-protocol-and-memory-storage
-    status: supported
-    claim: >-
-      The installed oidc-client-ts 3.5.0 can restore through prompt=none and renew using an
-      in-memory refresh token or a silent iframe, with the configured user store and persisted
-      transaction state containing no auth tokens.
-    reason: >-
-      The SDK implementation and tests exercise its real request/response processing. Explicit
-      InMemoryWebStorage overrides the library default; ID-token hints in silent transaction state
-      are disabled.
-    verification: >-
-      On 2026-11-03 inspected the installed SDK and ran actual-SDK protocol unit tests for
-      prompt=none, PKCE, anonymous OIDC errors, refresh grant, iframe fallback, nonce/claim checks,
-      callback relay and stale response fencing. The combined unit suite passed 100 tests including
-      API one-retry and coordinator concurrency/session-isolation behavior. Provider exceptions
-      never become UI errors or stored query data.
-    source: >-
-      node_modules/oidc-client-ts/dist/esm/oidc-client-ts.js; features/oidc.ts;
-      features/tokenSession.ts; tests/oidc.test.ts; tests/session.test.ts;
-      tests/token-retry.test.ts; https://authts.github.io/oidc-client-ts/classes/UserManager.html
-    updated_at: '2026-11-03'
-  - id: deployed-silent-restore-cookie-availability
-    status: unknown
-    claim: >-
-      The deployed browser can use the Keycloak SSO cookie inside the silent authorization iframe
-      and the provider permits the configured callback.
-    reason: >-
-      This is required after reload because no authentication tokens persist. Browser privacy and
-      frame policy depend on the deployment. Official Keycloak documentation explicitly describes
-      third-party-cookie limits.
-    verification: >-
-      On 2026-11-03 inspected local realm redirect/web-origin settings and read official Keycloak
-      adapter documentation over HTTPS. It describes hidden iframe check-sso, memory-only tokens and
-      browser cookie restrictions. Repository/fixture checks do not establish deployed cookie
-      behavior. No live realm or backend configuration was changed for this task.
-    source: >-
-      https://www.keycloak.org/securing-apps/javascript-adapter;
-      ../be-project-nexus/infra/local-dev/keycloak/realm-nexus.json;
-      docs/features/session-restore.md
     updated_at: '2026-11-03'
   - id: two-minute-session-five-real-minutes
     status: supported
@@ -783,7 +771,40 @@ assumptions:
       postman/mocks/oidc-keycloak/default.js; postman/mocks/oidc-api/default.js;
       test-results/oidc-simulation.ndjson (ignored current general-run evidence)
     updated_at: '2026-11-05'
+  - id: notification-cookie-session-merge
+    status: supported
+    claim: >-
+      The merged frontend retains notification session isolation and gateway
+      cookie authentication in the scenarios exercised by the local HTTP stand-ins.
+    reason: >-
+      The notification fixture now intercepts the gateway session envelope
+      before loading the profile, while the gateway performs code exchange.
+      The previous latest-hash-only API mock rejected unexpired tokens during
+      refresh. Recording each issued hash and expiry removes those synthetic
+      401 responses without changing production auth or test assertions.
+    verification: >-
+      On 2026-11-06 merged develop 687951d0 into notification branch 20dc2c71.
+      All 12 notification browser scenarios passed in the general suite.
+      The final dedicated auth/guest/session suite passed 25/25 in 1.0 minute
+      on app/provider ports 3217/4019. Its 565 HTTP request events included
+      86 gateway session calls. The five modeled minutes produced exactly
+      15 successful protected calls, including refresh overlap. Actual mock
+      handler checks also accepted overlapping issued tokens, rejected each
+      at its exact expiry, rejected missing/unknown tokens, preserved forced
+      401 modes and cleared the registry on reset. Initial auth runs exposed
+      the latest-hash-only fixture defect; the frontend replayed those
+      synthetic 401s successfully before the fixture correction.
+      These results do not establish live backend or Keycloak integration.
+    source: >-
+      tests/notification.spec.ts; tests/session.spec.ts; tests/oidc.spec.ts;
+      postman/mocks/oidc-api/default.js; postman/mocks/oidc-keycloak/default.js;
+      tests/catalog-fixture.mjs
+    updated_at: '2026-11-06'
 fingerprints:
+  - id: notification-cookie-session-merge
+    date: '2026-11-06'
+    commit: '20dc2c71 with uncommitted merge of develop 687951d0 and reviewed conflict resolutions'
+    cli: '1.73.0; dedicated auth app/provider 3217/4019; general app/API/provider 3216/4016/4017'
   - id: notification-session-configurable-port-merge
     date: '2026-11-05'
     commit: >-
