@@ -103,6 +103,12 @@ const normalizeHttpError = (
   const fields = new Map<string, string[]>();
   for (const { field, detail } of errors)
     fields.set(field, [...(fields.get(field) ?? []), detail]);
+  const standardProperties = new Set([
+    "type", "title", "status", "code", "detail", "instance", "traceId", "errors",
+  ]);
+  const extensions = Object.fromEntries(
+    Object.entries(value).filter(([key]) => !standardProperties.has(key)),
+  );
   return {
     kind: "http",
     status,
@@ -114,6 +120,7 @@ const normalizeHttpError = (
     traceId: string("traceId"),
     errors: errors.length ? errors : undefined,
     fieldErrors: fields.size ? Object.fromEntries(fields) : undefined,
+    extensions: Object.keys(extensions).length ? extensions : undefined,
   };
 };
 

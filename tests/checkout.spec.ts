@@ -1,6 +1,6 @@
 import { test, expect, type Page, type APIRequestContext, type TestInfo } from "@playwright/test";
 
-const simulation = "http://127.0.0.1:3923";
+const simulation = `http://127.0.0.1:${process.env.NEXUS_CHECKOUT_API_PORT || "3923"}`;
 const lineIds = ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"];
 type PreviewBody = {
   shippingAddress: {
