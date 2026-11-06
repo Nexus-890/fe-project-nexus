@@ -31,6 +31,7 @@ try {
     config.exclude = [
       "node_modules",
       ".next/**",
+      ".next-oidc-*/**",
       ".next-catalog-*/**",
       ".next-verify-build/**",
       ".next-cart-readiness-build/**",

@@ -1,4 +1,4 @@
-/* Local #150 dependency fixture. Shipping and preview contracts are provisional;
+/* Local #150 dependency fixture. Shipping localities and quoted fees are provisional;
  * their fees/localities model scenarios, not a live carrier quote. The simulation
  * removes its /api routeKey before this handler receives /v1/... requests.
  */
@@ -51,12 +51,26 @@ function bodyOf(req) {
   return typeof req.body === "object" && req.body ? req.body : JSON.parse(req.body || "{}");
 }
 
+async function forwardSession(req, res, url) {
+  const headers = Object.fromEntries(Object.entries(req.headers).filter(([name]) => !['host', 'connection', 'content-length'].includes(name)));
+  const upstream = await fetch('http://127.0.0.1:' + (process.env.NEXUS_TEST_PROVIDER_PORT || '3923') + '/session' + url.pathname, {
+    method: req.method, headers,
+    body: ['GET','HEAD','OPTIONS'].includes(req.method) ? undefined : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {})),
+  });
+  res.statusCode = upstream.status;
+  upstream.headers.forEach((value,name) => { if (!['content-length','content-encoding','transfer-encoding','set-cookie'].includes(name)) res.setHeader(name,value); });
+  const cookies = upstream.headers.getSetCookie();
+  if(cookies.length) res.setHeader('Set-Cookie',cookies);
+  res.end(Buffer.from(await upstream.arrayBuffer()));
+}
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3103");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Origin", `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || 3123}`);
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
   const url = new URL(req.url, "http://127.0.0.1:3913");
+  if (url.pathname.startsWith('/v1/auth/')) return forwardSession(req, res, url);
   if (url.pathname === "/health") return json(res, { ready: true });
   if (url.pathname === "/test/reset") {
     await pm.state.set("checkout-api:options", defaults());

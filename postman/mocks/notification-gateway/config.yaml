@@ -1,0 +1,10 @@
+version: 1
+name: notification-gateway
+slug: notification-gateway
+protocol: http
+port: 3915
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

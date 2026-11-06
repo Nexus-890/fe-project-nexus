@@ -1,5 +1,8 @@
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 
+const appOrigin = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3102"}`;
+const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}/keycloak`;
+
 // These expected update/remove responses are explicit browser stand-ins. They
 // do not establish live compatibility with #111's current auth/envelope code.
 const cartPath = "/api/v1/carts/me";
@@ -56,9 +59,11 @@ async function installCart(page: Page, title = productName) {
   };
   const issuedTokens = new Set<string>();
   page.on("response", async (response) => {
-    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+    // The gateway exchanges the code; the browser receives the access token in its envelope.
+    // 204 is an anonymous refresh with no body.
+    if (["/api/v1/auth/session", "/api/v1/auth/refresh"].includes(new URL(response.url()).pathname) && response.status() === 200) {
       const body = await response.json();
-      issuedTokens.add(body.access_token);
+      issuedTokens.add(body.data.accessToken);
     }
   });
   await page.route("**/api/v1/users/me", async (route) => {
@@ -74,6 +79,23 @@ async function installCart(page: Page, title = productName) {
       address: null, dateOfBirth: null, roles: ["BUYER"], status: "ACTIVE",
       createdAt: "2026-11-02T00:00:00Z",
     }));
+  });
+  // This harness owns the signed-in header's private dependencies. An unrelated
+  // notification fixture must not reject its token and trigger session renewal.
+  await page.route("**/api/v1/notifications**", (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    expect(route.request().method()).toBe("GET");
+    expect(state.account.authorization).toMatch(/^Bearer .+$/);
+    expect(route.request().headers().authorization).toBe(state.account.authorization);
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/notifications/unread-count")
+      return json(route, envelope({ count: 0 }));
+    expect(path).toBe("/api/v1/notifications");
+    return json(route, {
+      ...envelope([]),
+      page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    });
   });
   await page.route("**/api/v1/products/*", (route) => {
     if (new URL(route.request().url()).pathname !== `/api/v1/products/${productId}`)
@@ -180,7 +202,7 @@ async function capture(page: Page, info: TestInfo, name: string) {
 }
 
 test.beforeEach(async ({ request }) => {
-  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
+  expect((await request.get(`${providerOrigin}/test/reset`)).ok()).toBe(true);
 });
 
 test("signed-out cart requests sign-in without fetching protected cart data", async ({ page }) => {
@@ -191,7 +213,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   expect(state.reads).toEqual([]);
   expect(state.writes).toEqual([]);
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
 });
 
 test("cart displays snapshot unit and line prices with a checkout link at desktop", async ({ page }, info) => {
@@ -242,7 +264,7 @@ test("quantity changes subtotal before the response and rejection restores the s
   }
 });
 
-test("successful quantity edit survives navigation and refresh followed by signing back in", async ({ page }) => {
+test("successful quantity edit survives navigation, session restoration and explicit sign-out", async ({ page }) => {
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
   const line = page.getByTestId(`cart-line-${lineId}`);
@@ -261,7 +283,19 @@ test("successful quantity edit survives navigation and refresh followed by signi
   await page.getByRole("link", { name: "Nexus home", exact: true }).click();
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  // The HttpOnly cookie restores the session on reload, so the cart is read again with a fresh token.
+  const readsBeforeRestore = state.reads.length;
   await page.reload();
+  await expect(page.getByText(`Hi ${state.account.name}`, { exact: true })).toBeVisible();
+  await expect(line.getByRole("spinbutton")).toHaveValue("3");
+  await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
+  expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  // Wait for the Keycloak end-session redirect to land back on the home page before navigating.
+  await expect(page).toHaveURL(`${appOrigin}/`);
+  await page.waitForLoadState();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "Sign in to view your cart" })).toBeVisible();
   const readsBeforeLogin = state.reads.length;
   await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
@@ -362,11 +396,11 @@ test("a pending old-account edit cannot restore private cart data after account 
     await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
     await expect.poll(() => state.writes.length).toBe(1);
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
-    await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:3102\/(?:\?.*)?$/);
+    await expect(page).toHaveURL((url) => url.origin === appOrigin && url.pathname === "/");
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     state.account.id = "buyer-2";
     state.account.name = "Second Buyer";
     await signIn(page, state.account.name);

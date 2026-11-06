@@ -61,12 +61,12 @@ flat component architecture. No duplicate old component tree is restored.
 | GET `/api/v1/shipping/provinces` | #201 pending; provisional `data: [{code,name}]` with sibling page metadata |
 | GET `/api/v1/shipping/districts?provinceCode=...` | #201 pending; same provisional list shape |
 | GET `/api/v1/shipping/wards?districtCode=...` | #201 pending; same provisional list shape |
-| POST `/api/v1/checkout/preview` | #188 unmerged draft; numeric item/amount fields normalized into decimal strings |
+| POST `/api/v1/checkout/preview` | #188 delivered contract; numeric item/amount fields normalized into decimal strings |
 
-The preview request follows #188's existing draft: `shippingAddress` contains
+The preview request follows #188's delivered contract: `shippingAddress` contains
 `recipientName`, `phoneNumber`, `addressLine`, `city`, `district`, `ward` and
 `countryCode: "VN"`, alongside `paymentMethod: "SEPAY"`. The form's three codes
-are retained locally, not sent as undocumented fields to the names-only draft.
+are retained locally, not sent as undocumented fields to the names-only contract.
 The eventual code-based #151 request needs the delivered BE contract to agree.
 The inspected #188 implementation currently returns `shippingFee: null`, so
 ward-sensitive fees remain a simulation assumption until #188/#201 integrate.

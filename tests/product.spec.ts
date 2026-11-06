@@ -1,5 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+const appOrigin = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3102"}`;
+const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}/keycloak`;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Authorization, Content-Type",
@@ -73,9 +76,11 @@ const installAuth = async (page: Page) => {
   };
   const issuedTokens = new Set<string>();
   page.on("response", async (response) => {
-    if (new URL(response.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/token" && response.ok()) {
+    // The gateway exchanges the code; the browser receives the access token in its envelope.
+    // 204 is an anonymous refresh with no body.
+    if (["/api/v1/auth/session", "/api/v1/auth/refresh"].includes(new URL(response.url()).pathname) && response.status() === 200) {
       const body = await response.json();
-      issuedTokens.add(body.access_token);
+      issuedTokens.add(body.data.accessToken);
     }
   });
   await page.route("**/api/v1/users/me", async (route) => {
@@ -100,6 +105,23 @@ const installAuth = async (page: Page) => {
         createdAt: "2026-10-30T00:00:00Z",
       }),
     );
+  });
+  // Complete this harness's authenticated header without the separate inbox
+  // fixture rejecting its token and triggering an unrelated session renewal.
+  await page.route("**/api/v1/notifications**", (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    expect(route.request().method()).toBe("GET");
+    expect(account.authorization).toMatch(/^Bearer .+$/);
+    expect(route.request().headers().authorization).toBe(account.authorization);
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/notifications/unread-count")
+      return fulfillJson(route, envelope({ count: 0 }));
+    expect(path).toBe("/api/v1/notifications");
+    return fulfillJson(route, {
+      ...envelope([]),
+      page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    });
   });
   // The authenticated header reads the cart independently of the add-item flow.
   await page.route("**/api/v1/carts/me", (route) => {
@@ -147,7 +169,7 @@ const openProductFromHome = async (page: Page) => {
 };
 
 test.beforeEach(async ({ request }) => {
-  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
+  expect((await request.get(`${providerOrigin}/test/reset`)).ok()).toBe(true);
 });
 
 test("product SKU, price, quantity and keyboard gallery work before anonymous cart prompts sign-in", async ({
@@ -250,6 +272,73 @@ test("authenticated cart sends selected SKU and quantity, then displays typed ba
   expect(calls[1]?.token).toBe(account.authorization);
 });
 
+test("navigation during a member add cannot replace its result with an older cart read", async ({ page }) => {
+  await installProduct(page);
+  const account = await installAuth(page);
+  let releaseAdd = () => {};
+  let releaseRead = () => {};
+  const pendingAdd = new Promise<void>((resolve) => { releaseAdd = resolve; });
+  const pendingRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+  let adding = false;
+  let reads = 0;
+  let finishedReads = 0;
+  let adds = 0;
+  const cart = {
+    id: "member-cart", userId: account.id, status: "ACTIVE",
+    items: [{ id: "member-line", productId: "1", skuId: "sku-red", quantity: 1, unitPrice: 150000 }],
+  };
+  await page.route("**/api/v1/carts/me", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    reads += 1;
+    const snapshot = structuredClone(cart);
+    try {
+      if (adding) await pendingRead;
+      await fulfillJson(route, envelope(snapshot));
+    } catch {
+      // A successful add cancels any older in-flight cart read.
+    } finally {
+      finishedReads += 1;
+    }
+  });
+  await page.route("**/api/v1/carts/me/items", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: corsHeaders });
+    adds += 1;
+    await pendingAdd;
+    cart.items[0].quantity += 1;
+    await fulfillJson(route, envelope(cart), 201);
+  });
+  try {
+    await page.goto("/sign-in");
+    await signIn(page, account.name);
+    await openProductFromHome(page);
+    await page.clock.install();
+    // Make the existing snapshot stale so mounting CartPage would refetch it.
+    await page.clock.fastForward(31_000);
+    const readsBeforeAdd = reads;
+    adding = true;
+    await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
+    await expect.poll(() => adds).toBe(1);
+    await page.getByRole("link", { name: /^Shopping cart/ }).click();
+    const line = page.getByTestId("cart-line-member-line");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await page.clock.runFor(100);
+    expect(reads).toBe(readsBeforeAdd);
+    releaseAdd();
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    adding = false;
+    releaseRead();
+    await expect.poll(() => finishedReads).toBe(reads);
+    await expect(line.getByRole("spinbutton")).toHaveValue("2");
+    await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 2 items");
+  } finally {
+    releaseAdd();
+    releaseRead();
+  }
+});
+
 test("logout during a pending cart request keeps the next account free of stale success", async ({
   page,
 }) => {
@@ -296,11 +385,11 @@ test("logout during a pending cart request keeps the next account free of stale 
       page.getByRole("button", { name: "Adding…", exact: true }),
     ).toBeDisabled();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
-    await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:3102\/(?:\?.*)?$/);
+    await expect(page).toHaveURL((url) => url.origin === appOrigin && url.pathname === "/");
     await page.waitForLoadState("load");
     await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.searchParams.get("returnTo") === "/");
     account.id = "buyer-2";
     account.name = "Second Buyer";
     await signIn(page, account.name);

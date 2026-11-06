@@ -2,7 +2,7 @@
 
 ## Canonical inputs and release status
 
-Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user-service.yaml), [catalog-service](../../../be-project-nexus/docs/api/openapi/catalog-service.yaml), and [commerce-service](../../../be-project-nexus/docs/api/openapi/commerce-service.yaml) OpenAPI files. Verify the owning controller/DTO when a discrepancy appears. The older API drafts outside `openapi` describe future behavior and do not override delivered responses.
+Use the delivered [user-service](../../../be-project-nexus/docs/api/openapi/user-service.yaml), [catalog-service](../../../be-project-nexus/docs/api/openapi/catalog-service.yaml), [commerce-service](../../../be-project-nexus/docs/api/openapi/commerce-service.yaml), and [notification-service](../../../be-project-nexus/docs/api/openapi/notification-service.yaml) OpenAPI files. Verify the owning controller/DTO when a discrepancy appears. The older API drafts outside `openapi` describe future behavior and do not override delivered responses.
 
 [ADR-008](../../../be-project-nexus/docs/adr/ADR-008-api-contract.md) and the [backend API style guide](../../../be-project-nexus/docs/api/style-guide.md) still record approval and coordinated BE/FE release as pending. This frontend implements their delivered envelope. Deployment readiness needs an agreed compatible backend version and live checks; neither a checked-in spec nor a fixture pass grants that approval.
 
@@ -81,7 +81,13 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
 | DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
 | GET `/api/v1/shipping/provinces`, `/districts?provinceCode=...`, `/wards?districtCode=...` | Checkout provisional #201 consumers; protected code/name lists with sibling page metadata in the explicit local mock |
-| POST `/api/v1/checkout/preview` | Checkout follows unmerged #188 draft; preview only, no order write; names-only address and numeric wire money |
+| POST `/api/v1/checkout/preview` | Checkout follows merged #188; preview only, no order write; names-only address and numeric wire money |
+| GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |
+| GET `/api/v1/notifications/unread-count` | Header total unread count, Bearer + NOTIFICATION.VIEW |
+| PATCH `/api/v1/notifications/{id}/read` | Opening an unread notification, Bearer + NOTIFICATION.VIEW; bodyless 204 |
+| PATCH `/api/v1/notifications/read-all` | Header mark-all action, Bearer + NOTIFICATION.VIEW; bodyless 204 |
+
+Notification mutations use the common origin and the #109 routes included in the merged notification-service controller and delivered OpenAPI. After a successful bodyless PATCH/204, the feature refetches the list and unread count. Live integration requires a running backend containing those operations. See [notifications](../features/notifications.md).
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
 
@@ -95,6 +101,6 @@ The table lists FE consumers/prepared calls, not every BE endpoint or a guarante
 
 ## Type generation and runtime checks
 
-Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, and `commerceGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
+Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, `commerceGeneratedType.ts`, `notificationGeneratedType.ts`, and `gatewayGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
 
 Generated types do not validate live JSON. Keep runtime guards/parsers for auth, trees, products, SKU/images, cart and paging. Update fixtures and parser tests in the same contract change. Do not keep a permissive dual wire-shape parser indefinitely to hide mismatched deployment versions.

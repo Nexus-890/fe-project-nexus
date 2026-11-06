@@ -25,13 +25,15 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CART-02 | Authenticated add-item request sends skuId and quantity only | Implemented frontend mutation/service; real authorization/contract needs integration evidence |
 | CART-03 | Use current-session cache/feedback only; show request failures accurately | Implemented mutation/session policy; tested scenarios determine evidence |
 | CART-04 | Render Cart lines with snapshot unit/line prices, subtotal and an empty catalog link | Implemented CartPage/components/query/header count; [evidence](../features/cart-page-implementation.md) |
-| CART-05 | Optimistically edit quantity/remove, immediately recalculate and roll back rejected changes | Implemented FE/cache/service calls; merged BE source mappings exist but build/auth/response compatibility blocks live acceptance; tested with explicit HTTP stand-ins |
-| CART-06 | Keep cart contents after refresh and verify responsive/real-API acceptance | Reread after same-user reauthentication; responsive screenshots in report; uninterrupted auth and peer real-API/cart-ID evidence pending |
-| CART-07 | Keep place-order disabled with a visible reason | #150 enables Cart navigation to address/quote review; order placement remains disabled on checkout until #151 |
+| CART-05 | Optimistically edit quantity/remove, immediately recalculate and roll back rejected changes | Implemented shared useCart/cache/service calls; delivered PUT/DELETE contract exists; live authenticated/peer acceptance remains pending |
+| CART-06 | Keep cart contents after refresh and verify responsive/real-API acceptance | Reread after same-user reauthentication; dated responsive screenshots in report; uninterrupted auth and peer real-API/cart-ID evidence pending |
+| CART-07 | Keep place-order disabled with a visible reason | #150 enables navigation to address/quote review; placement remains pending #151 |
 | CART-08 | Checkout, payment, vouchers, Save for Later and shipping/tax calculations | Outside the Cart page task; design examples are not additional functional scope |
+| NTF-01/02 | Header latest ten notifications and total unread count | Implemented frontend against delivered notification reads; authenticated sessions only |
+| NTF-03/04 | Open one / mark all as read and refresh count | Implemented against #109 PATCH routes; list/count refetch, pending/error handling and session isolation; verified with HTTP stand-ins |
 | ROUTE-01 | Preserve `/login`, `/register` and `/category/[slug]` aliases | Implemented route redirects |
 | DEV-01 | Build UI with explicit auth/product/cart stand-ins | Development/test only, blocked in production |
-| OTHER-01 | Auction bidding, order management, payment, shipment and notification screens | Not implied by backend service existence; separate frontend features |
+| OTHER-01 | Auction bidding, order management, payment, shipment and full notification history/preferences screens | Not implied by backend service existence; separate frontend features |
 
 ## Rules preserved by the rebuild
 

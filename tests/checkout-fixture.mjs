@@ -7,8 +7,8 @@ const output = createWriteStream("test-results/checkout-simulation.ndjson");
 const errors = createWriteStream("test-results/checkout-simulation.err");
 const simulation = spawn("postman", [
   "simulation", "run", "postman/simulations/checkout.sim.yaml",
-  "--port", "3913", "--no-history", "--output", "ndjson",
-], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  "--port", process.env.NEXUS_TEST_PROVIDER_PORT || "3923", "--no-history", "--output", "ndjson",
+], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, env: { ...process.env, NEXUS_TEST_PROVIDER_PORT: process.env.NEXUS_TEST_PROVIDER_PORT || "3923", NEXUS_TEST_APP_PORT: process.env.NEXUS_TEST_APP_PORT || "3123" } });
 
 simulation.stdout.pipe(output);
 simulation.stderr.pipe(errors);

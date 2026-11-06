@@ -9,6 +9,8 @@ import type { CartItem } from "../types/cartResponseType";
 
 const item = (unitPrice: string, quantity: number): CartItem => ({
   id: "line", productId: "product", skuId: "sku", unitPrice, quantity,
+  // Helpers must derive amounts from the snapshot price, never a cached display total.
+  productName: "Test item", lineTotal: "0.00",
 });
 
 test("cart totals use the snapshot unit price and update immediately with quantity", () => {

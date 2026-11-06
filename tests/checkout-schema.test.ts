@@ -40,7 +40,7 @@ test("checkout maps Problem Details fields by code and known paths, leaving unkn
 });
 
 test("a shipping quote must match every snapshot cart line before its total can be rendered", () => {
-  const items: CartItem[] = [{ id: "line-1", productId: "product", skuId: "sku", quantity: 2, unitPrice: "150000.00" }];
+  const items: CartItem[] = [{ id: "line-1", productId: "product", skuId: "sku", quantity: 2, unitPrice: "150000.00", lineTotal: "300000.00", productName: "Fixture product" }];
   const preview: CheckoutPreview = {
     items: [{ itemId: "line-1", productId: "product", skuId: "sku", quantity: 2, unitPrice: "150000.00", lineTotal: "300000.00" }],
     subtotal: "300000.00", shippingFee: "30000.00", taxAmount: "0.00", discountAmount: "0.00", total: "330000.00", issues: [],

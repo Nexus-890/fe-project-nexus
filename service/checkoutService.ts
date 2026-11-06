@@ -19,7 +19,7 @@ import type {
 export const PROVINCES_PATH = "/api/v1/shipping/provinces";
 export const DISTRICTS_PATH = "/api/v1/shipping/districts";
 export const WARDS_PATH = "/api/v1/shipping/wards";
-// Request/response follow the unmerged #188 DTOs, not a delivered OpenAPI DTO.
+// Preview follows the delivered #188 contract; locality codes remain a #201 dependency.
 export const CHECKOUT_PREVIEW_PATH = "/api/v1/checkout/preview";
 
 const isNonBlankString = (value: unknown): value is string =>

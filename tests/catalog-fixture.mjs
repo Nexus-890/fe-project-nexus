@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
 
+const fixturePort = Number(process.env.NEXUS_TEST_API_PORT ?? 3911);
+const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
+
 const node = (id, name, slug, parentId, level, children = []) => ({
   id,
   name,
@@ -36,18 +39,182 @@ const backendProducts = [
 ];
 
 let treeFailure = false;
+const defaultNotificationCase = () => ({ list: "default", count: "default", read: "default", readAll: "default" });
+let notificationCase = defaultNotificationCase();
+let notificationRequests = [];
+let pendingNotifications = [];
+const notificationSessions = new Map();
+
+const fixtureUser = (account) => ({
+  id: `10000000-0000-4000-8000-00000000000${account === "a" ? 1 : 2}`,
+  email: `notification-${account}@example.test`,
+  phone: account === "a" ? "0900000001" : "0900000002",
+  fullName: `Notification ${account.toUpperCase()}`,
+  gender: null,
+  address: null,
+  dateOfBirth: null,
+  roles: ["BUYER"],
+  status: "ACTIVE",
+  createdAt: "2026-11-03T00:00:00Z",
+});
+
+const fixtureNotifications = (account) =>
+  Array.from({ length: 24 }, (_, index) => ({
+    id: `20000000-0000-4000-${account === "a" ? "8000" : "9000"}-${String(index + 1).padStart(12, "0")}`,
+    type: "ORDER_UPDATED",
+    title: `${account.toUpperCase()} update ${24 - index}`,
+    content: `Account ${account.toUpperCase()} notification ${24 - index}. Your order has an update. Open this notification to read the complete information for your account.`,
+    readAt: index % 4 === 3 ? "2026-11-03T01:00:00Z" : null,
+    createdAt: new Date(Date.parse("2026-11-03T00:30:00Z") - index * 60_000).toISOString(),
+  }));
+
+let notificationItems = { a: fixtureNotifications("a"), b: fixtureNotifications("b") };
+
+const success = (data) => ({ code: 0, message: "response success", data });
+const releaseNotifications = () => {
+  const pending = pendingNotifications;
+  pendingNotifications = [];
+  pending.forEach((reply) => reply());
+};
 
 function json(res, value, status = 200) {
   res.statusCode = status;
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(value));
+  res.end(status === 204 ? undefined : JSON.stringify(value));
 }
 
-const server = createServer((req, res) => {
-  const url = new URL(req.url, "http://127.0.0.1:3911");
+// The gateway session endpoints (#252) live on the OIDC stand-in. Forward them as the gateway
+// would, with headers and cookies intact, so sign-in in this suite gets the same HttpOnly cookie.
+async function forwardSession(req, res, url) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const headers = Object.fromEntries(Object.entries(req.headers)
+    .filter(([name]) => !["host", "connection", "content-length"].includes(name)));
+  const providerPort = process.env.NEXUS_TEST_PROVIDER_PORT ?? process.env.NEXUS_OIDC_SIM_PORT ?? 3913;
+  const upstream = await fetch(`http://127.0.0.1:${providerPort}${url.pathname}`, {
+    method: req.method,
+    headers,
+    body: ["GET", "HEAD", "OPTIONS"].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  res.statusCode = upstream.status;
+  upstream.headers.forEach((value, name) => {
+    if (!["content-length", "content-encoding", "transfer-encoding", "set-cookie"].includes(name))
+      res.setHeader(name, value);
+  });
+  const cookies = upstream.headers.getSetCookie();
+  if (cookies.length) res.setHeader("Set-Cookie", cookies);
+  res.end(Buffer.from(await upstream.arrayBuffer()));
+}
+
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, fixtureOrigin);
+  if (url.pathname.startsWith("/api/v1/auth/"))
+    return forwardSession(req, res, url).catch(() => json(res, { title: "Bad gateway", status: 502 }, 502));
   if (req.method === "OPTIONS") return json(res, {});
   if (url.pathname === "/health") return json(res, {});
+  if (url.pathname === "/test/notifications/reset") {
+    releaseNotifications();
+    notificationCase = defaultNotificationCase();
+    notificationItems = { a: fixtureNotifications("a"), b: fixtureNotifications("b") };
+    notificationRequests = [];
+    notificationSessions.clear();
+    return json(res, {});
+  }
+  if (url.pathname === "/test/notifications/case") {
+    notificationCase = {
+      list: url.searchParams.get("list") ?? "default",
+      count: url.searchParams.get("count") ?? "default",
+      read: url.searchParams.get("read") ?? "default",
+      readAll: url.searchParams.get("readAll") ?? "default",
+    };
+    return json(res, {});
+  }
+  if (url.pathname === "/test/notifications/release") {
+    releaseNotifications();
+    return json(res, {});
+  }
+  if (url.pathname === "/test/notifications/evidence")
+    return json(res, notificationRequests);
+  if (url.pathname === "/test/notifications/session" && req.method === "POST") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const { account, accessToken } = JSON.parse(body);
+    if (!["a", "b"].includes(account) || typeof accessToken !== "string" || !accessToken)
+      return json(res, { title: "Invalid fixture session", status: 400 }, 400);
+    notificationSessions.set(`Bearer ${accessToken}`, account);
+    return json(res, {});
+  }
+  if (url.pathname === "/api/v1/users/me") {
+    const account = notificationSessions.get(req.headers.authorization);
+    return account
+      ? json(res, success(fixtureUser(account)))
+      : json(res, { title: "Unauthorized", status: 401 }, 401);
+  }
+  if (url.pathname.startsWith("/api/v1/notifications")) {
+    const account = notificationSessions.get(req.headers.authorization);
+    const evidence = {
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+      authorization: req.headers.authorization ?? null,
+      canceled: false,
+    };
+    notificationRequests.push(evidence);
+    res.on("close", () => {
+      if (!res.writableEnded) evidence.canceled = true;
+    });
+    if (!account) return json(res, { title: "Unauthorized", status: 401 }, 401);
+    if (req.method === "PATCH") {
+      const all = url.pathname === "/api/v1/notifications/read-all";
+      const match = url.pathname.match(/^\/api\/v1\/notifications\/([^/]+)\/read$/);
+      if (!all && !match)
+        return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
+      const mode = all ? notificationCase.readAll : notificationCase.read;
+      if (mode === "error")
+        return json(res, { title: "Unavailable", status: 503 }, 503);
+      const items = notificationItems[account];
+      const selected = all ? items : items.filter((item) => item.id === decodeURIComponent(match[1]));
+      if (!all && selected.length === 0)
+        return json(res, { title: "Not found", status: 404 }, 404);
+      const reply = () => {
+        if (res.destroyed) return;
+        selected.forEach((item) => { item.readAt ??= "2026-11-03T02:00:00Z"; });
+        json(res, null, 204);
+      };
+      if (mode === "delayed") pendingNotifications.push(reply);
+      else reply();
+      return;
+    }
+    if (req.method !== "GET")
+      return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
+    const mode = url.pathname.endsWith("/unread-count")
+      ? notificationCase.count
+      : notificationCase.list;
+    if (mode === "error")
+      return json(res, { title: "Unavailable", status: 503 }, 503);
+    if (url.pathname === "/api/v1/notifications/unread-count")
+      return json(res, success({
+        count: mode === "zero" ? 0 : mode === "large" ? 125 : notificationItems[account].filter((item) => item.readAt === null).length,
+      }));
+    if (url.pathname !== "/api/v1/notifications")
+      return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
+    const page = Number(url.searchParams.get("page") ?? 0);
+    const size = Number(url.searchParams.get("size") ?? 10);
+    const items = mode === "empty" ? [] : notificationItems[account];
+    const response = {
+      ...success(mode === "malformed" ? [{ invalid: true }] : items.slice(page * size, (page + 1) * size)),
+      page: { number: page, size, totalElements: items.length, totalPages: Math.ceil(items.length / size) },
+    };
+    const reply = () => {
+      if (!res.destroyed) json(res, response);
+    };
+    if (mode === "delayed") pendingNotifications.push(reply);
+    else reply();
+    return;
+  }
   if (url.pathname === "/test/tree-failure") {
     treeFailure = url.searchParams.get("enabled") === "true";
     return json(res, {});
@@ -92,4 +259,4 @@ const server = createServer((req, res) => {
   return json(res, { title: "Not found", status: 404 }, 404);
 });
 
-server.listen(3911, "127.0.0.1");
+server.listen(fixturePort, "127.0.0.1");

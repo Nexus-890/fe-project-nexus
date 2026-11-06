@@ -71,16 +71,21 @@ export function getMockProductDetail(productId: string): ProductDetail {
 
 export function getMockCartAfterAdd(input: AddCartItemRequest): Cart {
   const sku = mockProductDetail.skus.find((entry) => entry.id === input.skuId) ?? mockProductDetail.skus[0];
+  const subtotal = multiplyMoney(sku.price, input.quantity);
   return {
     id: "00000001-1111-4111-8111-111111111111",
     userId: "00000080-1111-4111-8111-111111111111",
     status: "ACTIVE",
+    subtotal,
+    currency: "VND",
     items: [{
       id: "00000002-1111-4111-8111-111111111111",
       skuId: input.skuId,
       productId: sku.productId,
+      productName: mockProductDetail.name,
       quantity: input.quantity,
       unitPrice: sku.price,
+      lineTotal: subtotal,
     }],
   };
 }

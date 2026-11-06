@@ -7,3 +7,6 @@ mocks:
   - name: api
     routeKey: api
     path: postman/mocks/checkout-api/config.yaml
+  - name: session
+    routeKey: session
+    path: postman/mocks/oidc-api/config.yaml

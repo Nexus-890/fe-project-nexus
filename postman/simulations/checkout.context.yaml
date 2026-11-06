@@ -98,6 +98,18 @@ assumptions:
       postman/mocks/checkout-api/config.yaml;
       postman/mocks/oidc-keycloak/config.yaml
     updated_at: "2026-11-04"
+  - id: checkout-develop-cookie-integration-20261106
+    status: supported
+    claim: The checkout scenarios use the current gateway cookie session lifecycle after merging develop.
+    reason: The actual frontend runs against the existing repository OIDC gateway and checkout HTTP stand-ins.
+    verification: >-
+      On 2026-11-06, generated-type check, lint, typecheck, 180 unit tests and all
+      13 checkout browser scenarios passed. The simulation recorded 381 requests,
+      including 27 session-member calls and 16 previews, with zero order writes.
+      Preview #188 is now delivered; shipping #201 and carrier fees remain modeled.
+      Live backend and carrier acceptance were not exercised.
+    source: tests/checkout.spec.ts; postman/mocks/oidc-api/default.js; postman/mocks/checkout-api/default.js
+    updated_at: "2026-11-06"
 fingerprints:
   - id: checkout-initial-implementation
     date: "2026-11-04"

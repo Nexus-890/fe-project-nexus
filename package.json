@@ -15,6 +15,8 @@
     "test:unit": "node scripts/test-auth.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
+    "test:cart": "node scripts/test-browser.mjs --config playwright.cart.config.ts",
+    "test:profile": "node scripts/test-browser.mjs --config playwright.profile.config.ts",
     "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts",
     "test:checkout": "node scripts/test-browser.mjs --config playwright.checkout.config.ts"
   },
