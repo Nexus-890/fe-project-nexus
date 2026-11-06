@@ -1,0 +1,10 @@
+version: 1
+name: cart-gateway
+slug: cart-gateway
+protocol: http
+port: 3913
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

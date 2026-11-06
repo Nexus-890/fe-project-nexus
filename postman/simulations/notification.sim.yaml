@@ -1,0 +1,6 @@
+simulation: notification-read-status
+routing: header
+mocks:
+  - name: notification-gateway
+    routeKey: notifications
+    path: ../mocks/notification-gateway/config.yaml

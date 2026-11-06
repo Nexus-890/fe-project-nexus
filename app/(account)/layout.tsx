@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
-import ShopLayout from "../../features/ShopLayout";
+import AccountLayout from "@/features/AccountLayout";
 
-function AccountLayout({ children }: { children: ReactNode }) {
-  return <ShopLayout>{children}</ShopLayout>;
+export default function Layout({ children }: { children: ReactNode }) {
+  return <AccountLayout>{children}</AccountLayout>;
 }
-
-export default AccountLayout;

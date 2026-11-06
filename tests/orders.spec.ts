@@ -5,7 +5,8 @@ import { test, expect, type APIRequestContext, type Page, type TestInfo } from "
 // The focused config supplies a real HTTP stand-in; the general suite does not.
 test.skip(!process.env.NEXUS_ORDER_LIST_TEST, "Run with playwright.orders.config.ts for the order HTTP simulation.");
 
-const simulation = "http://127.0.0.1:3914/api";
+const simulation = `http://127.0.0.1:${process.env.NEXUS_ORDER_LIST_PORT || "3914"}/api`;
+const provider = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
 const pendingId = "68000000-0000-4000-8000-000000000002";
 const pendingGroupId = "c8000000-0000-4000-8000-000000000102";
 const rows = (page: Page) => page.getByTestId(/^order-row-/);
@@ -43,8 +44,8 @@ async function capture(page: Page, info: TestInfo, filename: string) {
 }
 
 test.beforeEach(async ({ page, request }) => {
-  expect((await request.get("http://127.0.0.1:3913/keycloak/test/reset")).ok()).toBe(true);
-  expect((await request.get("http://127.0.0.1:3913/api/test/reset")).ok()).toBe(true);
+  expect((await request.get(`${provider}/keycloak/test/reset`)).ok()).toBe(true);
+  expect((await request.get(`${provider}/api/test/reset`)).ok()).toBe(true);
   expect((await request.get(`${simulation}/test/reset`)).ok()).toBe(true);
   // The header's same-origin cart is outside this task's API dependency.
   await page.route("**/api/v1/carts/me", (route) => route.fulfill({ json: {
@@ -89,7 +90,7 @@ test("three orders display number, date, total and status with only pending paym
   await expect(page).toHaveURL(new RegExp(`/checkout/payment/${pendingGroupId}$`));
 });
 
-test("status filter persists through refresh and signing back in", async ({ page, request }) => {
+test("status filter persists through refresh and cookie session restoration", async ({ page, request }) => {
   await signIn(page);
   await expect(rows(page)).toHaveCount(3);
   await page.getByRole("combobox", { name: "Order status", exact: true }).selectOption("PENDING");
@@ -98,8 +99,6 @@ test("status filter persists through refresh and signing back in", async ({ page
   await expect(page.getByTestId(`order-row-${pendingId}`)).toContainText("To Pay");
   await page.reload();
   await expect(page).toHaveURL(/\/orders\?status=PENDING$/);
-  await page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
-  await finishSignIn(page);
   await expect(page).toHaveURL(/\/orders\?status=PENDING$/);
   await expect(page.getByRole("combobox", { name: "Order status", exact: true })).toHaveValue("PENDING");
   await expect(rows(page)).toHaveCount(1);
@@ -129,6 +128,20 @@ test("empty results render a message", async ({ page, request }) => {
   await expect(page.getByRole("main")).toContainText(/no orders/i);
 });
 
+test("confirmation query alone cannot claim payment and survives filtering and reload", async ({ page }) => {
+  const confirmation = "payment=confirmed&groupId=c8000000-0000-4000-8000-000000000102";
+  await signIn(page, `/orders?${confirmation}`);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(page.getByText("Payment confirmed. All orders in your group have been paid.", { exact: true })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Order status", exact: true }).selectOption("PENDING");
+  await expect(page).toHaveURL(`/orders?status=PENDING&${confirmation}`);
+  await expect(rows(page)).toHaveCount(1);
+  await page.reload();
+  await expect(page).toHaveURL(`/orders?status=PENDING&${confirmation}`);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByText("Payment confirmed. All orders in your group have been paid.", { exact: true })).toHaveCount(0);
+});
+
 test("problem detail is displayed and a retry reloads orders", async ({ page, request }) => {
   await mode(request, "unavailable");
   await signIn(page);
@@ -148,13 +161,16 @@ test("pending order without a group cannot navigate to an invented payment", asy
   await expect(pending.getByRole("button", { name: "Pay Now", exact: true })).toBeDisabled();
 });
 
-test("commerce unauthenticated problem asks for sign-in instead of retrying", async ({ page, request }) => {
+test("commerce 401 refreshes once then asks for sign-in without another query retry", async ({ page, request }) => {
   await mode(request, "unauthenticated");
   await signIn(page, "/orders?status=PENDING");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Your order session has expired. Sign in again.");
   await expect(page.getByRole("button", { name: /retry orders/i })).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", `/sign-in?returnTo=${encodeURIComponent("/orders?status=PENDING")}`);
-  expect((await evidence(request)).reads).toHaveLength(1);
+  expect((await evidence(request)).reads).toHaveLength(2);
+  const authEvidence = await request.get(`${provider}/api/test/evidence`);
+  expect(authEvidence.ok()).toBe(true);
+  expect((await authEvidence.json()).sessionRefreshes).toBe(1);
 });
 
 test("375x812 long order numbers wrap without horizontal scrolling or clipped text", async ({ page, request }, info) => {

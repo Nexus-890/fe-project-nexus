@@ -4,7 +4,7 @@ import { mkdirSync, createWriteStream } from "node:fs";
 mkdirSync("test-results", { recursive: true });
 const simulation = spawn("postman", [
   "simulation", "run", "postman/simulations/order-list.sim.yaml",
-  "--port", "3914", "--no-history", "--output", "ndjson",
+  "--port", process.env.NEXUS_ORDER_LIST_PORT || "3914", "--no-history", "--output", "ndjson",
 ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 simulation.stdout.pipe(createWriteStream("test-results/order-list-simulation.ndjson"));
 simulation.stderr.pipe(createWriteStream("test-results/order-list-simulation.err"));

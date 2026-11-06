@@ -19,6 +19,10 @@ export function useOrders() {
     const query = new URLSearchParams();
     if (nextStatus) query.set("status", nextStatus);
     if (nextPage > 1) query.set("page", String(nextPage));
+    if (params.get("payment") === "confirmed" && params.get("groupId")) {
+      query.set("payment", "confirmed");
+      query.set("groupId", params.get("groupId")!);
+    }
     return query.size ? `/orders?${query}` : "/orders";
   };
   const orders = useApiQuery({

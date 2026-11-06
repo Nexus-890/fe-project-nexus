@@ -1,0 +1,9 @@
+version: 1
+name: nexus-payment-api
+slug: nexus-payment-api
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CategoryNode } from "./catalogResponseType";
 import type { UserResponse } from "./authResponseType";
 
@@ -5,10 +6,12 @@ import type { UserResponse } from "./authResponseType";
 export type HeaderProps = {
   user: UserResponse | null;
   authenticating: boolean;
+  restoring?: boolean;
   onSignOut: () => void;
   cartQuantity?: number;
   categories: CategoryNode[];
   categoriesLoading: boolean;
   categoriesError: boolean;
   onRetryCategories: () => void;
+  notificationBell?: ReactNode;
 };

@@ -10,7 +10,21 @@ Base: `origin/develop` at `0d0a36a4`, inspected 2026-11-04. The delivered OpenAP
 
 Develop does **not** yet supply each order's `orderGroupId` (#138), and `/checkout/payment/[orderGroupId]` is not present on this base. The mock adds distinct group IDs as explicitly allowed by the task. A pending link uses that ID, never `orderId`. If the field is missing, the row remains visible with a disabled payment button. No backend or payment-page implementation is included.
 
-The existing session keeps tokens in memory. Refresh preserves filter/page in the URL, but the user must sign in again; the sign-in return destination preserves that URL. This task does not change session persistence.
+The current gateway session keeps access tokens in memory and the refresh token in an HttpOnly cookie. Refresh preserves filter/page in the URL while the provider restores the session. The list displays its account loading state during restoration. If the session has ended, the sign-in return destination preserves that URL.
+
+## Develop reconciliation — 2026-11-06
+
+Merged `origin/develop` at `49a7caa8` while retaining the current account layout, sidebar/footer, notification cache keys and gateway cookie session. Orders now uses that shared account layout and activates its Orders navigation entry. The delivered `OrderResponse` and list OpenAPI still omit `orderGroupId`, so the safe disabled payment state remains necessary for that backend response. The focused local fixture forwards gateway session request bodies, cookies and CSRF headers, and the reload scenario expects session restoration.
+
+Reconciliation verification: generated-type drift check, lint, typecheck and all 177 frontend unit tests passed. All nine focused order browser scenarios passed in 39.2 seconds, including restored filter/page state, one 401 refresh/replay and the shared account layout at desktop/mobile sizes. The simulation log confirms order HTTP requests with successful and rejected responses. Existing Next upgrade reminders required unchanged command retries; a local dependency copy was needed because cross-volume `node_modules` junctions could not run Next. These checks exercise local HTTP stand-ins, not live backend services.
+
+## Integration after payment polling — #153 → #154
+
+The account `/orders` route now combines the full filtered list with #153's paid-group confirmation. It shows the confirmation only when this session's cached group read has all children `PAID`; URL flags alone never establish payment. Filter and page links retain `payment`/`groupId` parameters. Group polling and the list share the strict order parser while preserving the list's optional group-payment link. The duplicate shop `/orders` route was removed. Both the order-list and group-service test suites remain present.
+
+On 2026-11-06, generated-type drift, lint, typecheck and all 191 unit tests passed. All ten focused order browser scenarios passed in 39.7 seconds, including a new assertion that a forged confirmation query remains unconfirmed through filtering and session restoration.
+
+The stacked payment check passed the thirty-second hidden-tab pause and resumed to this list with verified confirmation. The strict all-PAID navigation check exceeded its three-second timeout in exercised runs, while the payment page had reached its confirmed state. Warming the browser destination did not remove that timing failure; the final test retains the original HTTP warmup and now measures navigation commit explicitly with `waitUntil: "commit"`. That final check also exceeded 3000ms. No production polling interval or timing limit was changed. These local results do not establish a reliable three-second navigation bound.
 
 ## Verification
 

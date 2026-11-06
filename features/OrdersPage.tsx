@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ReceiptText } from "lucide-react";
 import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatusBadge";
 import { Pagination } from "../components/Pagination";
@@ -9,6 +10,9 @@ import { formatVND } from "../components/formatPrice";
 import { ORDER_STATUSES, isOrderStatus } from "../service/orderService";
 import { useOrders } from "./useOrders";
 import type { OrderSummary } from "../types/orderResponseType";
+import type { OrderGroup } from "../types/orderResponseType";
+import { queryKeys } from "../configs/queryKeys";
+import { getPaymentOutcome } from "./paymentStatusUtils";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Ho_Chi_Minh",
@@ -50,32 +54,22 @@ function OrderRow({ order }: { order: OrderSummary }) {
   );
 }
 
-function OrdersPage() {
+function OrdersPage({ confirmedGroupId }: { confirmedGroupId?: string }) {
   const { auth, orders, status, page, hrefFor, href } = useOrders();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  // URL flags are not evidence: only the current session's verified poll can confirm payment.
+  const confirmed = auth.status === "authenticated" && confirmedGroupId &&
+    getPaymentOutcome(queryClient.getQueryData<OrderGroup>(queryKeys.orders.group(auth.sessionId, confirmedGroupId))) === "paid";
   const signInHref = `/sign-in?returnTo=${encodeURIComponent(href)}`;
   const forbidden = orders.error?.code === "FORBIDDEN" || orders.error?.code === "COMMERCE_FORBIDDEN";
   const expired = orders.error?.code === "UNAUTHENTICATED" || orders.error?.code === "COMMERCE_UNAUTHENTICATED" || orders.error?.status === 401;
   const data = orders.data;
   return (
-    <section className="mx-auto grid w-full max-w-[1248px] gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[224px_minmax(0,1fr)] lg:gap-12 lg:py-9" aria-labelledby="orders-title">
-      <aside className="min-w-0">
-        {auth.user && (
-          <div className="mb-4 flex min-w-0 items-center gap-3 lg:mb-6">
-            <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-sm">
-              {auth.user.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("")}
-            </span>
-            <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{auth.user.fullName}</span>
-          </div>
-        )}
-        <nav aria-label="Account">
-          <Link href="/orders" aria-current="page" className="inline-flex min-h-11 items-center gap-3 text-sm font-medium text-primary">
-            <ReceiptText size={18} aria-hidden="true" />Orders
-          </Link>
-        </nav>
-      </aside>
+    <section className="min-w-0 pb-8" aria-labelledby="orders-title">
       <div className="min-w-0">
         <h1 id="orders-title" className="text-heading-32">Orders</h1>
+        {confirmed && <div role="status" className="mt-6 rounded-sm border border-border bg-success/5 p-4 text-success">Payment confirmed. All orders in your group have been paid.</div>}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <label htmlFor="order-status" className="text-sm font-medium">Order status</label>
           <select id="order-status" value={status ?? ""} onChange={(event) => router.push(hrefFor(isOrderStatus(event.target.value) ? event.target.value : undefined))} className="min-h-11 max-w-full rounded-sm border border-border bg-background px-3 text-sm">
@@ -83,7 +77,7 @@ function OrdersPage() {
             {ORDER_STATUSES.map((value) => <option key={value} value={value}>{ORDER_STATUS_LABELS[value]}</option>)}
           </select>
         </div>
-        {auth.status === "authenticating" ? (
+        {auth.status === "restoring" || auth.status === "authenticating" ? (
           <p role="status" className="py-12 text-muted-foreground">Loading your account…</p>
         ) : auth.status === "error" ? (
           <div className="py-8">

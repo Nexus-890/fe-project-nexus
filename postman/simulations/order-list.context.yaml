@@ -67,8 +67,54 @@ assumptions:
       No live service behavior is inferred from this simulation.
     source: tests/orders.spec.ts; playwright.orders.config.ts; postman/mocks/order-list-api/default.js
     updated_at: '2026-11-04'
+  - id: gateway-cookie-session-order-list
+    status: supported
+    claim: >-
+      In the focused local scenarios, the real order-list frontend restores
+      its gateway cookie session on reload and replays a protected 401 once
+      after refreshing before showing the sign-in action.
+    reason: >-
+      The fixture forwards session bodies, origin/app headers and cookies to
+      the existing gateway stand-in. Browser checks observed the restored
+      filtered list and exactly two order reads plus one gateway refresh in
+      the persistently unauthorized scenario.
+    verification: >-
+      On 2026-11-06 ran all nine focused browser scenarios with fingerprint
+      order-list-154-develop-reconciliation: 9 passed in 39.2 seconds. The
+      simulation log contains order endpoint request events with 200, 401
+      and 503 responses, demonstrating caller execution against the stand-in.
+      The mobile/desktop screenshots were visually inspected. The initial
+      cross-volume dependency junction could not run Next; local dependency
+      copies resolved it. Existing Next upgrade reminders required unchanged
+      command retries. This does not establish live backend compatibility.
+    source: tests/orders.spec.ts; playwright.orders.config.ts; postman/mocks/order-list-api/default.js
+    updated_at: '2026-11-06'
+  - id: stacked-confirmation-query-safety
+    status: supported
+    claim: >-
+      The full account order list preserves confirmation parameters across
+      filtering and reload without treating those URL flags as payment evidence.
+    reason: >-
+      The banner requires an all-PAID group read from the current session cache.
+      The focused real-browser scenario carries a forged confirmation query
+      through filtering and cookie restoration without displaying confirmation.
+    verification: >-
+      On 2026-11-06 all ten focused order browser scenarios passed in 39.7
+      seconds on order-list-154-stacked. Group-service and list-service suites
+      were retained; all 191 frontend unit tests passed. The local simulation
+      recorded the list requests with successful and rejected responses.
+    source: tests/orders.spec.ts; features/OrdersPage.tsx; features/useOrders.ts
+    updated_at: '2026-11-06'
 fingerprints:
   - id: order-list-154
     date: '2026-11-04'
     commit: '0d0a36a4 with uncommitted #154 frontend and test changes'
     cli: 'Postman 1.73.0'
+  - id: order-list-154-develop-reconciliation
+    date: '2026-11-06'
+    commit: 'eaa34d3e merged with origin/develop 49a7caa8 and order-layout/session reconciliation'
+    cli: 'Installed Postman CLI'
+  - id: order-list-154-stacked
+    date: '2026-11-06'
+    commit: 'c40ae3e3 merged with resolved payment polling b7c923a5 and additive list/group reconciliation'
+    cli: 'Installed Postman CLI'

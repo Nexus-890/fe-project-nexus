@@ -31,20 +31,24 @@ function problem(res, status, code, detail) {
   res.end(JSON.stringify({ type: "urn:problem:domain-error", title: "Order list unavailable", status, code, detail }));
 }
 function forward(req, res, port, path) {
+  const headers = Object.fromEntries(Object.entries(req.headers)
+    .filter(([name]) => !["host", "connection", "content-length"].includes(name)));
+  const body = req.body == null ? undefined : typeof req.body === "string" ? req.body : JSON.stringify(req.body);
   const upstream = http.request({
     hostname: "127.0.0.1", port, path, method: req.method,
-    headers: { authorization: req.headers.authorization || "", accept: "application/json" },
+    headers,
   }, (response) => {
-    res.writeHead(response.statusCode, { "Content-Type": response.headers["content-type"] || "application/json" });
+    res.writeHead(response.statusCode, response.headers);
     response.pipe(res);
   });
   upstream.on("error", () => problem(res, 503, "SERVICE_UNAVAILABLE", "A fixture dependency is unavailable."));
-  upstream.end();
+  upstream.end(body);
 }
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3102");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Origin", process.env.NEXUS_OIDC_APP_ORIGIN || "http://127.0.0.1:3102");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, "http://127.0.0.1:3914");
   if (url.pathname === "/health") return json(res, { ready: true });
@@ -58,9 +62,10 @@ const server = http.createServer(async (req, res) => {
     return json(res, {});
   }
   if (url.pathname === "/test/evidence") return json(res, await pm.state.get("order-list-api:evidence") || initialEvidence());
-  if (url.pathname === "/v1/users/me") return forward(req, res, 3913, `/api${req.url}`);
+  if (url.pathname === "/v1/users/me" || url.pathname.startsWith("/v1/auth/"))
+    return forward(req, res, Number(process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || 3913), `/api${req.url}`);
   if (url.pathname === "/v1/categories/tree" || url.pathname === "/v1/products")
-    return forward(req, res, 3911, `/api${req.url}`);
+    return forward(req, res, Number(process.env.NEXUS_TEST_API_PORT || 3911), `/api${req.url}`);
   if (url.pathname === "/v1/orders" && req.method === "GET") {
     const evidence = await pm.state.get("order-list-api:evidence") || initialEvidence();
     const authorized = /^Bearer .+/.test(req.headers.authorization || "");

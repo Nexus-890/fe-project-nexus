@@ -43,13 +43,30 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /.next-catalog-*/
+/.next-profile-*/
+/.next-cart-*/
+/cart-simulation.ndjson
+/cart-simulation.err
+/profile-simulation.ndjson
+/profile-simulation.err
+!/postman/
+!/postman/**
 /.next-oidc-run/
+/.next-payment-run/
+/.next-oidc-*/
 
 !.env.example
+
+# Reusable local API simulations; generated dependencies and logs stay local.
+!/postman/
+/postman/.dependencies/
+/postman/**/*.ndjson
 
 /.next-typecheck/
 /.next-verify-build/
 /.next-cart-readiness-build/
-/.next-orders-run/
+/.next-orders-*/
+/.next-payment-build/
+/.next-polling-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json
