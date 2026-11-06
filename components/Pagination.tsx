@@ -5,9 +5,10 @@ type PaginationProps = {
   page: number;
   totalPages: number;
   hrefForPage: (page: number) => string;
+  ariaLabel?: string;
 };
 
-export function Pagination({ page, totalPages, hrefForPage }: PaginationProps) {
+export function Pagination({ page, totalPages, hrefForPage, ariaLabel = "Product pagination" }: PaginationProps) {
   if (totalPages <= 1) return null;
   const style =
     "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm border border-border px-3 hover:bg-muted";
@@ -17,7 +18,7 @@ export function Pagination({ page, totalPages, hrefForPage }: PaginationProps) {
 
   return (
     <nav
-      aria-label="Product pagination"
+      aria-label={ariaLabel}
       className="flex max-w-full flex-wrap items-center justify-center gap-1 text-sm"
     >
       {page > 1 ? (

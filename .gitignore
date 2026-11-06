@@ -67,6 +67,7 @@ next-env.d.ts
 /.next-typecheck/
 /.next-verify-build/
 /.next-cart-readiness-build/
+/.next-orders-*/
 /.next-payment-build/
 /.next-polling-build/
 .tsconfig-typecheck.json

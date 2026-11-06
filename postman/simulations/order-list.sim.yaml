@@ -1,0 +1,6 @@
+simulation: nexus-order-list
+routing: path
+mocks:
+  - name: api
+    routeKey: api
+    path: postman/mocks/order-list-api/config.yaml

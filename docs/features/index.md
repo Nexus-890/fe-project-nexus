@@ -11,6 +11,7 @@
 | [Checkout](checkout.md) | Address validation, locality selection and order summary; #201 shipping remains provisional |
 | [Place order](place-order.md) | Idempotency key reuse, price confirmation, stock feedback and payment handoff |
 | [Notifications](notifications.md) | Header unread count/latest ten, single-read/mark-all actions, list/count refetch and session isolation |
+| [Order list](order-list.md) | Buyer orders, URL status/paging, status badges and pending group-payment links; mock evidence while #138 and the payment route are pending |
 
 These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Payment execution, carrier booking, auction bidding and forgotten-password recovery are outside the current frontend implementation scope. Authentication tokens stay in memory; reload restoration uses the provider's SSO session.
 

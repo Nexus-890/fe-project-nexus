@@ -6,6 +6,7 @@ export const ROUTES = {
   signUp: "/sign-up",
   profile: "/profile",
   cart: "/cart",
+  orders: "/orders",
   reputation: "/profile#reputation",
   security: "/profile#security",
   sell: "/#sell",
@@ -33,7 +34,7 @@ export interface AccountNavigationItem {
 }
 
 export const ACCOUNT_NAVIGATION: AccountNavigationItem[] = [
-  { id: "orders", label: "Orders", icon: ReceiptText },
+  { id: "orders", label: "Orders", icon: ReceiptText, href: ROUTES.orders },
   { id: "bids", label: "My Bids", icon: Gavel },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "reputation", label: "Reputation", icon: Star, href: ROUTES.reputation },

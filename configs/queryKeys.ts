@@ -1,5 +1,6 @@
 import type { ProductFilters } from "../types/catalogRequestType";
 import type { CheckoutDestination } from "../types/checkoutType";
+import type { OrderFilters } from "../types/orderRequestType";
 import type { NotificationFilters } from "../types/notificationRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
@@ -36,6 +37,8 @@ export const queryKeys = {
       ["notification", sessionId, "unread-count"] as const,
   },
   orders: {
+    list: (sessionId: number, filters: OrderFilters) =>
+      ["orders", sessionId, "list", filters] as const,
     group: (sessionId: number, orderGroupId: string) =>
       ["orders", sessionId, "group", orderGroupId] as const,
     own: (sessionId: number, page: number) =>
