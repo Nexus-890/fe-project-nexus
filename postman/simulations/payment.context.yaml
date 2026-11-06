@@ -218,29 +218,28 @@ assumptions:
       test-results/payment-simulation.ndjson (ignored local run evidence)
     updated_at: "2026-11-06"
   - id: stacked-order-list-navigation-timing
-    status: contradicted
+    status: supported
     claim: >-
-      Every all-PAID transition reaches the full account order-list URL within
-      the strict three-second local browser acceptance bound.
+      With the order destination prefetched while the buyer pays, the exercised
+      all-PAID transition reaches the account order-list URL within three seconds.
     reason: >-
-      The stacked payment check reached its confirmed state but exceeded the
-      unchanged three-second navigation timeout. Warming the browser account
-      destination did not remove the failure. The separate hidden-tab scenario
-      passed its thirty-second pause, resume navigation and confirmation banner.
+      The initial stacked route reached the confirmed state but missed the
+      navigation deadline. Prefetching the exact destination in the payment
+      feature removes route loading from the confirmation transition without
+      changing the polling interval or weakening the deadline.
     verification: >-
-      On 2026-11-06 ran the focused payment-polling scenarios after merging
-      b7c923a5 into the full order-list implementation c40ae3e3. The steady
-      all-PAID scenario exceeded page.waitForURL's 3000ms bound in two exercised
-      runs, with the page already showing its confirmed/loading-orders state.
-      Group requests and admin PATCHes executed against the local simulation.
-      The hidden-tab scenario passed in 32.1 seconds. Retained the original
-      HTTP warmup, three-second assertion and production polling interval.
-      A final focused run measured navigation commit explicitly with
-      waitUntil commit and also exceeded 3000ms. Existing Next advisory exits
-      required unchanged retries before application scenarios could run. No live
-      backend timing claim follows from these results.
+      On 2026-11-06 initial stacked runs exceeded the unchanged 3000ms URL bound,
+      including a run measuring navigation commit. On final candidate 1a090ab0,
+      the strict three-second scenario passed with waitUntil commit and all
+      confirmation banner/list assertions. The thirty-second hidden-tab pause,
+      resume and verified banner scenario also passed. Both selected scenarios
+      passed together in 58.5 seconds. Their HTTP simulation recorded 114 calls,
+      7 group reads, 4 admin PATCHes and 11 order-list reads, with no 501 responses.
+      Earlier full payment/polling validation passed all 18 scenarios. These
+      findings concern local stand-ins, not deployed backend or bank timing.
     source: tests/payment-polling.spec.ts; features/CheckoutPaymentPage.tsx; features/OrdersPage.tsx
     updated_at: '2026-11-06'
+
 fingerprints:
   - id: payment-status-polling
     date: "2026-11-04"
@@ -260,5 +259,5 @@ fingerprints:
     cli: "1.73.0"
   - id: order-list-154-stacked
     date: "2026-11-06"
-    commit: "c40ae3e3 merged with b7c923a5 and additive list/group reconciliation"
+    commit: "69b65feb: original #154 and b7c923a5 with list/group reconciliation"
     cli: "1.73.0"
