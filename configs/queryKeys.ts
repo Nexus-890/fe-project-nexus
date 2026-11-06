@@ -26,4 +26,10 @@ export const queryKeys = {
     unreadCount: (sessionId: number) =>
       ["notification", sessionId, "unread-count"] as const,
   },
+  orders: {
+    group: (sessionId: number, orderGroupId: string) =>
+      ["orders", sessionId, "group", orderGroupId] as const,
+    own: (sessionId: number, page: number) =>
+      ["orders", sessionId, "own", { page, size: 10 }] as const,
+  },
 };

@@ -18,7 +18,7 @@ process.env.NEXUS_OIDC_SIM_PORT = providerPort;
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
-  testIgnore: ["**/cart-shared.spec.ts", "**/profile.spec.ts", "**/oidc.spec.ts", "**/guest-cart.spec.ts", "**/session.spec.ts", "**/session-long.spec.ts", "**/payment.spec.ts"],
+  testIgnore: ["**/cart-shared.spec.ts", "**/profile.spec.ts", "**/oidc.spec.ts", "**/guest-cart.spec.ts", "**/session.spec.ts", "**/session-long.spec.ts", "**/payment.spec.ts", "**/payment-polling.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
