@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatVND } from "./formatPrice";
 
 type CartSummaryProps = {
@@ -39,20 +40,13 @@ function CartSummary({ quantity, subtotal, pending = false }: CartSummaryProps) 
           Updating your cart…
         </p>
       ) : null}
-      <button
+      {pending ? <button
         type="button"
         disabled
-        aria-describedby="cart-checkout-reason"
         className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
       >
         Proceed to Checkout
-      </button>
-      <p
-        id="cart-checkout-reason"
-        className="mt-4 text-xs leading-5 text-muted-foreground"
-      >
-        Checkout is not available yet. You can review and update your cart here.
-      </p>
+      </button> : <Link href="/checkout" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:bg-primary-hover">Proceed to Checkout</Link>}
     </aside>
   );
 }

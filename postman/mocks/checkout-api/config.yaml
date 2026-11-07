@@ -1,0 +1,9 @@
+version: 1
+name: nexus-checkout-api
+slug: nexus-checkout-api
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

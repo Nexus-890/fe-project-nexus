@@ -1,0 +1,121 @@
+purpose:
+  stands_in_for: >-
+    Existing local OIDC provider fixture and a local API fixture for delivered
+    profile/cart/catalog reads plus provisional #201 shipping lists and #188
+    checkout preview. These fixtures do not represent a real carrier quote.
+  unblocks: >-
+    Browser verification of task #150 address validation, dependent locality
+    selectors, cart snapshot prices, quote refresh/error/session behavior and
+    responsive layout before those backend dependencies are merged.
+assumptions:
+  - id: checkout-contract-boundary
+    status: unknown
+    claim: >-
+      The future shipping lists use code/name arrays with sibling page metadata
+      and preview accepts the draft #188 address names and returns numeric
+      item/amount fields plus a nullable shippingFee.
+    reason: >-
+      Shipping #201 has no delivered controller/OpenAPI on develop 0d0a36a4.
+      The #188 branch is unmerged and returns shippingFee null. The locality
+      wire fields and ward-sensitive fees are explicit development assumptions,
+      not evidence about the eventual provider behavior.
+    verification: >-
+      On 2026-11-04 inspected delivered commerce OpenAPI/controllers and the
+      remote #188 draft contract. Authenticated profile/cart responses reuse
+      the delivered success envelope. Browser execution was pending at initial
+      creation. The final checkout-browser-verification run passed all 13
+      local scenarios, but those simulated responses still cannot establish
+      the future provider contract or a real ward-sensitive carrier fee.
+    source: >-
+      service/checkoutService.ts; types/checkoutType.ts;
+      postman/mocks/checkout-api/default.js;
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      remote #188 commit 64be1db3
+    updated_at: "2026-11-04"
+  - id: checkout-local-simulation-coverage
+    status: supported
+    claim: >-
+      In the 13 local browser scenarios exercised, the actual application
+      validates required address fields before preview, filters locality
+      children by codes, updates shipping/total for the selected ward,
+      suppresses stale/session-obsolete quotes and remains usable at 375x812.
+    reason: >-
+      tests/checkout.spec.ts exercises the actual application against local
+      HTTP dependencies. All 13 scenarios passed against the final dirty
+      checkout implementation. The API verifies Bearer hashes against tokens
+      actually issued by the reused OIDC fixture, and records preview/order
+      requests for no-write assertions. This demonstrates frontend behavior
+      under the modeled scenarios rather than compatibility with live backend,
+      carrier pricing or deployed authentication services.
+    verification: >-
+      Created tests and local simulation on 2026-11-04. npm run test:checkout
+      passed all 13 scenarios at the checkout-browser-verification fingerprint,
+      including focus on the first invalid field, no preview/order submission
+      for an empty address, profile-only text prefill, two-line snapshot
+      prices, dependent codes, changing ward fees, delayed obsolete quotes,
+      district retry, Problem Details field mapping and quote retry, nullable
+      fees, malformed/inconsistent previews, metadata fallback, mobile target
+      geometry and logout while a quote was pending. The initial invocation
+      stopped at the existing Next.js package security reminder; the unchanged
+      retry passed. A final run after implementation review passed all 13
+      scenarios again and produced the preserved log inspected here. It
+      contains one listening event and 353 HTTP request events: 279 for the API
+      member and 74 for Keycloak. The actual preview path received 16 POSTs:
+      14 HTTP 200 responses (including invalid-data exercises), one 400 field
+      error and one 503 quote failure. Two old Ward 4 responses completed after
+      about 1.4 seconds in the quote-race/logout scenarios. There were zero
+      POST /orders requests and zero HTTP 401 responses. Captured screenshots
+      were visually reviewed at desktop 1440px and mobile 375x812; mobile
+      assertions found no horizontal overflow and all visible main-content
+      controls measured at least 44x44px. Logs and screenshots were preserved
+      in the task-local checkout-150 artifact folder before other browser
+      runners cleaned test-results. Real #188/#201 integration remains pending.
+    source: >-
+      tests/checkout.spec.ts; playwright.checkout.config.ts;
+      tests/checkout-fixture.mjs; postman/mocks/checkout-api/default.js;
+      test-results/checkout-simulation.ndjson (ignored local run evidence,
+      preserved in the task-local checkout-150 artifact folder);
+      checkout-desktop-1440.png; checkout-mobile-375x812.png
+    updated_at: "2026-11-04"
+  - id: checkout-mock-provenance
+    status: supported
+    claim: >-
+      This simulation uses repository-owned local mocks and no published owner
+      mock was searched or downloaded during the task.
+    reason: >-
+      The existing Postman CLI 1.73.0 rejects postman status as an unknown
+      command, so signed-in owner discovery was not established. The already
+      committed OIDC fixture is reused and the checkout handler states its
+      provisional contract assumptions explicitly. No remote workspace change
+      or deployment is needed for local browser verification.
+    verification: >-
+      On 2026-11-04 postman --version returned 1.73.0, while postman status
+      returned unknown command. Read api-simulation and api-mocking guidance;
+      selected the supported local simulation command with --port because
+      browser clients do not honor an environment HTTP proxy automatically.
+    source: >-
+      postman/simulations/checkout.sim.yaml;
+      postman/mocks/checkout-api/config.yaml;
+      postman/mocks/oidc-keycloak/config.yaml
+    updated_at: "2026-11-04"
+  - id: checkout-develop-cookie-integration-20261106
+    status: supported
+    claim: The checkout scenarios use the current gateway cookie session lifecycle after merging develop.
+    reason: The actual frontend runs against the existing repository OIDC gateway and checkout HTTP stand-ins.
+    verification: >-
+      On 2026-11-06, generated-type check, lint, typecheck, 180 unit tests and all
+      13 checkout browser scenarios passed. The simulation recorded 381 requests,
+      including 27 session-member calls and 16 previews, with zero order writes.
+      Preview #188 is now delivered; shipping #201 and carrier fees remain modeled.
+      Live backend and carrier acceptance were not exercised.
+    source: tests/checkout.spec.ts; postman/mocks/oidc-api/default.js; postman/mocks/checkout-api/default.js
+    updated_at: "2026-11-06"
+fingerprints:
+  - id: checkout-initial-implementation
+    date: "2026-11-04"
+    commit: "0d0a36a4 with uncommitted checkout implementation"
+    cli: "1.73.0"
+  - id: checkout-browser-verification
+    date: "2026-11-04"
+    commit: "0d0a36a4 with uncommitted checkout implementation and review fixes"
+    cli: "1.73.0"

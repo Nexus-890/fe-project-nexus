@@ -80,6 +80,8 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
 | PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
 | DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
+| GET `/api/v1/shipping/provinces`, `/districts?provinceCode=...`, `/wards?districtCode=...` | Checkout provisional #201 consumers; protected code/name lists with sibling page metadata in the explicit local mock |
+| POST `/api/v1/checkout/preview` | Checkout follows merged #188; preview only, no order write; names-only address and numeric wire money |
 | GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |
 | GET `/api/v1/notifications/unread-count` | Header total unread count, Bearer + NOTIFICATION.VIEW |
 | PATCH `/api/v1/notifications/{id}/read` | Opening an unread notification, Bearer + NOTIFICATION.VIEW; bodyless 204 |
@@ -88,6 +90,12 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 Notification mutations use the common origin and the #109 routes included in the merged notification-service controller and delivered OpenAPI. After a successful bodyless PATCH/204, the feature refetches the list and unread count. Live integration requires a running backend containing those operations. See [notifications](../features/notifications.md).
 
 `q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
+
+Shipping #201 has no delivered contract and #188's preview is not merged. The
+[checkout integration](../features/checkout.md) records these provisional shapes,
+retained GHN codes, null-fee handling and local simulation evidence. Replace
+the provisional boundary with generated wire DTOs after the owning APIs deliver
+their OpenAPI; the current normalized UI types do not claim a delivered contract.
 
 The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. The #129 publication branch merged remote `e2411ea4`, which includes BE #111 update/remove source. Its DTO package imports, unresolved symbols/repository calls and authentication-principal binding need correction before a compatible build/runtime can be verified. PUT currently returns bare CartResponse instead of the required envelope; keep FE parsing strict. Confirm response/permissions and update delivered OpenAPI before regenerating wire types or claiming live integration. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
 

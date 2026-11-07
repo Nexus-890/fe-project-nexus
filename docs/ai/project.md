@@ -16,7 +16,8 @@ One `configs/api.ts` owns API configuration and HTTP behavior. Pure API function
 | Home | Public category tree/navigation |
 | Category/search | API product listings, category filters, URL paging, loading/error/empty states |
 | Product detail | Product images, SKU choice, price formatting, quantity, anonymous sign-in prompt |
-| Cart | Authenticated add and Cart page/header count with snapshot totals, optimistic edit/remove and rollback; blank service origin, merged BE update/remove source pending compatible build/auth/response contract; checkout disabled |
+| Cart | Authenticated add and Cart page/header count with snapshot totals, optimistic edit/remove and rollback; blank service origin, merged BE update/remove source pending compatible build/auth/response contract; links to checkout |
+| Checkout | Validated address, cascading locality selectors and snapshot summary; shipping #201 remains provisional, order placement pending #151 |
 | Notifications | Authenticated header latest-ten list/count, single-read and mark-all actions with list/count refetch; no history/preferences pages |
 | Search/sort contract | UI query state exists; the delivered products controller currently accepts categoryId/page/size, so real q/sort behavior remains a backend contract dependency |
 | Local fixtures | Explicit development/test stand-ins; never evidence that the real backend implemented a feature |

@@ -1,4 +1,5 @@
 import type { ProductFilters } from "../types/catalogRequestType";
+import type { CheckoutDestination } from "../types/checkoutType";
 import type { NotificationFilters } from "../types/notificationRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
@@ -14,6 +15,13 @@ export const queryKeys = {
   },
   cart: {
     me: (sessionId: number) => ["cart", sessionId, "me"] as const,
+  },
+  checkout: {
+    provinces: (sessionId: number) => ["checkout", sessionId, "provinces"] as const,
+    districts: (sessionId: number, provinceCode: string) => ["checkout", sessionId, "districts", provinceCode] as const,
+    wards: (sessionId: number, districtCode: string) => ["checkout", sessionId, "wards", districtCode] as const,
+    preview: (sessionId: number, cartSignature: string, destination: CheckoutDestination | null) =>
+      ["checkout", sessionId, "preview", cartSignature, destination] as const,
   },
   notification: {
     all: (sessionId: number) => ["notification", sessionId] as const,
