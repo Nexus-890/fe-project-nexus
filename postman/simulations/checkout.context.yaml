@@ -201,6 +201,13 @@ assumptions:
     verification: On 2026-11-06 all 24 checkout/place-order browser scenarios, 186 unit tests, lint, generated-type check and typecheck passed after merging develop and resolved #150. Live inventory, carrier and backend acceptance remain pending.
     source: tests/place-order.spec.ts; tests/checkout.spec.ts; postman/simulations/checkout.sim.yaml
     updated_at: "2026-11-06"
+  - id: order-to-qr-stack-integration-20261106
+    status: supported
+    claim: The stacked checkout implementation opens real QR instructions for its created order group under the modeled dependencies.
+    reason: Checkout payment initiation now resolves the group created by the same local stand-in, rather than ending at the earlier payment placeholder.
+    verification: On 2026-11-06 all 10 selected place-order/409/retry/logout browser scenarios passed after combining #151 and #152. The double-click case displayed the created group reference on the QR payment page. Generated-type check, lint, typecheck and all 193 unit tests passed. These findings do not establish live backend or bank integration.
+    source: tests/place-order.spec.ts; postman/mocks/checkout-api/default.js; features/CheckoutPaymentPage.tsx
+    updated_at: "2026-11-06"
 fingerprints:
   - id: checkout-initial-implementation
     date: "2026-11-04"

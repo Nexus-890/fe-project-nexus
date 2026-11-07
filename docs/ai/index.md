@@ -14,6 +14,7 @@ Read the frontend [AGENTS.md](../../AGENTS.md) first. Use the table to select re
 | Checkout address or shipping preview | [Checkout](../features/checkout.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | CheckoutPage/checkoutSchema/CheckoutSummary, AddressForm/OrderSummary, checkoutService and checkout simulation context |
 | Place order or checkout retry | [Place order](../features/place-order.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | useCheckout/CheckoutOrderFeedback, checkoutService, delivered order controller/DTOs and checkout simulation |
 | Component or visual change | [Design system](../ui/design-system.md), [components](../ui/components.md) | Owning component, `app/globals.css`, real consumers |
+| Group payment QR, memo or countdown | [Payment](../features/payment.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | CheckoutPaymentPage, CopyableField/CountdownTimer, paymentService, delivered payment controller/DTO/spec and payment simulation |
 | File layout, naming, or imports | [Architecture](architecture.md), [coding rules](coding-rules.md) | Imports, component generator aliases, test/smoke scripts |
 | Test or release validation | [Workflow](task-workflow.md), [non-functional requirements](../requirement/non-functional.md) | `package.json`, tests, runner configs, actual command output |
 

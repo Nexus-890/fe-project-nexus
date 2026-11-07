@@ -53,6 +53,7 @@ next-env.d.ts
 !/postman/**
 /.next-oidc-run/
 /.next-checkout-run/
+/.next-payment-run/
 /.next-oidc-*/
 /.next-checkout-*/
 
@@ -66,5 +67,6 @@ next-env.d.ts
 /.next-typecheck/
 /.next-verify-build/
 /.next-cart-readiness-build/
+/.next-payment-build/
 .tsconfig-typecheck.json
 .tsconfig-build.json
