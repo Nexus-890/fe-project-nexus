@@ -62,6 +62,11 @@ function PaymentContents({ orderGroupId }: { orderGroupId: string }) {
   }, { retry: false, retryOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: "always", gcTime: 0 });
   const paymentStatus = usePaymentStatus(orderGroupId, payment.data);
 
+  // Load the account route while the buyer pays so confirmation can navigate promptly.
+  useEffect(() => {
+    router.prefetch(`/orders?payment=confirmed&groupId=${encodeURIComponent(orderGroupId)}`);
+  }, [orderGroupId, router]);
+
   useEffect(() => {
     if (paymentStatus.outcome === "paid")
       router.replace(`/orders?payment=confirmed&groupId=${encodeURIComponent(orderGroupId)}`);

@@ -1,0 +1,9 @@
+version: 1
+name: nexus-order-list-api
+slug: nexus-order-list-api
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

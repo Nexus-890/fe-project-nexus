@@ -86,14 +86,14 @@ test("polls child statuses every three seconds and confirms only after every ord
   const paidAt = performance.now();
   // Wait on the navigation event itself: repeated URL assertions can return
   // after their polling backoff even when navigation happened inside 3 seconds.
-  await page.waitForURL(confirmationPath, { timeout: 3000 });
+  await page.waitForURL(confirmationPath, { timeout: 3000, waitUntil: "commit" });
   expect(performance.now() - paidAt).toBeLessThan(3000);
   await expect(page.getByRole("status").filter({ hasText: "Payment confirmed. All orders in your group have been paid." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your orders", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
   await expect.poll(async () => (await evidence(request)).orderListRequests).toBeGreaterThan(0);
   for (const orderNumber of ["NX-20261104-0001", "NX-20261104-0002"]) {
-    const row = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: orderNumber, exact: true }) });
-    await expect(row.getByText("PAID", { exact: true })).toBeVisible();
+    const row = page.getByRole("row").filter({ hasText: orderNumber });
+    await expect(row.getByText("Processing", { exact: true })).toBeVisible();
   }
   const screenshotPath = info.outputPath("payment-confirmed.png");
   await page.screenshot({ path: screenshotPath, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });

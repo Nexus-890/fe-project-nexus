@@ -1,0 +1,198 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+
+// The focused config supplies a real HTTP stand-in; the general suite does not.
+test.skip(!process.env.NEXUS_ORDER_LIST_TEST, "Run with playwright.orders.config.ts for the order HTTP simulation.");
+
+const simulation = `http://127.0.0.1:${process.env.NEXUS_ORDER_LIST_PORT || "3914"}/api`;
+const provider = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
+const pendingId = "68000000-0000-4000-8000-000000000002";
+const pendingGroupId = "c8000000-0000-4000-8000-000000000102";
+const rows = (page: Page) => page.getByTestId(/^order-row-/);
+
+async function evidence(request: APIRequestContext) {
+  const response = await request.get(`${simulation}/test/evidence`);
+  expect(response.ok()).toBe(true);
+  return response.json();
+}
+
+async function mode(request: APIRequestContext, value: string) {
+  expect((await request.get(`${simulation}/test/mode?mode=${value}`)).ok()).toBe(true);
+}
+
+async function signIn(page: Page, destination = "/orders") {
+  await page.goto(`/sign-in?returnTo=${encodeURIComponent(destination)}`);
+  await finishSignIn(page);
+}
+
+async function finishSignIn(page: Page) {
+  await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/keycloak\/realms\/nexus\/protocol\/openid-connect\/auth\?/);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@nexus.local");
+  await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+  await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
+}
+
+async function capture(page: Page, info: TestInfo, filename: string) {
+  const directory = path.resolve("docs/features/order-list-evidence");
+  await mkdir(directory, { recursive: true });
+  const output = path.join(directory, filename);
+  await page.screenshot({ path: output, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });
+  await info.attach(filename, { path: output, contentType: "image/png" });
+}
+
+test.beforeEach(async ({ page, request }) => {
+  expect((await request.get(`${provider}/keycloak/test/reset`)).ok()).toBe(true);
+  expect((await request.get(`${provider}/api/test/reset`)).ok()).toBe(true);
+  expect((await request.get(`${simulation}/test/reset`)).ok()).toBe(true);
+  // The header's same-origin cart is outside this task's API dependency.
+  await page.route("**/api/v1/carts/me", (route) => route.fulfill({ json: {
+    code: 0, message: "response success", data: {
+      id: "order-header-cart", userId: "68000000-0000-4000-8000-000000000003", status: "ACTIVE", items: [],
+    },
+  } }));
+});
+
+test("signed-out orders do not request private data", async ({ page, request }) => {
+  await page.goto("/orders?status=PENDING");
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(rows(page)).toHaveCount(0);
+  expect((await evidence(request)).reads).toEqual([]);
+});
+
+test("three orders display number, date, total and status with only pending payment navigation", async ({ page, request }, info) => {
+  await page.setViewportSize({ width: 1440, height: 1060 });
+  await signIn(page);
+  await expect(rows(page)).toHaveCount(3);
+  const expected = [
+    ["68000000-0000-4000-8000-000000000001", "NX-260929-0042", "300.000,50 ₫", "Processing"],
+    [pendingId, "NX-260929-0038", "9.854.900,00 ₫", "To Pay"],
+    ["68000000-0000-4000-8000-000000000003", "NX-260921-0311", "93.190,00 ₫", "Cancelled"],
+  ];
+  for (const [id, number, total, status] of expected) {
+    const row = page.getByTestId(`order-row-${id}`);
+    await expect(row).toContainText(number);
+    await expect(row).toContainText(/Sep 29, 2026|29 Sep 2026|29\/09\/2026/);
+    await expect(row).toContainText(total);
+    await expect(row.getByText(status, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("main").getByRole("link", { name: "Pay Now", exact: true })).toHaveCount(1);
+  const pay = page.getByTestId(`order-row-${pendingId}`).getByRole("link", { name: "Pay Now", exact: true });
+  await expect(pay).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
+  expect((await evidence(request)).reads).toContainEqual({ method: "GET", status: null, page: "0", size: "10", authorized: true });
+  await capture(page, info, "orders-desktop-1440.png");
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, info, "orders-mobile-375x812.png");
+  await pay.click();
+  await expect(page).toHaveURL(new RegExp(`/checkout/payment/${pendingGroupId}$`));
+});
+
+test("status filter persists through refresh and cookie session restoration", async ({ page, request }) => {
+  await signIn(page);
+  await expect(rows(page)).toHaveCount(3);
+  await page.getByRole("combobox", { name: "Order status", exact: true }).selectOption("PENDING");
+  await expect(page).toHaveURL(/\/orders\?status=PENDING$/);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByTestId(`order-row-${pendingId}`)).toContainText("To Pay");
+  await page.reload();
+  await expect(page).toHaveURL(/\/orders\?status=PENDING$/);
+  await expect(page).toHaveURL(/\/orders\?status=PENDING$/);
+  await expect(page.getByRole("combobox", { name: "Order status", exact: true })).toHaveValue("PENDING");
+  await expect(rows(page)).toHaveCount(1);
+  const reads = (await evidence(request)).reads;
+  expect(reads.filter((read: { status: string | null }) => read.status === "PENDING").length).toBeGreaterThanOrEqual(2);
+});
+
+test("pagination sends zero-based pages and keeps the selected status", async ({ page, request }) => {
+  await mode(request, "paged");
+  await signIn(page, "/orders?status=PENDING");
+  await expect(rows(page)).toHaveCount(10);
+  await page.getByRole("navigation", { name: "Order pagination", exact: true }).getByRole("link", { name: "Next", exact: true }).click();
+  await expect(page).toHaveURL(/\/orders\?status=PENDING&page=2$/);
+  await expect(rows(page)).toHaveCount(10);
+  expect((await evidence(request)).reads).toContainEqual({ method: "GET", status: "PENDING", page: "1", size: "10", authorized: true });
+  await page.getByRole("combobox", { name: "Order status", exact: true }).selectOption("CANCELED");
+  await expect(page).toHaveURL(/\/orders\?status=CANCELED$/);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText("Cancelled");
+  expect((await evidence(request)).reads).toContainEqual({ method: "GET", status: "CANCELED", page: "0", size: "10", authorized: true });
+});
+
+test("empty results render a message", async ({ page, request }) => {
+  await mode(request, "empty");
+  await signIn(page);
+  await expect(rows(page)).toHaveCount(0);
+  await expect(page.getByRole("main")).toContainText(/no orders/i);
+});
+
+test("confirmation query alone cannot claim payment and survives filtering and reload", async ({ page }) => {
+  const confirmation = "payment=confirmed&groupId=c8000000-0000-4000-8000-000000000102";
+  await signIn(page, `/orders?${confirmation}`);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(page.getByText("Payment confirmed. All orders in your group have been paid.", { exact: true })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Order status", exact: true }).selectOption("PENDING");
+  await expect(page).toHaveURL(`/orders?status=PENDING&${confirmation}`);
+  await expect(rows(page)).toHaveCount(1);
+  await page.reload();
+  await expect(page).toHaveURL(`/orders?status=PENDING&${confirmation}`);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByText("Payment confirmed. All orders in your group have been paid.", { exact: true })).toHaveCount(0);
+});
+
+test("problem detail is displayed and a retry reloads orders", async ({ page, request }) => {
+  await mode(request, "unavailable");
+  await signIn(page);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Orders are temporarily unavailable. Please try again.");
+  await expect(rows(page)).toHaveCount(0);
+  await mode(request, "success");
+  await page.getByRole("button", { name: /retry orders/i }).click();
+  await expect(rows(page)).toHaveCount(3);
+});
+
+test("pending order without a group cannot navigate to an invented payment", async ({ page, request }) => {
+  await mode(request, "missing-group");
+  await signIn(page);
+  const pending = page.getByTestId(`order-row-${pendingId}`);
+  await expect(pending).toBeVisible();
+  await expect(pending.getByRole("link", { name: "Pay Now", exact: true })).toHaveCount(0);
+  await expect(pending.getByRole("button", { name: "Pay Now", exact: true })).toBeDisabled();
+});
+
+test("commerce 401 refreshes once then asks for sign-in without another query retry", async ({ page, request }) => {
+  await mode(request, "unauthenticated");
+  await signIn(page, "/orders?status=PENDING");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Your order session has expired. Sign in again.");
+  await expect(page.getByRole("button", { name: /retry orders/i })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", `/sign-in?returnTo=${encodeURIComponent("/orders?status=PENDING")}`);
+  expect((await evidence(request)).reads).toHaveLength(2);
+  const authEvidence = await request.get(`${provider}/api/test/evidence`);
+  expect(authEvidence.ok()).toBe(true);
+  expect((await authEvidence.json()).sessionRefreshes).toBe(1);
+});
+
+test("375x812 long order numbers wrap without horizontal scrolling or clipped text", async ({ page, request }, info) => {
+  await mode(request, "long-number");
+  await signIn(page);
+  await expect(rows(page)).toHaveCount(3);
+  expect(page.viewportSize()).toEqual({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const clipped = await page.locator("header :visible, main :visible, footer :visible").evaluateAll((elements) =>
+    elements.filter((element) => element instanceof HTMLElement && element.clientWidth > 0 &&
+      element.scrollWidth > element.clientWidth + 1 && !element.closest("script,style,svg,pre,.sr-only"))
+      .map((element) => element.textContent?.trim()).filter(Boolean),
+  );
+  expect(clipped).toEqual([]);
+  await expect(page.getByTestId(`order-row-${pendingId}`).getByRole("link", { name: "Pay Now", exact: true })).toBeVisible();
+  await capture(page, info, "orders-mobile-long-number-375x812.png");
+  await page.setViewportSize({ width: 1024, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const clippedAtTablet = await page.locator("header :visible, main :visible, footer :visible").evaluateAll((elements) =>
+    elements.filter((element) => element instanceof HTMLElement && element.clientWidth > 0 &&
+      element.scrollWidth > element.clientWidth + 1 && !element.closest("script,style,svg,pre,.sr-only"))
+      .map((element) => element.textContent?.trim()).filter(Boolean),
+  );
+  expect(clippedAtTablet).toEqual([]);
+});
