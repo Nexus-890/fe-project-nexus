@@ -55,7 +55,7 @@ The final Postman simulation log was inspected and recorded 179 dependency reque
 
 Deploy the new frontend together with the backend fields `serverNow` and `transferContent`; responses without them fail validation. This is an additive backend response change and requires no database migration. Existing ADR-008 owner/release approval remains pending.
 
-The `develop` base does not yet deliver the checkout/order-creation frontend handoff; this work implements the payment destination for a supplied order-group UUID. Success polling/confirmation and replacement expired sessions are outside this issue. The backend deliberately rejects paid, canceled and expired sessions rather than issuing a fresh QR.
+The `develop` base does not yet deliver the checkout/order-creation frontend handoff; this work implements the payment destination for a supplied order-group UUID. Follow-up #153 adds [status polling and order-list confirmation](payment-status-polling.md) on top of #152. Replacement expired sessions remain outside this flow. The backend deliberately rejects paid, canceled and expired sessions rather than issuing a fresh QR.
 
 The local Docker daemon is unavailable, so payment database/Kafka integration suites and a live end-to-end bank transfer have not been verified. Existing Next.js 16.4.0 tooling reported a dependency security advisory during build; the unchanged retry completed. Framework upgrades are outside this payment change.
 

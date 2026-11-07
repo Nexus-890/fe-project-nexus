@@ -279,6 +279,11 @@ const server = http.createServer(async (req, res) => {
     };
     return json(res, options.malformedPreview ? { ...envelope(preview), data: { ...preview, total: "invalid" } } : envelope(preview));
   }
+  if (url.pathname.startsWith('/v1/orders/groups/') && req.method === 'GET') {
+    const group = evidence.groups.find(entry => url.pathname === '/v1/orders/groups/' + entry.group.orderGroupId);
+    await save();
+    return group ? json(res, envelope(group.group)) : problem(res, 404, 'COMMERCE_ORDER_GROUP_NOT_FOUND', 'No such order group.');
+  }
   if (url.pathname === '/v1/payments' && req.method === 'POST') {
     const body = bodyOf(req);
     const group = evidence.groups.find(entry => entry.group.orderGroupId === body.orderGroupId);

@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    ".next-polling-build/**",
     // Default ignores of eslint-config-next:
     ".next/**", ".next-*/**", "types/*GeneratedType.ts", "test-results/**", "playwright-report/**",
     "out/**",
