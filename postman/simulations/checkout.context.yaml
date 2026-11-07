@@ -2,11 +2,15 @@ purpose:
   stands_in_for: >-
     Existing local OIDC provider fixture and a local API fixture for delivered
     profile/cart/catalog reads plus provisional #201 shipping lists and #188
-    checkout preview. These fixtures do not represent a real carrier quote.
+    checkout preview, delivered order-creation/replay and price conflicts,
+    and forced future inventory conflicts. These fixtures do not represent
+    a real carrier quote or inventory reservation.
   unblocks: >-
     Browser verification of task #150 address validation, dependent locality
     selectors, cart snapshot prices, quote refresh/error/session behavior and
-    responsive layout before those backend dependencies are merged.
+    responsive layout before those backend dependencies are merged; also #151
+    idempotency, explicit price confirmation, stock feedback and order-group
+    payment navigation against the local dependency model.
 assumptions:
   - id: checkout-contract-boundary
     status: unknown
@@ -110,6 +114,93 @@ assumptions:
       Live backend and carrier acceptance were not exercised.
     source: tests/checkout.spec.ts; postman/mocks/oidc-api/default.js; postman/mocks/checkout-api/default.js
     updated_at: "2026-11-06"
+  - id: order-delivered-idempotency-contract
+    status: supported
+    claim: >-
+      The delivered commerce contract promises 201 for a new order group and
+      200 with the original group for the same buyer, UUID key and unchanged
+      shipping/payment body when order idempotency is enabled.
+    reason: >-
+      Delivered OpenAPI and OrderService implement the same key/body behavior,
+      including replay before current cart/price checks. This is source and
+      contract evidence, not a live deployment observation or a guarantee when
+      ORDER_IDEMPOTENCY_ENABLED is disabled.
+    verification: >-
+      On 2026-11-04 read the POST /api/v1/orders contract and controller/service
+      at the place-order-browser-verification fingerprint. Price conflict
+      commits only the reported cart-price update and creates no order; a
+      confirmed request must use a new key. Money extension fields are numeric
+      VND amounts, not minor units.
+    source: >-
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/service/OrderService.java;
+      service/checkoutService.ts
+    updated_at: "2026-11-04"
+  - id: order-inventory-conflict-contract
+    status: unknown
+    claim: >-
+      The eventual inventory integration returns COMMERCE_INSUFFICIENT_STOCK
+      with a SKU identity and optionally a product name, allowing checkout to
+      identify the sold-out item.
+    reason: >-
+      The delivered inventory client is a stub and the current commerce
+      contract has no COMMERCE_INSUFFICIENT_STOCK response. The local handler
+      deliberately forces this future branch as requested by #151. A passing
+      caller scenario cannot establish the future provider's wire fields.
+    verification: >-
+      On 2026-11-04 inspected the delivered commerce source/OpenAPI and modeled
+      forced stock failures with skuId and optional productName. A real
+      reservation rejection with an agreed Problem Details extension is still
+      needed before claiming live inventory compatibility.
+    source: >-
+      postman/mocks/checkout-api/default.js; tests/place-order.spec.ts;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/service/OrderService.java
+    updated_at: "2026-11-04"
+  - id: order-local-simulation-coverage
+    status: supported
+    claim: >-
+      In the final 24 local browser scenarios, the actual frontend preserves
+      address/quote behavior, prevents duplicate click writes, reuses the same
+      key/body after an uncertain persisted order, explicitly confirms new
+      prices with a new key, names forced sold-out items, and opens one payment
+      destination for a group of two seller orders.
+    reason: >-
+      The real Next application and shared HTTP boundary ran against the local
+      dependency simulation. Assertions inspect recorded keys, request bodies,
+      statuses and group count, including a reconnect that empties the cart and
+      rejects the preview before same-key replay. These findings concern the
+      modeled dependencies, not deployed commerce, actual inventory or QR payment.
+    verification: >-
+      On 2026-11-04 the final direct Playwright checkout config passed 24/24
+      scenarios in 59.4 seconds at place-order-browser-verification, using API
+      port 3923, application port 3113 and isolated .next-checkout-151-run output
+      while preserving the existing development servers. This includes 13
+      address/quote regressions and 11 order scenarios. The final simulation log
+      has one listening event and 719 HTTP requests: 578 API and 141 Keycloak.
+      POST /v1/orders ran 14 times: four 201, two 200 replays, one 400 validation,
+      five 409 conflicts and two simulated lost-response 503s. There were zero
+      401 responses. The reconnect scenario observed an actual empty-cart GET,
+      a 409 COMMERCE_CART_EMPTY preview, one persisted group and a 200 replay
+      with the original key/body. Fixed concurrent evidence appends in the mock
+      before this final run so simultaneous refetches cannot erase request
+      records. The 375px price-conflict screenshot was visually inspected:
+      both amounts, detail, confirm action and return link remain readable.
+      Logs and screenshots were copied to the task-local place-order-151
+      artifact folder before further test runners could clean test-results.
+    source: >-
+      tests/place-order.spec.ts; tests/checkout.spec.ts;
+      playwright.checkout.config.ts; postman/mocks/checkout-api/default.js;
+      test-results/checkout-simulation.ndjson (ignored local final-run log,
+      copied to the task-local place-order-151 artifact folder);
+      place-order-price-conflict-mobile.png
+    updated_at: "2026-11-04"
+  - id: place-order-develop-cookie-integration-20261106
+    status: supported
+    claim: Address review and idempotent order creation remain compatible with the merged cookie session lifecycle in the modeled scenarios.
+    reason: The existing frontend and shared HTTP boundary were exercised against repository-owned checkout and gateway stand-ins.
+    verification: On 2026-11-06 all 24 checkout/place-order browser scenarios, 186 unit tests, lint, generated-type check and typecheck passed after merging develop and resolved #150. Live inventory, carrier and backend acceptance remain pending.
+    source: tests/place-order.spec.ts; tests/checkout.spec.ts; postman/simulations/checkout.sim.yaml
+    updated_at: "2026-11-06"
 fingerprints:
   - id: checkout-initial-implementation
     date: "2026-11-04"
@@ -118,4 +209,8 @@ fingerprints:
   - id: checkout-browser-verification
     date: "2026-11-04"
     commit: "0d0a36a4 with uncommitted checkout implementation and review fixes"
+    cli: "1.73.0"
+  - id: place-order-browser-verification
+    date: "2026-11-04"
+    commit: "5ee074e4 with uncommitted #151 implementation and review fixes"
     cli: "1.73.0"

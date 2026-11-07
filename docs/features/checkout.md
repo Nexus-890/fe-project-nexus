@@ -3,7 +3,8 @@
 Implemented on 2026-11-04 from `develop` at `0d0a36a4`, after #129 supplied
 the cart route and shared `useCart`. The route is `/checkout`; the Cart summary
 now links there after cart edits finish. This change implements address/quote
-review. It does not create an order or initiate payment; #151 owns that action.
+review. [Place order #151](place-order.md) extends it with order creation,
+idempotency and a group payment handoff; QR initiation belongs to #152.
 
 ## Behavior and UI
 
@@ -37,8 +38,8 @@ or inventory reservation timer. All money remains VND.
 - Anonymous checkout redirects to `/sign-in?returnTo=%2Fcheckout`; authenticated
   empty carts redirect to `/cart`. Session keys, private-query metadata and
   generation checks prevent late quote results after logout/account changes.
-- Review address confirms the current form locally. Continue to payment stays
-  disabled with a visible explanation until order placement is implemented.
+- Review address confirms the current form locally. #151 enables Place order
+  once the current address is reviewed and the quote is ready.
 
 ## Ownership
 
@@ -67,7 +68,8 @@ The preview request follows #188's delivered contract: `shippingAddress` contain
 `recipientName`, `phoneNumber`, `addressLine`, `city`, `district`, `ward` and
 `countryCode: "VN"`, alongside `paymentMethod: "SEPAY"`. The form's three codes
 are retained locally, not sent as undocumented fields to the names-only contract.
-The eventual code-based #151 request needs the delivered BE contract to agree.
+Order creation also uses the delivered names-only address contract; code-based
+shipping integration still needs an agreed backend contract.
 The inspected #188 implementation currently returns `shippingFee: null`, so
 ward-sensitive fees remain a simulation assumption until #188/#201 integrate.
 There are no changes to delivered OpenAPI or generated DTOs.

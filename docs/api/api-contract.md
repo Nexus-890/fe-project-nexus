@@ -40,6 +40,13 @@ Backend catalog/cart monetary fields are JSON numbers serialized from BigDecimal
 
 ## Pure services and generic hooks
 
+`POST /api/v1/orders` uses a UUID `Idempotency-Key` supplied by the checkout
+attempt. Creation (201) and same-key replay (200) both return one order group
+inside `data`. The shared HTTP boundary retains nonstandard Problem Details
+properties in `ApiError.extensions`; checkout validates `skuId`, `oldPrice` and
+`newPrice` before presenting a 409 price confirmation. See [Place order](../features/place-order.md)
+for retry, stock and payment handoff behavior.
+
 | Layer | Public contract |
 | --- | --- |
 | HTTP configuration | `requestApi` performs controlled HTTP and returns the validated envelope; failed requests reject with `ApiError` |

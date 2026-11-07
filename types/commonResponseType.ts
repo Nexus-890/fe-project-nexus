@@ -13,6 +13,8 @@ export type ProblemDetails = {
 export type ApiError = ProblemDetails & {
   kind: "http" | "network" | "invalid-response" | "aborted";
   fieldErrors?: FieldErrors;
+  /** Service-specific Problem Details properties remain unknown until parsed. */
+  extensions?: Record<string, unknown>;
 };
 /** Only the form/context facade uses a result; services reject failed requests. */
 export type ApiResult<T> =

@@ -17,6 +17,7 @@ export const queryKeys = {
     me: (sessionId: number) => ["cart", sessionId, "me"] as const,
   },
   checkout: {
+    group: (sessionId: number, orderGroupId: string) => ["checkout", sessionId, "group", orderGroupId] as const,
     provinces: (sessionId: number) => ["checkout", sessionId, "provinces"] as const,
     districts: (sessionId: number, provinceCode: string) => ["checkout", sessionId, "districts", provinceCode] as const,
     wards: (sessionId: number, districtCode: string) => ["checkout", sessionId, "wards", districtCode] as const,
