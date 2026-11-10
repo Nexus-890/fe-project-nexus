@@ -237,6 +237,10 @@ test("cart displays snapshot unit and line prices with a checkout link at deskto
 
 test("quantity changes subtotal before the response and rejection restores the snapshot", async ({ page }) => {
   const state = await installCart(page);
+  const pricingRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/v1/carts/me/pricing")) pricingRequests.push(request.url());
+  });
   const gate = deferred();
   state.updateGate = gate.promise;
   state.rejectedUpdate = true;
@@ -259,6 +263,7 @@ test("quantity changes subtotal before the response and rejection restores the s
     await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
     await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
     expect(state.writes).toHaveLength(1);
+    expect(pricingRequests).toEqual([]);
   } finally {
     gate.resolve();
   }
