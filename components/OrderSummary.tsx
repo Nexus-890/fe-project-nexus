@@ -62,6 +62,7 @@ function OrderSummary({ items, preview, loading, error, onRetry, addressReady, c
   const quantity = getCartQuantity(items);
   const subtotal = preview?.subtotal ?? getCartSubtotal(items);
   const quoted = addressReady && !loading && !error && preview && preview.shippingFee !== null;
+  const estimated = !quoted && !error && preview?.shippingFee !== null;
   const shipping = loading
     ? "Calculating…"
     : error
@@ -106,9 +107,9 @@ function OrderSummary({ items, preview, loading, error, onRetry, addressReady, c
             </>
           ) : null}
           <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-border pt-5">
-            <dt className="text-base font-medium">Total</dt>
+            <dt className="text-base font-medium">{estimated ? "Estimated total" : "Total"}</dt>
             <dd data-testid="checkout-total" className="min-w-0 font-mono text-xl font-semibold tabular-nums text-primary [overflow-wrap:anywhere]">
-              {quoted ? formatVND(preview.total) : "—"}
+              {quoted ? formatVND(preview.total) : estimated ? formatVND(subtotal) : "—"}
             </dd>
           </div>
         </dl>
