@@ -7,7 +7,7 @@ import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
-import { formatVND } from "@/components/formatPrice";
+import { formatVND, formatVNDRange } from "@/components/formatPrice";
 import { getProduct } from "@/service/catalogService";
 import {
   mockProductDetail,
@@ -102,6 +102,10 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const detail = product.data;
   const sku = selectedSku(detail.skus, selectedSkuId);
   const price = formatVND(sku?.price ?? null);
+  const priceRange =
+    detail.maxPrice !== null && Number(detail.minPrice) !== Number(detail.maxPrice)
+      ? formatVNDRange(detail.minPrice, detail.maxPrice)
+      : null;
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
   const handleAddToCart = async () => {
@@ -180,6 +184,11 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             <p className="text-sm text-gray-800">
               SKU selection controls the price sent to the cart.
             </p>
+            {priceRange !== null && (
+              <p data-testid="product-price-range" className="text-base font-semibold text-primary">
+                {priceRange}
+              </p>
+            )}
           </div>
 
           <p

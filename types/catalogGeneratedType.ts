@@ -352,8 +352,10 @@ export interface components {
             categoryId: string;
             /** Format: uuid */
             sellerId: string;
-            /** @description Existing BigDecimal JSON number; this migration preserves the delivered numeric wire format. */
+            /** @description Lowest SKU price of the product; null when it has no SKU. Existing BigDecimal JSON number; this migration preserves the delivered numeric wire format. */
             minPrice: number | null;
+            /** @description Highest SKU price of the product; equals minPrice when every SKU has one price, null when it has no SKU. BigDecimal JSON number. */
+            maxPrice: number | null;
             /** @description Product images sorted by sortOrder then ID; empty when none exist. */
             images?: components["schemas"]["Image"][];
         };
@@ -368,8 +370,10 @@ export interface components {
             categoryId: string;
             /** Format: uuid */
             sellerId: string;
-            /** @description Existing BigDecimal JSON number; this migration preserves the delivered numeric wire format. */
+            /** @description Lowest SKU price of the product; null when it has no SKU. Existing BigDecimal JSON number; this migration preserves the delivered numeric wire format. */
             minPrice: number | null;
+            /** @description Highest SKU price of the product; equals minPrice when every SKU has one price, null when it has no SKU. BigDecimal JSON number. */
+            maxPrice: number | null;
             description: string | null;
             auctionEnable: boolean;
             skus: components["schemas"]["Sku"][];
@@ -409,6 +413,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             productId: string;
+            /** @description Generated on create as `SKU-<productId without dashes>-<NN>`, NN the next number for that product (01, 02, ...). An update never changes it. SKUs created before keep the code they had. */
             skuCode: string;
             color: string | null;
             size: string | null;
@@ -417,8 +422,8 @@ export interface components {
             /** @description Current persisted SKU status string, initially ACTIVE. This issue does not restrict the existing string column to a new enum. */
             status: string;
         };
+        /** @description The SKU code is not part of the request. A `skuCode` sent in the body is ignored. */
         WriteSku: {
-            skuCode: string;
             color: string;
             size: string;
             /** @description Greater than zero; at most 17 integer and 2 fractional decimal digits. Stored BigDecimal numeric(19,2). */
@@ -2935,7 +2940,6 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "skuCode": "SHOE-BLACK-42",
                  *       "color": "Black",
                  *       "size": "42",
                  *       "price": 150000.5
@@ -3299,7 +3303,6 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "skuCode": "SHOE-BLACK-42",
                  *       "color": "Black",
                  *       "size": "42",
                  *       "price": 150000.5

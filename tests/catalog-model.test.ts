@@ -15,7 +15,7 @@ import {
   parseProductPage,
   normalizeMoney,
 } from "../service/catalogService";
-import { formatVND } from "../components/formatPrice";
+import { formatVND, formatVNDRange } from "../components/formatPrice";
 import { signUpSchema } from "../features/signUpSchema";
 import { multiplyMoney } from "../mocks/product-detail";
 import type { ApiContext } from "../types/commonRequestType";
@@ -150,6 +150,21 @@ test("VND formatting preserves decimal precision, grouping and invalid/null fall
     assert.equal(formatVND(input), expected);
   for (const input of [null, "", "invalid", "-1", "1e3"])
     assert.equal(formatVND(input), null);
+});
+test("a product price range shows min – max when they differ and one price when they are equal", () => {
+  assert.equal(formatVNDRange("100000", "150000"), "100.000 ₫ – 150.000 ₫");
+  assert.equal(formatVNDRange("100000.00", "100000"), "100.000,00 ₫");
+  assert.equal(formatVNDRange("100000", null), "100.000 ₫");
+  assert.equal(formatVNDRange(null, null), null);
+});
+test("product list and detail parsing keep maxPrice next to minPrice", () => {
+  const page = { number: 0, size: 12, totalElements: 1, totalPages: 1 };
+  const item = { id: "p", name: "Shoe", slug: "shoe", minPrice: "100000", maxPrice: "150000" };
+  const [summary] = parseProductPage(envelope([item], page)).content;
+  assert.equal(summary.minPrice, "100000");
+  assert.equal(summary.maxPrice, "150000");
+  assert.equal(parseProductPage(envelope([{ ...item, minPrice: null, maxPrice: null }], page)).content[0].maxPrice, null);
+  assert.throws(() => parseProductPage(envelope([{ ...item, maxPrice: "bad" }], page)));
 });
 test("money normalization and fixture multiplication retain separate decimal semantics", () => {
   assert.equal(normalizeMoney("1.2"), "1.2");

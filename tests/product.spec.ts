@@ -34,6 +34,7 @@ const product = {
   sellerId: "seller-1",
   status: "ACTIVE",
   minPrice: 150000,
+  maxPrice: 175000.5,
   description: "Product supplied by the delivered API contract.",
   auctionEnable: false,
   skus: [
@@ -188,6 +189,7 @@ test("product SKU, price, quantity and keyboard gallery work before anonymous ca
   await expect(
     page.getByRole("heading", { name: "Browser product", exact: true }),
   ).toBeVisible();
+  await expect(page.getByTestId("product-price-range")).toHaveText("150.000,00 ₫ – 175.000,50 ₫");
   await expect(page.getByText("150.000,00 ₫", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Blue / L", exact: true }).click();
   await expect(

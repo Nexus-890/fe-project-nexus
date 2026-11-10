@@ -68,7 +68,8 @@ export const parseProductPage = (
       typeof item.id !== "string" ||
       typeof item.name !== "string" ||
       typeof item.slug !== "string" ||
-      (item.minPrice !== null && normalizeMoney(item.minPrice) === null)
+      (item.minPrice !== null && normalizeMoney(item.minPrice) === null) ||
+      (item.maxPrice != null && normalizeMoney(item.maxPrice) === null)
     ) {
       throw createInvalidResponseError("Invalid product summary");
     }
@@ -77,6 +78,7 @@ export const parseProductPage = (
       name: item.name,
       slug: item.slug,
       minPrice: item.minPrice === null ? null : normalizeMoney(item.minPrice),
+      maxPrice: item.maxPrice == null ? null : normalizeMoney(item.maxPrice),
       categoryId:
         typeof item.categoryId === "string" ? item.categoryId : undefined,
       sellerId: typeof item.sellerId === "string" ? item.sellerId : undefined,
@@ -136,7 +138,12 @@ export const parseProductDetail = (value: unknown): ProductDetail => {
   const images = parseProductImages(value.images);
   const minPrice =
     value.minPrice == null ? null : normalizeMoney(value.minPrice);
-  if (value.minPrice != null && minPrice === null)
+  const maxPrice =
+    value.maxPrice == null ? null : normalizeMoney(value.maxPrice);
+  if (
+    (value.minPrice != null && minPrice === null) ||
+    (value.maxPrice != null && maxPrice === null)
+  )
     throw createInvalidResponseError("Invalid product price");
   return {
     id: value.id,
@@ -146,6 +153,7 @@ export const parseProductDetail = (value: unknown): ProductDetail => {
     sellerId: value.sellerId,
     status: value.status,
     minPrice,
+    maxPrice,
     description: (value.description as string) ?? null,
     auctionEnable: value.auctionEnable,
     skus,

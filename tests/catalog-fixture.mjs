@@ -28,6 +28,7 @@ const product = (id, categoryId) => ({
   slug: `product-${id}`,
   categoryId,
   minPrice: 150000.5,
+  maxPrice: id === 1 ? 175000 : 150000.5,
 });
 
 const backendProducts = [

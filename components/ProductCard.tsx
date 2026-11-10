@@ -1,4 +1,4 @@
-import { formatVND } from "./formatPrice";
+import { formatVND, formatVNDRange } from "./formatPrice";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
 import { sortProductImages } from "./productImageUtils";
@@ -6,11 +6,14 @@ import { sortProductImages } from "./productImageUtils";
 import type { ProductSummary } from "@/types/catalogResponseType";
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "images">;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "maxPrice" | "images">;
 };
 
 export function ProductCard({ product }: ProductCardProps) {
-  const price = formatVND(product.minPrice);
+  const price =
+    product.maxPrice === null
+      ? formatVND(product.minPrice)
+      : formatVNDRange(product.minPrice, product.maxPrice);
   const firstImage = sortProductImages(product.images)[0];
 
   return (
@@ -37,7 +40,9 @@ export function ProductCard({ product }: ProductCardProps) {
           </h3>
           {price !== null && (
             <p className="m-0 text-base font-semibold leading-6 tracking-[-0.02em] text-primary [overflow-wrap:anywhere]">
-              <span className="text-xs font-normal tracking-normal">from </span>
+              {product.maxPrice === null && (
+                <span className="text-xs font-normal tracking-normal">from </span>
+              )}
               {price}
             </p>
           )}
