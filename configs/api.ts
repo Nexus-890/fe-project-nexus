@@ -164,9 +164,11 @@ export const requestApi = async <T>(
   const context = options.context ?? {};
   const baseURL = normalizeBaseUrl(context.baseUrl ?? API_BASE_URL);
   const headers = new AxiosHeaders(options.config?.headers);
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData;
   headers.set("Accept", "application/json");
   headers.delete("Authorization");
-  if (method !== "GET" && body !== undefined)
+  if (multipart) headers.delete("Content-Type");
+  else if (method !== "GET" && body !== undefined)
     headers.set("Content-Type", "application/json");
   const sentToken = options.auth !== false ? context.getAccessToken?.() : null;
   const sessionId = sentToken ? context.getSessionId?.() : undefined;
@@ -189,7 +191,7 @@ export const requestApi = async <T>(
     headers,
     auth: undefined,
     signal: options.signal,
-    data: body === undefined ? undefined : JSON.stringify(body),
+    data: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     adapter: fetch ? "fetch" : api.defaults.adapter,
     env: fetch
       ? ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { Package } from "lucide-react";
+import { Heart, Package } from "lucide-react";
 import { multiplyCartMoney } from "@/features/cartUtils";
 import type { CartItem } from "@/types/cartResponseType";
 import type { ProductDetail } from "@/types/catalogResponseType";
@@ -13,6 +13,8 @@ type CartLineProps = {
   pending: boolean;
   onQuantityChange: (quantity: number) => void;
   onRemove: () => void;
+  saved?: boolean;
+  onSave?: () => void;
 };
 
 function CartLine({
@@ -21,11 +23,13 @@ function CartLine({
   pending,
   onQuantityChange,
   onRemove,
+  saved = false,
+  onSave,
 }: CartLineProps) {
-  const name = product?.name ?? `Item ${item.productId}`;
+  const name = product?.name ?? item.productName ?? `Item ${item.productId}`;
   const sku = product?.skus.find((candidate) => candidate.id === item.skuId);
-  const variant = [sku?.color, sku?.size].filter(Boolean).join(" · ");
-  const image = product?.images.find((candidate) => candidate.imageUrl);
+  const variant = [sku?.color ?? item.color, sku?.size ?? item.size].filter(Boolean).join(" · ");
+  const imageUrl = product?.images.find((candidate) => candidate.imageUrl)?.imageUrl ?? item.imageUrl;
   const unitPrice = formatVND(item.unitPrice);
   const lineTotal = formatVND(multiplyCartMoney(item.unitPrice, item.quantity));
 
@@ -34,15 +38,15 @@ function CartLine({
       data-testid={`cart-line-${item.id}`}
       aria-label={name}
       aria-busy={pending}
-      className="min-w-0 rounded-sm border border-border bg-card p-4 text-card-foreground sm:p-6"
+      className="min-w-0 bg-card p-4 text-card-foreground sm:p-5"
     >
       <div className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] gap-4 sm:grid-cols-[96px_minmax(0,1fr)] xl:grid-cols-[96px_minmax(0,1fr)_auto]">
         <div className="flex size-20 items-center justify-center overflow-hidden rounded-sm bg-muted sm:size-24">
-          {image ? (
+          {imageUrl ? (
             // Catalog media URLs are delivered by the API, as in ProductGallery.
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={image.imageUrl}
+              src={imageUrl}
               alt={name}
               width={96}
               height={96}
@@ -74,6 +78,8 @@ function CartLine({
               {unitPrice}
             </span>
           </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4">
+          {onSave && <button type="button" onClick={onSave} aria-pressed={saved} disabled={pending} className="inline-flex min-h-11 items-center gap-1 text-xs text-muted-foreground hover:text-primary disabled:opacity-50"><Heart size={13} fill={saved ? "currentColor" : "none"} aria-hidden="true" />{saved ? "Saved for later" : "Save for Later"}</button>}
           <button
             type="button"
             onClick={onRemove}
@@ -83,6 +89,7 @@ function CartLine({
           >
             Remove
           </button>
+          </div>
         </div>
 
         <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-4 border-t border-border pt-4 sm:col-start-2 sm:col-span-1 xl:col-start-3 xl:row-start-1 xl:flex-nowrap xl:items-start xl:justify-end xl:border-t-0 xl:pt-0">

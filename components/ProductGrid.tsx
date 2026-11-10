@@ -22,7 +22,7 @@ export function ProductGrid({
   retrying = false,
 }: ProductGridProps) {
   const grid =
-    "m-0 grid list-none grid-cols-1 items-start gap-6 p-0 @min-[480px]/catalog:grid-cols-2 @min-[760px]/catalog:grid-cols-3";
+    "m-0 grid list-none grid-cols-1 items-stretch gap-6 p-0 @min-[480px]/catalog:grid-cols-2 @min-[760px]/catalog:grid-cols-3";
   const state =
     "flex w-full flex-col items-center gap-3 rounded-sm border border-dashed border-border px-6 py-12 text-center";
 
@@ -98,7 +98,7 @@ export function ProductGrid({
     <div className="@container/catalog w-full min-w-0">
       <ul className={grid} aria-label="Products">
         {products.map((product) => (
-          <li className="min-w-0" key={product.id}>
+          <li className="h-full min-w-0" key={product.id}>
             <ProductCard product={product} />
           </li>
         ))}

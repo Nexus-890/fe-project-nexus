@@ -115,6 +115,10 @@ const server = createServer(async (req, res) => {
     return forwardSession(req, res, url).catch(() => json(res, { title: "Bad gateway", status: 502 }, 502));
   if (req.method === "OPTIONS") return json(res, {});
   if (url.pathname === "/health") return json(res, {});
+  if (url.pathname === "/api/v1/auctions") return json(res, {
+    ...success([{ id: "auction-1", productId: "1", title: "Vintage watch", imageUrl: null, currentPrice: 250000, bidCount: 12, currency: "VND", endAt: new Date(Date.now() + 7200000).toISOString() }]),
+    page: { number: 0, size: 5, totalElements: 1, totalPages: 1 },
+  });
   if (url.pathname === "/test/notifications/reset") {
     releaseNotifications();
     notificationCase = defaultNotificationCase();

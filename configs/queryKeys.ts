@@ -5,7 +5,12 @@ import type { NotificationFilters } from "../types/notificationRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  auctions: {
+    active: ["auctions", "active"] as const,
+  },
   catalog: {
+    cartProducts: (productIds: string[]) =>
+      ["catalog", "cart-products", productIds] as const,
     tree: ["catalog", "category-tree"] as const,
     products: (filters: ProductFilters) =>
       ["catalog", "products", filters] as const,
@@ -37,6 +42,10 @@ export const queryKeys = {
       ["notification", sessionId, "unread-count"] as const,
   },
   orders: {
+    detail: (sessionId: number, orderId: string) =>
+      ["orders", sessionId, "detail", orderId] as const,
+    history: (sessionId: number, orderId: string) =>
+      ["orders", sessionId, "history", orderId] as const,
     list: (sessionId: number, filters: OrderFilters) =>
       ["orders", sessionId, "list", filters] as const,
     group: (sessionId: number, orderGroupId: string) =>

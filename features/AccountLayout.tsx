@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import ShopLayout from "@/features/ShopLayout";
 import AccountSidebar from "@/components/AccountSidebar";
-import AccountFooter from "@/components/AccountFooter";
 
 function AccountLayout({ children }: { children: ReactNode }) {
   const { user, status } = useAuth();
@@ -15,7 +14,6 @@ function AccountLayout({ children }: { children: ReactNode }) {
         <AccountSidebar user={user} loading={status === "authenticating"} />
         <div className="min-w-0">{children}</div>
       </div>
-      <AccountFooter />
     </ShopLayout>
   );
 }

@@ -4,7 +4,7 @@
 
 | Route | Behavior |
 | --- | --- |
-| `/` | Public category navigation/tree |
+| `/` | Campaign carousel, sample vouchers, root category tiles, live products, active auctions and category-based picks |
 | `/categories/[slug]` | Server category resolution, then client product listing |
 | `/category/[slug]` | Preserved redirect alias |
 | `/search` | URL-controlled query/category/sort/page and API-backed listing |
@@ -13,6 +13,12 @@
 `CategoryPage` uses the pure catalog service on the server. Resolve category by public slug or id in the nested tree, including existing `slug=` compatibility links. Unknown category calls `notFound`; an API failure goes to the route error boundary. Client hooks do not run in server category resolution.
 
 The shop layout owns auth/category query state and passes props to the header/navigation. UI components do not call transport functions. Category tree loading/errors and product loading/errors remain independent, with explicit retry.
+
+Homepage category tiles display only the roots returned by the tree API. They do not
+render child links below the root label; recursive descendants remain available in
+the listing sidebar and category picker. Product cards reserve equal media, two-line
+title and price areas, stretch within their grid, and show `Price unavailable` when
+the API has no price so missing data does not collapse the card.
 
 ## Listing and URL helpers
 
@@ -26,9 +32,11 @@ Services call public category/product endpoints and validate returned data befor
 - Encoded category path segments and search query parameters.
 - Pagination/filter links and browser history; page 1/query-empty URL conventions remain stable.
 
-Page-out-of-range, empty results, malformed response and API failure have distinct UI states. Do not inject demo products or promotional data to make a page look populated.
+Page-out-of-range, empty results, malformed response and API failure have distinct UI states. Catalog data stays API backed; a failed catalog call never falls back to fake products. The buyer shop design task explicitly authorizes hardcoded presentation for APIs that are not delivered: campaigns, sample vouchers, sample seller profile and sample ratings/reviews. Those previews are labeled and do not change checkout prices or claim a real discount.
 
-The search UI retains q/category/sort in URL state. The delivered products controller currently supports categoryId/page/size only. Real text search and price/newest sorting require a backend contract extension; mock filtering or URL changes alone do not establish those capabilities.
+The search UI retains q/category/sort in URL state. The delivered products controller currently supports categoryId/page/size only. Real text search and price/newest sorting require a backend contract extension; mock filtering or URL changes alone do not establish those capabilities. The search results and sidebar now show that limitation, including price/rating/condition/trust preview controls. Query/category chips can be removed independently.
+
+Homepage products use one ten-item public query, shared between campaigns, featured products and the initial picks tab. Switching a picks category uses its real categoryId. Active auctions use public `GET /api/v1/auctions?status=ACTIVE&page=0&size=5`, validated against `AuctionController` and `AuctionResponse`, normalized into a separate homepage view model and sorted by closing time. They refresh every 30 seconds and their countdowns stop at zero. Cards link to the catalog item; bidding is not implemented. Auction loading/failure/empty states remain separate from catalog states.
 
 ## Detail, money and media
 
@@ -38,7 +46,9 @@ The selected SKU is local state. Changing it updates displayed price without iss
 
 The [product image gallery](product-image-gallery.md) orders images by `sortOrder`, displays a main image and selectable thumbnails, and preserves wrapping arrows and keyboard navigation. `ProductImage` supplies the shared empty/broken-image placeholder. The main image reserves a black square; thumbnails reserve 72px on mobile and 80px from the small breakpoint, so loading and failures do not change media dimensions. Product cards use the first ordered image when one is supplied.
 
-The delivered detail endpoint already returns `images`; the delivered list endpoint does not. The list parser accepts a validated optional `images` array and normalizes omission to `[]`, so current list responses continue to show placeholders. List image data remains a backend dependency of upload task #122. Do not fetch product detail separately for each card or invent a media endpoint to fill this gap. Existing public product GET paths and the shared empty-string base URL fallback stay in place.
+Both delivered detail and list endpoints return `images`: `ProductService.attachImages` batches list media reads and `ProductResponse.images` is recorded in the OpenAPI Product schema. The list parser still accepts omission for older compatible responses, normalizing it to `[]`. Cards use those public Supabase URLs directly and never fetch detail separately for each card. Existing public product GET paths and the shared empty-string base URL fallback stay in place.
+
+Product detail includes keyboard-accessible description/specification/review/shipping tabs. Specifications and description come from the live detail; reviews and seller statistics are explicitly sample content. Recommendations use the current category and exclude the current item. Buy Now performs the existing add-to-cart workflow, then opens checkout only on a current-session success. Product cards save to the shared visit-only watchlist; the shared layout clears it across auth session changes.
 
 `components/formatPrice.ts` preserves string-safe VND formatting. For example `"150000"` becomes `"150.000 ₫"`, `"150000.5"` becomes `"150.000,50 ₫"`, and `"001000.125"` becomes `"1.000,125 ₫"`. It does not round long decimal strings or convert a large integer string through Number. Null/invalid values keep the existing unavailable-price fallback.
 

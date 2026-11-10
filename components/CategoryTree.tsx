@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Smartphone, Laptop, Camera, Watch, Headphones, Shirt, Gamepad2, Sofa, BookOpen, Gem, Shapes } from "lucide-react";
 import type { CategoryNode } from "@/types/catalogResponseType";
 import { categoryHref } from "@/features/catalogUtils";
 
@@ -9,35 +10,13 @@ type CategoryTreeProps = {
   variant?: "tree" | "tiles";
 };
 
-const categoryIcons: Record<string, string> = {
-  phone: "▯",
-  phones: "▯",
-  laptop: "▱",
-  laptops: "▱",
-  camera: "◉",
-  cameras: "◉",
-  watch: "◌",
-  watches: "◌",
-  audio: "◖",
-  fashion: "◇",
-  gaming: "▣",
-  game: "▣",
-  home: "⌂",
-  "home-garden": "⌂",
-  book: "▤",
-  books: "▤",
-  collectible: "☆",
-  collectibles: "☆",
-};
-
-function iconForCategory(slug: string): string {
-  return categoryIcons[slug.toLowerCase()] ?? "•";
-}
+const categoryIcons = { phone: Smartphone, phones: Smartphone, electronics: Laptop, laptop: Laptop, laptops: Laptop, camera: Camera, cameras: Camera, watch: Watch, watches: Watch, audio: Headphones, headphones: Headphones, fashion: Shirt, gaming: Gamepad2, game: Gamepad2, home: Sofa, "home-garden": Sofa, book: BookOpen, books: BookOpen, collectible: Gem, collectibles: Gem };
 
 function CategoryIcon({ slug }: { slug: string }) {
+  const Icon = categoryIcons[slug.toLowerCase() as keyof typeof categoryIcons] ?? Shapes;
   return (
-    <span aria-hidden="true" className="text-xl leading-none">
-      {iconForCategory(slug)}
+    <span aria-hidden="true" className="grid size-11 place-items-center rounded-sm border border-border bg-card text-muted-foreground">
+      <Icon size={22} />
     </span>
   );
 }
@@ -54,7 +33,7 @@ export function CategoryTree({
     <ul
       className={
         tiles
-          ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+          ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8"
           : depth === 0
             ? "space-y-2"
             : "ml-4 border-l border-border pl-3"
@@ -65,17 +44,16 @@ export function CategoryTree({
           <Link
             href={categoryHref(category.slug)}
             aria-current={activeSlug === category.slug ? "page" : undefined}
-            className={`flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm [overflow-wrap:anywhere] hover:bg-muted ${tiles ? "min-h-24 flex-col justify-center gap-2 border border-border bg-card text-center shadow-sm" : ""} ${depth === 0 ? "font-semibold" : ""} ${activeSlug === category.slug ? "bg-muted text-primary" : ""}`}
+            className={`flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm [overflow-wrap:anywhere] hover:bg-muted ${tiles ? "min-h-24 flex-col justify-center gap-2 bg-card text-center" : ""} ${depth === 0 ? "font-medium" : ""} ${activeSlug === category.slug ? "bg-muted text-primary" : ""}`}
           >
             {tiles ? <CategoryIcon slug={category.slug} /> : null}
             {category.name}
           </Link>
-          <CategoryTree
+          {variant === "tree" ? <CategoryTree
             categories={category.children}
             depth={depth + 1}
             activeSlug={activeSlug}
-            variant={variant}
-          />
+          /> : null}
         </li>
       ))}
     </ul>

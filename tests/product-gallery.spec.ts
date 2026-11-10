@@ -217,6 +217,7 @@ test("a broken first card image uses the placeholder instead of skipping to anot
   }]);
   await page.goto("/search");
   const card = page.getByRole("article", { name: "Broken card", exact: true });
+  await card.scrollIntoViewIfNeeded();
   await expect(placeholder(card, "Broken card")).toBeVisible();
   await expect(card.locator("img")).toHaveCount(0);
   expect(errors).toEqual([]);

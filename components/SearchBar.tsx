@@ -118,6 +118,7 @@ function SearchBar({
 
       <button
         type="button"
+        onClick={() => router.push(`${searchHref({ q: query.trim(), category })}#catalog-filters`)}
         className="min-h-11 min-w-11 whitespace-nowrap px-2 text-xs text-neutral-600 hover:text-black"
       >
         Advanced

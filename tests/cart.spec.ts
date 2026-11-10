@@ -280,7 +280,7 @@ test("successful quantity edit survives navigation, session restoration and expl
   await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
   await expect.poll(() => state.carts.get("buyer-1")!.items[0].quantity).toBe(3);
   await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
-  await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+  await page.locator("header").getByRole("link", { name: "Nexus home", exact: true }).click();
   await openCart(page);
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
   // The HttpOnly cookie restores the session on reload, so the cart is read again with a fresh token.
@@ -411,7 +411,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
     await expect(page.getByRole("main")).not.toContainText(productName);
     await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName(/0/);
-    await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+    await page.locator("header").getByRole("link", { name: "Nexus home", exact: true }).click();
     await openCart(page);
     await expect(page.getByTestId(`cart-line-${lineId}`)).toHaveCount(0);
   } finally {
@@ -433,7 +433,7 @@ test("navigation keeps cart edits locked through reconciliation and ignores a la
     await expect.poll(() => state.writes.length).toBe(1);
     const initialReads = state.reads.length;
     state.readGate = readGate.promise;
-    await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+    await page.locator("header").getByRole("link", { name: "Nexus home", exact: true }).click();
     await expect.poll(() => state.reads.length).toBeGreaterThan(initialReads);
     await openCart(page);
     await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();

@@ -1,35 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ShoppingBag } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Heart, ShoppingBag, Store } from "lucide-react";
 import CartLine from "../components/CartLine";
 import CartSummary from "../components/CartSummary";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
-import { getProduct } from "../service/catalogService";
+import { getCartProducts } from "../service/cartCatalogService";
 import { getCartQuantity, getCartSubtotal } from "./cartUtils";
 import { useCart } from "./useCart";
 import type { CartItem } from "../types/cartResponseType";
-
-type CartLineWithDetailsProps = {
-  item: CartItem;
-  pending: boolean;
-  onQuantityChange: (quantity: number) => void;
-  onRemove: () => void;
-};
-
-function CartLineWithDetails(props: CartLineWithDetailsProps) {
-  const product = useApiQuery(
-    {
-      queryKey: queryKeys.catalog.product(props.item.productId),
-      service: (signal) => getProduct(props.item.productId, { signal }),
-    },
-    { staleTime: 60_000, retry: false },
-  );
-  // Catalog metadata is optional. Prices and quantities always come from the cart.
-  return <CartLine {...props} product={product.data} />;
-}
 
 function CartPage() {
   const { status, sessionId, error, retryProfile } = useAuth();
@@ -85,8 +67,19 @@ function CartPage() {
 
 function CartContents() {
   const { cart, pending, feedback, updateQuantity, removeItem } = useCart();
+  const [saved, setSaved] = useState<string[]>([]);
   const quantity = getCartQuantity(cart.data?.items ?? []);
   const items = cart.data?.items ?? [];
+  const productIds = [...new Set(items.map((item) => item.productId))].sort();
+  const products = useApiQuery({
+    queryKey: queryKeys.catalog.cartProducts(productIds),
+    service: (signal) => getCartProducts(productIds, { signal }),
+  }, { enabled: productIds.length > 0, staleTime: 60_000, retry: false });
+  const sellers = new Map<string, CartItem[]>();
+  for (const item of items) {
+    const sellerId = products.data?.[item.productId]?.sellerId ?? item.sellerId ?? "shop";
+    sellers.set(sellerId, [...(sellers.get(sellerId) ?? []), item]);
+  }
 
   if (!cart.data && cart.isPending)
     return (
@@ -117,7 +110,7 @@ function CartContents() {
   return (
     <>
       <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
-        {quantity} {quantity === 1 ? "item" : "items"}
+        {quantity} {quantity === 1 ? "item" : "items"} from {sellers.size} {sellers.size === 1 ? "seller" : "sellers"}
       </p>
       {feedback && (
         <p
@@ -149,15 +142,11 @@ function CartContents() {
             aria-label="Cart items"
             aria-busy={pending}
           >
-            {items.map((item) => (
-              <CartLineWithDetails
-                key={item.id}
-                item={item}
-                pending={pending}
-                onQuantityChange={(next) => updateQuantity(item.id, next)}
-                onRemove={() => removeItem(item.id)}
-              />
-            ))}
+            {[...sellers].map(([sellerId, lines], index) => <section key={sellerId} className="overflow-hidden rounded-sm border border-border" aria-label={`Seller ${index + 1}`}>
+              <h2 className="flex min-h-12 items-center gap-2 border-b border-border bg-muted/40 px-4 text-sm font-medium"><Store size={16} aria-hidden="true" />{lines?.[0]?.sellerName || (sellerId === "shop" ? "Your shop" : `Shop ${index + 1}`)}<span className="ml-auto text-xs font-normal text-muted-foreground">{lines?.length} {lines?.length === 1 ? "product" : "products"}</span></h2>
+              <div className="divide-y divide-border">{lines?.map((item) => <CartLine key={item.id} item={item} product={products.data?.[item.productId]} pending={pending} saved={saved.includes(item.id)} onSave={() => setSaved((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onQuantityChange={(next) => updateQuantity(item.id, next)} onRemove={() => removeItem(item.id)} />)}</div>
+            </section>)}
+            {saved.length > 0 && <p role="status" className="flex items-start gap-2 rounded-sm bg-muted p-4 text-xs leading-5 text-muted-foreground"><Heart size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />{saved.length} {saved.length === 1 ? "item marked" : "items marked"} for later in this visit. Items stay in your cart until you remove them.</p>}
             <Link
               href="/search"
               className="inline-flex min-h-11 items-center gap-2 text-sm font-medium hover:text-primary"

@@ -1,14 +1,18 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, House } from "lucide-react";
+import { ChevronRight, House, MapPin, ShoppingCart, ShieldCheck, Truck, Zap } from "lucide-react";
 import { isApiError } from "@/configs/api";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 import { formatVND } from "@/components/formatPrice";
-import { getProduct } from "@/service/catalogService";
+import { getProduct, getProducts } from "@/service/catalogService";
+import ProductInformationTabs, { RatingStars } from "@/components/ProductInformationTabs";
+import ProductCard from "@/components/ProductCard";
+import SampleSaleCountdown from "@/components/SampleSaleCountdown";
 import {
   mockProductDetail,
   USE_PRODUCT_DETAIL_MOCK,
@@ -46,6 +50,7 @@ function selectedSku(
 }
 
 function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
+  const router = useRouter();
   const id = resolveProductId(slug, productId);
   const { status, sessionId, isSessionCurrent } = useAuth();
   const cart = useGuestCart();
@@ -67,6 +72,11 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
     text: string;
   } | null>(null);
   const activeSession = useRef<{ sessionId: number; status: typeof status } | null>(null);
+  const recommendationFilters = { categoryId: product.data?.categoryId, page: 0, size: 5 };
+  const recommendations = useApiQuery({
+    queryKey: queryKeys.catalog.products(recommendationFilters),
+    service: (signal) => getProducts(recommendationFilters, { signal }),
+  }, { enabled: Boolean(product.data?.categoryId) });
 
   useEffect(() => {
     activeSession.current = { sessionId, status };
@@ -104,7 +114,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const price = formatVND(sku?.price ?? null);
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (buyNow = false) => {
     if (status === "anonymous" && !cart.guestEnabled) {
       setSignInPrompt(sessionId);
       setCartMessage(null);
@@ -121,6 +131,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
       if (!isCurrent()) return;
       if (result.ok) {
         setCartMessage({ sessionId, text: "Added to cart." });
+        if (buyNow) router.push("/checkout");
       } else if (result.error.kind !== "aborted") {
         if (status === "anonymous" && (result.error.status === 401 || result.error.status === 403)) {
           setSignInPrompt(sessionId);
@@ -177,17 +188,18 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             <h1 className="text-heading-32 [overflow-wrap:anywhere]">
               {detail.name}
             </h1>
-            <p className="text-sm text-gray-800">
-              SKU selection controls the price sent to the cart.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm"><RatingStars /><strong>4.8</strong><span className="text-muted-foreground">126 sample reviews</span></div>
           </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-gradient-to-r from-primary-active to-primary p-3 text-primary-foreground"><span className="inline-flex items-center gap-2 text-sm font-medium"><Zap size={17} aria-hidden="true" />FLASH SALE PREVIEW</span><SampleSaleCountdown inverse /></div>
           <p
             className="min-h-10 text-heading-32 text-primary"
             aria-live="polite"
           >
             {price ?? "Price unavailable"}
           </p>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Shop vouchers</span>{["50K off", "15% off audio", "Free shipping"].map((offer) => <span key={offer} className="rounded-sm border border-orange-300 px-2 py-1 text-primary">{offer}</span>)}<span className="w-full text-muted-foreground">Sample offers · final price is shown at checkout.</span></div>
 
           {detail.skus.length > 0 ? (
             <SKUSelector
@@ -207,14 +219,15 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             <QuantityPicker value={quantity} onChange={setQuantity} />
           </div>
 
-          <button
+          <div className="flex flex-wrap gap-3"><button
             type="button"
             onClick={() => void handleAddToCart()}
             disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            {cart.adding ? "Adding…" : "Add to Cart"}
+            <ShoppingCart size={20} className="mr-2" aria-hidden="true" />{cart.adding ? "Adding…" : "Add to Cart"}
           </button>
+          <button type="button" disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"} onClick={() => void handleAddToCart(true)} className="inline-flex min-h-12 min-w-32 flex-1 items-center justify-center rounded-md border border-border px-5 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground sm:flex-none">Buy Now</button></div>
 
           {signInPrompt === sessionId ? (
             <p
@@ -236,13 +249,12 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             </p>
           ) : null}
 
-          {detail.description ? (
-            <p className="border-t border-border pt-5 text-sm leading-6 text-gray-900 [overflow-wrap:anywhere]">
-              {detail.description}
-            </p>
-          ) : null}
+          <div className="space-y-3 border-t border-border pt-5 text-sm"><p className="flex items-center gap-2"><MapPin size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />Choose your delivery address at checkout</p><p className="flex items-center gap-2"><Truck size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />Shipping options and fees are confirmed before payment.</p></div>
+          <div className="space-y-4 rounded-sm border border-border p-4"><div className="flex items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold" aria-hidden="true">NS</span><div><h2 className="text-sm font-semibold">Nexus Demo Store</h2><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><ShieldCheck size={13} className="text-info" aria-hidden="true" />Sample seller profile</p></div><Link href="/search" className="ml-auto inline-flex min-h-11 items-center rounded-sm border border-border px-3 text-xs">Visit shop</Link></div><dl className="grid grid-cols-3 gap-3 text-xs"><div><dd className="font-semibold">3,410</dd><dt className="mt-1 text-muted-foreground">Sample sales</dt></div><div><dd className="font-semibold">99%</dd><dt className="mt-1 text-muted-foreground">Sample positive ratings</dt></div><div><dd className="font-semibold">&lt; 1h</dd><dt className="mt-1 text-muted-foreground">Sample response time</dt></div></dl></div>
         </section>
       </section>
+      <ProductInformationTabs product={detail} />
+      <section aria-label="You might also like" className="mt-8 space-y-5"><h2 className="text-heading-24">You might also like</h2>{recommendations.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading recommendations…</p> : recommendations.isError ? <div role="alert" className="space-y-3 rounded-sm border border-border p-4 text-sm"><p>Unable to load recommendations.</p><button type="button" onClick={() => void recommendations.refetch()} disabled={recommendations.isFetching} className="min-h-11 rounded-sm border border-border px-3">Retry recommendations</button></div> : recommendations.data?.content.some((item) => item.id !== detail.id) ? <ul className="grid list-none grid-cols-1 gap-4 p-0 min-[480px]:grid-cols-2 lg:grid-cols-4">{recommendations.data.content.filter((item) => item.id !== detail.id).slice(0, 4).map((item) => <li key={item.id} className="min-w-0"><ProductCard product={item} /></li>)}</ul> : <p className="text-sm text-muted-foreground">More finds are on the way. <Link href="/search" className="inline-flex min-h-11 items-center text-primary">Browse all products</Link></p>}</section>
     </div>
   );
 }

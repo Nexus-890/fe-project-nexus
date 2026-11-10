@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, House } from "lucide-react";
+import { ChevronRight, House, X } from "lucide-react";
 import { useApiQuery } from "@/hooks/useApi";
 import { getCategoryTree, getProducts } from "@/service/catalogService";
 import { queryKeys } from "@/configs/queryKeys";
@@ -114,14 +114,10 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
           <div className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {query ? (
-                <span className="inline-flex min-h-9 max-w-full items-center rounded-full border border-primary bg-orange-100 px-3 py-1.5 text-sm text-primary">
-                  {query}
-                </span>
+                <Link href={searchHref({ category: categorySlug, sort: sort === "relevance" ? "" : sort })} aria-label={`Remove search ${query}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-primary bg-orange-100 px-3 py-1.5 text-sm text-primary [overflow-wrap:anywhere]">{query}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
               ) : null}
               {selectedCategory ? (
-                <span className="inline-flex min-h-9 max-w-full items-center rounded-full border border-border px-3 py-1.5 text-sm">
-                  {selectedCategory.name}
-                </span>
+                <Link href={searchHref({ q: query, sort: sort === "relevance" ? "" : sort })} aria-label={`Remove category ${selectedCategory.name}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm [overflow-wrap:anywhere]">{selectedCategory.name}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
               ) : null}
             </div>
             <label className="flex min-h-11 items-center gap-2 text-sm">
@@ -150,6 +146,8 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
               </select>
             </label>
           </div>
+
+          {query || sort !== "relevance" ? <p className="rounded-sm bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">Text search and sorting are previews. Results currently follow the selected category.</p> : null}
 
           {products.isSuccess && page > Math.max(1, totalPages) ? (
             <div

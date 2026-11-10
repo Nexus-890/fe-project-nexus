@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Header from "@/components/Header";
+import AccountFooter from "@/components/AccountFooter";
 import NotificationBellFeature from "@/features/NotificationBellFeature";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
@@ -64,6 +65,7 @@ function ShopLayout({ children }: { children: ReactNode }) {
         </div>
       ) : null}
       <main className="min-w-0 flex-1">{children}</main>
+      <AccountFooter />
     </div>
   );
 }

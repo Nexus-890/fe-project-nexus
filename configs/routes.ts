@@ -9,21 +9,21 @@ export const ROUTES = {
   orders: "/orders",
   reputation: "/profile#reputation",
   security: "/profile#security",
-  sell: "/#sell",
+  sell: "/sell/images",
 } as const;
 
 export const HEADER_UTILITY_NAVIGATION = [
   { label: "Daily Deals", href: "/#daily-deals", visibility: "sm:inline-flex" },
   { label: "Vouchers", href: "/#vouchers", visibility: "sm:inline-flex" },
   { label: "Live Auctions", href: "/#live-auctions", visibility: "md:inline-flex" },
-  { label: "Help & Contact", href: "/#help", visibility: "lg:inline-flex" },
+  { label: "Help & Contact", href: "/help", visibility: "lg:inline-flex" },
 ] as const;
 
 export const HEADER_CATEGORY_SHORTCUTS = [
   { label: "Nexus Live", href: "/#nexus-live", active: true },
-  { label: "Saved", href: "/#saved" },
+  { label: "Saved", href: "/saved" },
   { label: "Deals", href: "/#deals" },
-  { label: "Refurbished", href: "/#refurbished" },
+  { label: "Refurbished", href: "/search" },
 ] as const;
 
 export interface AccountNavigationItem {

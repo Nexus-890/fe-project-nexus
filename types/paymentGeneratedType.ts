@@ -1,5 +1,25 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
+    "/api/v1/webhooks/sepay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a SePay callback and match its payment session
+         * @description Public at the gateway and payment service; no bearer token is required. Before parsing JSON or querying payment_db, verifies HMAC-SHA256 over the ASCII timestamp, one dot byte and the original request body bytes. Missing, malformed, stale or invalid signature/timestamp headers return 401. The absolute timestamp skew must be at most 300 seconds. A nonempty normalized code takes precedence over content, even if that code has no matching session. Otherwise content is normalized and looked up exactly first; only if that fails is one configured leading bank prefix (for example SEVQR) removed for another exact lookup. Normalization trims, uppercases using Locale.ROOT and removes Unicode whitespace. The remaining memo must be 1-32 uppercase ASCII letters/digits for an exact payment_sessions.memo_code lookup. There is no arbitrary substring matching. Missing, invalid or unknown memos are accepted with one WARN naming the normalized memo. A valid parsed object returns 200 whether matched or unmatched. This operation does not check amount, account, transfer direction, session state or deadline, create transactions, change orders or emit events. The native SePay acknowledgement is exempt from ApiResponse using @ProtocolResponse.
+         */
+        post: operations["receiveSepayWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payments": {
         parameters: {
             query?: never;
@@ -68,6 +88,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Provider wire object. Fields are optional and nullable at this stage; amount, timestamp text and direction are not business-validated here. Unknown fields are ignored. A missing memo produces an accepted no-match. */
+        SepayWebhookRequest: {
+            /** Format: int64 */
+            id?: number | null;
+            gateway?: string | null;
+            /** @description Provider timestamp text, preserved without date-format validation */
+            transactionDate?: string | null;
+            /** @description Receiving account text; preserve leading zeros */
+            accountNumber?: string | null;
+            /** @description Provider-extracted memo; takes precedence when nonempty after normalization */
+            code?: string | null;
+            /** @description Fallback memo source; exact normalized lookup precedes a retry with one configured leading prefix removed */
+            content?: string | null;
+            /** @description Provider transfer direction; not restricted to an enum at this stage */
+            transferType?: string | null;
+            transferAmount?: number | null;
+            accumulated?: number | null;
+            subAccount?: string | null;
+            referenceCode?: string | null;
+            description?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        SepayWebhookAcknowledgement: {
+            /** @enum {boolean} */
+            success: true;
+        };
         PaymentInitApiResponse: {
             /**
              * @default 0
@@ -170,7 +217,8 @@ export interface components {
             title: string;
             status: number;
             detail: string;
-            code?: string;
+            instance: string;
+            code: string;
             traceId?: string;
         };
     };
@@ -182,6 +230,95 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    receiveSepayWebhook: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for authentication; omission is handled as 401 rather than request binding failure. HMAC-SHA256 digest of the timestamp and exact raw body, using the server-configured webhook secret. */
+                "X-SePay-Signature"?: string;
+                /** @description Required for authentication; omission is handled as 401. Original Unix seconds used as the signed prefix, within 300 seconds of the server clock. */
+                "X-SePay-Timestamp"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description SePay sends JSON. The controller reads original bytes before JSON parsing; an absent body fails signature verification with 401. Unknown object properties are ignored, and no provider field is required by this matching stage. A signed body that cannot be parsed into this object returns 400. */
+        requestBody?: {
+            content: {
+                /**
+                 * @example {
+                 *       "id": 100001,
+                 *       "gateway": "ACB",
+                 *       "transactionDate": "2026-11-05 17:00:00",
+                 *       "accountNumber": "0000000002",
+                 *       "code": " nx20261105001 ",
+                 *       "content": "SEVQR NX20261105001",
+                 *       "transferType": "in",
+                 *       "transferAmount": 350000,
+                 *       "accumulated": 350000,
+                 *       "subAccount": null,
+                 *       "referenceCode": "SYNTHETIC-TEST-100001",
+                 *       "description": "Synthetic example; not the immutable captured delivery"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SepayWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Verified, parsed callback accepted, including an unmatched memo. Native SePay protocol response, without code/message/data or session information. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SepayWebhookAcknowledgement"];
+                };
+            };
+            /** @description Signature verified, but the JSON is malformed, null, not an object or contains a value incompatible with the DTO (PAYMENT_INVALID_WEBHOOK_REQUEST). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "The webhook body must be a valid SePay JSON object",
+                     *       "instance": "/api/v1/webhooks/sepay",
+                     *       "code": "PAYMENT_INVALID_WEBHOOK_REQUEST"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing body/headers, malformed signature or timestamp, expired timestamp, or a signature mismatch (PAYMENT_UNAUTHENTICATED). No parsing, lookup or business change occurs. If an invalid bearer token is supplied despite this public route, shared security can reject it with UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "The webhook signature is invalid",
+                     *       "instance": "/api/v1/webhooks/sepay",
+                     *       "code": "PAYMENT_UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     initiateGroupPayment: {
         parameters: {
             query?: never;
