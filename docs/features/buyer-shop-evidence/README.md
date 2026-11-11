@@ -7,6 +7,11 @@ three shared sample journeys/layout cases and two seller form cases. Sample
 screenshots were refreshed after the continuity correction; they are clearly
 labeled design previews. They do not establish payment settlement.
 
+After merge `4bfcbe7b` / develop `da482b76`, the full default browser run passed
+**54 cases** with **11 order cases skipped by its existing configuration**.
+This includes the review cases above. Earlier dedicated order evidence remains
+historical; no final-merge order rerun is claimed.
+
 | Sample screen | 375px | 1440px |
 | --- | --- | --- |
 | Cart | [cart](cart-375.png) | [cart](cart-1440.png) |

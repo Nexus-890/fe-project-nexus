@@ -61,7 +61,7 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
         </div>
       </Link>
       {sampleDetails ? <span className="pointer-events-none absolute top-2 left-2 rounded-sm bg-primary px-2 py-1 text-[10px] font-medium leading-4 text-primary-foreground">Sample deal</span> : null}
-      <button type="button" aria-label={`${saved ? "Remove" : "Save"} ${product.name} ${saved ? "from" : "to"} watchlist`} aria-pressed={saved} onClick={() => watchlist ? watchlist.toggle(product) : setLocalSaved((current) => !current)} className={`absolute top-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-sm border border-border bg-card/95 hover:text-primary ${saved ? "text-primary" : "text-muted-foreground"}`}><Heart size={19} fill={saved ? "currentColor" : "none"} aria-hidden="true" /></button>
+      <button type="button" aria-label={`${saved ? "Remove" : "Save"} ${product.name} ${saved ? "from" : "to"} watchlist`} aria-pressed={saved} onClick={() => watchlist ? watchlist.toggle({ ...product, maxPrice: product.maxPrice ?? null }) : setLocalSaved((current) => !current)} className={`absolute top-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-sm border border-border bg-card/95 hover:text-primary ${saved ? "text-primary" : "text-muted-foreground"}`}><Heart size={19} fill={saved ? "currentColor" : "none"} aria-hidden="true" /></button>
     </article>
   );
 }

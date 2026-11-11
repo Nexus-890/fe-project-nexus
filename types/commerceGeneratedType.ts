@@ -345,7 +345,7 @@ export interface components {
             discountAmount: number;
             /** @description Always null until shipping quote #201 is delivered, including above FREE_SHIPPING_THRESHOLD. */
             estimatedShippingFee: number | null;
-            /** @description subtotal + taxAmount - discountAmount. Unknown shipping is excluded until #201. */
+            /** @description subtotal - discountAmount + taxAmount + estimatedShippingFee. A null estimatedShippingFee counts as 0 until #201. */
             total: number;
         };
         CartIssue: {
@@ -386,7 +386,7 @@ export interface components {
             taxAmount: number;
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             discountAmount: number;
-            /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
+            /** @description subtotal - discountAmount + taxAmount + shippingFee. A null shippingFee counts as 0 until #201. */
             total: number;
             issues: components["schemas"]["CartIssue"][];
         };
@@ -601,7 +601,7 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             /** Format: date-time */
             createdAt: string;
-            /** @description BigDecimal JSON number; no decimal-string conversion. */
+            /** @description subtotal - discount_amount + tax_amount + shipping_fee of the order, recomputed by the backend from catalog prices and enforced by a database CHECK. BigDecimal JSON number; no decimal-string conversion. */
             totalAmount: number;
             items: components["schemas"]["OrderItem"][];
         };

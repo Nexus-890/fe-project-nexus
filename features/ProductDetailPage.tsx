@@ -112,10 +112,8 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const detail = product.data;
   const sku = selectedSku(detail.skus, selectedSkuId);
   const price = formatVND(sku?.price ?? null);
-  const priceRange =
-    detail.maxPrice !== null && Number(detail.minPrice) !== Number(detail.maxPrice)
-      ? formatVNDRange(detail.minPrice, detail.maxPrice)
-      : null;
+  const formattedRange = formatVNDRange(detail.minPrice, detail.maxPrice);
+  const priceRange = formattedRange !== formatVND(detail.minPrice) ? formattedRange : null;
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
   const handleAddToCart = async (buyNow = false) => {
@@ -197,7 +195,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
               Price depends on the option you choose.
             </p>
             {priceRange !== null && (
-              <p data-testid="product-price-range" className="text-base font-semibold text-primary">
+              <p data-testid="product-price-range" className="text-base font-semibold text-primary [overflow-wrap:anywhere]">
                 {priceRange}
               </p>
             )}
@@ -205,7 +203,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-gradient-to-r from-primary-active to-primary p-3 text-primary-foreground"><span className="inline-flex items-center gap-2 text-sm font-medium"><Zap size={17} aria-hidden="true" />FLASH SALE PREVIEW</span><SampleSaleCountdown inverse /></div>
           <p
-            className="min-h-10 text-heading-32 text-primary"
+            className="min-h-10 text-heading-32 text-primary [overflow-wrap:anywhere]"
             aria-live="polite"
           >
             {price ?? "Price unavailable"}

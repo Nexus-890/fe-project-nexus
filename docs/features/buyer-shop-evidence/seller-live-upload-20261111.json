@@ -23,6 +23,8 @@
     "id": "0b2bf8fc-4730-48df-83ea-5c13c8e56b0a",
     "productId": "92000000-0000-4000-8000-000000000224",
     "sellerId": "68000000-0000-4000-8000-000000000002",
+    "createdBy": "68000000-0000-4000-8000-000000000002",
+    "createdAt": "2026-11-11T18:01:04.26093+07:00",
     "sortOrder": 1,
     "imageUrl": "https://nzjvjvyqxcisjgvglwvj.supabase.co/storage/v1/object/public/product-images/products/92000000-0000-4000-8000-000000000224/b4d3f798-0122-4919-8c0b-860c385ec1eb.jpg",
     "verifiedBy": "Direct SELECT from PostgreSQL and a fresh public GET product detail through the gateway"
