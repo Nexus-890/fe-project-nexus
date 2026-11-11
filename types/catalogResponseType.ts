@@ -11,8 +11,10 @@ export type ProductSummary = Pick<ProductWireResponse, "id" | "name" | "slug"> &
     /** List media from #122; optional for older compatible list responses. */
     images?: ProductImage[];
   };
-export type ProductSku = Omit<components["schemas"]["Sku"], "price"> & {
+export type ShippingParcel = NonNullable<components["schemas"]["ShippingParcel"]>;
+export type ProductSku = Omit<components["schemas"]["Sku"], "price" | "shippingParcel"> & {
   price: string;
+  shippingParcel?: ShippingParcel | null;
 };
 export type ProductImage = components["schemas"]["Image"];
 export type ProductDetail = ProductSummary &

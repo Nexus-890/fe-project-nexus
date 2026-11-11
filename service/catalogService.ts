@@ -9,7 +9,9 @@ import type {
   CategoryNode,
   ProductDetail,
   ProductImage,
+  ProductSku,
   ProductSummary,
+  ShippingParcel,
 } from "../types/catalogResponseType";
 import type { ProductFilters } from "../types/catalogRequestType";
 
@@ -19,6 +21,38 @@ export const normalizeMoney = (value: unknown): string | null => {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0)
     return value.toFixed(2);
   return null;
+};
+
+export const isValidShippingParcel = (value: unknown): value is ShippingParcel =>
+  isRecord(value) && Number.isInteger(value.weightGrams) &&
+  Number(value.weightGrams) >= 1 && Number(value.weightGrams) <= 50000 &&
+  [value.lengthCm, value.widthCm, value.heightCm].every((dimension) =>
+    Number.isInteger(dimension) && Number(dimension) >= 1 && Number(dimension) <= 200);
+
+export const parseShippingParcel = (value: unknown): ShippingParcel | null => {
+  if (value == null) return null;
+  if (!isValidShippingParcel(value))
+    throw createInvalidResponseError("Invalid SKU shipping measurements");
+  return {
+    weightGrams: value.weightGrams, lengthCm: value.lengthCm,
+    widthCm: value.widthCm, heightCm: value.heightCm,
+  };
+};
+
+export const parseProductSku = (value: unknown): ProductSku => {
+  if (!isRecord(value) || typeof value.id !== "string" ||
+    typeof value.productId !== "string" || typeof value.skuCode !== "string" ||
+    (value.color !== null && typeof value.color !== "string") ||
+    (value.size !== null && typeof value.size !== "string") || typeof value.status !== "string")
+    throw createInvalidResponseError("Invalid product SKU");
+  const price = normalizeMoney(value.price);
+  if (price === null) throw createInvalidResponseError("Invalid SKU price");
+  const shippingParcel = parseShippingParcel(value.shippingParcel);
+  return {
+    id: value.id, productId: value.productId, skuCode: value.skuCode,
+    color: value.color, size: value.size, status: value.status, price,
+    ...(value.shippingParcel === undefined ? {} : { shippingParcel }),
+  };
 };
 export const isCategoryTree = (value: unknown): value is CategoryNode[] =>
   Array.isArray(value) &&
@@ -111,30 +145,7 @@ export const parseProductDetail = (value: unknown): ProductDetail => {
   ) {
     throw createInvalidResponseError("Invalid product detail");
   }
-  const skus = value.skus.map((sku) => {
-    if (
-      !isRecord(sku) ||
-      typeof sku.id !== "string" ||
-      typeof sku.productId !== "string" ||
-      typeof sku.skuCode !== "string" ||
-      (sku.color !== null && typeof sku.color !== "string") ||
-      (sku.size !== null && typeof sku.size !== "string") ||
-      typeof sku.status !== "string"
-    ) {
-      throw createInvalidResponseError("Invalid product SKU");
-    }
-    const price = normalizeMoney(sku.price);
-    if (price === null) throw createInvalidResponseError("Invalid SKU price");
-    return {
-      id: sku.id,
-      productId: sku.productId,
-      skuCode: sku.skuCode,
-      color: sku.color,
-      size: sku.size,
-      status: sku.status,
-      price,
-    };
-  });
+  const skus = value.skus.map(parseProductSku);
   const images = parseProductImages(value.images);
   const minPrice =
     value.minPrice == null ? null : normalizeMoney(value.minPrice);

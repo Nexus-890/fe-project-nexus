@@ -93,6 +93,13 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await seller.getByRole("textbox", { name: /^size / }).fill("Standard");
   await seller.getByRole("textbox", { name: /^price / }).fill("150000");
   await seller.getByRole("button", { name: "Save SKU", exact: true }).click();
+  expect(await seller.getByLabel("Weight (g) new SKU", { exact: true }).evaluate((input: HTMLInputElement) => input.validity.valueMissing)).toBe(true);
+  expect((await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`)).toHaveLength(0);
+  await seller.getByLabel("Weight (g) new SKU", { exact: true }).fill("1200");
+  await seller.getByLabel("Length (cm) new SKU", { exact: true }).fill("30");
+  await seller.getByLabel("Width (cm) new SKU", { exact: true }).fill("20");
+  await seller.getByLabel("Height (cm) new SKU", { exact: true }).fill("15");
+  await seller.getByRole("button", { name: "Save SKU", exact: true }).click();
   await expect.poll(async () => (await evidence(request)).products[0].skus.length).toBe(1);
   state = await evidence(request);
   const generatedCode = state.products[0].skus[0].skuCode;
@@ -100,7 +107,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   const savedCode = seller.getByRole("textbox", { name: `SKU code ${generatedCode}`, exact: true });
   await expect(savedCode).toHaveValue(generatedCode);
   await expect(savedCode).not.toBeEditable();
-  expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000 });
+  expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000, shippingParcel: { weightGrams: 1200, lengthCm: 30, widthCm: 20, heightCm: 15 } });
   await expect(seller.getByRole("button", { name: "Save SKU", exact: true })).toHaveCount(0);
   await expect(publish).toBeDisabled();
   await seller.getByLabel("Product image file", { exact: true }).setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
@@ -159,4 +166,78 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
       await screen.screenshot({ path: path.join(output, `mock-${name}-375.png`), fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
     }
   } finally { await adminContext.close(); await buyerContext.close(); }
+});
+
+test("Seller completes a legacy SKU parcel with browser bounds before publishing", async ({ page, request }) => {
+  const seeded = await request.post(`${api}/test/legacy-product`);
+  expect(seeded.status()).toBe(201);
+  const { data: product } = await seeded.json();
+  const sku = product.skus[0];
+  await signIn(page, request, "SELLER", `/backoffice/products/${product.id}`);
+  await expect(page.getByRole("heading", { name: "Edit Product", exact: true })).toBeVisible();
+  const publish = page.getByRole("button", { name: "Publish", exact: true });
+  await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("button", { name: `Edit SKU ${sku.skuCode}`, exact: true }).click();
+  const weight = page.getByLabel(`Weight (g) ${sku.skuCode}`, { exact: true });
+  const length = page.getByLabel(`Length (cm) ${sku.skuCode}`, { exact: true });
+  const width = page.getByLabel(`Width (cm) ${sku.skuCode}`, { exact: true });
+  const height = page.getByLabel(`Height (cm) ${sku.skuCode}`, { exact: true });
+  const save = page.getByRole("button", { name: "Save SKU", exact: true });
+  const putRequests = async () => (await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/skus/${sku.id}`);
+  await expect(weight).toBeEmpty();
+  await save.click();
+  await expect.poll(async () => (await putRequests()).length).toBe(1);
+  expect((await putRequests())[0].body).toEqual({ color: "Black", size: "Standard", price: 150000 });
+  expect((await evidence(request)).products[0].skus[0].shippingParcel).toBeNull();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("button", { name: `Edit SKU ${sku.skuCode}`, exact: true }).click();
+  // Once one measurement is entered, the remaining values must form one complete parcel.
+  await weight.fill("1");
+  await save.click();
+  expect((await putRequests()).length).toBe(1);
+  for (const field of [weight, length, width, height]) await field.fill("1");
+  for (const [field, upper] of [[weight, 50000], [length, 200], [width, 200], [height, 200]] as const) {
+    await expect(field).toHaveAttribute("min", "1");
+    await expect(field).toHaveAttribute("max", String(upper));
+    await field.fill("0");
+    await save.click();
+    expect(await field.evaluate((input: HTMLInputElement) => input.validity.rangeUnderflow)).toBe(true);
+    expect(await putRequests()).toHaveLength(1);
+    await field.fill(String(upper + 1));
+    await save.click();
+    expect(await field.evaluate((input: HTMLInputElement) => input.validity.rangeOverflow)).toBe(true);
+    expect(await putRequests()).toHaveLength(1);
+    await field.fill("1.5");
+    await save.click();
+    expect(await field.evaluate((input: HTMLInputElement) => input.validity.stepMismatch)).toBe(true);
+    expect(await putRequests()).toHaveLength(1);
+    await field.fill("1");
+  }
+  // Both inclusive lower and upper bounds are exercised on the persisted update.
+  await weight.fill("50000");
+  await length.fill("200");
+  await save.click();
+  await expect.poll(async () => (await putRequests()).length).toBe(2);
+  expect((await putRequests())[1].body).toEqual({
+    color: "Black", size: "Standard", price: 150000,
+    shippingParcel: { weightGrams: 50000, lengthCm: 200, widthCm: 1, heightCm: 1 },
+  });
+  await expect(publish).toBeEnabled();
+  await page.reload();
+  await expect(publish).toBeEnabled();
+  expect((await evidence(request)).products[0].skus[0].shippingParcel).toEqual({ weightGrams: 50000, lengthCm: 200, widthCm: 1, heightCm: 1 });
+  await page.getByRole("button", { name: `Edit SKU ${sku.skuCode}`, exact: true }).click();
+  await expect(weight).toHaveValue("50000");
+  await expect(length).toHaveValue("200");
+  await expect(width).toHaveValue("1");
+  await expect(height).toHaveValue("1");
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const output = path.resolve("test-results/backoffice/evidence");
+  await mkdir(output, { recursive: true });
+  await page.screenshot({ path: path.join(output, "mock-sku-parcel-375.png"), fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
+  await page.getByRole("button", { name: "Cancel SKU", exact: true }).click();
+  await publish.click();
+  await expect.poll(async () => (await evidence(request)).products[0].status).toBe("ACTIVE");
 });

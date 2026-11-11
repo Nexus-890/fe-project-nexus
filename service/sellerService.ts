@@ -1,5 +1,5 @@
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
-import { normalizeMoney, parseProductDetail, parseProductPage } from "./catalogService";
+import { isValidShippingParcel, normalizeMoney, parseProductDetail, parseProductPage, parseProductSku, parseShippingParcel } from "./catalogService";
 import { parseOrderSummary } from "./orderService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
@@ -33,8 +33,11 @@ export const getSellerPriceRange = (skus: readonly ProductSku[]): { minPrice: st
   return { minPrice: prices[0] ?? null, maxPrice: prices.at(-1) ?? null };
 };
 
-export const canPublishSellerProduct = (product: Pick<ProductDetail, "skus" | "images">): boolean =>
-  product.skus.some((sku) => !sku.id.startsWith("new-")) && product.images.some((image) => image.imageUrl.trim().length > 0);
+export const canPublishSellerProduct = (product: Pick<ProductDetail, "skus" | "images">): boolean => {
+  const savedSkus = product.skus.filter((sku) => sku.id.trim() && !sku.id.startsWith("new-"));
+  return savedSkus.length > 0 && savedSkus.every((sku) => isValidShippingParcel(sku.shippingParcel)) &&
+    product.images.some((image) => image.imageUrl.trim().length > 0);
+};
 
 export const getSellerProductListings = async (page: number, options: ServiceRequestOptions = {}): Promise<Page<SellerProductListing>> => {
   const result = await getSellerProducts(page, options);
@@ -84,13 +87,30 @@ export const changeSellerProductStatus = async (id: string, status: SellerProduc
   return parseProductWrite(data);
 };
 
-export const createSellerSku = async (productId: string, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> => {
-  const payload: SellerSkuInput = { color: body.color, size: body.size, price: body.price };
-  const { data } = await requestApi("POST", `/api/v1/products/${encodeURIComponent(productId)}/skus`, payload, { ...options, auth: true });
-  if (!isRecord(data) || typeof data.id !== "string" || data.productId !== productId || typeof data.skuCode !== "string" || !data.skuCode.trim() || typeof data.price !== "number" || normalizeMoney(data.price) === null || (data.color !== null && typeof data.color !== "string") || (data.size !== null && typeof data.size !== "string") || typeof data.status !== "string")
+export const saveSellerSku = async (productId: string, skuId: string | null, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> => {
+  if (!productId.trim() || (skuId !== null && (!skuId.trim() || skuId.startsWith("new-"))) ||
+    typeof body.color !== "string" || !body.color.trim() || body.color.trim().length > 50 ||
+    typeof body.size !== "string" || !body.size.trim() || body.size.trim().length > 50 ||
+    typeof body.price !== "number" || !Number.isFinite(body.price) || body.price <= 0 || body.price >= 1e17 ||
+    Number(body.price.toFixed(2)) !== body.price)
+    throw createInvalidResponseError("Invalid SKU input");
+  const shippingParcel = parseShippingParcel(body.shippingParcel);
+  const payload: SellerSkuInput = { color: body.color.trim(), size: body.size.trim(), price: body.price,
+    ...(body.shippingParcel === undefined ? {} : { shippingParcel }) };
+  const path = skuId === null ? `/api/v1/products/${encodeURIComponent(productId)}/skus` : `/api/v1/skus/${encodeURIComponent(skuId)}`;
+  const { data } = await requestApi(skuId === null ? "POST" : "PUT", path, payload, { ...options, auth: true });
+  const sku = parseProductSku(data);
+  if (!sku.id.trim() || sku.id.startsWith("new-") || sku.productId !== productId || !sku.skuCode.trim() ||
+    !isRecord(data) || typeof data.price !== "number" || (skuId !== null && sku.id !== skuId))
     throw createInvalidResponseError("Invalid saved SKU");
-  return { id: data.id, productId: data.productId as string, skuCode: data.skuCode, color: data.color as string | null, size: data.size as string | null, price: normalizeMoney(data.price)!, status: data.status };
+  return sku;
 };
+
+export const createSellerSku = async (productId: string, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> =>
+  saveSellerSku(productId, null, body, options);
+
+export const updateSellerSku = async (productId: string, skuId: string, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> =>
+  saveSellerSku(productId, skuId, body, options);
 
 export const getSellerSales = async (pageNumber: number, status: string | undefined, options: ServiceRequestOptions = {}): Promise<Page<SellerSale>> => {
   if (!Number.isInteger(pageNumber) || pageNumber < 0 || pageNumber > 2147483646 ||

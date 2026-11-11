@@ -38,6 +38,33 @@ assumptions:
     verification: On 2026-11-11 all 8 scenarios passed with a temporary Webpack config for the task dependency junction, including Seller publication, Admin intake, Buyer checkout and the explicit simulated paid callback. This is local simulation evidence and does not verify live shipping metadata, GHN or bank settlement.
     source: tests/backoffice.spec.ts; playwright.backoffice.config.ts; service/checkoutService.ts; ../docs/backoffice-222-merge-verification.md
     updated_at: '2026-11-11'
+  - id: sku-parcel-http-contract-20261111
+    status: supported
+    claim: >-
+      Catalog SKU writes accept a complete shippingParcel with weightGrams in
+      1..50000 and lengthCm/widthCm/heightCm in 1..200; omitted/null parcel on an
+      update preserves previously stored measurements.
+    reason: >-
+      ShippingParcel Bean Validation and SkuService.applyShippingParcel define
+      these inclusive integer bounds and preservation behavior. The local mock
+      now stores/responds with metadata and explicitly seeds one legacy SKU with
+      an image but no parcel for browser verification.
+    verification: >-
+      On 2026-11-11 read the merged Catalog source and adapted the mock plus
+      existing demo SKU request assertion. Added a browser scenario for new-SKU
+      required measurements, legacy price-only update, invalid/partial parcel
+      suppression, inclusive bounds, persisted edit and Publish gating after
+      reload. The parent ran all 9 back-office scenarios successfully and reviewed
+      the 375 px editor screenshot without overflow. HTTP logs confirm POST201
+      with the new parcel, PUT200 without metadata for a legacy SKU, then PUT200
+      with persisted boundary measurements. Catalog tests passed 28 cases,
+      including omitted-update preservation. Live GHN/checkout compatibility
+      is not established by these local stand-ins.
+    source: >-
+      ../be-project-nexus/catalog-service/src/main/java/com/group5/catalogservice/product/dto/ShippingParcel.java;
+      ../be-project-nexus/catalog-service/src/main/java/com/group5/catalogservice/product/service/SkuService.java;
+      postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts
+    updated_at: '2026-11-11'
 fingerprints:
   - id: review158-live-acceptance-20261111
     date: '2026-11-11'
@@ -54,4 +81,8 @@ fingerprints:
   - id: backoffice-demo-20261111
     date: '2026-11-11'
     commit: origin/develop 14e4cdae with current Buyer Account, Seller Portal and back-office changes
+    cli: Postman 1.73.0
+  - id: sku-parcel-adaptation-20261111
+    date: '2026-11-11'
+    commit: 30ed13f3 with uncommitted seller parcel UI/service and simulation adaptation
     cli: Postman 1.73.0

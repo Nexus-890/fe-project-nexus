@@ -15,6 +15,9 @@ const problem = (res, status, detail) => json(res, { type: "urn:problem:backoffi
 function list(res, data, url) { const page = Number(url.searchParams.get("page") || 0), size = Number(url.searchParams.get("size") || 10); return json(res, { ...envelope(data.slice(page * size, (page + 1) * size)), page: { number: page, size, totalElements: data.length, totalPages: Math.ceil(data.length / size) } }); }
 const bodyOf = (req) => typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 const findSku = (id) => products.flatMap((product) => product.skus).find((sku) => sku.id === id);
+const validParcel = (parcel) => parcel !== null && typeof parcel === "object" &&
+  [["weightGrams", 50000], ["lengthCm", 200], ["widthCm", 200], ["heightCm", 200]]
+    .every(([field, max]) => Number.isInteger(parcel[field]) && parcel[field] >= 1 && parcel[field] <= max);
 const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Math.min(...product.skus.map((sku) => sku.price)) : null, maxPrice: product.skus.length ? Math.max(...product.skus.map((sku) => sku.price)) : null });
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 async function session(req, res, url) {
@@ -33,6 +36,19 @@ const server = http.createServer(async (req, res) => {
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
   if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; return json(res, {}); }
   if (path === "/test/control") { const body = bodyOf(req); rejectPublish = body.rejectPublish ?? rejectPublish; profileRole = body.profileRole ?? null; return json(res, {}); }
+  // Explicit test setup for a legacy persisted SKU that predates parcel metadata.
+  if (path === "/test/legacy-product" && req.method === "POST") {
+    const id = randomUUID(), skuId = randomUUID();
+    const product = {
+      id, sellerId: seller, name: "Legacy parcel product", slug: `demo-${id}`, categoryId: category,
+      status: "DRAFT", description: "Legacy SKU needs real parcel measurements.", auctionEnable: false,
+      images: [{ id: randomUUID(), imageUrl: `${origin}/api/test/image.svg`, sortOrder: 0 }],
+      skus: [{ id: skuId, productId: id, skuCode: `SKU-${id.replaceAll("-", "")}-01`,
+        color: "Black", size: "Standard", price: 150000, status: "ACTIVE", shippingParcel: null }],
+    };
+    products.push(product);
+    return ok(res, withPrice(product), 201);
+  }
   if (path === "/test/evidence") return json(res, { requests: evidence, products: products.map(withPrice), balances, orders, groups });
   if (path === "/test/payment-confirmed") { const { groupId } = bodyOf(req); const group = groups[groupId]; if (!group) return problem(res, 404, "No simulated order group"); group.status = "PAID"; group.orders.forEach((order) => { order.status = "PAID"; }); evidence.push({ method: "TEST", path, status: 200, environment: "simulation only; models undelivered payment consumer" }); return ok(res, group); }
   if (path === "/test/image.svg") { res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="orange"/></svg>'); }
@@ -57,8 +73,9 @@ const server = http.createServer(async (req, res) => {
     if (!has("SELLER") || product.sellerId !== claims.sub) return problem(res, 403, "Product owner required");
     if (req.method === "POST" && suffix === "/skus") {
       const body = bodyOf(req);
+      if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
       const skuCode = `SKU-${product.id.replaceAll("-", "")}-${String(product.skus.length + 1).padStart(2, "0")}`;
-      const sku = { color: body.color, size: body.size, price: body.price, skuCode, id: randomUUID(), productId: product.id, status: "ACTIVE" };
+      const sku = { color: body.color, size: body.size, price: body.price, shippingParcel: body.shippingParcel == null ? null : { ...body.shippingParcel }, skuCode, id: randomUUID(), productId: product.id, status: "ACTIVE" };
       product.skus.push(sku); return ok(res, sku, 201);
     }
     if (req.method === "POST" && suffix === "/images") { if (!String(req.headers["content-type"]).startsWith("multipart/form-data; boundary=")) return problem(res, 400, "Multipart boundary missing"); const image = { id: randomUUID(), imageUrl: `${origin}/api/test/image.svg`, sortOrder: product.images.length }; product.images.push(image); return ok(res, image, 201); }
@@ -71,7 +88,10 @@ const server = http.createServer(async (req, res) => {
     if (!sku) return problem(res, 404, "SKU missing");
     if (!has("SELLER") || products.find((product) => product.id === sku.productId)?.sellerId !== claims.sub) return problem(res, 403, "Product owner required");
     const body = bodyOf(req);
+    if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
     Object.assign(sku, { color: body.color, size: body.size, price: body.price });
+    // Catalog preserves existing metadata when an older client omits/nulls the parcel.
+    if (body.shippingParcel != null) sku.shippingParcel = { ...body.shippingParcel };
     return ok(res, sku);
   }
   if (path === "/v1/inventory/intake") { if (!has("ADMIN")) return problem(res, 403, "Admin role required"); const body = bodyOf(req); if (!findSku(body.skuId) || !Number.isInteger(body.quantity) || body.quantity < 1) return problem(res, 400, "Valid SKU and positive quantity required"); const balance = balances[body.skuId] ||= { skuId: body.skuId, warehouseId: warehouse, total: 0, available: 0, reserved: 0, unavailable: 0 }; balance.total += body.quantity; balance.available += body.quantity; return ok(res, balance, 201); }

@@ -4,13 +4,13 @@ import { canPublishSellerProduct, getSellerAvailableTotal, getSellerPriceRange, 
 import type { ProductDetail, ProductSku } from "../types/catalogResponseType";
 import type { ApiContext } from "../types/commonRequestType";
 
-const sku: ProductSku = { id: "sku-1", productId: "product-1", skuCode: "TEST-1", color: "Black", size: "M", price: "100.00", status: "ACTIVE" };
+const sku: ProductSku = { id: "sku-1", productId: "product-1", skuCode: "TEST-1", color: "Black", size: "M", price: "100.00", status: "ACTIVE", shippingParcel: { weightGrams: 1200, lengthCm: 30, widthCm: 20, heightCm: 15 } };
 const image = { id: "image-1", imageUrl: "https://images.example.test/product.jpg", sortOrder: 0 };
 const detail: ProductDetail = { id: "product-1", name: "Own draft", slug: "own-draft", categoryId: "category-1", sellerId: "seller-1", status: "DRAFT", description: "Private draft text", auctionEnable: false, skus: [sku], images: [image], minPrice: null, maxPrice: null };
 const wire = { ...detail, skus: [{ ...sku, price: 100 }] };
 const invalid = (error: unknown) => typeof error === "object" && error !== null && "kind" in error && error.kind === "invalid-response";
 
-test("publishing requires both a persisted SKU and a public image; an unsaved row never qualifies", () => {
+test("publishing requires a persisted SKU with parcel measurements and a public image; an unsaved row never qualifies", () => {
   assert.equal(canPublishSellerProduct({ skus: [], images: [] }), false);
   assert.equal(canPublishSellerProduct({ skus: [sku], images: [] }), false);
   assert.equal(canPublishSellerProduct({ skus: [], images: [image] }), false);
@@ -68,4 +68,38 @@ test("seller stock sums authenticated warehouse balance pages rather than defaul
   assert.equal(await getSellerAvailableTotal([]), 0);
   assert.throws(() => parseSellerBalance({ skuId: "sku-1", warehouseId: "warehouse-1", total: 5, available: 9, reserved: 0, unavailable: 0 }, "sku-1"), invalid);
   assert.throws(() => parseSellerBalance({ skuId: "other", warehouseId: "warehouse-1", total: 1, available: 1, reserved: 0, unavailable: 0 }, "sku-1"), invalid);
+});
+test("every persisted SKU needs a complete valid parcel before publication, including old and inactive variants", () => {
+  const missing: ProductSku = { ...sku, id: "sku-2", shippingParcel: null };
+  assert.equal(canPublishSellerProduct({ skus: [missing], images: [image] }), false);
+  assert.equal(canPublishSellerProduct({ skus: [sku, missing], images: [image] }), false);
+  assert.equal(canPublishSellerProduct({ skus: [sku, { ...missing, status: "INACTIVE" }], images: [image] }), false);
+  assert.equal(canPublishSellerProduct({ skus: [sku, { ...missing, id: "new-unsaved" }], images: [image] }), true);
+  assert.equal(canPublishSellerProduct({ skus: [sku, { ...sku, id: "sku-2" }], images: [image] }), true);
+  const parcels: unknown[] = [undefined, null, {}, { weightGrams: 1200, lengthCm: 30, widthCm: 20 },
+    { ...sku.shippingParcel, weightGrams: 0 }, { ...sku.shippingParcel, weightGrams: 50001 },
+    { ...sku.shippingParcel, lengthCm: 201 }, { ...sku.shippingParcel, widthCm: -1 }, { ...sku.shippingParcel, heightCm: 1.5 }];
+  for (const shippingParcel of parcels) {
+    assert.equal(canPublishSellerProduct({ skus: [sku, { ...missing, shippingParcel: shippingParcel as ProductSku["shippingParcel"] }], images: [image] }), false);
+  }
+});
+
+test("owner detail preserves valid parcels and accepts old missing or null parcel metadata", async () => {
+  for (const shippingParcel of [sku.shippingParcel, undefined, null]) {
+    const result = await getSellerProduct(detail.id, { context: { fetch: async () => Response.json({ code: 0, message: "response success", data: {
+      ...wire, skus: [{ ...wire.skus[0], shippingParcel }],
+    } }) } });
+    assert.deepEqual(result.skus[0].shippingParcel, shippingParcel);
+    assert.equal(canPublishSellerProduct(result), shippingParcel !== undefined && shippingParcel !== null);
+  }
+});
+
+test("owner detail rejects malformed and partially present parcel metadata", async () => {
+  for (const shippingParcel of ["parcel", [], {}, { weightGrams: 1200, lengthCm: 30, widthCm: 20 },
+    { ...sku.shippingParcel, weightGrams: 0 }, { ...sku.shippingParcel, weightGrams: 50001 },
+    { ...sku.shippingParcel, lengthCm: 201 }, { ...sku.shippingParcel, widthCm: -1 }, { ...sku.shippingParcel, heightCm: 1.5 }]) {
+    await assert.rejects(getSellerProduct(detail.id, { context: { fetch: async () => Response.json({ code: 0, message: "response success", data: {
+      ...wire, skus: [{ ...wire.skus[0], shippingParcel }],
+    } }) } }), invalid);
+  }
 });
