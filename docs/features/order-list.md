@@ -40,8 +40,4 @@ npm run test:browser -- --config playwright.orders.config.ts
 
 This starts the real Next frontend against a local Postman order simulation plus the existing OIDC/catalog fixtures. The simulation context is [order-list.context.yaml](../../postman/simulations/order-list.context.yaml). Browser tests exercise three rows, URL filter/refresh, paging, empty/error/retry, the pending group destination and responsive overflow. This establishes behavior against the stand-ins; live backend compatibility and the payment destination page remain unverified dependencies.
 
-Screenshots for the merge request:
-
-- [Desktop, 1440px](order-list-evidence/orders-desktop-1440.png)
-- [Mobile, 375×812](order-list-evidence/orders-mobile-375x812.png)
-- [Mobile, long order number](order-list-evidence/orders-mobile-long-number-375x812.png)
+Screenshots belong on [issue #254](https://git.fsoft-academy.edu.vn/hcm26_cpl_java_11/hcm26_cpl_java_11_group_5/-/issues/254), outside the source tree. The browser suite regenerates desktop1440px, mobile375×812 and long-order-number captures as Playwright attachments in ignored `test-results` through `testInfo.outputPath`.

@@ -262,7 +262,7 @@ assumptions:
       also found the asynchronous session-readiness race, absent orderGroupId
       in OrderResponse, and missing payment-success consumer/group-read.
     source: >-
-      ../docs/buyer-shop/sepay-flow-review.md;
+      docs/features/payment.md;
       tests/payment.spec.ts; tests/payment-polling.spec.ts;
       test-results/payment-simulation.ndjson;
       ../be-project-nexus/payment-service/src/main/java/com/group5/paymentservice/payment/controller/SepayWebhookController.java;

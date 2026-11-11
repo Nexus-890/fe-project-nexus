@@ -1,5 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 
 // The focused config supplies a real HTTP stand-in; the general suite does not.
@@ -36,9 +34,7 @@ async function finishSignIn(page: Page) {
 }
 
 async function capture(page: Page, info: TestInfo, filename: string) {
-  const directory = path.resolve("docs/features/order-list-evidence");
-  await mkdir(directory, { recursive: true });
-  const output = path.join(directory, filename);
+  const output = info.outputPath(filename);
   await page.screenshot({ path: output, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });
   await info.attach(filename, { path: output, contentType: "image/png" });
 }

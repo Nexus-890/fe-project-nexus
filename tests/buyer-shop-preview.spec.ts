@@ -1,4 +1,3 @@
-import { mkdir } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 test("sample voucher, address, delivery and payment persist through result and guest order detail", async ({ page }) => {
@@ -110,9 +109,7 @@ test("sample item edits and checkout voucher carry into bank result and matching
   expect(purchases).toEqual([]);
 });
 
-test("buyer sample screens fit mobile and desktop and provide visual evidence", async ({ page }) => {
-  const directory = "docs/features/buyer-shop-evidence";
-  await mkdir(directory, { recursive: true });
+test("buyer sample screens fit mobile and desktop and provide visual evidence", async ({ page }, info) => {
   for (const viewport of [{ width: 375, height: 812 }, { width: 1440, height: 1000 }]) {
     await page.setViewportSize(viewport);
     for (const screen of [
@@ -126,7 +123,10 @@ test("buyer sample screens fit mobile and desktop and provide visual evidence", 
       await expect(page.getByText("Design preview", { exact: true })).toBeVisible();
       await expect(page.locator("header").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-      await page.screenshot({ path: `${directory}/${screen.name}-${viewport.width}.png`, fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
+      const filename = `${screen.name}-${viewport.width}.png`;
+      const output = info.outputPath(filename);
+      await page.screenshot({ path: output, fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
+      await info.attach(filename, { path: output, contentType: "image/png" });
     }
   }
 });

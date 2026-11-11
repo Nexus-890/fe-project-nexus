@@ -11,7 +11,7 @@ import { sortProductImages } from "./productImageUtils";
 import type { ProductSummary } from "@/types/catalogResponseType";
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "images"> & Partial<Pick<ProductSummary, "maxPrice">>;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "maxPrice" | "images">;
   /** Optional design preview until seller statistics and campaigns are delivered. */
   sampleDetails?: boolean;
 };
@@ -21,7 +21,7 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
   const [localSaved, setLocalSaved] = useState(false);
   const saved = watchlist ? watchlist.contains(product.id) : localSaved;
   const price =
-    product.maxPrice == null
+    product.maxPrice === null
       ? formatVND(product.minPrice)
       : formatVNDRange(product.minPrice, product.maxPrice);
   const firstImage = sortProductImages(product.images)[0];
@@ -50,7 +50,7 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
           </h3>
           {sampleDetails ? <span className="w-fit rounded-sm border border-orange-300 px-1.5 py-0.5 text-[10px] leading-4 text-primary">Free ship</span> : null}
           <p className={`m-0 min-h-12 leading-6 [overflow-wrap:anywhere] ${price === null ? "text-sm text-muted-foreground" : "text-base font-semibold tracking-[-0.02em] text-primary"}`}>
-            {price === null ? "Price unavailable" : <>{product.maxPrice == null && <span className="text-xs font-normal tracking-normal">from </span>}{price}</>}
+            {price === null ? "Price unavailable" : <>{product.maxPrice === null && <span className="text-xs font-normal tracking-normal">from </span>}{price}</>}
           </p>
           {sampleDetails ? (
             <div className="mt-auto min-h-10 space-y-1 text-[11px] leading-4 text-muted-foreground">
@@ -61,7 +61,7 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
         </div>
       </Link>
       {sampleDetails ? <span className="pointer-events-none absolute top-2 left-2 rounded-sm bg-primary px-2 py-1 text-[10px] font-medium leading-4 text-primary-foreground">Sample deal</span> : null}
-      <button type="button" aria-label={`${saved ? "Remove" : "Save"} ${product.name} ${saved ? "from" : "to"} watchlist`} aria-pressed={saved} onClick={() => watchlist ? watchlist.toggle({ ...product, maxPrice: product.maxPrice ?? null }) : setLocalSaved((current) => !current)} className={`absolute top-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-sm border border-border bg-card/95 hover:text-primary ${saved ? "text-primary" : "text-muted-foreground"}`}><Heart size={19} fill={saved ? "currentColor" : "none"} aria-hidden="true" /></button>
+      <button type="button" aria-label={`${saved ? "Remove" : "Save"} ${product.name} ${saved ? "from" : "to"} watchlist`} aria-pressed={saved} onClick={() => watchlist ? watchlist.toggle(product) : setLocalSaved((current) => !current)} className={`absolute top-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-sm border border-border bg-card/95 hover:text-primary ${saved ? "text-primary" : "text-muted-foreground"}`}><Heart size={19} fill={saved ? "currentColor" : "none"} aria-hidden="true" /></button>
     </article>
   );
 }
