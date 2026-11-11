@@ -83,7 +83,7 @@ export const parseProductPage = (
         typeof item.categoryId === "string" ? item.categoryId : undefined,
       sellerId: typeof item.sellerId === "string" ? item.sellerId : undefined,
       status: typeof item.status === "string" ? item.status : undefined,
-      // The current list DTO has no media; #122 adds this optional field.
+      // Older list responses may omit the optional media supplied by #122.
       images: item.images == null ? [] : parseProductImages(item.images),
     };
   });

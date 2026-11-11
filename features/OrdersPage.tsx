@@ -24,7 +24,7 @@ function OrderRow({ order }: { order: OrderSummary }) {
     <tr data-testid={`order-row-${order.orderId}`} className="grid grid-cols-2 gap-4 border-t border-border p-4 first:border-t-0 xl:table-row xl:first:border-t xl:p-0">
       <th scope="row" className="col-span-2 min-w-0 text-left font-normal xl:w-[28%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Order</span>
-        <span className="font-mono text-sm [overflow-wrap:anywhere]">{order.orderNumber}</span>
+        <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="font-mono text-sm hover:text-primary hover:underline [overflow-wrap:anywhere]">{order.orderNumber}</Link>
       </th>
       <td className="min-w-0 text-sm xl:w-[22%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Date</span>

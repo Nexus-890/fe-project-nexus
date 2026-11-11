@@ -240,7 +240,42 @@ assumptions:
     source: tests/payment-polling.spec.ts; features/CheckoutPaymentPage.tsx; features/OrdersPage.tsx
     updated_at: '2026-11-06'
 
+  - id: sepay-flow-audit-20261110
+    status: supported
+    claim: >-
+      The current frontend QR/countdown and polling behavior passes the eighteen
+      local HTTP scenarios, but the current backend does not deliver a complete
+      SePay transfer-to-paid-order flow.
+    reason: >-
+      The simulation supplies the order-group GET and test-driven child status
+      transitions. The actual commerce controller has no group GET. The payment
+      webhook currently verifies and matches without financial writes, and the
+      commerce payment consumer handles refund events only. Passing simulation
+      checks therefore does not establish live settlement or paid-order updates.
+    verification: >-
+      On 2026-11-10 ran npm run test:payment: 18/18 passed in 2.3 minutes after
+      retrying a Next startup upgrade reminder. Inspected 667 dependency request
+      events. Fresh FE unit suite passed 211/211. Focused actual payment-service
+      tests passed 119/119, including isolated PostgreSQL persistence scenarios
+      explicitly asserting no payment/outbox mutation for matched and repeated
+      callbacks. No live transfer or live webhook POST was made. Source review
+      also found the asynchronous session-readiness race, absent orderGroupId
+      in OrderResponse, and missing payment-success consumer/group-read.
+    source: >-
+      docs/features/payment.md;
+      tests/payment.spec.ts; tests/payment-polling.spec.ts;
+      test-results/payment-simulation.ndjson;
+      ../be-project-nexus/payment-service/src/main/java/com/group5/paymentservice/payment/controller/SepayWebhookController.java;
+      ../be-project-nexus/payment-service/src/test/java/com/group5/paymentservice/payment/SepayWebhookPersistenceTest.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/controller/OrderController.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/event/PaymentEventConsumer.java
+    updated_at: '2026-11-10'
+
 fingerprints:
+  - id: sepay-flow-audit-20261110
+    date: '2026-11-10'
+    commit: 'develop 55b1890b with uncommitted codex/buyer-shop-completion changes'
+    cli: '1.73.0'
   - id: payment-status-polling
     date: "2026-11-04"
     commit: "bbfcb7e8 with uncommitted #153 polling, order-service and browser simulation changes"

@@ -157,6 +157,15 @@ test("a product price range shows min – max when they differ and one price whe
   assert.equal(formatVNDRange("100000", null), "100.000 ₫");
   assert.equal(formatVNDRange(null, null), null);
 });
+
+test("price range comparison preserves distinct numeric(19,2) cents and equivalent decimal forms", () => {
+  assert.equal(formatVNDRange("1", "1.00"), "1 ₫");
+  assert.equal(formatVNDRange("001.00", "1.0"), "1,00 ₫");
+  assert.equal(
+    formatVNDRange("99999999999999999.98", "99999999999999999.99"),
+    "99.999.999.999.999.999,98 ₫ – 99.999.999.999.999.999,99 ₫",
+  );
+});
 test("product list and detail parsing keep maxPrice next to minPrice", () => {
   const page = { number: 0, size: 12, totalElements: 1, totalPages: 1 };
   const item = { id: "p", name: "Shoe", slug: "shoe", minPrice: "100000", maxPrice: "150000" };

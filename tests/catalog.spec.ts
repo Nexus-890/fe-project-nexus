@@ -46,7 +46,7 @@ async function mobileChecks(page: Page) {
   expect(small).toEqual([]);
 }
 
-test("home renders the API category tree at mobile and desktop without fetching products", async ({
+test("home renders live catalog and auctions with responsive campaign and voucher controls", async ({
   page,
 }, info) => {
   const apiRequests: string[] = [];
@@ -59,22 +59,22 @@ test("home renders the API category tree at mobile and desktop without fetching 
   await page.goto("/");
   const tree = page.locator("#categories");
   await expect(tree.locator(":scope > ul > li")).toHaveCount(3);
-  await expect(
-    tree
-      .getByRole("link", { name: "Electronics", exact: true })
-      .locator("..")
-      .getByRole("link", { name: "Audio", exact: true }),
-  ).toBeVisible();
-  await expect(
-    tree
-      .getByRole("link", { name: "Audio", exact: true })
-      .locator("..")
-      .getByRole("link", { name: "Headphones", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(tree.getByRole("link")).toHaveCount(3);
+  await expect(tree.getByRole("link", { name: "Electronics", exact: true })).toBeVisible();
+  await expect(tree.getByRole("link", { name: "Audio", exact: true })).toHaveCount(0);
+  await expect(tree.getByRole("link", { name: "Headphones", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article")).toHaveCount(11);
+  await expect(page.getByRole("heading", { name: "FLASH SALE", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today's picks", exact: true })).toBeVisible();
+  await expect(page.getByText("250.000,00 ₫", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next campaign", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Upgrade time.", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Previous campaign", exact: true }).click();
+  await page.getByRole("button", { name: "Save NEXUS50 sample voucher", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove NEXUS50 sample voucher", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(
     apiRequests.every(
-      (url) => new URL(url).pathname === "/api/v1/categories/tree",
+      (url) => ["/api/v1/categories/tree", "/api/v1/products", "/api/v1/auctions"].includes(new URL(url).pathname),
     ),
   ).toBe(true);
   const initialApiRequests = [...apiRequests];
@@ -86,7 +86,7 @@ test("home renders the API category tree at mobile and desktop without fetching 
     .getByRole("option", { name: "Home & Living", exact: true })
     .click();
   await expect(categoryPicker).toContainText("Home & Living");
-  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(page.getByRole("article")).toHaveCount(11);
   expect(apiRequests).toEqual(initialApiRequests);
   await mobileChecks(page);
   await page.screenshot({
@@ -117,7 +117,7 @@ test("home renders the API category tree at mobile and desktop without fetching 
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(categoryPicker).toBeFocused();
   await expect(categoryPicker).toContainText("Electronics");
-  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(page.getByRole("article")).toHaveCount(11);
   await expect(page).toHaveURL(/\/$/);
   expect(apiRequests).toEqual(initialApiRequests);
   await layoutChecks(page);
@@ -128,6 +128,45 @@ test("home renders the API category tree at mobile and desktop without fetching 
   await tree.getByRole("link", { name: "Electronics", exact: true }).click();
   await expect(page).toHaveURL(/\/categories\/electronics$/);
   await expect(page.getByRole("article")).toHaveCount(2);
+});
+
+test("cards align short, long and unavailable-price products while home categories show only roots", async ({ page }) => {
+  const imageUrl = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="silver"/></svg>')}`;
+  await page.route("**/api/v1/products?*", (route) => route.fulfill({ json: {
+    code: 0, message: "response success",
+    data: [
+      { id: "aligned-1", slug: "short-title", name: "Short title", minPrice: 150000, images: [{ id: "photo-1", imageUrl, sortOrder: 0 }] },
+      { id: "aligned-2", slug: "long-title", name: "A much longer product title with enough words to exceed the reserved two-line heading area on a narrow product card", minPrice: 15990000, images: [{ id: "photo-2", imageUrl, sortOrder: 0 }] },
+      { id: "aligned-3", slug: "no-price", name: "Product without a price or image", minPrice: null, images: [] },
+    ],
+    page: { number: 0, size: 10, totalElements: 3, totalPages: 1 },
+  } }));
+
+  async function equalCardSizes(cards: ReturnType<Page["getByRole"]>) {
+    await expect(cards).toHaveCount(3);
+    const dimensions = await cards.evaluateAll((elements) => elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { width: Math.round(bounds.width), height: Math.round(bounds.height) };
+    }));
+    expect(new Set(dimensions.map(({ width }) => width)).size).toBe(1);
+    expect(new Set(dimensions.map(({ height }) => height)).size).toBe(1);
+    await expect(cards.filter({ hasText: "Price unavailable" })).toHaveCount(1);
+  }
+
+  for (const viewport of [{ width: 375, height: 812 }, { width: 1440, height: 1000 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(page.locator("#categories").getByRole("link")).toHaveCount(3);
+    await expect(page.locator("#categories").getByRole("link", { name: "Headphones", exact: true })).toHaveCount(0);
+    await equalCardSizes(page.locator("#deals").getByRole("article"));
+    await equalCardSizes(page.locator("#today-picks").getByRole("article"));
+    await layoutChecks(page);
+
+    await page.goto("/search");
+    await expect(page.getByRole("complementary", { name: "Filters" }).getByRole("link", { name: "Headphones", exact: true })).toBeVisible();
+    await equalCardSizes(page.getByRole("region", { name: "Search results" }).getByRole("article"));
+    await layoutChecks(page);
+  }
 });
 
 test("category has only its products and responsive layout", async ({
@@ -210,7 +249,7 @@ test("home category failure displays the error and retry restores the category t
       : route.continue(),
   );
   await page.goto("/");
-  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(page.getByRole("article")).toHaveCount(11);
   await expect(page.getByText("Unable to load categories.")).toBeVisible();
   await mobileChecks(page);
   failed = false;
@@ -346,4 +385,15 @@ test("header category selection reaches the product API and All Categories clear
   await expect(page).toHaveURL(/\/search$/);
   await expect(page.getByRole("article")).toHaveCount(5);
   await expect(categoryPicker).toContainText("All Categories");
+});
+
+test("product hearts share the visit watchlist across shop navigation", async ({ page }) => {
+  await page.goto("/search");
+  await page.getByRole("button", { name: "Save Product 1 to watchlist", exact: true }).click();
+  await page.getByRole("link", { name: "Saved", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Saved items", exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Product 1", exact: true })).toHaveCount(1);
+  await page.getByRole("button", { name: "Remove Product 1 from watchlist", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(page.getByText("A little inspiration to start?", { exact: true })).toBeVisible();
 });

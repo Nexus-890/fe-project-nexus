@@ -316,7 +316,7 @@ test("logout cancels a pending inbox and a late old response cannot enter the ne
     await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === "/api/v1/notifications" && entry.canceled)).toBe(true);
   });
   const anonymousEvidence = await evidence(request);
-  await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+  await page.locator("header").getByRole("link", { name: "Nexus home", exact: true }).click();
   await expect(page.locator("#categories > ul > li")).toHaveCount(3);
   expect(await evidence(request)).toEqual(anonymousEvidence);
   await setCase(request, "list=default");
@@ -344,7 +344,7 @@ test("logout cancels a pending read and a late mutation cannot change the next a
     await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === firstReadPath && entry.canceled)).toBe(true);
   });
   const anonymousEvidence = await evidence(request);
-  await page.getByRole("link", { name: "Nexus home", exact: true }).click();
+  await page.locator("header").getByRole("link", { name: "Nexus home", exact: true }).click();
   await expect(page.locator("#categories > ul > li")).toHaveCount(3);
   await expect(page.getByRole("button", { name: /^Notifications/ })).toHaveCount(0);
   expect(await evidence(request)).toEqual(anonymousEvidence);

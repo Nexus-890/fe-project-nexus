@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, MapPin, ShoppingCart } from "lucide-react";
 import type { HeaderProps } from "@/types/uiType";
 import { HEADER_UTILITY_NAVIGATION, ROUTES } from "@/configs/routes";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import MobileAccountNavigation from "@/components/MobileAccountNavigation";
 
 function HeaderTopBar({
   user,
@@ -16,6 +18,7 @@ function HeaderTopBar({
   notificationBell,
 }: HeaderProps) {
   const router = useRouter();
+  const watchlist = useWatchlist();
   function signOut() {
     onSignOut();
   }
@@ -23,9 +26,9 @@ function HeaderTopBar({
   return (
     <div className="border-b border-border">
       <div className="mx-auto flex min-h-11 lg:min-h-9 max-w-[1248px] items-center justify-between gap-3 px-4 py-1 lg:py-0 text-xs text-gray-900 sm:px-6">
-        <nav aria-label="Nexus utility links" className="flex min-w-0 items-center gap-1 sm:gap-3">
+        <nav aria-label="Nexus utility links" className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
           {user ? (
-            <Link href={ROUTES.profile} className="inline-flex min-h-11 lg:min-h-9 max-w-[13rem] items-center gap-1 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
+            <Link href={ROUTES.profile} className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[9rem] sm:max-w-[13rem] items-center gap-1 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
               Hi {user.fullName}
               <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
             </Link>
@@ -34,7 +37,7 @@ function HeaderTopBar({
               className="inline-flex min-h-11 lg:min-h-9 items-center px-2"
               role="status"
             >
-              {restoring ? "Restoring session…" : "Signing in…"}
+              {restoring ? "Restoring sessionâ€¦" : "Signing inâ€¦"}
             </span>
           ) : (
             <>
@@ -72,28 +75,31 @@ function HeaderTopBar({
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <nav
             aria-label="Account and shopping links"
-            className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2"
+            className="hidden shrink-0 items-center gap-1 lg:flex lg:gap-2"
           >
-            <button
-              type="button"
+            <Link
+              href="/checkout"
               className="inline-flex min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary"
             >
               <MapPin size={14} aria-hidden="true" />
               <span className="hidden md:inline">Ship to HCMC</span>
-            </button>
-            <button
-              type="button"
-              className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary md:inline-flex"
-            >
-              Watchlist <ChevronDown size={13} aria-hidden="true" />
-            </button>
-            <Link
-              href={ROUTES.profile}
-              className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary lg:inline-flex"
-            >
-              My Nexus <ChevronDown size={13} aria-hidden="true" />
             </Link>
+            <Link
+              href={ROUTES.sell}
+              className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
+            >
+              Sell
+            </Link>
+            <details name="header-account-navigation" className="relative hidden md:block">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-sm px-2 hover:text-primary lg:min-h-9">Watchlist{watchlist?.products.length ? ` (${watchlist.products.length})` : ""} <ChevronDown size={13} aria-hidden="true" /></summary>
+              <div className="absolute right-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md"><Link href="/saved" className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">Saved items</Link><Link href="/#live-auctions" className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">Explore auctions</Link></div>
+            </details>
+            <details name="header-account-navigation" className="relative hidden lg:block">
+              <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm px-2 hover:text-primary">My Nexus <ChevronDown size={13} aria-hidden="true" /></summary>
+              <div className="absolute right-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">{[{href: ROUTES.profile,label: "My profile"},{href: ROUTES.orders,label: "My orders"},{href: "/saved",label: "Saved items"}].map(({href,label})=><Link key={href} href={href} className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">{label}</Link>)}</div>
+            </details>
           </nav>
+          <MobileAccountNavigation savedCount={watchlist?.products.length} />
           {notificationBell}
           <nav aria-label="Shopping cart" className="flex">
             <Link

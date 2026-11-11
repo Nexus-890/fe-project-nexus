@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Provider from "../providers/Provider";
+import WatchlistProvider from "../providers/WatchlistProvider";
+import BuyerPreviewProvider from "../providers/BuyerPreviewProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +29,7 @@ function RootLayout({ children }: { children: ReactNode }) {
       
     >
       <body className="min-h-full flex flex-col">
-        <Provider>{children}</Provider>
+        <Provider><BuyerPreviewProvider><WatchlistProvider>{children}</WatchlistProvider></BuyerPreviewProvider></Provider>
       </body>
     </html>
   );

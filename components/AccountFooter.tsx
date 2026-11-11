@@ -2,7 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { ROUTES } from "@/configs/routes";
 
-const footerLabels = ["Help Center", "Shipping & Returns", "Seller Terms", "Privacy"];
+const footerLinks = [
+  { label: "Help Center", href: "/help" },
+  { label: "Shipping & Returns", href: "/help#shipping" },
+  { label: "Seller Terms", href: "/help#sellers" },
+  { label: "Privacy", href: "/help#privacy" },
+];
 
 function AccountFooter() {
   return (
@@ -15,8 +20,8 @@ function AccountFooter() {
           <span>© {new Date().getFullYear()} Nexus</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          {footerLabels.map((label) => <span key={label}>{label}</span>)}
-          <span className="border-l border-border pl-5">Prices in USD</span>
+          {footerLinks.map(({ label, href }) => <Link key={href} href={href} className="inline-flex min-h-11 min-w-11 items-center rounded-sm hover:text-primary">{label}</Link>)}
+          <span className="border-l border-border pl-5">Prices in VND</span>
         </div>
       </div>
     </footer>

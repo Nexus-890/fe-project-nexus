@@ -22,7 +22,7 @@ export function CategoryNavigation({
     <section
       id="categories"
       aria-label="Categories"
-      className="min-w-0 rounded-md border border-border p-4"
+      className="min-w-0 border-y border-border py-3"
     >
       {loading ? (
         <p role="status">Loading categories…</p>

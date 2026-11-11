@@ -8,7 +8,7 @@ export type ProductSummary = Pick<ProductWireResponse, "id" | "name" | "slug"> &
     minPrice: string | null;
     maxPrice: string | null;
     status?: string;
-    /** Optional list media: supplied by BE image-upload #122 when available. */
+    /** List media from #122; optional for older compatible list responses. */
     images?: ProductImage[];
   };
 export type ProductSku = Omit<components["schemas"]["Sku"], "price"> & {

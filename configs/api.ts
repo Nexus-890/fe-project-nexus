@@ -167,7 +167,6 @@ export const requestApi = async <T>(
   const multipart = typeof FormData !== "undefined" && body instanceof FormData;
   headers.set("Accept", "application/json");
   headers.delete("Authorization");
-  // The transport must generate the boundary for this exact FormData body.
   if (multipart) headers.delete("Content-Type");
   else if (method !== "GET" && body !== undefined)
     headers.set("Content-Type", "application/json");

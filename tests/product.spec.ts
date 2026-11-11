@@ -159,6 +159,7 @@ const openProductFromHome = async (page: Page) => {
     .locator("#categories")
     .getByRole("link", { name: "Electronics", exact: true })
     .click();
+  await expect(page).toHaveURL(/\/categories\/electronics$/);
   await page
     .getByRole("article")
     .filter({ hasText: "Product 1" })
@@ -168,6 +169,26 @@ const openProductFromHome = async (page: Page) => {
     page.getByRole("heading", { name: "Browser product", exact: true }),
   ).toBeVisible();
 };
+
+test("detail information tabs use keyboard navigation and expose sample reviews without changing price", async ({ page }, info) => {
+  await installProduct(page);
+  await page.goto("/products/product-1?id=1");
+  const reviewTab = page.getByRole("tab", { name: "Reviews 126", exact: true });
+  await expect(reviewTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Sample reviews · preview content, not customer purchase feedback.")).toBeVisible();
+  await page.screenshot({ path: info.outputPath("product-detail-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: info.outputPath("product-detail-desktop.png"), fullPage: true });
+  await page.getByRole("tab", { name: "Description", exact: true }).click();
+  await expect(page.getByText(product.description, { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Description", exact: true }).press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Specifications", exact: true })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Product specifications", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Specifications", exact: true }).press("End");
+  await expect(page.getByRole("heading", { name: "Shipping & Returns", exact: true })).toBeVisible();
+  await expect(page.getByText("150.000,00 ₫", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 
 test.beforeEach(async ({ request }) => {
   expect((await request.get(`${providerOrigin}/test/reset`)).ok()).toBe(true);

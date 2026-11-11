@@ -20,15 +20,66 @@ npm ci
 Copy-Item .env.example .env.local
 ```
 
-Set `NEXT_PUBLIC_API_URL` in `.env.local` to the common backend origin, normally `http://localhost:8080`, then run:
+Keep the local defaults from `.env.example` in `.env.local`:
 
-For same-origin local integration, use `NEXT_PUBLIC_API_URL=` and `API_PROXY_TARGET=http://localhost:8080` instead. Next proxies browser `/api/v1/*` calls and uses the target for server catalog reads, avoiding browser cross-origin requirements. The Cart service base URL intentionally remains blank; see [Cart configuration](docs/features/cart.md#api-configuration).
+```dotenv
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_API_BASE_URL=
+API_PROXY_TARGET=http://localhost:8080
+```
+
+The browser calls relative `/api/v1/*` paths on Next, and Next forwards them to
+the real gateway at port 8080. Server catalog reads use the same gateway target.
+Leaving both public-origin settings blank selects this mode; an explicit public
+origin takes precedence and makes browser calls directly to that origin. The
+Cart service base URL intentionally remains blank; see [Cart configuration](docs/features/cart.md#api-configuration).
+
+Start the local Buyer Shop Backend from this frontend directory:
+
+```powershell
+pwsh -File ../be-project-nexus/infra/local-dev/start-buyer-shop.ps1
+```
+
+The helper starts configuration/discovery, gateway (`8080`), catalog (`8082`)
+and auction (`8084`), checks their availability and prepares the public demo
+dataset. Docker infrastructure alone does not start these host-run Spring
+services. The [repository startup guide](../README.md#running-it) documents the
+manual service startup sequence. Then run:
 
 ```powershell
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000). Configure an absolute backend origin either through the proxy or the public direct origin. Service paths already contain `/api/v1`; do not add it to the origin. Restart Next after environment changes. Direct cross-origin browser calls require backend CORS support. The [existing UI/API inventory](docs/features/api-ui-integration.md) separates connected flows from incompatible/undelivered backend contracts or absent screens.
+Open [localhost:3000](http://localhost:3000). Service paths already contain
+`/api/v1`; do not add it to an origin. Restart Next after environment changes.
+For direct cross-origin mode, set `NEXT_PUBLIC_API_URL` to the common Backend
+origin, leave `API_PROXY_TARGET` empty and ensure Backend CORS permits the exact
+frontend origin. The [existing UI/API inventory](docs/features/api-ui-integration.md)
+separates connected flows from incompatible/undelivered Backend contracts or absent screens.
+
+### Local data and connection checks
+
+Buyer Shop demo data is persisted in the service databases. After applying the
+service migrations and provisioning the standard demo accounts, initialize it
+with `be-project-nexus/infra/local-dev/seed-buyer-shop.ps1`; the
+[data/media report](../be-project-nexus/docs/buyer-shop-backend.md) documents the
+dataset and repeatable seed/image commands. Restarting the web frontend does
+not require recreating products or uploading images again.
+
+Before checking the page, verify the same gateway endpoints it uses:
+
+```powershell
+Invoke-RestMethod 'http://localhost:8080/api/v1/categories/tree'
+Invoke-RestMethod 'http://localhost:8080/api/v1/products?page=0&size=10'
+Invoke-RestMethod 'http://localhost:8080/api/v1/auctions?status=ACTIVE&page=0&size=5'
+```
+
+A refused connection/5xx means the API path is unavailable; an empty successful
+`data: []` means no matching records. Check gateway registration/routing when
+catalog or auction works on its own port but the gateway call fails. For proxy
+mode, `http://localhost:3000/api/v1/products?page=0&size=10` must also return the
+same JSON envelope after Next restarts. No product/cart mock is needed for this
+real database flow.
 
 Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUBLIC_KEYCLOAK_CLIENT_ID` from `.env.example`. Sign-in opens Keycloak; `/auth/callback` exchanges the code, loads the profile and restores the requested page. See [authentication](docs/features/authentication.md) for local setup and integration limits. Access tokens stay in memory; a full reload returns to anonymous.
 

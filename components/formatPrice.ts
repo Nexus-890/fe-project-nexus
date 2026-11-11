@@ -20,6 +20,12 @@ export const formatVNDRange = (
 ): string | null => {
   const min = formatVND(minPrice);
   const max = formatVND(maxPrice);
-  if (min === null || max === null || Number(minPrice) === Number(maxPrice)) return min;
+  if (min === null || max === null || minPrice === null || maxPrice === null) return min;
+
+  const normalize = (price: string): string => {
+    const [integer, fraction = ""] = price.split(".");
+    return `${integer.replace(/^0+(?=\d)/, "")}.${fraction.replace(/0+$/, "")}`;
+  };
+  if (normalize(minPrice) === normalize(maxPrice)) return min;
   return `${min} – ${max}`;
 };

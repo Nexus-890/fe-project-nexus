@@ -3,7 +3,7 @@ import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
 import type { OrderFilters } from "../types/orderRequestType";
-import type { OrderGroup, OrderStatus, OrderSummary } from "../types/orderResponseType";
+import type { OrderDetail, OrderDetailItem, OrderGroup, OrderHistoryEntry, OrderStatus, OrderSummary } from "../types/orderResponseType";
 import type { operations } from "../types/commerceGeneratedType";
 
 export type OwnOrdersFilters = NonNullable<operations["listOwnOrders"]["parameters"]["query"]>;
@@ -102,4 +102,64 @@ export const listOwnOrders = async (
 ): Promise<Page<OrderSummary>> => {
   const { page = 0, size = 10, status } = filters;
   return getOrders({ page, size, status }, options);
+};
+
+export const parseOrderDetail = (value: unknown): OrderDetail => {
+  const summary = parseOrderSummary(value);
+  if (!isRecord(value) || !isUuid(value.userId) || !isUuid(value.sellerId) ||
+    (value.orderType !== "STANDARD" && value.orderType !== "AUCTION") || !Array.isArray(value.items))
+    throw createInvalidResponseError("Invalid order details");
+  const items: OrderDetailItem[] = value.items.map((item) => {
+    if (!isRecord(item) || !isUuid(item.orderItemId) || !isUuid(item.productId) || !isUuid(item.skuId) ||
+      !isNonBlank(item.productName) || !isNonBlank(item.skuCode) ||
+      (item.imageUrl !== null && typeof item.imageUrl !== "string") ||
+      !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1)
+      throw createInvalidResponseError("Invalid order item");
+    return {
+      orderItemId: item.orderItemId, productId: item.productId, skuId: item.skuId,
+      productName: item.productName, skuCode: item.skuCode, imageUrl: item.imageUrl as string | null,
+      quantity: Number(item.quantity), unitPrice: parseAmount(item.unitPrice), totalPrice: parseAmount(item.totalPrice),
+    };
+  });
+  if (new Set(items.map((item) => item.orderItemId)).size !== items.length)
+    throw createInvalidResponseError("Duplicate order items");
+  return { ...summary, userId: value.userId, sellerId: value.sellerId, orderType: value.orderType, items };
+};
+
+export const getOrder = async (orderId: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
+  if (!isUuid(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  const { data } = await requestApi<unknown>("GET", `${ORDERS_PATH}/${encodeURIComponent(orderId)}`, undefined, {
+    ...options, auth: true, params: undefined,
+  });
+  const order = parseOrderDetail(data);
+  if (order.orderId.toLowerCase() !== orderId.toLowerCase()) throw createInvalidResponseError("Order reference mismatch");
+  return order;
+};
+
+export const getOrderHistory = async (orderId: string, options: ServiceRequestOptions = {}): Promise<OrderHistoryEntry[]> => {
+  if (!isUuid(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  const { data } = await requestApi<unknown>("GET", `${ORDERS_PATH}/${encodeURIComponent(orderId)}/history`, undefined, {
+    ...options, auth: true, params: undefined,
+  });
+  if (!Array.isArray(data)) throw createInvalidResponseError("Invalid order history");
+  return data.map((entry) => {
+    if (!isRecord(entry) || !isUuid(entry.id) || !isUuid(entry.changedBy) || !isInstant(entry.createdAt) ||
+      !isOrderStatus(entry.newStatus) || (entry.previousStatus !== null && !isOrderStatus(entry.previousStatus)) ||
+      typeof entry.reason !== "string") throw createInvalidResponseError("Invalid order history entry");
+    return { id: entry.id, changedBy: entry.changedBy, createdAt: entry.createdAt,
+      newStatus: entry.newStatus, previousStatus: entry.previousStatus as OrderStatus | null, reason: entry.reason };
+  });
+};
+
+export const cancelOrder = async (orderId: string, reason: string, options: ServiceRequestOptions = {}): Promise<OrderGroup> => {
+  if (!isUuid(orderId) || !reason.trim() || reason.trim().length > 500)
+    throw createInvalidResponseError("Enter a cancellation reason of up to 500 characters");
+  const { data } = await requestApi<unknown>("POST", `${ORDERS_PATH}/${encodeURIComponent(orderId)}/cancel`, { reason: reason.trim() }, {
+    ...options, auth: true, params: undefined,
+  });
+  if (!isRecord(data) || !isUuid(data.orderGroupId)) throw createInvalidResponseError("Invalid canceled order group");
+  const group = parseOrderGroup(data, data.orderGroupId);
+  if (!group.orders.some((order) => order.orderId.toLowerCase() === orderId.toLowerCase()))
+    throw createInvalidResponseError("Canceled order reference mismatch");
+  return group;
 };

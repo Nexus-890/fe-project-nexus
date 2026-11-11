@@ -16,3 +16,16 @@ export type OrderGroup = Pick<
   OrderGroupWireResponse,
   "orderGroupId" | "status" | "currency" | "dueAt"
 > & { totalAmount: string; orders: OrderSummary[] };
+
+export type OrderDetailItem = Omit<components["schemas"]["OrderItem"], "unitPrice" | "totalPrice"> & {
+  unitPrice: string;
+  totalPrice: string;
+};
+
+export type OrderDetail = Omit<OrderWireResponse, "totalAmount" | "items"> & {
+  totalAmount: string;
+  items: OrderDetailItem[];
+  orderGroupId: string | null;
+};
+
+export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];
