@@ -14,8 +14,8 @@ introduced.
 
 ## Request and retry behavior
 
-The body follows delivered commerce `CreateOrderRequest`: the full shipping
-address with city/district/ward names, `countryCode: "VN"`, and
+The body follows delivered commerce #138 `CreateOrderRequest`: the recipient,
+phone, street address, `provinceCode`, `wardCode`, `countryCode: "VN"`, and
 `paymentMethod: "SEPAY"`. Each attempt gets a UUID `Idempotency-Key`. An explicit
 retry after an uncertain result keeps that key and the exact original body.
 Address edits are locked while the request is pending or its result is uncertain.

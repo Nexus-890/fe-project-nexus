@@ -176,14 +176,13 @@ const createOrderBody = (
   )
     throw createInvalidResponseError("A complete shipping address is required");
   return {
-    // Delivered order creation accepts names; the form retains GHN locality codes.
+    // Commerce #138 accepts GHN locality codes; names remain form display data.
     shippingAddress: {
       recipientName: recipientName.trim(),
       phoneNumber: phoneNumber.trim(),
       addressLine: addressLine.trim(),
-      city: city.trim(),
-      district: district.trim(),
-      ward: ward.trim(),
+      provinceCode: provinceCode.trim(),
+      wardCode: wardCode.trim(),
       countryCode,
     },
     paymentMethod: "SEPAY",

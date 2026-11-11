@@ -1,4 +1,4 @@
-/* Local #150/#151 dependency fixture. Shipping and preview contracts are provisional;
+/* Local #150/#151 dependency fixture. Requests use delivered #138 address codes;
  * their fees/localities model scenarios, not a live carrier quote. The simulation
  * removes its /api routeKey before this handler receives /v1/... requests.
  */
@@ -84,7 +84,7 @@ async function placeOrder(req, res, options) {
   if (!/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/.test(key))
     return reject(400, "COMMERCE_INVALID_ORDER_REQUEST", "Idempotency-Key must be a UUID");
   const address = body.shippingAddress || {};
-  const required = ["recipientName", "phoneNumber", "addressLine", "city", "district", "ward", "countryCode"];
+  const required = ["recipientName", "phoneNumber", "addressLine", "provinceCode", "wardCode", "countryCode"];
   const invalid = required.filter((field) => typeof address[field] !== "string" || !address[field].trim());
   if (body.paymentMethod !== "SEPAY" || address.countryCode !== "VN" || invalid.length)
     return reject(400, "VALIDATION_FAILED", "A complete Vietnamese shipping address and SEPAY payment method are required.", invalid.map((field) => ({
@@ -127,6 +127,9 @@ async function placeOrder(req, res, options) {
     orderNumber: `NX-20261104-0000000${index + 1}`,
     userId: user.id, sellerId: `68000000-0000-4000-8000-00000000000${index + 4}`,
     orderType: "STANDARD", status: "PENDING", createdAt: "2026-11-04T08:00:00Z",
+    orderGroupId: "c8000000-0000-4000-8000-000000000006",
+    recipientName: address.recipientName, phoneNumber: address.phoneNumber,
+    subtotal: item.unitPrice * item.quantity, shippingFee: 0, discountAmount: 0, taxAmount: 0,
     totalAmount: item.unitPrice * item.quantity,
     items: [{
       orderItemId: `c9000000-0000-4000-8000-00000000000${index + 1}`,
@@ -250,10 +253,10 @@ const server = http.createServer(async (req, res) => {
     const body = bodyOf(req);
     evidence.previews.push(body);
     await save();
-    if (options.slowWard && body.shippingAddress?.ward === "Ward 4")
+    if (options.slowWard && body.shippingAddress?.wardCode === "20308")
       await new Promise((resolve) => setTimeout(resolve, 1400));
     const completed = currentEvidence;
-    completed.completedPreviews.push(body.shippingAddress?.ward);
+    completed.completedPreviews.push(body.shippingAddress?.wardCode);
     if (completed.groups.length) {
       completed.consumedCartPreviews += 1;
       await pm.state.set("checkout-api:evidence", completed);
@@ -265,11 +268,11 @@ const server = http.createServer(async (req, res) => {
       { field: "shippingAddress.phoneNumber", code: "VALIDATION_PATTERN", detail: "Enter a reachable Vietnamese phone number." },
     ]);
     const address = body.shippingAddress || {};
-    const required = ["recipientName", "phoneNumber", "addressLine", "city", "district", "ward", "countryCode"];
+    const required = ["recipientName", "phoneNumber", "addressLine", "provinceCode", "wardCode", "countryCode"];
     const invalid = required.filter((field) => typeof address[field] !== "string" || !address[field].trim());
     if (body.paymentMethod !== "SEPAY" || invalid.length)
       return problem(res, 400, "VALIDATION_FAILED", "All shipping fields are required.", invalid.map((field) => ({ field: `shippingAddress.${field}`, code: "VALIDATION_NOT_BLANK", detail: "This field is required." })));
-    const shippingFee = options.nullShippingFee ? null : address.ward === "Ward 5" ? 45000 : 30000;
+    const shippingFee = options.nullShippingFee ? null : address.wardCode === "20309" ? 45000 : 30000;
     const cartItems = await currentItems();
     const subtotal = options.changedPreview ? 500000 : cartItems.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
     const preview = {

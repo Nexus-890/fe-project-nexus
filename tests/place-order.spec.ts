@@ -7,7 +7,7 @@ const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 type OrderBody = {
   shippingAddress: {
     recipientName: string; phoneNumber: string; addressLine: string;
-    city: string; district: string; ward: string; countryCode: string;
+    provinceCode: string; wardCode: string; countryCode: string;
   };
   paymentMethod: string;
 };
@@ -93,7 +93,7 @@ test("double-click sends one purchase and opens one payment page for two seller 
   expect(actual.orders[0].body).toEqual({
     shippingAddress: {
       recipientName: "Nguyen Thi Lan", phoneNumber: "0901234567", addressLine: "227 Nguyen Van Cu",
-      city: "Ho Chi Minh City", district: "District 4", ward: "Ward 4", countryCode: "VN",
+      provinceCode: "202", wardCode: "20308", countryCode: "VN",
     },
     paymentMethod: "SEPAY",
   });

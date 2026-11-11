@@ -27,12 +27,14 @@ const order: components["schemas"]["Order"] = {
   orderId: "order-1", orderNumber: "NX001", userId: "buyer-1", sellerId: "seller-1",
   orderType: "STANDARD", status: "PENDING", createdAt: "2026-11-04T10:00:00Z",
   totalAmount: 300000, items: [item],
+  orderGroupId: "c8000000-0000-4000-8000-000000000006",
+  subtotal: 300000, shippingFee: 0, discountAmount: 0, taxAmount: 0,
 };
 const group: components["schemas"]["OrderGroup"] = {
   orderGroupId: "c8000000-0000-4000-8000-000000000006", status: "PENDING",
   totalAmount: 450000, currency: "VND", dueAt: "2026-11-04T10:15:00Z",
   orders: [order, {
-    ...order, orderId: "order-2", sellerId: "seller-2", totalAmount: 150000,
+    ...order, orderId: "order-2", sellerId: "seller-2", totalAmount: 150000, subtotal: 150000,
     items: [{ ...item, orderItemId: "line-2", quantity: 1, totalPrice: 150000 }],
   }],
 };
@@ -85,8 +87,8 @@ test("order creation and replay send the supplied key and current auth over HTTP
       paymentMethod: "SEPAY",
       shippingAddress: {
         recipientName: "Buyer Name", phoneNumber: destination.phoneNumber,
-        addressLine: destination.addressLine, city: destination.city,
-        district: destination.district, ward: destination.ward, countryCode: "VN",
+        addressLine: destination.addressLine, provinceCode: destination.provinceCode,
+        wardCode: destination.wardCode, countryCode: "VN",
       },
     });
     assert.equal(config.headers.get("Idempotency-Key"), "wrong");

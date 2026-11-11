@@ -54,8 +54,9 @@ export type CheckoutOrderItem = Omit<
   components["schemas"]["OrderItem"], "unitPrice" | "totalPrice"
 > & { unitPrice: string; totalPrice: string };
 
-export type CheckoutOrder = Omit<
-  components["schemas"]["Order"], "totalAmount" | "items"
+export type CheckoutOrder = Pick<
+  components["schemas"]["Order"],
+  "orderId" | "orderNumber" | "userId" | "sellerId" | "orderType" | "status" | "createdAt"
 > & { totalAmount: string; items: CheckoutOrderItem[] };
 
 export type CheckoutOrderGroup = Omit<

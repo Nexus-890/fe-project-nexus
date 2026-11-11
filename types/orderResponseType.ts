@@ -8,7 +8,7 @@ export type OrderSummary = Pick<
   "orderId" | "orderNumber" | "createdAt" | "status"
 > & {
   totalAmount: string;
-  /** Awaiting #138: the delivered list DTO does not yet expose this field. */
+  /** Older order responses can predate the group identifier added in #138. */
   orderGroupId: string | null;
 };
 
@@ -22,10 +22,10 @@ export type OrderDetailItem = Omit<components["schemas"]["OrderItem"], "unitPric
   totalPrice: string;
 };
 
-export type OrderDetail = Omit<OrderWireResponse, "totalAmount" | "items"> & {
-  totalAmount: string;
+export type OrderDetail = OrderSummary & Pick<
+  OrderWireResponse, "userId" | "sellerId" | "orderType"
+> & {
   items: OrderDetailItem[];
-  orderGroupId: string | null;
 };
 
 export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];

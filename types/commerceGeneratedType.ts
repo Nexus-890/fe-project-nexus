@@ -73,7 +73,7 @@ export interface paths {
         };
         /**
          * Calculate current cart pricing (CRT-05)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
          */
         get: operations["getCartPricing"];
         put?: never;
@@ -95,7 +95,7 @@ export interface paths {
         put?: never;
         /**
          * Validate the current cart (CRT-06)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
          */
         post: operations["validateCart"];
         delete?: never;
@@ -115,7 +115,7 @@ export interface paths {
         put?: never;
         /**
          * Preview checkout without creating an order (ORD-02)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null until #201 and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD is configured but cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns 400 COMMERCE_CART_EMPTY. Item issues are returned with 200 for buyer review; this call does not place an order. Shipping/payment inputs are validated but are not persisted.
+         * @description Read-only checkout for the JWT buyer: never creates a cart, touches activity timestamps, changes saved cart prices, reserves stock, creates orders or publishes events. Uses current catalog prices and returns item issues for review. A valid cart is grouped by seller; backend packs each seller parcel from catalog-owned per-unit shippingParcel metadata and calls shipment-service once per seller with the two-level recipient address. shippingFee is the sum of those quotes and total includes it. Missing metadata or an oversized parcel returns 409; carrier transport failure returns 503 instead of a zero fee. Client fees or parcel measurements are never trusted. Empty active cart returns 400 COMMERCE_CART_EMPTY. Promo code remains ignored under D01. Inactive/missing product issues leave shipping unknown; PRICE_CHANGED still quotes current catalog data for buyer review.
          */
         post: operations["previewCheckout"];
         delete?: never;
@@ -139,7 +139,7 @@ export interface paths {
         put?: never;
         /**
          * Place an order from the current cart
-         * @description Requires CHECKOUT.START AND ORDER.CREATE and a UUID Idempotency-Key. Splits the active cart by seller and checks current SKU availability before checkout. With nexus.order.idempotency-enabled=true (ORDER_IDEMPOTENCY_ENABLED, default true), a matching replay of the same key, buyer and shipping/payment payload returns the original order group and seller order IDs with 200 before price validation and creates no new rows; a fresh key returns 201. UUID letter case is normalized, so uppercase and lowercase forms are the same key. Concurrent successful requests for one key leave one group and one order per seller; the losing request returns the committed winner's group. A missing or invalid key returns 400 COMMERCE_INVALID_ORDER_REQUEST. A key owned by another buyer returns 400 COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED without that buyer's order data. The same buyer reusing a key with changed shipping/payment data returns 409 COMMERCE_IDEMPOTENCY_CONFLICT. When idempotency is disabled, the UUID header remains required but each successful checkout uses a fresh internal key and does not replay the supplied key. With nexus.checkout.price-revalidation=true (CHECKOUT_PRICE_REVALIDATION, default true), current SKU prices are compared with the cart prices using exact long minor units. A changed price returns 409 COMMERCE_PRICE_CHANGED with top-level skuId, oldPrice and newPrice in the original currency units. Only the reported cart item's price is updated and committed; no order or inventory reservation is created. A confirmed retry with a new Idempotency-Key returns 201 at the updated cart price if prices have not changed again. If several prices changed, each 409 reports and updates one item, leaving the other changed prices for subsequent confirmation. With price-revalidation=false, orders use the saved cart prices while SKU and product availability checks still apply. Cart ownership and checkout guards still apply. Unsupported promotion, unavailable item and unrepresentable money fail before checkout completes. Payment method is SEPAY; the current reservation implementation may reject unavailable inventory. Gateway checks ORDER.CREATE; downstream additionally checks CHECKOUT.START.
+         * @description Requires CHECKOUT.START AND ORDER.CREATE and a UUID Idempotency-Key. Splits the active cart by seller and checks current SKU availability before checkout. With nexus.order.idempotency-enabled=true (ORDER_IDEMPOTENCY_ENABLED, default true), a matching replay of the same key, buyer and shipping/payment payload returns the original order group and seller order IDs with 200 before price validation and creates no new rows; a fresh key returns 201. UUID letter case is normalized, so uppercase and lowercase forms are the same key. Concurrent successful requests for one key leave one group and one order per seller; the losing request returns the committed winner's group. A missing or invalid key returns 400 COMMERCE_INVALID_ORDER_REQUEST. A key owned by another buyer returns 400 COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED without that buyer's order data. The same buyer reusing a key with changed shipping/payment data returns 409 COMMERCE_IDEMPOTENCY_CONFLICT. When idempotency is disabled, the UUID header remains required but each successful checkout uses a fresh internal key and does not replay the supplied key. With nexus.checkout.price-revalidation=true (CHECKOUT_PRICE_REVALIDATION, default true), current SKU prices are compared with the cart prices using exact long minor units. A changed price returns 409 COMMERCE_PRICE_CHANGED with top-level skuId, oldPrice and newPrice in the original currency units. Only the reported cart item's price is updated and committed; no order or inventory reservation is created. A confirmed retry with a new Idempotency-Key returns 201 at the updated cart price if prices have not changed again. If several prices changed, each 409 reports and updates one item, leaving the other changed prices for subsequent confirmation. With price-revalidation=false, orders use the saved cart prices while SKU and product availability checks still apply. Cart ownership and checkout guards still apply. Unsupported promotion, unavailable item and unrepresentable money fail before checkout completes. Payment method is SEPAY. Quote every seller order before reserving anything using catalog-owned shippingParcel metadata; client shipping fees are never used. Shipping failure leaves no order or reservation. Save the group and child orders in the commerce transaction, then make one inventory reservation call with all seller order items. Inventory 409 becomes COMMERCE_INSUFFICIENT_STOCK with skuId, available and requested; all commerce group/order rows roll back. Timeout or open inventory circuit returns COMMERCE_INVENTORY_UNAVAILABLE within the configured bounded inventory-call deadline below 3 seconds, with no committed commerce order. Every child paymentDueAt and group dueAt come from reservation expiresAt. Saved shipping_info holds recipient{name,phone,address{line1,wardCode,provinceCode}}, warehouseId from the reservation and the backend-computed parcel. Failure after a successful remote hold may leave inventory for the expiry job; this path sends no compensating release. Gateway checks ORDER.CREATE; downstream additionally checks CHECKOUT.START.
          */
         post: operations["createOrder"];
         delete?: never;
@@ -180,6 +180,26 @@ export interface paths {
          * @description Requires ORDER.LIST and SELLER. Lists only orders whose persisted seller_id equals the validated JWT subject. Supplied status, from and to filters combine with AND; no userId, sellerId or orderType selector is supported. BUYER receives 403 even with ORDER.LIST. from/to filter createdAt using ISO-8601 timestamps with an offset, inclusive at both bounds; from after to returns 400 COMMERCE_INVALID_ORDER_FILTER. Percent-encode a positive offset + as %2B, or use UTC Z. page is zero-based and defaults to 0; size defaults to 10 and must be 1 to 100. Invalid paging returns 400 COMMERCE_INVALID_ORDER_FILTER. Results sort by createdAt DESC then orderNumber DESC. Empty results and pages beyond the end return 200 with empty data and actual page totals.
          */
         get: operations["listSalesOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the complete order group
+         * @description Requires ORDER.VIEW and the group buyer owner or ADMIN. Includes every seller order, stored price/shipping breakdown, current status and the common reservation deadline. Another buyer receives 403; a missing group returns 404 COMMERCE_ORDER_NOT_FOUND.
+         */
+        get: operations["getOrderGroup"];
         put?: never;
         post?: never;
         delete?: never;
@@ -343,9 +363,9 @@ export interface components {
             taxAmount: number;
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             discountAmount: number;
-            /** @description Always null until shipping quote #201 is delivered, including above FREE_SHIPPING_THRESHOLD. */
+            /** @description Null because this endpoint has no delivery address; use checkout preview for an address-aware quote, including above FREE_SHIPPING_THRESHOLD. */
             estimatedShippingFee: number | null;
-            /** @description subtotal - discountAmount + taxAmount + estimatedShippingFee. A null estimatedShippingFee counts as 0 until #201. */
+            /** @description subtotal + taxAmount - discountAmount. Unknown shipping is excluded from this address-free estimate. */
             total: number;
         };
         CartIssue: {
@@ -380,7 +400,7 @@ export interface components {
             items: components["schemas"]["CheckoutPreviewItem"][];
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             subtotal: number;
-            /** @description Unknown until #201; explicitly null. */
+            /** @description Sum of backend shipping quotes for each seller order; null while inactive/missing product issues prevent quotation. */
             shippingFee: number | null;
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             taxAmount: number;
@@ -434,6 +454,16 @@ export interface components {
             /** @description Active trace/correlation identifier when available; optional without tracing. */
             traceId?: string;
             errors?: components["schemas"]["ValidationError"][];
+        };
+        InsufficientStockProblem: components["schemas"]["Problem"] & {
+            /** @enum {integer} */
+            status?: 409;
+            /** @enum {string} */
+            code?: "COMMERCE_INSUFFICIENT_STOCK";
+            /** Format: uuid */
+            skuId: string;
+            available: number;
+            requested: number;
         };
         PriceChangedProblem: components["schemas"]["Problem"] & {
             /** @enum {integer} */
@@ -541,13 +571,16 @@ export interface components {
         };
         /** @enum {string} */
         OrderStatus: "PENDING" | "PAID" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELED" | "REFUND_REQUESTED" | "REFUNDED";
+        /** @description GHN v3 two-level recipient address. Use active province/ward codes from the shipping locality API; the ward must belong to the province. */
         ShippingAddress: {
             recipientName: string;
+            /** @description Vietnamese carrier-compatible phone; trimmed before validation. */
             phoneNumber: string;
             addressLine: string;
-            ward: string;
-            district: string;
-            city: string;
+            /** @description Active GHN v3 ward _id as a string; no district is accepted. */
+            wardCode: string;
+            /** @description Active GHN v3 province _id as a string. */
+            provinceCode: string;
             /**
              * @description Trimmed and uppercased before validation.
              * @enum {string}
@@ -588,6 +621,11 @@ export interface components {
         Order: {
             /** Format: uuid */
             orderId: string;
+            /**
+             * Format: uuid
+             * @description Group containing this seller order; returned on all detail/list reads.
+             */
+            orderGroupId: string;
             orderNumber: string;
             /**
              * Format: uuid
@@ -605,7 +643,13 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             /** Format: date-time */
             createdAt: string;
-            /** @description subtotal - discount_amount + tax_amount + shipping_fee of the order, recomputed by the backend from catalog prices and enforced by a database CHECK. BigDecimal JSON number; no decimal-string conversion. */
+            /** @description Sum of stored item line totals. */
+            subtotal: number;
+            /** @description Backend shipping quote for this seller order. */
+            shippingFee: number;
+            discountAmount: number;
+            taxAmount: number;
+            /** @description subtotal - discountAmount + taxAmount + shippingFee, recomputed by the backend and enforced by the database CHECK; BigDecimal JSON number. */
             totalAmount: number;
             items: components["schemas"]["OrderItem"][];
         };
@@ -613,11 +657,14 @@ export interface components {
             /** Format: uuid */
             orderGroupId: string;
             status: string;
-            /** @description BigDecimal JSON number; no decimal-string conversion. */
+            /** @description Sum of all child order totalAmount values, including their shipping fees. */
             totalAmount: number;
             /** @example VND */
             currency: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Reservation expiresAt; every child paymentDueAt has this same deadline.
+             */
             dueAt: string;
             orders: components["schemas"]["Order"][];
         };
@@ -1781,9 +1828,8 @@ export interface operations {
                  *         "recipientName": "Buyer",
                  *         "phoneNumber": "0901234567",
                  *         "addressLine": "123 Street",
-                 *         "ward": "Ward",
-                 *         "district": "District",
-                 *         "city": "HCM",
+                 *         "wardCode": "1003646",
+                 *         "provinceCode": "1000001",
                  *         "countryCode": "VN"
                  *       },
                  *       "paymentMethod": "SEPAY",
@@ -1803,7 +1849,7 @@ export interface operations {
                     "application/json": components["schemas"]["CheckoutPreviewEnvelope"];
                 };
             };
-            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `COMMERCE_CART_EMPTY`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            /** @description Bad Request. Codes: `COMMERCE_INVALID_QUANTITY`, `COMMERCE_CART_EMPTY`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. Additional codes: `COMMERCE_INVALID_SHIPPING_ADDRESS`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1813,7 +1859,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "COMMERCE_INVALID_QUANTITY" | "COMMERCE_CART_EMPTY" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY";
+                        code?: "COMMERCE_INVALID_QUANTITY" | "COMMERCE_CART_EMPTY" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "COMMERCE_INVALID_SHIPPING_ADDRESS";
                     };
                 };
             };
@@ -1833,7 +1879,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_FORBIDDEN`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1843,7 +1889,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN";
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
                     };
                 };
             };
@@ -1877,6 +1923,20 @@ export interface operations {
                     };
                 };
             };
+            /** @description Codes: `COMMERCE_SHIPPING_METADATA_REQUIRED`, `COMMERCE_INVALID_PARCEL`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "COMMERCE_SHIPPING_METADATA_REQUIRED" | "COMMERCE_INVALID_PARCEL";
+                    };
+                };
+            };
             /** @description Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`. */
             415: {
                 headers: {
@@ -1888,6 +1948,20 @@ export interface operations {
                         status?: 415;
                         /** @enum {string} */
                         code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 422;
+                        /** @enum {string} */
+                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE";
                     };
                 };
             };
@@ -1935,7 +2009,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. Additional codes: `COMMERCE_SHIPPING_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1945,7 +2019,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE" | "COMMERCE_SHIPPING_UNAVAILABLE";
                     };
                 };
             };
@@ -2141,9 +2215,8 @@ export interface operations {
                  *         "recipientName": "Nguyen Van A",
                  *         "phoneNumber": "0901234567",
                  *         "addressLine": "123 Le Loi",
-                 *         "ward": "Ben Thanh",
-                 *         "district": "1",
-                 *         "city": "Ho Chi Minh",
+                 *         "wardCode": "1003646",
+                 *         "provinceCode": "1000001",
                  *         "countryCode": "VN"
                  *       }
                  *     }
@@ -2161,7 +2234,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateOrderResponse"];
                 };
             };
-            /** @description A new order group and one order for each seller in the cart were created. */
+            /** @description A new group and one order per seller were committed with backend shipping fees and one atomic reservation request. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2170,7 +2243,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateOrderResponse"];
                 };
             };
-            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `COMMERCE_INVALID_ORDER_REQUEST`, `COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED`, `COMMERCE_INVALID_QUANTITY`, `COMMERCE_CART_EMPTY`. Missing or invalid Idempotency-Key writes no order. A key owned by another buyer returns no order data. */
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `COMMERCE_INVALID_ORDER_REQUEST`, `COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED`, `COMMERCE_INVALID_QUANTITY`, `COMMERCE_CART_EMPTY`. Missing or invalid Idempotency-Key writes no order. A key owned by another buyer returns no order data. Additional codes: `COMMERCE_INVALID_SHIPPING_ADDRESS`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2180,7 +2253,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 400;
                         /** @enum {string} */
-                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "COMMERCE_INVALID_ORDER_REQUEST" | "COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED" | "COMMERCE_INVALID_QUANTITY" | "COMMERCE_CART_EMPTY";
+                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "INVALID_REQUEST_BODY" | "COMMERCE_INVALID_ORDER_REQUEST" | "COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED" | "COMMERCE_INVALID_QUANTITY" | "COMMERCE_CART_EMPTY" | "COMMERCE_INVALID_SHIPPING_ADDRESS";
                     };
                 };
             };
@@ -2242,17 +2315,17 @@ export interface operations {
                     };
                 };
             };
-            /** @description Conflict. Codes: `COMMERCE_IDEMPOTENCY_CONFLICT`, `COMMERCE_PROMOTION_NOT_SUPPORTED`, `COMMERCE_ITEM_UNAVAILABLE`, `COMMERCE_INVALID_ORDER_AMOUNT`, `COMMERCE_PRICE_CHANGED`. IDEMPOTENCY_CONFLICT applies when the same buyer reuses a key with changed shipping/payment data; a key belonging to another buyer returns 400 instead. PRICE_CHANGED includes skuId, oldPrice and newPrice; the reported cart price is saved, but no order or inventory reservation is created. */
+            /** @description Conflict. Codes: `COMMERCE_INSUFFICIENT_STOCK`, `COMMERCE_IDEMPOTENCY_CONFLICT`, `COMMERCE_PROMOTION_NOT_SUPPORTED`, `COMMERCE_ITEM_UNAVAILABLE`, `COMMERCE_INVALID_ORDER_AMOUNT`, `COMMERCE_PRICE_CHANGED`. IDEMPOTENCY_CONFLICT applies when the same buyer reuses a key with changed shipping/payment data; a key belonging to another buyer returns 400 instead. PRICE_CHANGED includes skuId, oldPrice and newPrice; the reported cart price is saved, but no order or inventory reservation is created. Additional codes: `COMMERCE_SHIPPING_METADATA_REQUIRED`, `COMMERCE_INVALID_PARCEL`. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["PriceChangedProblem"] | (components["schemas"]["Problem"] & {
+                    "application/problem+json": components["schemas"]["InsufficientStockProblem"] | components["schemas"]["PriceChangedProblem"] | (components["schemas"]["Problem"] & {
                         /** @enum {integer} */
                         status?: 409;
                         /** @enum {string} */
-                        code?: "COMMERCE_IDEMPOTENCY_CONFLICT" | "COMMERCE_PROMOTION_NOT_SUPPORTED" | "COMMERCE_ITEM_UNAVAILABLE" | "COMMERCE_INVALID_ORDER_AMOUNT";
+                        code?: "COMMERCE_IDEMPOTENCY_CONFLICT" | "COMMERCE_PROMOTION_NOT_SUPPORTED" | "COMMERCE_ITEM_UNAVAILABLE" | "COMMERCE_INVALID_ORDER_AMOUNT" | "COMMERCE_SHIPPING_METADATA_REQUIRED" | "COMMERCE_INVALID_PARCEL";
                     });
                 };
             };
@@ -2267,6 +2340,20 @@ export interface operations {
                         status?: 415;
                         /** @enum {string} */
                         code?: "UNSUPPORTED_MEDIA_TYPE";
+                    };
+                };
+            };
+            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 422;
+                        /** @enum {string} */
+                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE";
                     };
                 };
             };
@@ -2300,7 +2387,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. */
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `COMMERCE_CATALOG_UNAVAILABLE`. Additional codes: `COMMERCE_SHIPPING_UNAVAILABLE`, `COMMERCE_INVENTORY_UNAVAILABLE`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2310,7 +2397,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "COMMERCE_CATALOG_UNAVAILABLE" | "COMMERCE_SHIPPING_UNAVAILABLE" | "COMMERCE_INVENTORY_UNAVAILABLE";
                     };
                 };
             };
@@ -2682,6 +2769,204 @@ export interface operations {
                 };
             };
             /** @description GATEWAY_TIMEOUT. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getOrderGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource UUID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The complete buyer order group. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "orderGroupId": "c8000000-0000-4000-8000-000000000006",
+                     *         "status": "PENDING",
+                     *         "totalAmount": 330000,
+                     *         "currency": "VND",
+                     *         "dueAt": "2026-11-11T08:30:00Z",
+                     *         "orders": [
+                     *           {
+                     *             "orderId": "c8000000-0000-4000-8000-000000000005",
+                     *             "orderGroupId": "c8000000-0000-4000-8000-000000000006",
+                     *             "orderNumber": "NX-20261111-00000001",
+                     *             "userId": "68000000-0000-4000-8000-000000000001",
+                     *             "sellerId": "68000000-0000-4000-8000-000000000003",
+                     *             "orderType": "STANDARD",
+                     *             "status": "PENDING",
+                     *             "createdAt": "2026-11-11T08:00:00Z",
+                     *             "subtotal": 300000,
+                     *             "shippingFee": 30000,
+                     *             "discountAmount": 0,
+                     *             "taxAmount": 0,
+                     *             "totalAmount": 330000,
+                     *             "items": []
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CreateOrderResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: `COMMERCE_ORDER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "COMMERCE_ORDER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
             504: {
                 headers: {
                     [name: string]: unknown;

@@ -441,13 +441,31 @@ export interface components {
             price: number;
             /** @description Current persisted SKU status string, initially ACTIVE. This issue does not restrict the existing string column to a new enum. */
             status: string;
+            shippingParcel?: components["schemas"]["ShippingParcel"];
         };
+        /**
+         * @description Seller supplied shipping-ready package for one SKU unit, measured in grams and centimetres. Null means the seller has not supplied verified measurements; checkout rejects missing measurements rather than inventing them.
+         * @example {
+         *       "weightGrams": 1200,
+         *       "lengthCm": 30,
+         *       "widthCm": 20,
+         *       "heightCm": 15
+         *     }
+         */
+        ShippingParcel: {
+            weightGrams: number;
+            lengthCm: number;
+            widthCm: number;
+            heightCm: number;
+        } | null;
         /** @description The SKU code is not part of the request. A `skuCode` sent in the body is ignored. */
         WriteSku: {
             color: string;
             size: string;
             /** @description Greater than zero; at most 17 integer and 2 fractional decimal digits. Stored BigDecimal numeric(19,2). */
             price: number;
+            /** @description Optional verified package measurements for one SKU unit. Omitted or null on update preserves the existing measurements for older clients. A supplied object must contain all four valid measurements. */
+            shippingParcel?: components["schemas"]["ShippingParcel"];
         };
         CreateCategoryResponse: {
             /**

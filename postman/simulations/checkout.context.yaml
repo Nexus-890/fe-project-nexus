@@ -208,6 +208,30 @@ assumptions:
     verification: On 2026-11-06 all 10 selected place-order/409/retry/logout browser scenarios passed after combining #151 and #152. The double-click case displayed the created group reference on the QR payment page. Generated-type check, lint, typecheck and all 193 unit tests passed. These findings do not establish live backend or bank integration.
     source: tests/place-order.spec.ts; postman/mocks/checkout-api/default.js; features/CheckoutPaymentPage.tsx
     updated_at: "2026-11-06"
+  - id: checkout-138-address-contract-20261111
+    status: supported
+    claim: >-
+      The delivered #138 preview and order request use provinceCode and wardCode
+      with recipient contact, addressLine and countryCode, rather than
+      city/district/ward display names.
+    reason: >-
+      The merged Commerce ShippingAddress DTO and OpenAPI define these fields.
+      This fixture now validates that request shape and keys simulated quote
+      fees, delays and recorded completion evidence by wardCode. Its synthetic
+      locality lists and fees remain independent of the live #201 API.
+    verification: >-
+      On 2026-11-11 inspected CreateOrderRequest.ShippingAddress and merged
+      Commerce OpenAPI at the checkout-138-merge-adaptation fingerprint. Updated
+      existing request/race assertions without removing scenarios. The parent then
+      ran all 24 checkout/place-order browser scenarios successfully against
+      these local HTTP stand-ins, including exact request bodies and wardCode
+      quote races. This does not establish live GHN or carrier acceptance.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/dto/request/CreateOrderRequest.java;
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      postman/mocks/checkout-api/default.js;
+      tests/checkout.spec.ts; tests/place-order.spec.ts
+    updated_at: "2026-11-11"
 fingerprints:
   - id: checkout-initial-implementation
     date: "2026-11-04"
@@ -220,4 +244,8 @@ fingerprints:
   - id: place-order-browser-verification
     date: "2026-11-04"
     commit: "5ee074e4 with uncommitted #151 implementation and review fixes"
+    cli: "1.73.0"
+  - id: checkout-138-merge-adaptation
+    date: "2026-11-11"
+    commit: "5a24447e with uncommitted origin/develop 32962651 merge and fixture adaptation"
     cli: "1.73.0"

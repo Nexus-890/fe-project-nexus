@@ -31,6 +31,13 @@ assumptions:
     verification: On 2026-11-11 signed POST /api/v1/webhooks/sepay returned HTTP200/success:true; in3617ms the group/order were PAID with one successful receipt, one published CheckoutPaymentConfirmed, one PAID history and one published OrderPaid. Actual Seller Sales GET200 rendered buyer snapshot, SKU/quantity,total and Paid. The pending shipping fixture emitted its initial request via the real relay/consumer. Media/scripts/results remain outside Git per MR review; the user chose to post the local video themselves. Earlier refund-only observations are superseded by merged #156; the mock callback remains test-only.
     source: be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/event/PaymentEventConsumer.java; be-project-nexus/payment-service/src/main/java/com/group5/paymentservice/payment/service/PaymentConfirmationService.java; docs/backoffice-review.md
     updated_at: '2026-11-11'
+  - id: develop-138-merge-regression-20261111
+    status: supported
+    claim: The eight existing back-office browser scenarios still pass after merging develop 32962651 and adapting the checkout request to address codes.
+    reason: The actual Next frontend ran against the existing local stateful HTTP simulation; role landing/access and Seller/Admin/Buyer flows retained their assertions.
+    verification: On 2026-11-11 all 8 scenarios passed with a temporary Webpack config for the task dependency junction, including Seller publication, Admin intake, Buyer checkout and the explicit simulated paid callback. This is local simulation evidence and does not verify live shipping metadata, GHN or bank settlement.
+    source: tests/backoffice.spec.ts; playwright.backoffice.config.ts; service/checkoutService.ts; ../docs/backoffice-222-merge-verification.md
+    updated_at: '2026-11-11'
 fingerprints:
   - id: review158-live-acceptance-20261111
     date: '2026-11-11'

@@ -5,7 +5,7 @@ const lineIds = ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-800
 type PreviewBody = {
   shippingAddress: {
     recipientName: string; phoneNumber: string; addressLine: string;
-    city: string; district: string; ward: string; countryCode: string;
+    provinceCode: string; wardCode: string; countryCode: string;
   };
   paymentMethod: string;
 };
@@ -100,7 +100,7 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   expect(actual.previews[0]).toEqual({
     shippingAddress: {
       recipientName: "Nguyen Thi Lan", phoneNumber: "0901234567", addressLine: "227 Nguyen Van Cu",
-      city: "Ho Chi Minh City", district: "District 4", ward: "Ward 4", countryCode: "VN",
+      provinceCode: "202", wardCode: "20308", countryCode: "VN",
     },
     paymentMethod: "SEPAY",
   });
@@ -143,7 +143,7 @@ test("parent selectors reset child codes and a ward change refreshes the quote",
   await expect(page.getByLabel("District", { exact: true }).locator("option[value='1443']")).toHaveCount(0);
   await page.getByLabel("District", { exact: true }).selectOption("1542");
   await page.getByLabel("Ward", { exact: true }).selectOption("20701");
-  await expect.poll(async () => (await evidence(request)).previews.at(-1)?.shippingAddress.ward).toBe("Phuc Xa");
+  await expect.poll(async () => (await evidence(request)).previews.at(-1)?.shippingAddress.wardCode).toBe("20701");
   const actual = await evidence(request);
   expect(actual.requests.some((entry) => entry.path.endsWith("/districts") && entry.query === "?provinceCode=201")).toBe(true);
   expect(actual.requests.some((entry) => entry.path.endsWith("/wards") && entry.query === "?districtCode=1542")).toBe(true);
@@ -157,7 +157,7 @@ test("a late quote for a previous ward cannot replace the current total", async 
   await page.getByLabel("Ward", { exact: true }).selectOption("20309");
   await expect(page.getByTestId("checkout-total")).toHaveText("470.000,00 ₫");
   // Observe the old dependency response finishing rather than assuming a delay.
-  await expect.poll(async () => (await evidence(request)).completedPreviews.includes("Ward 4")).toBe(true);
+  await expect.poll(async () => (await evidence(request)).completedPreviews.includes("20308")).toBe(true);
   await expect(page.getByTestId("checkout-shipping")).toHaveText("45.000,00 ₫");
   expect((await evidence(request)).orderRequests).toBe(0);
 });
@@ -241,7 +241,7 @@ test("logout while a preview is pending cannot restore another session's checkou
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByText("Hi Nguyen Thi Lan", { exact: true })).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/checkout$/);
-  await expect.poll(async () => (await evidence(request)).completedPreviews.includes("Ward 4")).toBe(true);
+  await expect.poll(async () => (await evidence(request)).completedPreviews.includes("20308")).toBe(true);
   await expect(page.getByTestId("checkout-total")).toHaveCount(0);
   expect((await evidence(request)).orderRequests).toBe(0);
 });
