@@ -163,7 +163,7 @@ test("code redirect and exchange use S256/state/nonce and keep tokens only in me
     const before = Date.now() / 1000;
     const result = await harness.client.completeSignIn(harness.callback());
     const { expiresAt, ...rest } = result;
-    assert.deepEqual(rest, { accessToken: harness.token, returnTo: "/products/laptop?variant=blue#details", subject: "buyer-id" });
+    assert.deepEqual(rest, { accessToken: harness.token, returnTo: "/products/laptop?variant=blue#details", returnToRequested: true, subject: "buyer-id" });
     assert.ok(expiresAt >= before + 3600 && expiresAt <= Date.now() / 1000 + 3600, "lifetime comes from expiresIn");
     // Mã và verifier đi thẳng tới gateway, trình duyệt không nhận refresh token nào
     assert.equal(harness.grants.length, 1);

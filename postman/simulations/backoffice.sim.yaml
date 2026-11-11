@@ -1,0 +1,9 @@
+simulation: nexus-backoffice-demo
+routing: path
+mocks:
+  - routeKey: api
+    path: ../mocks/backoffice-gateway/config.yaml
+  - routeKey: keycloak
+    path: ../mocks/oidc-keycloak/config.yaml
+  - routeKey: session
+    path: ../mocks/oidc-api/config.yaml

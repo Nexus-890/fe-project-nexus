@@ -60,6 +60,26 @@ export interface paths {
         patch: operations["markNotificationAsRead"];
         trace?: never;
     };
+    "/api/v1/notifications/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List delivery attempts of one own notification
+         * @description Requires NOTIFICATION.VIEW and ownership by the JWT subject. Returns one delivery per channel with its attempts in order. The recipient address and raw provider error text are never returned; failures expose errorCode and retryable only.
+         */
+        get: operations["listNotificationDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/read-all": {
         parameters: {
             query?: never;
@@ -140,6 +160,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the health of every service, Keycloak and the message broker
+         * @description Requires SYSTEM.HEALTH.VIEW (ADMIN, SUPPORT_STAFF). Every instance of every configured service is looked up in Eureka and its /actuator/health is called in parallel under one shared 2 second deadline; a service is UP as soon as one instance answers 2xx, and DOWN when it is missing from Eureka or no instance answers before the deadline. The response is still 200. Keycloak is UP when its realm discovery document answers. Brokers come from the shared health state in Redis written by BrokerHealthJob; a broker is UNKNOWN with lastCheckedAt null before the first run or while Redis is unreachable.
+         */
+        get: operations["getSystemHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/health/brokers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List message brokers with their last failure and recovery times
+         * @description Requires SYSTEM.HEALTH.VIEW (ADMIN, SUPPORT_STAFF). BrokerHealthJob checks Kafka every 15 seconds and marks it DOWN only when one retry also fails. The state lives in Redis under {environment}:health:{broker}; lastFailureAt is set when a broker goes DOWN and lastRecoveredAt when it comes back UP, and each change to DOWN or back to UP is recorded once in the event log as SystemHealthCheckFailed or SystemHealthCheckRecovered. A broker is UNKNOWN with null times before the first run or while Redis is unreachable. The complete list is one logical page.
+         */
+        get: operations["listBrokerHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -200,6 +260,46 @@ export interface components {
                 /** Format: int64 */
                 count: number;
             };
+        };
+        NotificationDeliveryAttempt: {
+            /** Format: uuid */
+            id: string;
+            attemptNumber: number;
+            /** @enum {string} */
+            status: "STARTED" | "SUCCEEDED" | "FAILED";
+            /** Format: date-time */
+            attemptedAt: string;
+            /** Format: date-time */
+            completedAt: string | null;
+            /** @description Symbolic failure code such as SMTP_UNAVAILABLE or RECIPIENT_NOT_FOUND; null on success. */
+            errorCode: string | null;
+            retryable: boolean;
+        };
+        NotificationDelivery: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            channel: "EMAIL" | "PUSH" | "SMS";
+            /** @enum {string} */
+            status: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+            attemptCount: number;
+            /**
+             * Format: date-time
+             * @description When the next send is due while PENDING; null once SENT or FAILED.
+             */
+            nextAttemptAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            attempts: components["schemas"]["NotificationDeliveryAttempt"][];
+        };
+        NotificationDeliveryListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["NotificationDelivery"][];
         };
         EventLogSummary: {
             /** Format: uuid */
@@ -266,6 +366,50 @@ export interface components {
             /** @default response success */
             message: string;
             data: components["schemas"]["AuditLog"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description UNKNOWN is only used for brokers: not checked yet, or the Redis health state is unreachable.
+         * @enum {string}
+         */
+        HealthStatus: "UP" | "DOWN" | "UNKNOWN";
+        ServiceHealth: {
+            /** @description Eureka service id, or keycloak. */
+            name: string;
+            status: components["schemas"]["HealthStatus"];
+        };
+        BrokerStatus: {
+            name: string;
+            status: components["schemas"]["HealthStatus"];
+            /** Format: date-time */
+            lastCheckedAt: string | null;
+        };
+        BrokerHealth: {
+            name: string;
+            status: components["schemas"]["HealthStatus"];
+            /** Format: date-time */
+            lastCheckedAt: string | null;
+            /** Format: date-time */
+            lastFailureAt: string | null;
+            /** Format: date-time */
+            lastRecoveredAt: string | null;
+        };
+        SystemHealthResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: {
+                services: components["schemas"]["ServiceHealth"][];
+                brokers: components["schemas"]["BrokerStatus"][];
+            };
+        };
+        BrokerHealthListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["BrokerHealth"][];
             page: components["schemas"]["PageInfo"];
         };
     };
@@ -586,6 +730,143 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED, NOTIFICATION_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "NOTIFICATION_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN, NOTIFICATION_NOT_OWNER. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "NOTIFICATION_NOT_OWNER";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: NOTIFICATION_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "NOTIFICATION_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: RATE_LIMITED. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+        };
+    };
+    listNotificationDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Notification ID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries of the notification; empty when no channel was used. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDeliveryListResponse"];
+                };
             };
             /** @description Bad Request. Codes: INVALID_PARAMETER. */
             400: {
@@ -1295,6 +1576,218 @@ export interface operations {
                         status?: 504;
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getSystemHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current status of every service and broker. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthResponse"];
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: RATE_LIMITED. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+        };
+    };
+    listBrokerHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every configured broker, ordered by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerHealthListResponse"];
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: RATE_LIMITED. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
                     };
                 };
             };

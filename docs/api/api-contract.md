@@ -113,6 +113,8 @@ The table lists FE consumers/prepared calls, not every BE endpoint or a guarante
 
 ## Type generation and runtime checks
 
+The back-office addition consumes a new protected `GET /api/v1/products/mine/{id}` with the existing ProductDetail envelope, SELLER + PRODUCT.LIST and exact JWT ownership. It can read the owner's nondeleted drafts/inactive products while the public read stays ACTIVE-only. Existing `GET /api/v1/inventory/balances` supplies paginated own-SKU warehouse balances; ADMIN-only `POST /api/v1/inventory/intake` returns Balance with HTTP 201. Seller sales adds optional nullable `recipientName`/`phoneNumber` from the immutable shipping-address snapshot, without a profile lookup. See the [combined task comparison](../../../docs/buyer-account-seller-portal-task.md) for exact scope and live-demo dependencies.
+
 Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, `commerceGeneratedType.ts`, `paymentGeneratedType.ts`, `notificationGeneratedType.ts`, and `gatewayGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
 
 Generated types do not validate live JSON. Keep runtime guards/parsers for auth, trees, products, SKU/images, cart and paging. Update fixtures and parser tests in the same contract change. Do not keep a permissive dual wire-shape parser indefinitely to hide mismatched deployment versions.

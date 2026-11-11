@@ -16,7 +16,7 @@ function AccountFooter() {
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {footerLabels.map((label) => <span key={label}>{label}</span>)}
-          <span className="border-l border-border pl-5">Prices in USD</span>
+          <span className="border-l border-border pl-5">Prices in VND</span>
         </div>
       </div>
     </footer>

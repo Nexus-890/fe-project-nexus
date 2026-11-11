@@ -105,7 +105,18 @@ assumptions:
       recorded the list requests with successful and rejected responses.
     source: tests/orders.spec.ts; features/OrdersPage.tsx; features/useOrders.ts
     updated_at: '2026-11-06'
+  - id: account-order-list-regression-20261111
+    status: supported
+    claim: The account order list preserves URL paging/status/payment-link behavior and renders long IDs and missing image thumbnails without clipping.
+    reason: All ten existing focused order browser assertions passed against the HTTP stand-in after using a compact accessible thumbnail fallback. Missing real orderGroupId still disables payment navigation.
+    verification: On 2026-11-11 npm run test:browser -- --config playwright.orders.config.ts passed 10/10, covering anonymous access, own-list reads, status persistence/reload, zero-based paging, empty/error/retry, 401 renewal limits, unsupported payment links and 375/1024px layout. The initial layout run detected clipped fallback text and was corrected in production rendering without weakening assertions. Fixture orderGroupId support remains provisional and does not establish that the live BE exposes it.
+    source: tests/orders.spec.ts; playwright.orders.config.ts; components/ProductImage.tsx; docs/buyer-account-seller-portal-evidence.md
+    updated_at: '2026-11-11'
 fingerprints:
+  - id: buyer-account-seller-portal-20261111
+    date: '2026-11-11'
+    commit: ddcc440b with uncommitted Buyer Account list/detail and compact image fallback changes
+    cli: 1.73.0
   - id: order-list-154
     date: '2026-11-04'
     commit: '0d0a36a4 with uncommitted #154 frontend and test changes'

@@ -12,7 +12,7 @@ function AccountLayout({ children }: { children: ReactNode }) {
   return (
     <ShopLayout>
       <div className="mx-auto grid w-full max-w-[1248px] min-w-0 gap-8 px-4 pt-6 sm:px-6 sm:pt-9 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8">
-        <AccountSidebar user={user} loading={status === "authenticating"} />
+        <AccountSidebar user={user} loading={status === "authenticating" || status === "restoring"} />
         <div className="min-w-0">{children}</div>
       </div>
       <AccountFooter />

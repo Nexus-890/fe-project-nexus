@@ -8,9 +8,10 @@ import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 import { getCategoryTree } from "@/service/catalogService";
+import { hasBackofficeAccess, readBackofficeRoles } from "./backofficeAccess";
 
 function ShopLayout({ children }: { children: ReactNode }) {
-  const { user, status, signOut, sessionId } = useAuth();
+  const { user, status, signOut, sessionId, accessToken } = useAuth();
   const cart = useGuestCart();
   const categories = useApiQuery({
     queryKey: queryKeys.catalog.tree,
@@ -34,6 +35,7 @@ function ShopLayout({ children }: { children: ReactNode }) {
         user={user}
         authenticating={status === "authenticating" || status === "restoring"}
         restoring={status === "restoring"}
+        canAccessBackoffice={status === "authenticated" && hasBackofficeAccess(readBackofficeRoles(accessToken))}
         onSignOut={() => void endSession()}
         cartQuantity={cart.ready && (status === "authenticated" || cart.guestEnabled) ? cart.itemCount : undefined}
         categories={categories.data ?? []}

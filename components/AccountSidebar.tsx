@@ -21,7 +21,7 @@ function AccountSidebar({ user, loading }: AccountSidebarProps) {
       <nav aria-label="Account navigation">
         <ul className="grid min-w-0 grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">
           {ACCOUNT_NAVIGATION.map(({ id, label, icon: Icon, href }) => {
-            const active = href === pathname;
+            const active = href === pathname || (href === "/orders" && pathname.startsWith("/orders/")) || (href === "/notifications" && pathname.startsWith("/notifications/"));
             const className = cn(
               "flex min-h-11 min-w-0 items-center gap-3 rounded-md px-3 py-2 text-sm leading-5",
               active ? "bg-primary/5 font-medium text-primary" : "text-gray-900",

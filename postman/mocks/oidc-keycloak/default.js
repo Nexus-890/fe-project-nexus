@@ -28,6 +28,8 @@ let evidence = initialEvidence();
 let mode = "success";
 let lifetime = 3600;
 let virtualTime = null;
+// Opt-in controls for role-routing scenarios; existing suites retain BUYER.
+let fixtureIdentity = { roles: ["BUYER"], subject, email: "buyer@nexus.local" };
 const now = () => virtualTime === null ? Date.now() : virtualTime;
 
 function json(res, body, status = 200) {
@@ -67,11 +69,11 @@ async function authorize(params, session, res) {
 async function issueToken(res, session, nonce) {
   const issuedAt = Math.floor(now() / 1000);
   const claims = {
-    iss: issuer, sub: subject, iat: issuedAt, exp: issuedAt + lifetime,
+    iss: issuer, sub: session.identity?.subject || subject, iat: issuedAt, exp: issuedAt + lifetime,
     auth_time: session.authTime, sid: session.id,
   };
   const accessToken = jwt({
-    ...claims, jti: randomUUID(), aud: "nexus-services", roles: ["BUYER"], privileges: ["PROFILE.VIEW"],
+    ...claims, jti: randomUUID(), aud: "nexus-services", roles: session.identity?.roles || ["BUYER"], privileges: session.identity?.privileges || ["PROFILE.VIEW"],
   });
   const refreshToken = `fixture-refresh-${randomUUID()}`;
   const refresh = await pm.state.get("oidc-keycloak:refresh-tokens") || {};
@@ -105,11 +107,17 @@ const server = http.createServer(async (req, res) => {
     mode = url.searchParams.get("mode") || "success";
     lifetime = 3600;
     virtualTime = null;
+    fixtureIdentity = { roles: ["BUYER"], subject, email: "buyer@nexus.local" };
     for (const key of ["codes", "sessions", "refresh-tokens", "access-tokens"]) await pm.state.set(`oidc-keycloak:${key}`, {});
     for (const key of ["access-token-hash", "access-token-expiry", "clock-time"]) await pm.state.set(`oidc-keycloak:${key}`, null);
     return json(res, {});
   }
   if (url.pathname === "/test/control") {
+    if (url.searchParams.has("roles")) {
+      const roles = url.searchParams.get("roles").split(",");
+      if (!roles.every((role) => ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"].includes(role))) return json(res, { error: "invalid_roles" }, 400);
+      fixtureIdentity = { roles, subject: url.searchParams.get("subject") || subject, email: url.searchParams.get("email") || "buyer@nexus.local", privileges: ["PROFILE.VIEW", "ORDER.LIST"] };
+    }
     if (url.searchParams.has("mode")) mode = url.searchParams.get("mode");
     if (url.searchParams.has("ttl")) {
       const value = Number(url.searchParams.get("ttl"));
@@ -156,7 +164,7 @@ const server = http.createServer(async (req, res) => {
       if (!fields(req).get("password")) return json(res, { error: "invalid_credentials" }, 400);
       evidence.passwordSubmissions += 1;
       const sessions = await pm.state.get("oidc-keycloak:sessions") || {};
-      const session = { id: randomUUID(), authTime: Math.floor(now() / 1000), expiresAt: now() + 3600_000 };
+      const session = { id: randomUUID(), authTime: Math.floor(now() / 1000), expiresAt: now() + 3600_000, identity: { ...fixtureIdentity } };
       if (mode !== "denied") {
         sessions[session.id] = session;
         await pm.state.set("oidc-keycloak:sessions", sessions);

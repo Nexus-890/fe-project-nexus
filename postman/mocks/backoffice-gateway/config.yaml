@@ -1,0 +1,9 @@
+version: 1
+name: nexus-backoffice-gateway
+slug: nexus-backoffice-gateway
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

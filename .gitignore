@@ -70,5 +70,6 @@ next-env.d.ts
 /.next-orders-*/
 /.next-payment-build/
 /.next-polling-build/
+/.next-backoffice-run/
 .tsconfig-typecheck.json
 .tsconfig-build.json

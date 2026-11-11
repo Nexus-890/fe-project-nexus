@@ -2,6 +2,7 @@
 
 import { Bell, CheckCheck, LoaderCircle, RefreshCw } from "lucide-react";
 import { useId, useState } from "react";
+import Link from "next/link";
 import type { Notification } from "@/types/notificationResponseType";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
@@ -268,6 +269,7 @@ function NotificationBell({
             )}
           </div>
         )}
+        <Link href="/notifications" className="flex min-h-11 items-center justify-center border-t border-border px-4 text-sm font-medium text-primary hover:bg-muted">View all notifications</Link>
       </PopoverContent>
     </Popover>
   );

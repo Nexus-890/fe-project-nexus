@@ -3,21 +3,21 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { safeReturnTo } from "./oidc";
+import { readBackofficeRoles, resolveRoleLanding } from "./backofficeAccess";
 import { Button } from "@/components/button";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function SignInPage() {
   const searchParams = useSearchParams();
-  const { signIn, status } = useAuth();
+  const { signIn, status, accessToken } = useAuth();
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace(safeReturnTo(searchParams.get("returnTo")));
-  }, [status, router, searchParams]);
+    if (status === "authenticated") router.replace(resolveRoleLanding(searchParams.get("returnTo"), readBackofficeRoles(accessToken)));
+  }, [status, router, searchParams, accessToken]);
 
   if (status === "restoring" || status === "authenticated") {
     return <main className="mx-auto w-full max-w-[400px] px-6 py-12" role="status">

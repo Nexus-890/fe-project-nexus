@@ -7,6 +7,7 @@ export type HeaderProps = {
   user: UserResponse | null;
   authenticating: boolean;
   restoring?: boolean;
+  canAccessBackoffice?: boolean;
   onSignOut: () => void;
   cartQuantity?: number;
   categories: CategoryNode[];

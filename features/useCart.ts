@@ -44,7 +44,7 @@ export function useCart() {
     service: (signal) => getCart({ context, signal }),
     meta: { requiresAuth: true },
   }, {
-    enabled: status === "authenticated" && ready && !mergeError && !adding && !mutating,
+    enabled: status === "authenticated" && user?.roles.includes("BUYER") === true && ready && !mergeError && !adding && !mutating,
     staleTime: 30_000,
     retryOnMount: false,
   });
@@ -146,7 +146,7 @@ export function useCart() {
   });
 
   const changeItem = (itemId: string, quantity?: number) => {
-    if (active.current || !ready || mergeError || adding ||
+    if (user?.roles.includes("BUYER") !== true || active.current || !ready || mergeError || adding ||
       client.isMutating({ mutationKey, exact: true }) || !isSessionCurrent(sessionId) || !cart.data) return;
     if (quantity !== undefined && (!Number.isSafeInteger(quantity) || quantity < 1)) return;
     if (quantity !== undefined && cart.data.items.find((item) => item.id === itemId)?.quantity === quantity) return;

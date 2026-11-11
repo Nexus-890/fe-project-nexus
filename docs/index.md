@@ -16,6 +16,7 @@ This documentation describes the frontend source in this repository. Start with 
 | Check reliability, security, or performance constraints | [Non-functional requirements](requirement/non-functional.md) |
 | Build UI | [Design system](ui/design-system.md), [components](ui/components.md) |
 | Carry out and verify a task | [Task workflow](ai/task-workflow.md) |
+| Review Buyer Account and Seller Portal | [Task and contract comparison](../../docs/buyer-account-seller-portal-task.md), [local data and live evidence](../../docs/buyer-account-seller-portal-data-evidence.md) |
 | Review the rebuild evidence and remaining release limits | [Rebuild verification](ai/verification.md) |
 
 The frontend targets the delivered success envelope described by the backend's [API style guide](../../be-project-nexus/docs/api/style-guide.md). That guide and [ADR-008](../../be-project-nexus/docs/adr/ADR-008-api-contract.md) record approval and coordinated release as pending. Local implementation and mock checks do not establish deployment approval or live compatibility.

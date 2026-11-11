@@ -567,3 +567,41 @@ test("aborting an addition suppresses a late response while retaining the active
   assert.equal(controller.getSnapshot().itemCount, 4);
   assert.equal(controller.getSnapshot().adding, false);
 });
+
+test("seller-only login preserves saved guest items without cart traffic and the next buyer merges once", async () => {
+  const { controller, calls, storage } = controllerFixture({ stored: guestSession });
+  const seller = { status: "authenticated", userId: "seller-1", accessToken: "seller-memory-token", sessionId: 10, canUseCart: false };
+  controller.setIdentity(seller);
+  controller.setIdentity({ ...seller });
+  await flush();
+  assert.deepEqual(controller.getSnapshot(), { owner: null, itemCount: 0, loading: false, adding: false, error: null, mergeError: null });
+  await controller.retryMerge();
+  const denied = await controller.addItem({ skuId: "sku-1", quantity: 1 });
+  assert.equal(denied.ok, false);
+  assert.equal(!denied.ok && denied.error.status, 403);
+  assert.deepEqual(storage.read(), guestSession);
+  assert.deepEqual(calls, { creates: 0, guestReads: 0, memberReads: 0, guestAdds: 0, memberAdds: 0, merges: [] });
+  controller.setIdentity({ ...seller, accessToken: "seller-renewed-token" });
+  await flush();
+  assert.deepEqual(storage.read(), guestSession);
+  controller.setIdentity({ ...member, sessionId: 11, canUseCart: true });
+  controller.setIdentity({ ...member, sessionId: 11, canUseCart: true });
+  await flush();
+  assert.deepEqual(calls.merges, [guestSession]);
+  assert.equal(storage.read(), null);
+  assert.equal(controller.getSnapshot().itemCount, 7);
+});
+
+test("role eligibility changes invalidate pending cart work instead of being treated as token rotation", async () => {
+  const pending = deferred<ApiResult<CartSnapshot>>();
+  const { controller, calls } = controllerFixture({ service: { getCart: async () => pending.promise } });
+  controller.setIdentity({ ...member, sessionId: 20, canUseCart: true });
+  await flush();
+  controller.setIdentity({ ...member, sessionId: 20, canUseCart: false });
+  pending.resolve(ok(cart(99)));
+  await flush();
+  assert.equal(controller.getSnapshot().owner, null);
+  assert.equal(controller.getSnapshot().itemCount, 0);
+  assert.equal(controller.getSnapshot().loading, false);
+  assert.equal(calls.merges.length, 0);
+});

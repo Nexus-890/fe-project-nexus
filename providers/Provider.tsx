@@ -10,6 +10,7 @@ import {
 import { API_BASE_URL, createCanceledError, isApiError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
 import { createOidcClient } from "../features/oidc";
+import { readBackofficeRoles, resolveRoleLanding } from "../features/backofficeAccess";
 import { createTokenSession, renewalDelay } from "../features/tokenSession";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import {
@@ -221,7 +222,7 @@ export function AuthSession({
         }
         tokens.start(response);
         setSession((previous) => ({ ...previous, expiresAt: response.expiresAt }));
-        destination = response.returnTo;
+        destination = resolveRoleLanding(response.returnToRequested === false ? undefined : response.returnTo, readBackofficeRoles(response.accessToken));
         return loadProfile();
       } catch (error: unknown) {
         if (generation.read() !== id) return { ok: false, error: createCanceledError() };

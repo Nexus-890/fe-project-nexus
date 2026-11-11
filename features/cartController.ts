@@ -3,7 +3,7 @@ import type { ApiResult } from "../types/commonResponseType";
 import { cartItemCount, type CartSnapshot } from "./cartSnapshotUtils";
 import type { GuestStorage } from "./guestCartStorage";
 
-export type CartIdentity = { status: string; userId: string | null; accessToken: string | null; sessionId?: number };
+export type CartIdentity = { status: string; userId: string | null; accessToken: string | null; sessionId?: number; canUseCart?: boolean };
 export interface CartControllerService {
   getCart: () => Promise<ApiResult<CartSnapshot>>;
   addCartItem: (input: AddCartItemRequest, signal?: AbortSignal) => Promise<ApiResult<CartSnapshot>>;
@@ -22,7 +22,7 @@ export interface CartState {
 }
 
 export const identityOwner = (identity: CartIdentity): string | null =>
-  identity.status === "authenticated" && identity.userId ? `user:${identity.userId}${identity.sessionId === undefined ? "" : `:${identity.sessionId}`}`
+  identity.status === "authenticated" && identity.userId && identity.canUseCart !== false ? `user:${identity.userId}${identity.sessionId === undefined ? "" : `:${identity.sessionId}`}`
     : identity.status === "anonymous" ? "guest" : null;
 
 const failure = (title: string, status = 0): ApiResult<never> => ({
@@ -115,8 +115,8 @@ export function createCartController(options: {
   }
 
   function setIdentity(next: CartIdentity): void {
-    if (identity.status === next.status && identity.userId === next.userId && identity.accessToken === next.accessToken && identity.sessionId === next.sessionId) return;
-    if (identity.status === "authenticated" && next.status === "authenticated" && identity.userId === next.userId && identity.sessionId === next.sessionId) {
+    if (identity.status === next.status && identity.userId === next.userId && identity.accessToken === next.accessToken && identity.sessionId === next.sessionId && identity.canUseCart === next.canUseCart) return;
+    if (identity.status === "authenticated" && next.status === "authenticated" && identity.userId === next.userId && identity.sessionId === next.sessionId && identity.canUseCart === next.canUseCart) {
       // Token rotation keeps the same cart session and its pending work.
       identity = next;
       return;
@@ -136,6 +136,8 @@ export function createCartController(options: {
   function addItem(input: AddCartItemRequest, signal?: AbortSignal): Promise<ApiResult<CartSnapshot>> {
     const id = generation;
     const owner = identityOwner(identity);
+    if (identity.status === "authenticated" && identity.canUseCart === false)
+      return Promise.resolve(failure("A buyer account is required to add items to a cart.", 403));
     if (!owner || (owner === "guest" && !options.guestEnabled)) {
       return Promise.resolve(failure("Please sign in before adding items.", 401));
     }

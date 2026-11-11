@@ -140,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/mine/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the current seller's product with SKUs and images
+         * @description Protected editor read for the JWT seller's own nondeleted product, including DRAFT and INACTIVE. Requires SELLER and PRODUCT.LIST; another seller receives 403. This does not change visibility of the public ACTIVE-only GET /products/{id} endpoint.
+         */
+        get: operations["getOwnProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products/{id}/status": {
         parameters: {
             query?: never;
@@ -2575,6 +2595,64 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    getOwnProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own product detail, with numeric SKU prices and image public URLs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetProductResponse"];
+                };
+            };
+            /** @description Invalid UUID parameter. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid authentication. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing SELLER or PRODUCT.LIST, or the product belongs to another seller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Product does not exist or was deleted. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -14,7 +14,7 @@ export function ChangePasswordCard() {
     <Card id="security" aria-labelledby="security-title" className="scroll-mt-6 gap-5 rounded-md">
       <CardHeader className="px-4 sm:px-6">
         <CardTitle id="security-title">Change Password</CardTitle>
-        <CardDescription id="password-availability">Password updates are coming soon.</CardDescription>
+        <CardDescription id="password-availability">Passwords are managed by Keycloak. This application has no password update API; these fields are unavailable.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-4 sm:px-6">
         <div className="grid min-w-0 gap-4 md:grid-cols-3">

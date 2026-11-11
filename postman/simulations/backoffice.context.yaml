@@ -1,0 +1,46 @@
+purpose:
+  stands_in_for: >-
+    Local Keycloak/gateway and catalog, inventory, commerce and payment HTTP dependencies
+    used by the actual Next.js back-office demo. The provider/session members reuse
+    this repository's existing OIDC simulation. The backoffice-gateway handler follows
+    inspected controllers and DTOs. Published owner mocks were not searched: the
+    installed CLI does not support the skill's postman status command.
+  unblocks: >-
+    Browser verification of JWT role landing/access, seller product/SKU/image publication,
+    administrator stock intake and a Buyer checkout whose explicit test-only callback
+    makes the simulated sale PAID. The frontend under test is never a simulation member.
+assumptions:
+  - id: flat-jwt-roles-determine-workspace
+    status: supported
+    claim: Back-office menus and access read the access token's flat roles claim and ignore privileges or conflicting profile roles.
+    reason: The fixture issues configurable root roles with ORDER.LIST even to a Buyer; tests deliberately return different profile roles.
+    verification: On 2026-11-11 the focused Chrome suite passed 8/8 scenarios. SELLER, ADMIN, SUPPORT_STAFF and combined BUYER+SELLER landed in /backoffice; BUYER landed at / and was denied back-office routes despite ORDER.LIST. A deliberately conflicting ADMIN profile did not grant the BUYER JWT access. Allowed and forbidden returnTo plus anonymous redirection were observed. These are issued fixture JWTs, not actual Keycloak role validation.
+    source: features/backofficeAccess.ts; postman/mocks/oidc-keycloak/default.js; tests/backoffice.spec.ts
+    updated_at: '2026-11-11'
+  - id: seller-admin-buyer-demo-against-stateful-http
+    status: supported
+    claim: The actual frontend can publish a Seller listing, intake ten units as Admin, then check out as Buyer and show the simulated paid sale to the Seller.
+    reason: The dependency handler persists related product, SKU, image, balance, cart and order IDs in its local process and checks role-bearing tokens issued by the reused OIDC provider.
+    verification: On 2026-11-11 npm run test:browser -- --config playwright.backoffice.config.ts passed 8/8. The full demo observed product POST201, SKU POST201, multipart image POST201, rejected publish409 then publish200, Admin intake201, Buyer cartPOST201, checkout preview200/orderPOST201/paymentPOST201, explicit test callback200, Seller salesGET200 showing PAID and the Buyer snapshot name/SKU. Simulation logs contained one listening event and 311 request events. Sanitized network/state evidence and 1440/375 screenshots are under root docs/backoffice-evidence. This does not verify the real missing payment consumer or actual bank settlement.
+    source: postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts; playwright.backoffice.config.ts
+    updated_at: '2026-11-11'
+  - id: live-payment-to-paid-consumer
+    status: unknown
+    claim: The complete real local Buyer-payment-to-Seller-PAID flow works with the merged CheckoutPaymentConfirmed consumer.
+    reason: Earlier live checks used a source version with only refund consumption. Pre-push develop synchronization to 02385a14 merged the #156 confirmation consumer, but the complete live checkout/payment/Sales path has not been rerun against it. Source delivery is not live integration proof.
+    verification: On 2026-11-11 inspected the earlier refund-only consumer, then the merged PaymentEventConsumer dispatching CheckoutPaymentConfirmed. Historical simulation checks use the explicit /api/test/payment-confirmed callback; it remains test-only and does not verify the newly merged real consumer or provider settlement.
+    source: ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/event/PaymentEventConsumer.java; postman/mocks/backoffice-gateway/default.js
+    updated_at: '2026-11-11'
+fingerprints:
+  - id: pre-push-develop-sync-20261111
+    date: '2026-11-11'
+    commit: origin/develop 02385a14 with the retained task changes and merged payment confirmation consumer
+    cli: Postman 1.73.0
+  - id: generated-sku-contract-20261111
+    date: '2026-11-11'
+    commit: origin/develop da482b76 with the preserved back-office task changes
+    cli: Postman 1.73.0
+  - id: backoffice-demo-20261111
+    date: '2026-11-11'
+    commit: origin/develop 14e4cdae with current Buyer Account, Seller Portal and back-office changes
+    cli: Postman 1.73.0

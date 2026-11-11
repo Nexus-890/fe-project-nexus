@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,11 +30,9 @@ try {
     // Include freshly generated route types; ignore other servers' generated artifacts.
     config.exclude = [
       "node_modules",
-      ".next/**",
-      ".next-oidc-*/**",
-      ".next-catalog-*/**",
-      ".next-verify-build/**",
-      ".next-cart-readiness-build/**",
+      ...readdirSync(root)
+        .filter((name) => name.startsWith(".next") && name !== ".next-typecheck")
+        .map((name) => name + "/**"),
       "test-results/**",
     ];
     writeFileSync(temporary, JSON.stringify(config, null, 2));

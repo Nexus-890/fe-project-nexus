@@ -14,6 +14,7 @@ import type { UserResponse } from "@/types/authResponseType";
 import type { UpdateProfileRequest } from "@/types/accountType";
 import type { ApiResult } from "@/types/commonResponseType";
 import { profileFormValues, profileSchema, profileUpdate, todayLocal, type ProfileFormValues } from "@/features/profileSchema";
+import ProfilePhotoPreview from "./ProfilePhotoPreview";
 
 interface PersonalInformationCardProps {
   user: UserResponse;
@@ -81,6 +82,7 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
     <Card id="personal-information" className="scroll-mt-6 rounded-md">
       <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
       <CardContent>
+        <ProfilePhotoPreview fullName={user.fullName} />
         <form noValidate onSubmit={handleSubmit(submit)} className="space-y-5" aria-label="Personal information">
           <fieldset disabled={isSubmitting} className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
             <legend className="sr-only">Edit your personal information</legend>

@@ -57,20 +57,21 @@ function CartProvider({ children }: { children: ReactNode }) {
       const memberResult = async (action: () => Promise<Cart>, adding = false, signal?: AbortSignal) => {
         const id = getIdentity().sessionId;
         return cartResult(async () => {
-          if (id === undefined || !isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
+          const isCurrentBuyer = () => id !== undefined && isSessionCurrent(id) && getIdentity().canUseCart !== false && !signal?.aborted;
+          if (id === undefined || !isCurrentBuyer()) throw createCanceledError();
           if (adding) {
             if (queryClient.isMutating({ mutationKey: ["cart", id, "edit"], exact: true }))
               throw { kind: "network", status: 0, title: "Please wait for your cart." };
             await queryClient.cancelQueries({ queryKey: queryKeys.cart.me(id), exact: true });
-            if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
+            if (!isCurrentBuyer()) throw createCanceledError();
           }
           const cart = await action();
-          if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
+          if (!isCurrentBuyer()) throw createCanceledError();
           if (adding) {
             // A route mounted during the POST may have started another read.
             // Cancel its older snapshot before publishing the committed cart.
             await queryClient.cancelQueries({ queryKey: queryKeys.cart.me(id), exact: true });
-            if (!isSessionCurrent(id) || signal?.aborted) throw createCanceledError();
+            if (!isCurrentBuyer()) throw createCanceledError();
           }
           // CartPage, the header, and post-login merges share the same private cache.
           queryClient.setQueryData(queryKeys.cart.me(id), cart);
@@ -93,26 +94,29 @@ function CartProvider({ children }: { children: ReactNode }) {
   }));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getServerSnapshot);
   const userId = user?.id ?? null;
-  const owner = identityOwner({ status, userId, accessToken, sessionId });
+  const canUseCart = user?.roles.includes("BUYER") === true;
+  const owner = identityOwner({ status, userId, accessToken, sessionId, canUseCart });
 
   useEffect(() => {
     currentUser.current = user;
-    controller.setIdentity({ status, userId, accessToken, sessionId });
-  }, [controller, status, userId, user, accessToken, sessionId]);
+    controller.setIdentity({ status, userId, accessToken, sessionId, canUseCart });
+  }, [controller, status, userId, user, accessToken, sessionId, canUseCart]);
 
-  const ready = owner !== null && state.owner === owner && !state.loading;
+  // Seller-only sessions have no buyer cart to synchronize. Their callback
+  // must finish without reading or consuming a saved guest credential.
+  const ready = (status === "authenticated" && !canUseCart) || (owner !== null && state.owner === owner && !state.loading);
   const memberCart = useApiQuery({
     queryKey: queryKeys.cart.me(sessionId),
     service: (signal) => getCart({ context: { ...requestContext, ...(user ? { mockUser: { id: user.id, email: user.email } } : {}) }, signal }),
     meta: { requiresAuth: true },
   }, {
-    enabled: status === "authenticated" && ready && !state.mergeError && !state.adding && !editing,
+    enabled: status === "authenticated" && canUseCart && ready && !state.mergeError && !state.adding && !editing,
     // The controller seeds this cache during sign-in/add. Reuse that fresh
     // snapshot when the header/page observer becomes enabled.
     staleTime: 30_000,
     retryOnMount: false,
   });
-  const itemCount = status === "authenticated" && memberCart.data
+  const itemCount = status === "authenticated" && !canUseCart ? 0 : status === "authenticated" && memberCart.data
     ? cartItemCount(memberCart.data) : state.owner === owner ? state.itemCount : 0;
 
   return <CartContext.Provider value={{

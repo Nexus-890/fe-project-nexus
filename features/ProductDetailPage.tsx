@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 import { formatVND, formatVNDRange } from "@/components/formatPrice";
 import { getProduct } from "@/service/catalogService";
+import { getSellerStock } from "@/service/sellerService";
 import {
   mockProductDetail,
   USE_PRODUCT_DETAIL_MOCK,
@@ -21,6 +22,14 @@ import ProductGallery from "@/components/ProductGallery";
 interface ProductDetailPageProps {
   slug: string;
   productId?: string;
+}
+
+function ProductStockAvailability({ skuId }: { skuId: string }) {
+  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(skuId), service: (signal) => getSellerStock([skuId], { signal }) }, { retry: false });
+  if (stock.isPending) return <p role="status" className="text-sm text-muted-foreground">Checking availability…</p>;
+  if (stock.isError) return <p className="text-sm text-muted-foreground">Stock availability is unavailable. <button type="button" className="min-h-9 underline" onClick={() => void stock.refetch()}>Retry availability</button></p>;
+  const available = stock.data?.[0]?.available;
+  return <p data-testid="product-stock" className={`text-sm ${available ? "text-success" : "text-muted-foreground"}`}>{available ? `In stock · ${available} available` : "Out of stock"}</p>;
 }
 
 const UUID_SUFFIX =
@@ -213,6 +222,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Quantity</p>
+            {sku && <ProductStockAvailability key={sku.id} skuId={sku.id} />}
             <QuantityPicker value={quantity} onChange={setQuantity} />
           </div>
 

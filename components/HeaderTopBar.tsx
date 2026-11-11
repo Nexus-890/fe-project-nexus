@@ -10,6 +10,7 @@ function HeaderTopBar({
   user,
   authenticating,
   restoring,
+  canAccessBackoffice = false,
   onSignOut,
   cartQuantity,
   notificationBell,
@@ -60,6 +61,7 @@ function HeaderTopBar({
           {HEADER_UTILITY_NAVIGATION.map(({ label, href, visibility }) => (
             <Link key={href} href={href} className={`hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary ${visibility}`}>{label}</Link>
           ))}
+          {canAccessBackoffice && <Link href="/backoffice" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">Back office</Link>}
           {user && (
             <button type="button" onClick={signOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
               Sign out
@@ -79,12 +81,6 @@ function HeaderTopBar({
               <MapPin size={14} aria-hidden="true" />
               <span className="hidden md:inline">Ship to HCMC</span>
             </button>
-            <Link
-              href={ROUTES.sell}
-              className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
-            >
-              Sell
-            </Link>
             <button
               type="button"
               className="hidden min-h-11 lg:min-h-9 items-center gap-1 rounded-sm px-2 hover:text-primary md:inline-flex"

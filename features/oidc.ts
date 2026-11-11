@@ -11,6 +11,8 @@ import type { SessionResponse } from "../types/authResponseType";
 export interface OidcSession {
   accessToken: string;
   returnTo: string;
+  /** Distinguishes an explicit shop destination from the default role landing. */
+  returnToRequested?: boolean;
   expiresAt: number;
   subject: string;
 }
@@ -172,6 +174,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
       grant: { code, codeVerifier: state.code_verifier, redirectUri: state.redirect_uri },
       nonce: state.nonce,
       returnTo: safeReturnTo(returnTo),
+      returnToRequested: typeof data === "object" && data !== null && "returnToRequested" in data ? data.returnToRequested === true : true,
     };
   };
 
@@ -214,7 +217,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
       await current.clearStaleState();
       if (generation !== id) throw new Error("Sign-in was canceled.");
       await current.signinRedirect({
-        state: { returnTo: safeReturnTo(returnTo) },
+        state: { returnTo: safeReturnTo(returnTo), returnToRequested: Boolean(returnTo) },
         nonce: browser!.randomUUID(),
       });
     },
@@ -239,6 +242,7 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
         });
         if (generation !== id) throw new Error("Sign-in was canceled.");
         const session = verify(tokens, callback.returnTo, callback.nonce);
+        session.returnToRequested = callback.returnToRequested;
         logoutHint = tokens.idToken;
         subject = session.subject;
         return session;

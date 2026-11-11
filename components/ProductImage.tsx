@@ -10,6 +10,7 @@ interface ProductImageProps {
   alt: string;
   productName: string;
   loading?: "eager" | "lazy";
+  compact?: boolean;
 }
 
 function ProductImage({
@@ -17,6 +18,7 @@ function ProductImage({
   alt,
   productName,
   loading = "eager",
+  compact = false,
 }: ProductImageProps) {
   const url = src?.trim();
   const [failedUrl, setFailedUrl] = useState<string>();
@@ -28,10 +30,10 @@ function ProductImage({
       <div
         role="img"
         aria-label={`${productName} image placeholder`}
-        className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center text-xs text-muted-foreground"
+        className={`flex h-full w-full flex-col items-center justify-center text-center text-xs text-muted-foreground ${compact ? "p-1" : "gap-2 p-2"}`}
       >
-        <ImageOff size={24} aria-hidden="true" className="shrink-0" />
-        <span>Image unavailable</span>
+        <ImageOff size={compact ? 16 : 24} aria-hidden="true" className="shrink-0" />
+        {!compact && <span>Image unavailable</span>}
       </div>
     );
   }

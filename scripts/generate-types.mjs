@@ -8,6 +8,8 @@ let drift = false;
 for (const [name, output] of [
   ["user-service", "userGeneratedType.ts"],
   ["catalog-service", "catalogGeneratedType.ts"],
+  ["auction-service", "auctionGeneratedType.ts"],
+  ["inventory-service", "inventoryGeneratedType.ts"],
   ["commerce-service", "commerceGeneratedType.ts"],
   ["notification-service", "notificationGeneratedType.ts"],
   // refresh-token cookie endpoints of the gateway (#252)
