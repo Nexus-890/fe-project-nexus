@@ -149,7 +149,7 @@ export interface paths {
         };
         /**
          * Read the current seller's product with SKUs and images
-         * @description Protected editor read for the JWT seller's own nondeleted product, including DRAFT and INACTIVE. Requires SELLER and PRODUCT.LIST; another seller receives 403. This does not change visibility of the public ACTIVE-only GET /products/{id} endpoint.
+         * @description Protected editor read for the JWT seller's own nondeleted product, including DRAFT and INACTIVE. Requires SELLER and PRODUCT.LIST; another seller receives 404. This does not change visibility of the public ACTIVE-only GET /products/{id} endpoint.
          */
         get: operations["getOwnProduct"];
         put?: never;
@@ -2637,7 +2637,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Missing SELLER or PRODUCT.LIST, or the product belongs to another seller. */
+            /** @description Missing SELLER role or PRODUCT.LIST privilege. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2646,7 +2646,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Product does not exist or was deleted. */
+            /** @description Product does not exist, was deleted, or belongs to another seller. */
             404: {
                 headers: {
                     [name: string]: unknown;

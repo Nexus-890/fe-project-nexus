@@ -10,10 +10,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 import { formatVND, formatVNDRange } from "@/components/formatPrice";
 import { getProduct, getProducts } from "@/service/catalogService";
+import { getProductAvailability } from "@/service/backofficeService";
 import ProductInformationTabs, { RatingStars } from "@/components/ProductInformationTabs";
 import ProductCard from "@/components/ProductCard";
 import SampleSaleCountdown from "@/components/SampleSaleCountdown";
-import { getProductAvailability } from "@/service/backofficeService";
 import {
   mockProductDetail,
   USE_PRODUCT_DETAIL_MOCK,
@@ -30,10 +30,10 @@ interface ProductDetailPageProps {
 
 function ProductStockAvailability({ skuId }: { skuId: string }) {
   const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(skuId), service: (signal) => getProductAvailability(skuId, { signal }) }, { retry: false });
-  if (stock.isPending) return <p role="status" className="text-sm text-muted-foreground">Checking availabilityâ€¦</p>;
+  if (stock.isPending) return <p role="status" className="text-sm text-muted-foreground">Checking availability...</p>;
   if (stock.isError) return <p className="text-sm text-muted-foreground">Stock availability is unavailable. <button type="button" className="min-h-9 underline" onClick={() => void stock.refetch()}>Retry availability</button></p>;
   const available = stock.data;
-  return <p data-testid="product-stock" className={`text-sm ${available ? "text-success" : "text-muted-foreground"}`}>{available ? `In stock Â· ${available} available` : "Out of stock"}</p>;
+  return <p data-testid="product-stock" className={`text-sm ${available ? "text-success" : "text-muted-foreground"}`}>{available ? `In stock · ${available} available` : "Out of stock"}</p>;
 }
 
 const UUID_SUFFIX =
@@ -104,7 +104,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
         className="mx-auto w-full max-w-[1248px] px-4 py-12 sm:px-6"
         role="status"
       >
-        Loading productâ€¦
+        Loading product…
       </section>
     );
   }
@@ -218,7 +218,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             {price ?? "Price unavailable"}
           </p>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Shop vouchers</span>{["50K off", "15% off audio", "Free shipping"].map((offer) => <span key={offer} className="rounded-sm border border-orange-300 px-2 py-1 text-primary">{offer}</span>)}<span className="w-full text-muted-foreground">Sample offers Â· final price is shown at checkout.</span></div>
+          <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Shop vouchers</span>{["50K off", "15% off audio", "Free shipping"].map((offer) => <span key={offer} className="rounded-sm border border-orange-300 px-2 py-1 text-primary">{offer}</span>)}<span className="w-full text-muted-foreground">Sample offers · final price is shown at checkout.</span></div>
 
           {detail.skus.length > 0 ? (
             <SKUSelector
@@ -245,7 +245,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
             disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            <ShoppingCart size={20} className="mr-2" aria-hidden="true" />{cart.adding ? "Addingâ€¦" : "Add to Cart"}
+            <ShoppingCart size={20} className="mr-2" aria-hidden="true" />{cart.adding ? "Adding…" : "Add to Cart"}
           </button>
           <button type="button" disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"} onClick={() => void handleAddToCart(true)} className="inline-flex min-h-12 min-w-32 flex-1 items-center justify-center rounded-md border border-border px-5 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground sm:flex-none">Buy Now</button></div>
 
@@ -274,7 +274,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
         </section>
       </section>
       <ProductInformationTabs product={detail} />
-      <section aria-label="You might also like" className="mt-8 space-y-5"><h2 className="text-heading-24">You might also like</h2>{recommendations.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading recommendationsâ€¦</p> : recommendations.isError ? <div role="alert" className="space-y-3 rounded-sm border border-border p-4 text-sm"><p>Unable to load recommendations.</p><button type="button" onClick={() => void recommendations.refetch()} disabled={recommendations.isFetching} className="min-h-11 rounded-sm border border-border px-3">Retry recommendations</button></div> : recommendations.data?.content.some((item) => item.id !== detail.id) ? <ul className="grid list-none grid-cols-1 gap-4 p-0 min-[480px]:grid-cols-2 lg:grid-cols-4">{recommendations.data.content.filter((item) => item.id !== detail.id).slice(0, 4).map((item) => <li key={item.id} className="min-w-0"><ProductCard product={item} /></li>)}</ul> : <p className="text-sm text-muted-foreground">More finds are on the way. <Link href="/search" className="inline-flex min-h-11 items-center text-primary">Browse all products</Link></p>}</section>
+      <section aria-label="You might also like" className="mt-8 space-y-5"><h2 className="text-heading-24">You might also like</h2>{recommendations.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading recommendations…</p> : recommendations.isError ? <div role="alert" className="space-y-3 rounded-sm border border-border p-4 text-sm"><p>Unable to load recommendations.</p><button type="button" onClick={() => void recommendations.refetch()} disabled={recommendations.isFetching} className="min-h-11 rounded-sm border border-border px-3">Retry recommendations</button></div> : recommendations.data?.content.some((item) => item.id !== detail.id) ? <ul className="grid list-none grid-cols-1 gap-4 p-0 min-[480px]:grid-cols-2 lg:grid-cols-4">{recommendations.data.content.filter((item) => item.id !== detail.id).slice(0, 4).map((item) => <li key={item.id} className="min-w-0"><ProductCard product={item} /></li>)}</ul> : <p className="text-sm text-muted-foreground">More finds are on the way. <Link href="/search" className="inline-flex min-h-11 items-center text-primary">Browse all products</Link></p>}</section>
     </div>
   );
 }

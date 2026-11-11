@@ -25,13 +25,17 @@ assumptions:
     source: postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts; playwright.backoffice.config.ts
     updated_at: '2026-11-11'
   - id: live-payment-to-paid-consumer
-    status: unknown
-    claim: The complete real local Buyer-payment-to-Seller-PAID flow works with the merged CheckoutPaymentConfirmed consumer.
-    reason: Earlier live checks used a source version with only refund consumption. Pre-push develop synchronization to 02385a14 merged the #156 confirmation consumer, but the complete live checkout/payment/Sales path has not been rerun against it. Source delivery is not live integration proof.
-    verification: On 2026-11-11 inspected the earlier refund-only consumer, then the merged PaymentEventConsumer dispatching CheckoutPaymentConfirmed. Historical simulation checks use the explicit /api/test/payment-confirmed callback; it remains test-only and does not verify the newly merged real consumer or provider settlement.
-    source: ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/event/PaymentEventConsumer.java; postman/mocks/backoffice-gateway/default.js
+    status: supported
+    claim: For one complete prepared PENDING fixture, the real local signed webhook advanced Payment and Commerce to PAID and the Seller Sales UI displayed that order.
+    reason: Actual gateway/payment/commerce services, database-backed outboxes and Kafka were exercised; no production response was intercepted and no PAID SQL update was used. This is a provider-event acceptance, not a claim about complete checkout/address capture or a bank transfer.
+    verification: On 2026-11-11 signed POST /api/v1/webhooks/sepay returned HTTP200/success:true; in3617ms the group/order were PAID with one successful receipt, one published CheckoutPaymentConfirmed, one PAID history and one published OrderPaid. Actual Seller Sales GET200 rendered buyer snapshot, SKU/quantity,total and Paid. The pending shipping fixture emitted its initial request via the real relay/consumer. Media/scripts/results remain outside Git per MR review; the user chose to post the local video themselves. Earlier refund-only observations are superseded by merged #156; the mock callback remains test-only.
+    source: be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/event/PaymentEventConsumer.java; be-project-nexus/payment-service/src/main/java/com/group5/paymentservice/payment/service/PaymentConfirmationService.java; docs/backoffice-review.md
     updated_at: '2026-11-11'
 fingerprints:
+  - id: review158-live-acceptance-20261111
+    date: '2026-11-11'
+    commit: develop fa659a90 merged with the reduced back-office task
+    cli: Postman 1.73.0
   - id: pre-push-develop-sync-20261111
     date: '2026-11-11'
     commit: origin/develop 02385a14 with the retained task changes and merged payment confirmation consumer

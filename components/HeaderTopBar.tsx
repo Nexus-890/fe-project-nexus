@@ -37,7 +37,7 @@ function HeaderTopBar({
               className="inline-flex min-h-11 lg:min-h-9 items-center px-2"
               role="status"
             >
-              {restoring ? "Restoring sessionâ€¦" : "Signing inâ€¦"}
+              {restoring ? "Restoring session…" : "Signing in…"}
             </span>
           ) : (
             <>
