@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-11",
+  "environment": "Local FE, Keycloak, gateway, catalog-service, PostgreSQL and the configured Supabase project",
+  "mock": false,
+  "browserRoute": "http://localhost:3000/sell/images",
+  "authentication": "Existing seller account; Authorization Code with PKCE; profile displayed Hi Nexus Seller",
+  "operation": "POST /api/v1/products/92000000-0000-4000-8000-000000000224/images",
+  "multipartField": "file",
+  "file": "be-project-nexus/infra/local-dev/seed-images/sneaker.jpg",
+  "browserObserved": [
+    "Uploading… with disabled inputs",
+    "Photo uploaded successfully",
+    "Uploaded product photo image",
+    "View uploaded image link pointing to the new Supabase object"
+  ],
+  "httpStatus": {
+    "contract": 201,
+    "wireStatusCaptured": false
+  },
+  "database": {
+    "database": "catalog_db",
+    "table": "product_images",
+    "id": "0b2bf8fc-4730-48df-83ea-5c13c8e56b0a",
+    "productId": "92000000-0000-4000-8000-000000000224",
+    "sellerId": "68000000-0000-4000-8000-000000000002",
+    "sortOrder": 1,
+    "imageUrl": "https://nzjvjvyqxcisjgvglwvj.supabase.co/storage/v1/object/public/product-images/products/92000000-0000-4000-8000-000000000224/b4d3f798-0122-4919-8c0b-860c385ec1eb.jpg",
+    "verifiedBy": "Direct SELECT from PostgreSQL and a fresh public GET product detail through the gateway"
+  },
+  "publicRead": {
+    "status": 200,
+    "sourceSha256": "9A6F5C8A5C6D4AD8332097809B077148B5D530249DF09D2B9F9544C66AE6E59F",
+    "downloadedSha256": "9A6F5C8A5C6D4AD8332097809B077148B5D530249DF09D2B9F9544C66AE6E59F"
+  },
+  "limits": [
+    "UI outcome was observed through the browser accessibility tree; a screenshot and raw network response were not retained for this live upload.",
+    "Invalid file, HTTP403 ownership and HTTP503 storage feedback were tested separately using explicit browser HTTP stand-ins; they are not claims of injected failures against live Supabase.",
+    "During later screenshot capture, a separate buyer-account-seller-portal worktree served localhost:3000 and returned 404 for /sell/images. That process and its authentication configuration were left untouched."
+  ]
+}

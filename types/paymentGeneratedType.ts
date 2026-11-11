@@ -242,23 +242,23 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        /** @description SePay sends JSON. The controller reads original bytes before JSON parsing; an absent body fails signature verification with 401. Unknown object properties are ignored, and no provider field is required by this matching stage. A signed body that cannot be parsed into this object returns 400. */
+        /** @description SePay sends JSON. The controller reads original bytes before JSON parsing; an absent body fails signature verification with 401. Unknown object properties are ignored, and no provider field is required by this matching stage. A signed body that cannot be parsed into this object returns 400. The example is copied from docs/api/sepay-webhook-sample.json, captured during the earlier provider spike; it is not a matching payment receipt or a claim that payment settlement was executed. */
         requestBody?: {
             content: {
                 /**
                  * @example {
-                 *       "id": 100001,
                  *       "gateway": "ACB",
-                 *       "transactionDate": "2026-11-05 17:00:00",
+                 *       "transactionDate": "2026-10-18 16:51:32",
                  *       "accountNumber": "0000000002",
-                 *       "code": " nx20261105001 ",
-                 *       "content": "SEVQR NX20261105001",
+                 *       "subAccount": "",
+                 *       "code": "",
+                 *       "content": "Giao dich thu nghiem 16h51m20s",
                  *       "transferType": "in",
-                 *       "transferAmount": 350000,
-                 *       "accumulated": 350000,
-                 *       "subAccount": null,
-                 *       "referenceCode": "SYNTHETIC-TEST-100001",
-                 *       "description": "Synthetic example; not the immutable captured delivery"
+                 *       "description": "Giao dich thu nghiem 16h51m20s",
+                 *       "transferAmount": 10000,
+                 *       "referenceCode": "SB4D116E4198F4",
+                 *       "accumulated": 0,
+                 *       "id": 39442
                  *     }
                  */
                 "application/json": components["schemas"]["SepayWebhookRequest"];

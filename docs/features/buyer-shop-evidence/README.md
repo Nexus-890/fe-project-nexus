@@ -1,5 +1,33 @@
 # Buyer shop browser evidence — 10 November 2026
 
+## Review corrections — 11 November 2026
+
+The review suite passed **8/8**: three navigation cases at375/768/1440px,
+three shared sample journeys/layout cases and two seller form cases. Sample
+screenshots were refreshed after the continuity correction; they are clearly
+labeled design previews. They do not establish payment settlement.
+
+| Sample screen | 375px | 1440px |
+| --- | --- | --- |
+| Cart | [cart](cart-375.png) | [cart](cart-1440.png) |
+| Checkout | [checkout](checkout-375.png) | [checkout](checkout-1440.png) |
+| Paid | [paid](paid-375.png) | [paid](paid-1440.png) |
+| Unpaid | [unpaid](unpaid-375.png) | [unpaid](unpaid-1440.png) |
+| Guest order detail | [detail](sample-order-375.png) | [detail](sample-order-1440.png) |
+
+[Seller live upload evidence](seller-live-upload-20261111.json) records an
+actual authenticated FE upload, new PostgreSQL row, public Supabase HTTP200
+and matching SHA256. Browser success and the image/link were observed; raw
+HTTP201 and a screenshot were not retained for that live operation. The two
+seller form tests use explicit HTTP stand-ins for validation/multipart201,
+ownership403 and storage503; these are separate from the live proof.
+
+See [review response](../../../../docs/buyer-shop/review-response-20261111.md)
+for scope exclusions, remaining Backend dependencies and the concurrent
+localhost:3000 server limitation.
+
+## Original catalog evidence
+
 The catalog, product detail and gallery browser suite passed **22/22 cases**. After adding the visit watchlist case and final presentation countdown, the focused home/watchlist/detail run passed **3/3 cases**, covering **23 unique scenarios** in total. The existing runner stopped its fixture/dev servers and restored `tsconfig.json` after each run.
 
 ```powershell
