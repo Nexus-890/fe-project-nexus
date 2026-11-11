@@ -293,18 +293,7 @@ assumptions:
       tests/profile.spec.ts; playwright.profile.config.ts; providers/Provider.tsx;
       test-results/profile-simulation.ndjson (generated, ignored); tests/profile-fixture.mjs
     updated_at: '2026-11-05'
-  - id: account-screen-regression-20261111
-    status: supported
-    claim: The updated profile screen preserves the simulated read/update/session behavior while explicitly separating unavailable features into local previews.
-    reason: The real frontend passed all twelve profile browser scenarios against this existing HTTP simulation, including dirty form preservation, retry and session rejection.
-    verification: On 2026-11-11 npm run test:profile passed 12/12. Tests asserted real request payloads and observed stateful profile saves/header updates, validation, delayed reads, 401 renewal limits, 503 retry, 375px layout and local-only sample controls. This establishes caller behavior against the authored simulation; actual local Keycloak reads are recorded separately in the repository root task evidence.
-    source: tests/profile.spec.ts; playwright.profile.config.ts; docs/buyer-account-seller-portal-evidence.md
-    updated_at: '2026-11-11'
 fingerprints:
-  - id: buyer-account-seller-portal-20261111
-    date: '2026-11-11'
-    commit: ddcc440b with uncommitted Buyer Account and Seller Portal frontend changes
-    cli: 1.73.0
   - id: develop-merge
     date: '2026-11-04'
     commit: 05bc5a10 with uncommitted merge of origin/develop 0d14ca45 and flat cart/profile migration

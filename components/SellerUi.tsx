@@ -20,13 +20,3 @@ export function SellerStatus({ children }: { children: ReactNode }) {
 export function SellerTabs({ values, selected, change }: { values: readonly string[]; selected: string; change: (value: string) => void }) {
   return <div aria-label="Filter results" className="flex flex-wrap gap-x-6 gap-y-2 border-b border-border text-sm">{values.map((value) => <button key={value} type="button" aria-pressed={selected === value} onClick={() => change(value)} className={`min-h-11 border-b-2 pb-3 ${selected === value ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{value}</button>)}</div>;
 }
-export function exportSellerCsv(name: string, rows: (string | number)[][]) {
-  const csv = rows.map((row) => row.map((cell) => {
-    const value = String(cell);
-    // Treat catalog/customer text as text when the file is opened in a spreadsheet.
-    const safe = typeof cell === "string" && /^[\s]*[=+@-]/.test(value) ? `'${value}` : value;
-    return `"${safe.replaceAll('"', '""')}"`;
-  }).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url);
-}

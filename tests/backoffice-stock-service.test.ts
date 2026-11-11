@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getStockBalances, intakeStock, parseStockBalance } from "../service/backofficeService";
+import { getProductAvailability, getStockBalances, intakeStock, parseStockBalance } from "../service/backofficeService";
 import { isApiError } from "../configs/api";
 import type { ApiContext } from "../types/commonRequestType";
 
@@ -9,6 +9,19 @@ const warehouseId = "a1000000-0000-4000-8000-000000000002";
 const otherWarehouse = "a1000000-0000-4000-8000-000000000003";
 const balance = { skuId, warehouseId, total: 14, available: 10, reserved: 3, unavailable: 1 };
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
+
+test("storefront availability uses a public scoped SKU read and rejects mismatched balances", async () => {
+  const calls: string[] = [];
+  const context: ApiContext = { getAccessToken: () => "must-not-send", fetch: async (input, init) => {
+    assert.equal(new Headers(init?.headers).get("Authorization"), null);
+    const url = new URL(String(input), "http://fixture.test");
+    calls.push(url.searchParams.get("skuIds") ?? "");
+    return Response.json({ code: 0, message: "response success", data: [{ skuId, available: 10 }] });
+  } };
+  assert.equal(await getProductAvailability(skuId, { context }), 10);
+  assert.deepEqual(calls, [skuId]);
+  await assert.rejects(getProductAvailability(skuId, { context: { fetch: async () => Response.json({ code: 0, message: "response success", data: [{ skuId: otherWarehouse, available: 10 }] }) } }), invalid);
+});
 
 test("admin intake sends the current scoped Bearer and exact allowed body, then returns persisted totals", async () => {
   const calls: { method?: string; path: string; auth: string | null; body: unknown }[] = [];

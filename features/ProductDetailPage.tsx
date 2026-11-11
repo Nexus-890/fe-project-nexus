@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
 import { formatVND, formatVNDRange } from "@/components/formatPrice";
 import { getProduct } from "@/service/catalogService";
-import { getSellerStock } from "@/service/sellerService";
+import { getProductAvailability } from "@/service/backofficeService";
 import {
   mockProductDetail,
   USE_PRODUCT_DETAIL_MOCK,
@@ -25,10 +25,10 @@ interface ProductDetailPageProps {
 }
 
 function ProductStockAvailability({ skuId }: { skuId: string }) {
-  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(skuId), service: (signal) => getSellerStock([skuId], { signal }) }, { retry: false });
+  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(skuId), service: (signal) => getProductAvailability(skuId, { signal }) }, { retry: false });
   if (stock.isPending) return <p role="status" className="text-sm text-muted-foreground">Checking availability…</p>;
   if (stock.isError) return <p className="text-sm text-muted-foreground">Stock availability is unavailable. <button type="button" className="min-h-9 underline" onClick={() => void stock.refetch()}>Retry availability</button></p>;
-  const available = stock.data?.[0]?.available;
+  const available = stock.data;
   return <p data-testid="product-stock" className={`text-sm ${available ? "text-success" : "text-muted-foreground"}`}>{available ? `In stock · ${available} available` : "Out of stock"}</p>;
 }
 

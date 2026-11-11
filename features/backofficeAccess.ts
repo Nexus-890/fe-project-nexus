@@ -48,7 +48,7 @@ export function resolveRoleLanding(returnTo: string | null | undefined, roles: r
   const destination = safeReturnTo(returnTo);
   const pathname = new URL(destination, "https://nexus.invalid").pathname;
   if (/^\/backoffice(?:\/|$)/i.test(decodeURIComponent(pathname))) return canAccessBackofficePath(destination, roles) ? destination : home;
-  if (/^\/seller(?:\/|$)/i.test(pathname) && !/^\/seller\/preview(?:\/|$)/i.test(pathname)) return roles.includes("SELLER") ? destination : home;
+  if (/^\/seller(?:\/|$)/i.test(pathname)) return home;
   if (/^\/(?:cart|checkout|orders|order)(?:\/|$)/i.test(pathname) && !roles.includes("BUYER")) return home;
   return destination;
 }

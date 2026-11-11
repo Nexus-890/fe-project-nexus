@@ -1,5 +1,4 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
-import { GUEST_CART_STORAGE_KEY } from "../features/guestCartStorage";
 
 const fixtureOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_API_PORT ?? 3911}`;
 const providerOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT ?? 3913}/keycloak`;
@@ -21,16 +20,14 @@ const setCase = async (request: APIRequestContext, query: string) => {
 };
 
 async function signIn(page: Page, account = "a") {
-  // Register every gateway-issued access token, including reload renewal,
-  // before the provider loads the profile against the notification fixture.
-  // The gateway retains the refresh token in its cookie.
-  await page.route(`${fixtureOrigin}/api/v1/auth/{session,refresh}`, async (route) => {
+  // Register the gateway-issued access token before the real callback/provider
+  // loads the profile. The gateway retains the refresh token in its cookie.
+  await page.route(`${fixtureOrigin}/api/v1/auth/session`, async (route) => {
     expect(route.request().method()).toBe("POST");
     expect(route.request().headers()["x-requested-with"]).toBe("nexus-web");
     expect(route.request().headers().authorization).toBeUndefined();
     const response = await route.fetch();
-    if (new URL(route.request().url()).pathname.endsWith("/session")) expect(response.ok()).toBe(true);
-    if (!response.ok() || response.status() === 204) return route.fulfill({ response });
+    expect(response.ok()).toBe(true);
     const { data: { accessToken } } = await response.json();
     expect(accessToken).toEqual(expect.any(String));
     const registered = await page.request.post(`${fixtureOrigin}/test/notifications/session`, {
@@ -39,7 +36,7 @@ async function signIn(page: Page, account = "a") {
     expect(registered.ok()).toBe(true);
     sessions.set(page, { account, authorization: `Bearer ${accessToken}` });
     await route.fulfill({ response });
-  });
+  }, { times: 1 });
   await page.goto("/sign-in");
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
@@ -362,92 +359,4 @@ test("logout cancels a pending read and a late mutation cannot change the next a
   await expect(popup.getByRole("alert")).toHaveCount(0);
   const accountRequests = (await evidence(request)).slice(anonymousEvidence.length);
   expect(accountRequests.every((entry) => entry.method === "GET" && entry.authorization === authorization)).toBe(true);
-});
-
-test("account notification page paginates, filters and shares read state with the header", async ({ page, request }) => {
-  await signIn(page);
-  await page.goto("/notifications");
-  await expect(page.getByRole("heading", { name: "Notifications", exact: true })).toBeVisible();
-  const list = page.getByRole("list", { name: "Account notifications", exact: true });
-  await expect(list.getByRole("button")).toHaveCount(10);
-  await list.getByRole("button").first().click();
-  await expect(page.getByRole("main")).toContainText("17 unread");
-  await expect(page.getByRole("button", { name: "Notifications, 17 unread", exact: true })).toBeVisible();
-  await page.getByRole("navigation", { name: "Notification categories", exact: true }).getByRole("button", { name: "Auctions", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "No notifications found", exact: true })).toBeVisible();
-  await page.getByRole("navigation", { name: "Notification categories", exact: true }).getByRole("button", { name: "Orders", exact: true }).click();
-  await expect(list.getByRole("button")).toHaveCount(10);
-  await page.getByRole("navigation", { name: "Notification pagination", exact: true }).getByRole("link", { name: "Next", exact: true }).click();
-  await expect(page).toHaveURL(/\/notifications\?page=2$/);
-  await expect.poll(async () => (await evidence(request)).some((entry) => entry.path === "/api/v1/notifications" && entry.query.page === "1" && entry.query.size === "10")).toBe(true);
-  await page.getByRole("main").getByRole("button", { name: "Mark All as Read", exact: true }).click();
-  await expect(page.getByRole("main")).toContainText("0 unread");
-  await expect(page.getByRole("main").getByRole("button", { name: "Mark All as Read", exact: true })).toBeDisabled();
-  await page.getByRole("link", { name: "Notification preferences", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Notification Preferences", exact: true })).toBeVisible();
-});
-
-test("full notification page shows real errors and retries without replacing them with samples", async ({ page, request }) => {
-  await signIn(page);
-  await setCase(request, "list=error");
-  await page.goto("/notifications?page=2");
-  await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
-  await expect(page.getByRole("list", { name: "Account notifications", exact: true })).toHaveCount(0);
-  await setCase(request, "list=default");
-  await page.getByRole("button", { name: "Retry notifications", exact: true }).click();
-  await expect(page.getByRole("list", { name: "Account notifications", exact: true }).getByRole("button")).toHaveCount(10);
-});
-
-test("order detail reads snapshot and history, validates cancellation and refreshes server status", async ({ page }) => {
-  const orderId = "68000000-0000-4000-8000-000000000001";
-  const buyerId = "10000000-0000-4000-8000-000000000001";
-  let status = "PAID";
-  const order = () => ({ orderId, orderNumber: "NX-FIXTURE-0001", userId: buyerId, sellerId: "28000000-0000-4000-8000-000000000001", orderType: "STANDARD", status, createdAt: "2026-11-11T01:00:00Z", totalAmount: 100000.25, items: [{ orderItemId: "38000000-0000-4000-8000-000000000001", productId: "48000000-0000-4000-8000-000000000001", skuId: "58000000-0000-4000-8000-000000000001", productName: "Snapshot trainers", skuCode: "US-9", imageUrl: null, quantity: 1, unitPrice: 100000.25, totalPrice: 100000.25 }] });
-  const cancellations: unknown[] = [];
-  await signIn(page);
-  await page.route(`**/api/v1/orders/${orderId}**`, async (route) => {
-    expect(route.request().headers().authorization).toBe(sessions.get(page)!.authorization);
-    const pathname = new URL(route.request().url()).pathname;
-    if (pathname.endsWith("/history")) return route.fulfill({ json: { code: 0, message: "response success", data: [{ id: "98000000-0000-4000-8000-000000000001", previousStatus: null, newStatus: status, reason: "Fixture order state", changedBy: buyerId, createdAt: "2026-11-11T01:00:00Z" }], page: { number: 0, size: 1, totalElements: 1, totalPages: 1 } } });
-    if (pathname.endsWith("/cancel")) {
-      expect(route.request().method()).toBe("POST"); cancellations.push(route.request().postDataJSON()); status = "CANCELED";
-      return route.fulfill({ json: { code: 0, message: "response success", data: { orderGroupId: "78000000-0000-4000-8000-000000000001", status, totalAmount: 100000.25, currency: "VND", dueAt: "2026-11-11T02:00:00Z", orders: [order()] } } });
-    }
-    return route.fulfill({ json: { code: 0, message: "response success", data: order() } });
-  });
-  await page.goto(`/orders/${orderId}`);
-  await expect(page.getByRole("heading", { name: "Order NX-FIXTURE-0001", exact: true })).toBeVisible();
-  await expect(page.getByText("Snapshot trainers", { exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Delivery status", exact: true })).toContainText("Fixture order state");
-  await page.getByRole("button", { name: "Cancel Order", exact: true }).click();
-  const confirm = page.getByRole("button", { name: "Confirm cancellation", exact: true });
-  await expect(confirm).toBeDisabled();
-  await page.getByLabel("Reason for cancellation", { exact: true }).fill("Changed my mind");
-  await confirm.click();
-  await expect(page.getByRole("status")).toContainText("Cancellation processed by the server.");
-  await expect(page.getByRole("button", { name: "Cancel Order", exact: true })).toBeDisabled();
-  expect(cancellations).toEqual([{ reason: "Changed my mind" }]);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-test("seller-only callback completes without buyer cart calls or consuming saved guest items", async ({ page }) => {
-  const saved = JSON.stringify({ token: "saved-guest-cart-credential-1234567890", mergeKey: "26d81980-257e-4860-98f8-c0ebc97c0474" });
-  const cartCalls: string[] = [];
-  await page.route("**/api/v1/carts/**", async (route) => { cartCalls.push(route.request().url()); await route.abort(); });
-  await page.route(`${fixtureOrigin}/api/v1/users/me`, async (route) => {
-    const response = await route.fetch();
-    if (!response.ok()) return route.fulfill({ response });
-    const body = await response.json();
-    body.data.roles = ["SELLER"];
-    await route.fulfill({ response, json: body });
-  });
-  await page.goto("/");
-  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: GUEST_CART_STORAGE_KEY, value: saved });
-  await signIn(page);
-  expect(await page.evaluate((key) => localStorage.getItem(key), GUEST_CART_STORAGE_KEY)).toBe(saved);
-  await page.getByRole("link", { name: /^Shopping cart(?:, 0 items)?$/ }).click();
-  await expect(page.getByRole("heading", { name: "A buyer account is required", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open Seller Portal", exact: true })).toHaveAttribute("href", "/seller");
-  expect(cartCalls).toEqual([]);
-  expect(await page.evaluate((key) => localStorage.getItem(key), GUEST_CART_STORAGE_KEY)).toBe(saved);
 });

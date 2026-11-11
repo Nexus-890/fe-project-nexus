@@ -289,18 +289,3 @@ test("profile fits 375x812 without clipped text and has desktop and mobile scree
   await page.setViewportSize({ width: 1440, height: 1634 });
   await page.screenshot({ path: info.outputPath("profile-desktop-1440.png"), fullPage: true, style: screenshotStyle });
 });
-
-test("unavailable profile features show explicit samples without changing the account", async ({ page, request }) => {
-  await signIn(page);
-  await openProfile(page);
-  await populatedForm(page);
-  await page.getByRole("button", { name: "Show sample reputation", exact: true }).click();
-  await expect(page.getByText("Sample · Trusted · 78", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sample preview only. These values do not describe your account. The reputation API is not available.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Show sample penalty", exact: true }).click();
-  await expect(page.getByText("AUC-SAMPLE-118", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Update Password", exact: true })).toBeDisabled();
-  await expect(page.getByLabel("Current Password", { exact: true })).toBeDisabled();
-  await responsiveChecks(page);
-  expect((await history(request)).filter((entry) => entry.method === "PUT")).toEqual([]);
-});

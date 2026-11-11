@@ -42,7 +42,7 @@ function CartPage() {
         Cart
       </h1>
       {status === "authenticated" ? (
-        user?.roles.includes("BUYER") ? <CartContents key={sessionId} /> : <div className="mt-6 rounded-sm border border-border p-6"><h2 className="text-heading-20">A buyer account is required</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">Shopping carts are available to buyer accounts. Your saved guest items are kept for your next buyer sign-in.</p><Link href={user?.roles.includes("SELLER") ? "/seller" : "/"} className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary">{user?.roles.includes("SELLER") ? "Open Seller Portal" : "Continue browsing"}</Link></div>
+        user?.roles.includes("BUYER") ? <CartContents key={sessionId} /> : <div className="mt-6 rounded-sm border border-border p-6"><h2 className="text-heading-20">A buyer account is required</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">Shopping carts are available to buyer accounts. Your saved guest items are kept for your next buyer sign-in.</p><Link href={user?.roles.includes("SELLER") ? "/backoffice" : "/"} className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary">{user?.roles.includes("SELLER") ? "Open back office" : "Continue browsing"}</Link></div>
       ) : status === "restoring" || status === "authenticating" ? (
         <p role="status" className="py-12 text-muted-foreground">
           Loading your account…

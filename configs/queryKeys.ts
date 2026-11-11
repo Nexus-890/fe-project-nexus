@@ -16,7 +16,6 @@ export const queryKeys = {
     products: (sessionId: number, page: number) => ["seller", sessionId, "products", page] as const,
     listings: (sessionId: number, page: number) => ["seller", sessionId, "listings", page] as const,
     productBalances: (sessionId: number, productId: string, skuIds: readonly string[]) => ["seller", sessionId, "balances", productId, skuIds] as const,
-    inventory: (sessionId: number, page: number) => ["seller", sessionId, "inventory", page] as const,
     sales: (sessionId: number, page: number, status?: string) => ["seller", sessionId, "sales", { page, status }] as const,
   },
   catalog: {
@@ -52,8 +51,6 @@ export const queryKeys = {
       ["notification", sessionId, "unread-count"] as const,
   },
   orders: {
-    detail: (sessionId: number, orderId: string) => ["orders", sessionId, "detail", orderId] as const,
-    history: (sessionId: number, orderId: string) => ["orders", sessionId, "history", orderId] as const,
     list: (sessionId: number, filters: OrderFilters) =>
       ["orders", sessionId, "list", filters] as const,
     group: (sessionId: number, orderGroupId: string) =>

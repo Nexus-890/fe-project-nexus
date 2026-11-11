@@ -2,6 +2,15 @@ import { createInvalidResponseError, isRecord, requestApi } from "../configs/api
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { StockBalance, StockIntakeInput } from "../types/backofficeType";
 
+/** Public selected-SKU availability used by the demo's storefront product page. */
+export const getProductAvailability = async (skuId: string, options: ServiceRequestOptions = {}): Promise<number> => {
+  if (!isUuid(skuId)) throw createInvalidResponseError("Invalid SKU reference");
+  const { data } = await requestApi("GET", "/api/v1/inventory", undefined, { ...options, auth: false, params: { skuIds: skuId } });
+  if (!Array.isArray(data) || data.length !== 1 || !isRecord(data[0]) || data[0].skuId !== skuId || !validQuantity(data[0].available))
+    throw createInvalidResponseError("Invalid product availability");
+  return data[0].available;
+};
+
 const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const quantityFields = ["total", "available", "reserved", "unavailable"] as const;
 const validQuantity = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 2147483647;

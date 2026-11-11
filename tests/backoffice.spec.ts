@@ -35,6 +35,7 @@ for (const role of ["SELLER", "ADMIN", "SUPPORT_STAFF", "BUYER", "BUYER,SELLER"]
       expect((await evidence(request)).requests.filter((row: { path: string }) => /products\/mine|inventory\/intake|orders\/sales/.test(row.path))).toEqual([]);
     } else {
       await expect(page).toHaveURL("/backoffice");
+      if (!role.split(",").includes("BUYER")) expect((await evidence(request)).requests.some((row: { path: string }) => row.path.startsWith("/api/v1/carts"))).toBe(false);
       await expect(backofficeNav(page)).toBeVisible();
       await expect(backofficeNav(page).getByRole("link", { name: "Products", exact: true })).toHaveCount(role.includes("SELLER") ? 1 : 0);
       await expect(backofficeNav(page).getByRole("link", { name: "Stock", exact: true })).toHaveCount(role === "ADMIN" ? 1 : 0);
@@ -100,14 +101,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await expect(savedCode).toHaveValue(generatedCode);
   await expect(savedCode).not.toBeEditable();
   expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000 });
-  const persistedSkuId = state.products[0].skus[0].id;
-  await seller.getByRole("button", { name: "Save SKU", exact: true }).click();
-  await expect.poll(async () => (await evidence(request)).requests.some((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/skus/${persistedSkuId}`)).toBe(true);
-  state = await evidence(request);
-  expect(state.products[0].skus).toHaveLength(1);
-  expect(state.products[0].skus[0].skuCode).toBe(generatedCode);
-  expect(state.requests.find((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/skus/${persistedSkuId}`).body).toEqual({ color: "Black", size: "Standard", price: 150000 });
-  await expect(savedCode).toHaveValue(generatedCode);
+  await expect(seller.getByRole("button", { name: "Save SKU", exact: true })).toHaveCount(0);
   await expect(publish).toBeDisabled();
   await seller.getByLabel("Product image file", { exact: true }).setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
   await expect(publish).toBeEnabled();
@@ -156,7 +150,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
     state = await evidence(request);
     expect(state.requests.some((row: { method: string; path: string; role: string }) => row.method === "POST" && row.path === "/api/v1/inventory/intake" && row.role === "ADMIN")).toBe(true);
     expect(state.requests.some((row: { method: string; path: string; role: string }) => row.method === "POST" && row.path === "/api/v1/orders" && row.role === "BUYER")).toBe(true);
-    const output = path.resolve("../docs/backoffice-evidence"); await mkdir(output, { recursive: true });
+    const output = path.resolve("test-results/backoffice/evidence"); await mkdir(output, { recursive: true });
     await writeFile(path.join(output, "mock-demo-evidence.json"), JSON.stringify({ environment: "synthetic Postman HTTP simulation; real frontend; payment callback models missing #156", checkedAt: new Date().toISOString(), operations: state.requests, product: state.products[0], order: state.orders[0] }, null, 2));
     for (const [name, screen] of [["seller-paid-sales", seller], ["admin-stock", adminPage]] as const) {
       await screen.screenshot({ path: path.join(output, `mock-${name}-1440.png`), fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });

@@ -100,18 +100,7 @@ assumptions:
       routing and backend connectivity.
     source: playwright.cart.config.ts; service/cartService.ts; configs/api.ts
     updated_at: '2026-11-03'
-  - id: buyer-cart-regression-after-seller-guard-20261111
-    status: supported
-    claim: Buyer cart read/edit/header synchronization remains functional after excluding seller-only sessions from Buyer cart initialization.
-    reason: Nine real-frontend browser scenarios passed against this existing HTTP simulation; separate controller and real Seller checks prove the unsupported-role branch does not consume a saved guest cart.
-    verification: On 2026-11-11 npm run test:cart passed 9/9, exercising shared GET/header cache, quantity and remove writes, rejection/retry, late response isolation and mobile/desktop layout. The simulation log recorded one listening event and 262 request events. These are synthetic dependency outcomes, not live cart write or provider guarantees.
-    source: tests/cart-shared.spec.ts; tests/cart.test.ts; providers/CartProvider.tsx; docs/buyer-account-seller-portal-evidence.md
-    updated_at: '2026-11-11'
 fingerprints:
-  - id: buyer-account-seller-portal-20261111
-    date: '2026-11-11'
-    commit: ddcc440b with uncommitted seller cart capability and Buyer Account frontend changes
-    cli: 1.73.0
   - id: backend-contract
     date: '2026-11-03'
     commit: 6e92bbacbc915d6e3266dcc719b4b967ea9f8b71 (origin/develop)

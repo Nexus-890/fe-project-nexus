@@ -7,12 +7,9 @@ export const ROUTES = {
   profile: "/profile",
   cart: "/cart",
   orders: "/orders",
-  notifications: "/notifications",
-  notificationPreferences: "/notifications/preferences",
   reputation: "/profile#reputation",
   security: "/profile#security",
-  sell: "/seller",
-  backoffice: "/backoffice",
+  sell: "/sell/images",
 } as const;
 
 export const HEADER_UTILITY_NAVIGATION = [
@@ -24,9 +21,9 @@ export const HEADER_UTILITY_NAVIGATION = [
 
 export const HEADER_CATEGORY_SHORTCUTS = [
   { label: "Nexus Live", href: "/#nexus-live", active: true },
-  { label: "Saved", href: "/#saved" },
+  { label: "Saved", href: "/saved" },
   { label: "Deals", href: "/#deals" },
-  { label: "Refurbished", href: "/#refurbished" },
+  { label: "Refurbished", href: "/search" },
 ] as const;
 
 export interface AccountNavigationItem {
@@ -39,7 +36,7 @@ export interface AccountNavigationItem {
 export const ACCOUNT_NAVIGATION: AccountNavigationItem[] = [
   { id: "orders", label: "Orders", icon: ReceiptText, href: ROUTES.orders },
   { id: "bids", label: "My Bids", icon: Gavel },
-  { id: "notifications", label: "Notifications", icon: Bell, href: ROUTES.notifications },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "reputation", label: "Reputation", icon: Star, href: ROUTES.reputation },
   { id: "profile", label: "Profile", icon: UserRound, href: ROUTES.profile },
   { id: "security", label: "Security", icon: LockKeyhole, href: ROUTES.security },

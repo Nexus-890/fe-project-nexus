@@ -10,20 +10,9 @@ export type OrderSummary = Pick<
   totalAmount: string;
   /** Awaiting #138: the delivered list DTO does not yet expose this field. */
   orderGroupId: string | null;
-  items?: OrderItem[];
 };
 
 export type OrderGroup = Pick<
   OrderGroupWireResponse,
   "orderGroupId" | "status" | "currency" | "dueAt"
 > & { totalAmount: string; orders: OrderSummary[] };
-
-export type OrderItem = Omit<components["schemas"]["OrderItem"], "unitPrice" | "totalPrice"> & {
-  unitPrice: string;
-  totalPrice: string;
-};
-export type OrderDetail = Omit<OrderWireResponse, "totalAmount" | "items"> & {
-  totalAmount: string;
-  items: OrderItem[];
-};
-export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];
