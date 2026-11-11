@@ -8,7 +8,7 @@ import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { useGuestCart } from "@/hooks/useGuestCart";
-import { formatVND } from "@/components/formatPrice";
+import { formatVND, formatVNDRange } from "@/components/formatPrice";
 import { getProduct, getProducts } from "@/service/catalogService";
 import ProductInformationTabs, { RatingStars } from "@/components/ProductInformationTabs";
 import ProductCard from "@/components/ProductCard";
@@ -112,6 +112,10 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const detail = product.data;
   const sku = selectedSku(detail.skus, selectedSkuId);
   const price = formatVND(sku?.price ?? null);
+  const priceRange =
+    detail.maxPrice !== null && Number(detail.minPrice) !== Number(detail.maxPrice)
+      ? formatVNDRange(detail.minPrice, detail.maxPrice)
+      : null;
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
   const handleAddToCart = async (buyNow = false) => {
@@ -189,6 +193,14 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
               {detail.name}
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-sm"><RatingStars /><strong>4.8</strong><span className="text-muted-foreground">126 sample reviews</span></div>
+            <p className="text-sm text-gray-800">
+              Price depends on the option you choose.
+            </p>
+            {priceRange !== null && (
+              <p data-testid="product-price-range" className="text-base font-semibold text-primary">
+                {priceRange}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-gradient-to-r from-primary-active to-primary p-3 text-primary-foreground"><span className="inline-flex items-center gap-2 text-sm font-medium"><Zap size={17} aria-hidden="true" />FLASH SALE PREVIEW</span><SampleSaleCountdown inverse /></div>

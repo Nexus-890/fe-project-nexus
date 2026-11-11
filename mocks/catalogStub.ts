@@ -24,6 +24,7 @@ export const getCatalogMockFetch = (path: string): typeof globalThis.fetch | und
       data = {
         ...product, status: "ACTIVE", categoryId: product.categoryId ?? "", sellerId: product.sellerId ?? "",
         minPrice: product.minPrice === null ? null : Number(product.minPrice),
+        maxPrice: product.maxPrice === null ? null : Number(product.maxPrice),
         skus: product.skus.map((sku) => ({ ...sku, price: Number(sku.price) })),
       };
     }

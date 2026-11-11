@@ -13,3 +13,13 @@ export const formatVND = (price: string | null): string | null => {
 
   return `${grouped}${decimal} ₫`;
 };
+
+export const formatVNDRange = (
+  minPrice: string | null,
+  maxPrice: string | null,
+): string | null => {
+  const min = formatVND(minPrice);
+  const max = formatVND(maxPrice);
+  if (min === null || max === null || Number(minPrice) === Number(maxPrice)) return min;
+  return `${min} – ${max}`;
+};

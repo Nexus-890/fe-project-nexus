@@ -10,6 +10,7 @@ export const mockProductDetail: ProductDetail = {
   name: "iPad Mini 2021 Starlight — Wi‑Fi, 64GB",
   slug: "ipad-mini-2021-starlight-00000004-1111-4111-8111-111111111111",
   minPrice: null,
+  maxPrice: null,
   categoryId: "00000010-1111-4111-8111-111111111111",
   sellerId: "00000080-1111-4111-8111-111111111111",
   status: "ACTIVE",

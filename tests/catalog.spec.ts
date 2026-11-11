@@ -175,7 +175,9 @@ test("category has only its products and responsive layout", async ({
   await page.goto("/categories/electronics");
   await expect(page.getByRole("article")).toHaveCount(2);
   await expect(page.getByRole("article").first()).toContainText("Product 1");
-  await expect(page.getByRole("article").first()).toContainText("150.000,50 ₫");
+  await expect(page.getByRole("article").first()).toContainText("150.000,50 ₫ – 175.000,00 ₫");
+  await expect(page.getByRole("article").nth(1).getByText("150.000,50 ₫", { exact: true })).toBeVisible();
+  await expect(page.getByRole("article").nth(1)).not.toContainText("–");
   await expect(
     page.getByRole("heading", { name: "Discover Nexus", exact: true }),
   ).toHaveCount(0);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Heart, Star } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlist";
-import { formatVND } from "./formatPrice";
+import { formatVND, formatVNDRange } from "./formatPrice";
 import Link from "next/link";
 import ProductImage from "./ProductImage";
 import { sortProductImages } from "./productImageUtils";
@@ -11,7 +11,7 @@ import { sortProductImages } from "./productImageUtils";
 import type { ProductSummary } from "@/types/catalogResponseType";
 
 export type ProductCardProps = {
-  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "images">;
+  product: Pick<ProductSummary, "id" | "name" | "slug" | "minPrice" | "images"> & Partial<Pick<ProductSummary, "maxPrice">>;
   /** Optional design preview until seller statistics and campaigns are delivered. */
   sampleDetails?: boolean;
 };
@@ -20,7 +20,10 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
   const watchlist = useWatchlist();
   const [localSaved, setLocalSaved] = useState(false);
   const saved = watchlist ? watchlist.contains(product.id) : localSaved;
-  const price = formatVND(product.minPrice);
+  const price =
+    product.maxPrice == null
+      ? formatVND(product.minPrice)
+      : formatVNDRange(product.minPrice, product.maxPrice);
   const firstImage = sortProductImages(product.images)[0];
 
   return (
@@ -47,7 +50,7 @@ export function ProductCard({ product, sampleDetails = false }: ProductCardProps
           </h3>
           {sampleDetails ? <span className="w-fit rounded-sm border border-orange-300 px-1.5 py-0.5 text-[10px] leading-4 text-primary">Free ship</span> : null}
           <p className={`m-0 min-h-12 leading-6 [overflow-wrap:anywhere] ${price === null ? "text-sm text-muted-foreground" : "text-base font-semibold tracking-[-0.02em] text-primary"}`}>
-            {price === null ? "Price unavailable" : <><span className="text-xs font-normal tracking-normal">from </span>{price}</>}
+            {price === null ? "Price unavailable" : <>{product.maxPrice == null && <span className="text-xs font-normal tracking-normal">from </span>}{price}</>}
           </p>
           {sampleDetails ? (
             <div className="mt-auto min-h-10 space-y-1 text-[11px] leading-4 text-muted-foreground">

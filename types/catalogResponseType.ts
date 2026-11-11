@@ -6,6 +6,7 @@ export type ProductDetailWireResponse = components["schemas"]["ProductDetail"];
 export type ProductSummary = Pick<ProductWireResponse, "id" | "name" | "slug"> &
   Partial<Pick<ProductWireResponse, "categoryId" | "sellerId">> & {
     minPrice: string | null;
+    maxPrice: string | null;
     status?: string;
     /** List media from #122; optional for older compatible list responses. */
     images?: ProductImage[];

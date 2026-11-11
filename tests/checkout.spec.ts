@@ -86,10 +86,13 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await expect(page.getByTestId(`checkout-item-${lineIds[0]}`)).toContainText("300.000,00 ₫");
   await expect(page.getByTestId(`checkout-item-${lineIds[1]}`)).toContainText("125.000,00 ₫");
   await expect(page.getByTestId("checkout-subtotal")).toHaveText("425.000,00 ₫");
+  await expect(page.getByText("Estimated total", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("checkout-total")).toHaveText("425.000,00 ₫");
   await expect(page.getByRole("main")).not.toContainText("999.999");
   expect((await evidence(request)).previews).toEqual([]);
   await destination(page);
   await expect(page.getByTestId("checkout-shipping")).toHaveText("30.000,00 ₫");
+  await expect(page.getByText("Total", { exact: true })).toBeVisible();
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await page.getByRole("button", { name: "Review address", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: /address.*ready/i })).toBeVisible();
