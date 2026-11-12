@@ -25,7 +25,7 @@ export const getCatalogMockFetch = (path: string): typeof globalThis.fetch | und
         ...product, status: "ACTIVE", categoryId: product.categoryId ?? "", sellerId: product.sellerId ?? "",
         minPrice: product.minPrice === null ? null : Number(product.minPrice),
         maxPrice: product.maxPrice === null ? null : Number(product.maxPrice),
-        skus: product.skus.map((sku) => ({ ...sku, price: Number(sku.price) })),
+        skus: product.skus.map((sku) => ({ ...sku, price: Number(sku.price), costPrice: undefined })),
       };
     }
     return new Response(JSON.stringify({ code: 0, message: "response success", data }), {

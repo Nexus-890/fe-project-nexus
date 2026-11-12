@@ -442,6 +442,8 @@ export interface components {
             /** @description Current persisted SKU status string, initially ACTIVE. This issue does not restrict the existing string column to a new enum. */
             status: string;
             shippingParcel?: components["schemas"]["ShippingParcel"];
+            /** @description Seller purchase cost for one unit. Returned only to the owning seller or an admin: on SKU create/update and on GET /api/v1/products/mine/{id}. Public reads omit it. Absent when the seller has not entered a cost. */
+            costPrice?: number;
         };
         /**
          * @description Seller supplied shipping-ready package for one SKU unit, measured in grams and centimetres. Null means the seller has not supplied verified measurements; checkout rejects missing measurements rather than inventing them.
@@ -466,6 +468,8 @@ export interface components {
             price: number;
             /** @description Optional verified package measurements for one SKU unit. Omitted or null on update preserves the existing measurements for older clients. A supplied object must contain all four valid measurements. */
             shippingParcel?: components["schemas"]["ShippingParcel"];
+            /** @description Optional purchase cost for one unit, zero or more; at most 17 integer and 2 fractional decimal digits. Stored numeric(19,2), private to the owner. It never changes the selling `price`. Omitted or null on update keeps the stored cost. */
+            costPrice?: number | null;
         };
         CreateCategoryResponse: {
             /**
