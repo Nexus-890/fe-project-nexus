@@ -14,6 +14,7 @@ for (const [name, output] of [
   // refresh-token cookie endpoints of the gateway (#252)
   ["api-gateway", "gatewayGeneratedType.ts"],
   ["payment-service", "paymentGeneratedType.ts"],
+  ["shipment-service", "shipmentGeneratedType.ts"],
 ]) {
   const spec = new URL(
     `../../be-project-nexus/docs/api/openapi/${name}.yaml`,

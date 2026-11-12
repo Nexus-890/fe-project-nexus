@@ -128,3 +128,28 @@ Review verification also passed all 253 FE unit tests, generated-type drift,
 lint, typecheck and production build. The unchanged unit suite had an initial
 cart-service worker failure, then all 253 passed on rerun. Existing Next security
 reminders required unchanged browser/build command retries.
+
+## Develop reconciliation — 2026-11-12
+
+Merged `origin/develop` at `8a2ff658`, including #206 shipment tracking. The task
+router retains both order-detail and shipment-tracking entries. The order page
+keeps cancellation/refund/error behavior alongside the incoming tracking card and
+its bounded polling policy. The commerce entity graphs and SQL regression remain
+unchanged.
+
+The local order-detail HTTP fixture now supplies the delivered successful empty
+shipment list for its orders, with explicit authenticated lookup/query evidence.
+It does not fabricate shipment tracking. The incoming shipment browser cases
+continue to verify populated history, clipboard, errors and stopped polling.
+
+Merge verification passed generated-type drift, lint, typecheck, 263 FE unit
+tests, 104 commerce tests on PostgreSQL 18.6, all 55 general browser scenarios
+and the isolated production build. The delivered controller/OpenAPI inventory
+matched all 94 operations. Build startup required an unchanged retry after the
+existing Next security reminder.
+
+The focused suite passed 37/38: all 17 detail and 11 shipment cases passed.
+The unchanged list-401 scenario still failed its known exact request-count
+assertion (expected two, received three), including one unchanged targeted rerun;
+its visible error/sign-in checks passed. That limitation is recorded without
+altering the test. The general suite intentionally skips the 38 focused cases.

@@ -85,9 +85,13 @@ test("list opens a snapshot with lines, total, status and history on desktop and
   await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("To Pay");
   await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Order created from cart");
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
+  await expect(page.getByText("Checking shipping updates…", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   const calls = await evidence(request);
   expect(calls.details).toContainEqual({ method: "GET", orderId: pendingId, authorized: true });
   expect(calls.histories).toContainEqual({ method: "GET", orderId: pendingId, authorized: true });
+  expect(calls.shipments).toContainEqual({ method: "GET", orderId: pendingId, authorized: true, page: "0", size: "1" });
   await assertNoOverflow(page);
   await capture(page, info, "order-detail-desktop-1440.png");
   await page.setViewportSize({ width: 375, height: 812 });

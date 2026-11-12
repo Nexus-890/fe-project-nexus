@@ -31,7 +31,7 @@ const initialHistories = () => Object.fromEntries(initialOrders().map((entry, in
   ...(entry.status === "PENDING" ? [] : [historyEntry(entry, index * 10 + 2, "PENDING", entry.status,
     entry.status === "PAID" ? "Payment confirmed" : "Changed my mind")]),
 ]]));
-const initialEvidence = () => ({ reads: [], details: [], histories: [], cancellations: [], rejected: 0 });
+const initialEvidence = () => ({ reads: [], details: [], histories: [], cancellations: [], shipments: [], rejected: 0 });
 // Detail/history refetches run together. Serialize read/modify/write evidence so
 // one endpoint cannot overwrite another endpoint's recorded request.
 let evidenceQueue = Promise.resolve();
@@ -121,6 +121,19 @@ const server = http.createServer(async (req, res) => {
     return forward(req, res, Number(process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || 3913), `/api${req.url}`);
   if (url.pathname === "/v1/categories/tree" || url.pathname === "/v1/products")
     return forward(req, res, Number(process.env.NEXUS_TEST_API_PORT || 3911), `/api${req.url}`);
+  if (url.pathname === "/v1/shipments" && req.method === "GET") {
+    const authorized = /^Bearer .+/.test(req.headers.authorization || "");
+    const orderId = url.searchParams.get("orderId");
+    await recordEvidence("shipments", { method: req.method, orderId, authorized,
+      page: url.searchParams.get("page"), size: url.searchParams.get("size") });
+    if (!authorized) return problem(res, 401, "SHIPMENT_UNAUTHENTICATED", "Sign in to view shipment updates.");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId || "") ||
+      url.searchParams.get("page") !== "0" || url.searchParams.get("size") !== "1")
+      return problem(res, 400, "SHIPMENT_INVALID_PARAMETER", "The fixture expects a valid orderId, page 0 and size 1.");
+    // These order snapshots have no visible shipment. A successful empty list
+    // models the delivered ownership-filtered read without a tracking fallback.
+    return json(res, success([], { number: 0, size: 1, totalElements: 0, totalPages: 0 }));
+  }
   if (url.pathname === "/v1/orders" && req.method === "GET") {
     const authorized = /^Bearer .+/.test(req.headers.authorization || "");
     await recordEvidence("reads", { method: req.method, status: url.searchParams.get("status"), page: url.searchParams.get("page"), size: url.searchParams.get("size"), authorized });

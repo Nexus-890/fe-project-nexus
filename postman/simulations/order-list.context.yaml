@@ -3,7 +3,9 @@ purpose:
     The buyer order-list, detail, history and cancellation HTTP endpoints using
     the delivered envelope, pagination and OrderResponse fields. The current
     worktree adds the server-computed canCancel contract. Auth and public catalog
-    calls forward to the repository's existing OIDC and catalog fixtures. This is a local mock;
+    calls forward to the repository's existing OIDC and catalog fixtures. An
+    ownership-filtered empty shipment read keeps these order snapshots compatible
+    with the merged shipment-tracking page. This is a local mock;
     published owner mocks were not searched because the installed CLI does
     not provide the skill's postman status command.
   unblocks: >-
@@ -223,6 +225,44 @@ assumptions:
       Playwright forbidden-request-outcomes attachment and trace.zip;
       test-results/order-list-simulation.ndjson
     updated_at: '2026-11-12'
+  - id: merged-shipment-empty-read
+    status: supported
+    claim: >-
+      In the merged local order-detail scenarios, an authenticated successful
+      empty shipment list hides tracking without introducing a shipping error.
+    reason: >-
+      Develop's shipment controller and OpenAPI describe the protected list
+      envelope with sibling pagination. The merged detail page now performs
+      that initial lookup for each visible order; the older order stand-in
+      did not model it and would return 501. The fixture now answers the exact
+      orderId/page=0/size=1 read with data=[], number=0, size=1 and zero totals,
+      recording auth/query evidence. It does not invent a shipment or tracking
+      history. The existing upstream shipment browser cases keep their explicit
+      route fixtures for active/history/error/polling behavior.
+    verification: >-
+      On 2026-11-12 at fingerprint order-detail-develop-merge-8a2ff658,
+      ran the focused merged browser config with tracing on isolated
+      app/API/OIDC/order ports 3128/3931/3933/3934 and .next-orders-develop-merge.
+      The run passed 37 of 38 cases in 2.5 minutes: all 17 detail cases, all
+      11 shipment cases and nine existing list cases. The list-to-detail case
+      asserts an authenticated shipment lookup with exact paging and no tracking
+      card or alert. NDJSON recorded 18 shipment GETs, all HTTP 200 with empty
+      lists. Shipment screenshots at 375x812 and 1440px were visually inspected.
+      The unchanged list-401 test failed its known exact received-request count,
+      expecting two GETs and receiving three, then failed the same assertion on
+      one unchanged targeted rerun. Its visible sign-in/error assertions passed;
+      it was not changed as part of the merge. The subsequent general browser
+      regression suite passed all 55 cases in 3.8 minutes, intentionally skipping
+      these 38 focused order/shipment cases. Browser startup required unchanged
+      retries after the existing Next security reminder. This is a local fixture result,
+      not a live shipment, gateway or carrier integration check.
+    source: >-
+      tests/order-detail.spec.ts; tests/orders.spec.ts;
+      postman/mocks/order-list-api/default.js; playwright.orders.config.ts;
+      ../be-project-nexus/shipment-service/src/main/java/com/group5/shipmentservice/shipping/controller/ShipmentController.java;
+      ../be-project-nexus/docs/api/openapi/shipment-service.yaml;
+      test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-12'
 fingerprints:
   - id: order-list-154
     date: '2026-11-04'
@@ -244,3 +284,7 @@ fingerprints:
     date: '2026-11-12'
     commit: 'b2e8c2e6 with uncommitted review corrections; browser lifecycle changes affect tests only'
     cli: 'Postman 1.73.0; local Next dev, Chrome and real HTTP Postman simulation'
+  - id: order-detail-develop-merge-8a2ff658
+    date: '2026-11-12'
+    commit: '806b9bc2 merged with origin/develop 8a2ff658; uncommitted merge and minimal empty-shipment fixture changes'
+    cli: 'Postman 1.73.0; local Next dev, Chrome and HTTP Postman order simulation'
