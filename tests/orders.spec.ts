@@ -134,6 +134,18 @@ test("three orders display number, date, total and status with only pending paym
   await expect(pay).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   expect((await evidence(request)).reads).toContainEqual({ method: "GET", status: null, page: "0", size: "10", authorized: true });
   await capture(page, info, "orders-desktop-1440.png");
+  const breakdownFits = () => pendingTotal.locator("dl").evaluate((list) => {
+    const box = list.getBoundingClientRect(), cell = list.closest("td")!.getBoundingClientRect();
+    return { page: document.documentElement.scrollWidth <= innerWidth, list: list.scrollWidth <= list.clientWidth,
+      inCell: box.left >= cell.left - 1 && box.right <= cell.right + 1, onScreen: box.right <= innerWidth };
+  });
+  const fits = { page: true, list: true, inCell: true, onScreen: true };
+  for (const width of [375, 320]) {
+    await page.setViewportSize({ width, height: 812 });
+    await expect(pendingTotal.getByTestId("order-breakdown-items")).toBeVisible();
+    expect(await breakdownFits()).toEqual(fits);
+    await capture(page, info, `orders-mobile-breakdown-${width}x812.png`);
+  }
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await capture(page, info, "orders-mobile-375x812.png");
