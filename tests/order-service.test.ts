@@ -180,7 +180,7 @@ test("order detail and history read snapshot fields through protected HTTP, canc
     for await (const chunk of request) body += chunk;
     requests.push({ method: request.method, path: request.url ?? "", auth: request.headers.authorization, body });
     response.writeHead(200, { "Content-Type": "application/json" });
-    const data = request.url?.endsWith("/history") ? [entry] : request.url?.endsWith("/cancel") ? { orderGroupId, status: "CANCELED", totalAmount: 150000, currency: "VND", dueAt: order.createdAt, orders: [{ ...order, status: "CANCELED" }] } : { ...order, totalAmount: 150000, items: [item] };
+    const data = request.url?.endsWith("/history") ? [entry] : request.url?.endsWith("/cancel") ? { orderGroupId, status: "CANCELED", totalAmount: 150000, currency: "VND", dueAt: order.createdAt, orders: [{ ...order, status: "CANCELED" }] } : { ...order, canCancel: true, totalAmount: 150000, items: [item] };
     response.end(JSON.stringify({ code: 0, message: "response success", data }));
   });
   const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "current-private-token" };
@@ -189,6 +189,7 @@ test("order detail and history read snapshot fields through protected HTTP, canc
     assert.equal(result.items[0].productName, "Snapshot product");
     assert.equal(result.items[0].unitPrice, "75000.00");
     assert.equal(result.items[0].totalPrice, "150000.00");
+    assert.equal(result.canCancel, true);
     assert.deepEqual(await getOrderHistory(orderId, { context }), [entry]);
     assert.equal((await cancelOrder(orderId, "  Changed my mind  ", { context })).orders[0].status, "CANCELED");
     assert.deepEqual(requests.map(({ method, path, auth }) => ({ method, path, auth })), [
@@ -197,6 +198,87 @@ test("order detail and history read snapshot fields through protected HTTP, canc
       { method: "POST", path: `/api/v1/orders/${orderId}/cancel`, auth: "Bearer current-private-token" },
     ]);
     assert.deepEqual(JSON.parse(requests[2].body), { reason: "Changed my mind" });
+  } finally { await close(server); }
+});
+
+test("order cancellation eligibility requires an explicit backend boolean and old responses fail closed", () => {
+  assert.equal(parseOrderDetail({ ...order, canCancel: true }).canCancel, true);
+  assert.equal(parseOrderDetail({ ...order, canCancel: false }).canCancel, false);
+  assert.equal(parseOrderDetail({ ...order, status: "PAID", canCancel: false }).canCancel, false);
+  assert.equal(parseOrderDetail(order).canCancel, false);
+  assert.equal(parseOrderDetail({ ...order, status: "PAID" }).canCancel, false);
+  for (const canCancel of [null, "true", "false", 0, 1, {}, []])
+    assert.throws(() => parseOrderDetail({ ...order, canCancel }), invalidResponse);
+});
+
+test("historical timeline entries allow null reason and actor while rejecting malformed metadata", async () => {
+  const entry = { id: "80000000-0000-4000-8000-000000000001", changedBy: null, previousStatus: "PAID",
+    newStatus: "CANCELED", reason: null, createdAt: order.createdAt };
+  let data: unknown = [entry];
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ code: 0, message: "response success", data }));
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "current-private-token" };
+  try {
+    assert.deepEqual(await getOrderHistory(orderId, { context }), [entry]);
+    for (const invalid of [
+      { ...entry, reason: 42 }, { ...entry, reason: undefined },
+      { ...entry, changedBy: "system" }, { ...entry, changedBy: undefined },
+      { ...entry, newStatus: "UNKNOWN" }, { ...entry, createdAt: "not-a-date" },
+    ]) {
+      data = [invalid];
+      await assert.rejects(getOrderHistory(orderId, { context }), invalidResponse);
+    }
+  } finally { await close(server); }
+});
+
+test("foreign order detail and history preserve the backend 403 message without retrying", async () => {
+  const seen: string[] = [];
+  const detail = "You do not have access to this order";
+  const server = createServer((request, response) => {
+    seen.push(request.url ?? "");
+    response.writeHead(403, { "Content-Type": "application/problem+json" });
+    response.end(JSON.stringify({ title: "Forbidden", status: 403, code: "COMMERCE_FORBIDDEN", detail }));
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "current-private-token" };
+  const forbidden = (error: unknown) => {
+    assert.ok(isApiError(error));
+    assert.equal(error.status, 403);
+    assert.equal(error.code, "COMMERCE_FORBIDDEN");
+    assert.equal(error.detail, detail);
+    return true;
+  };
+  try {
+    await assert.rejects(getOrder(orderId, { context }), forbidden);
+    await assert.rejects(getOrderHistory(orderId, { context }), forbidden);
+    assert.deepEqual(seen, [`/api/v1/orders/${orderId}`, `/api/v1/orders/${orderId}/history`]);
+  } finally { await close(server); }
+});
+
+test("a stale cancellation returns its 409 message after one POST with no automatic retry", async () => {
+  const seen: Array<{ method?: string; path?: string; auth?: string; body: string }> = [];
+  const detail = "Order is SHIPPED and can no longer be cancelled";
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    seen.push({ method: request.method, path: request.url, auth: request.headers.authorization, body });
+    response.writeHead(409, { "Content-Type": "application/problem+json" });
+    response.end(JSON.stringify({ title: "Conflict", status: 409, code: "ORDER_NOT_CANCELLABLE", detail }));
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "current-private-token" };
+  try {
+    await assert.rejects(cancelOrder(orderId, "  Changed my mind  ", { context }), (error: unknown) => {
+      assert.ok(isApiError(error));
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "ORDER_NOT_CANCELLABLE");
+      assert.equal(error.detail, detail);
+      return true;
+    });
+    assert.deepEqual(seen, [{
+      method: "POST", path: `/api/v1/orders/${orderId}/cancel`, auth: "Bearer current-private-token",
+      body: JSON.stringify({ reason: "Changed my mind" }),
+    }]);
   } finally { await close(server); }
 });
 

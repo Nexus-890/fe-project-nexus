@@ -716,6 +716,8 @@ export interface components {
             /** @enum {string} */
             orderType: "STANDARD" | "AUCTION";
             status: components["schemas"]["OrderStatus"];
+            /** @description Cancellation eligibility for the current caller: ORDER.CANCEL and ownership (or ADMIN/SUPPORT_STAFF), and either PAID or PENDING in a PENDING group. This is a read-time snapshot; cancellation rechecks locked state and can return 409. Missing on older backends must be treated as false. */
+            canCancel: boolean;
             /** Format: date-time */
             createdAt: string;
             /** @description Sum of stored item line totals. */
@@ -749,9 +751,13 @@ export interface components {
             /** @enum {string|null} */
             previousStatus: "PENDING" | "PAID" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELED" | "REFUND_REQUESTED" | "REFUNDED" | null;
             newStatus: components["schemas"]["OrderStatus"];
-            reason: string;
-            /** Format: uuid */
-            changedBy: string;
+            /** @description May be unavailable for historical or system-generated history. */
+            reason: string | null;
+            /**
+             * Format: uuid
+             * @description May be unavailable for historical or system-generated history.
+             */
+            changedBy: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -2973,6 +2979,7 @@ export interface operations {
                      *             "sellerId": "68000000-0000-4000-8000-000000000003",
                      *             "orderType": "STANDARD",
                      *             "status": "PENDING",
+                     *             "canCancel": true,
                      *             "createdAt": "2026-11-11T08:00:00Z",
                      *             "subtotal": 300000,
                      *             "shippingFee": 30000,

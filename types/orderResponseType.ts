@@ -26,6 +26,7 @@ export type OrderDetail = OrderSummary & Pick<
   OrderWireResponse, "userId" | "sellerId" | "orderType"
 > & {
   items: OrderDetailItem[];
+  canCancel: boolean;
 };
 
 export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];

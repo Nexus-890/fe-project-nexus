@@ -1,5 +1,44 @@
 # Frontend HTTP simulations
 
+## Buyer order detail and cancellation
+
+```powershell
+npm run test:browser -- --config playwright.orders.config.ts
+```
+
+The focused suite starts the real Next.js application, the existing OIDC/catalog
+fixtures and the local Postman `order-list.sim.yaml` HTTP dependency. It now runs
+both `tests/orders.spec.ts` and `tests/order-detail.spec.ts`; production code never
+selects these mocks. The shared cart shell remains separately stubbed by the browser.
+
+The order stand-in follows `OrderController`, `OrderService`, `OrderResponse` and
+the delivered commerce OpenAPI on `develop` at `4f083ee0`, including the working-tree
+`canCancel` addition. Detail, history and cancellation requests go over real HTTP,
+with the shared Bearer/envelope/Problem Details handling. False or missing `canCancel`
+must hide the cancellation action. Cancellation returns a group while the detail
+and timeline refresh independently. The fixture models one order per group; it
+does not establish multi-order cancellation behavior.
+
+Test-only `/api/test/reset`, `/api/test/order`, `/api/test/detail-mode` and
+`/api/test/evidence` control state, inject failures and record calls. The paid-refund
+scenario advances state explicitly to exercise Awaiting refund, Refund requested
+and Refunded without claiming that Kafka or a payment provider delivered an event.
+These controls exist only in the local mock. Unmodeled endpoints return 501.
+
+On 2026-11-12, all 27 focused cases passed (17 detail and 10 list). They cover
+list-to-detail lines/total/status/history, permitted and withheld cancellation,
+pending and paid cancellation, refund refresh, 409 feedback with refreshed
+eligibility, foreign-order 403, independent read recovery and responsive layout.
+Screenshots and traces are generated under ignored `test-results`; request events
+are in `test-results/order-list-simulation.ndjson`. The simulation context preserves
+contract evidence and integration limits in `simulations/order-list.context.yaml`.
+After the final cart-cache and receipt adjustments, the two cancellation cases
+passed again, including an assertion that cancellation refreshes the cart header.
+The local mock was reused; the installed Postman 1.73.0 has no `postman status`
+command, so an owner's published mock was not searched. This validates frontend
+behavior against local stand-ins; deployed backend, authorization, asynchronous
+refund delivery and production Keycloak remain separate integration checks.
+
 ## Notification read-status verification
 
 This local simulation models notification reads from the delivered OpenAPI and

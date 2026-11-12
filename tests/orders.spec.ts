@@ -260,48 +260,6 @@ test("active shipment polling reads only tracking and stops when delivery is con
   await expect(region.getByRole("list", { name: "Shipment status history" }).getByRole("listitem")).toHaveCount(3);
 });
 
-test("buyer opens an order snapshot, reads history and cancels with a reason", async ({ page }) => {
-  let canceled = false;
-  let reason: unknown;
-  const createdAt = "2026-09-29T10:30:00+07:00";
-  const snapshot = () => ({
-    orderId: pendingId, orderNumber: "NX-260929-DETAIL", orderGroupId: pendingGroupId,
-    userId: "68000000-0000-4000-8000-000000000003", sellerId: "69000000-0000-4000-8000-000000000001",
-    orderType: "STANDARD", status: canceled ? "CANCELED" : "PENDING", createdAt, totalAmount: 150000,
-    items: [{ orderItemId: "69000000-0000-4000-8000-000000000011", productId: "69000000-0000-4000-8000-000000000012", skuId: "69000000-0000-4000-8000-000000000013", productName: "Purchased product snapshot", skuCode: "WHITE-M", imageUrl: null, quantity: 2, unitPrice: 75000, totalPrice: 150000 }],
-  });
-  const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
-  await page.route(`**/api/v1/orders/${pendingId}`, (route) => {
-    expect(route.request().headers().authorization).toMatch(/^Bearer /);
-    return route.fulfill({ json: envelope(snapshot()) });
-  });
-  await page.route(`**/api/v1/orders/${pendingId}/history`, (route) => route.fulfill({ json: envelope([
-    { id: "69000000-0000-4000-8000-000000000014", changedBy: "68000000-0000-4000-8000-000000000003", previousStatus: null, newStatus: "PENDING", reason: "Order created", createdAt },
-    ...(canceled ? [{ id: "69000000-0000-4000-8000-000000000015", changedBy: "68000000-0000-4000-8000-000000000003", previousStatus: "PENDING", newStatus: "CANCELED", reason: "Changed my mind", createdAt }] : []),
-  ]) }));
-  await page.route(`**/api/v1/orders/${pendingId}/cancel`, (route) => {
-    expect(route.request().method()).toBe("POST");
-    expect(route.request().headers().authorization).toMatch(/^Bearer /);
-    reason = route.request().postDataJSON();
-    canceled = true;
-    return route.fulfill({ json: envelope({ orderGroupId: pendingGroupId, status: "CANCELED", currency: "VND", totalAmount: 150000, dueAt: createdAt, orders: [snapshot()] }) });
-  });
-  await signIn(page);
-  await rows(page).filter({ has: page.locator(`a[href="/order/${pendingId}"]`) }).getByRole("link").first().click();
-  await expect(page.getByRole("heading", { name: "Order NX-260929-DETAIL", exact: true })).toBeVisible();
-  await expect(page.getByText("Purchased product snapshot", { exact: true })).toBeVisible();
-  await expect(page.getByText("Order created", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
-  await page.getByRole("button", { name: "Cancel order", exact: true }).click();
-  await page.getByLabel("Why do you want to cancel?", { exact: true }).fill("  Changed my mind  ");
-  await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Your cancellation request was processed." })).toBeVisible();
-  await expect(page.getByText("Changed my mind", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveCount(0);
-  expect(reason).toEqual({ reason: "Changed my mind" });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-});
-
 test("signed-out orders do not request private data", async ({ page, request }) => {
   await page.goto("/orders?status=PENDING");
   await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();

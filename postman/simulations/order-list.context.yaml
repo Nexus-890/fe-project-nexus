@@ -1,14 +1,17 @@
 purpose:
   stands_in_for: >-
-    The buyer order-list HTTP endpoint using develop's delivered envelope,
-    pagination and OrderResponse fields, plus the orderGroupId field required
-    by #154 and pending BE #138. Auth and public catalog calls forward to the
-    repository's existing OIDC and catalog fixtures. This is a local mock;
+    The buyer order-list, detail, history and cancellation HTTP endpoints using
+    the delivered envelope, pagination and OrderResponse fields. The current
+    worktree adds the server-computed canCancel contract. Auth and public catalog
+    calls forward to the repository's existing OIDC and catalog fixtures. An
+    ownership-filtered empty shipment read keeps these order snapshots compatible
+    with the merged shipment-tracking page. This is a local mock;
     published owner mocks were not searched because the installed CLI does
     not provide the skill's postman status command.
   unblocks: >-
     Focused browser verification of /orders, URL filters, paging, empty/error
-    states, payment destination selection and mobile layout without a live backend.
+    states, payment destination selection, detail lines/status/history, cancellation,
+    refund progress and mobile layout without a live backend.
 assumptions:
   - id: delivered-list-contract
     status: supported
@@ -33,13 +36,18 @@ assumptions:
       Task #154 requires this field and explicitly permits a mock until #138
       merges. Develop's OrderResponse and delivered list schema omit it.
       The fixture adds it only to exercise the requested payment destination.
+      This was the 2026-11-04 source state. At order-detail-history-cancel-20261112,
+      develop now delivers orderGroupId in OrderResponse and OpenAPI; runtime
+      availability remains unknown because no live backend was exercised.
     verification: >-
       On 2026-11-04 source inspection confirmed the missing field. Pending
       payment links require the compatible #138 backend contract before live use.
+      On 2026-11-12 inspected the newer delivered source and confirmed the field
+      is now present. The local browser uses distinct group and order IDs.
     source: >-
       ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/dto/response/OrderResponse.java;
       postman/mocks/order-list-api/default.js; task #154 acceptance criteria
-    updated_at: '2026-11-04'
+    updated_at: '2026-11-12'
   - id: simulated-order-list-caller
     status: supported
     claim: >-
@@ -105,6 +113,156 @@ assumptions:
       recorded the list requests with successful and rejected responses.
     source: tests/orders.spec.ts; features/OrdersPage.tsx; features/useOrders.ts
     updated_at: '2026-11-06'
+  - id: order-detail-cancellation-contract
+    status: supported
+    claim: >-
+      The working-tree order DTO exposes canCancel as a snapshot of caller
+      privilege, ownership/management role and order/group state. Pending
+      cancellation affects an unpaid group; paid cancellation affects one order.
+    reason: >-
+      OrderService and the updated delivered OpenAPI agree on ORDER.CANCEL,
+      buyer/Admin/Support access, PAID eligibility and PENDING eligibility only
+      when the group is PENDING. Cancellation locks and rechecks state, so a
+      previously eligible snapshot may still receive a 409.
+    verification: >-
+      On 2026-11-12 inspected OrderResponse, OrderService, OrderController and
+      the working-tree OpenAPI at fingerprint order-detail-history-cancel-20261112.
+      This records source behavior; it does not establish a deployed service.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/dto/response/OrderResponse.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/service/OrderService.java;
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/controller/OrderController.java;
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml
+    updated_at: '2026-11-12'
+  - id: simulated-order-detail-caller
+    status: supported
+    claim: >-
+      In the modeled scenarios, the real frontend opens order detail from the
+      list, displays immutable lines/total/status/history, follows canCancel,
+      handles cancellation and 403/409 messages, and refreshes refund progress.
+    reason: >-
+      The real Next.js app and shared HTTP client used the local Postman mock
+      for the order endpoints. Browser assertions checked rendered results and
+      recorded authenticated requests, including exactly one POST per cancellation.
+    verification: >-
+      On 2026-11-12 ran npm run test:browser -- --config playwright.orders.config.ts
+      at fingerprint order-detail-history-cancel-20261112: all 27 tests passed in
+      1.1 minutes (17 detail and 10 existing list cases). Covered list-to-detail
+      navigation; private-read suppression while signed out; pending cancellation
+      with trimmed reason and detail/history/list refresh; PAID cancellation
+      followed by Awaiting refund, REFUND_REQUESTED and REFUNDED via explicit
+      test-only state advancement and manual refresh; hidden actions for all
+      terminal states and for false/missing canCancel; a stale eligibility 409
+      preserving its message and refreshing the snapshot; a foreign-order 403
+      without a history read or retry button; independent history and detail
+      recovery; and desktop/mobile layout. The NDJSON contains 90 non-OPTIONS
+      order requests: successful detail/history reads, two cancel POST 200s,
+      one cancel POST 409, one detail 403, one history 503, and list/detail error
+      reads. Desktop 1440px, mobile 375x812, refund and 403 captures were visually
+      inspected with no clipping. Initial browser startup rejected a cross-volume
+      node_modules junction; copying dependencies locally resolved it. An existing
+      Next reminder stopped one startup; the unchanged final command continued.
+      The earlier run had three unscoped alert-selector failures caused by Next's
+      route announcer; scoping the assertions to main fixed the tests. After
+      adding cart invalidation and removing a duplicated terminal-status badge,
+      reran only pending and paid cancellation: 2 passed in 22.5 seconds. The
+      pending case now observes a fresh cart GET after cancellation. A fixture
+      evidence read/modify/write race initially lost a history record even though
+      the NDJSON and rendered history showed both reads; serializing evidence
+      writes fixed the fixture bookkeeping. The updated refund screenshot was
+      visually inspected. No live
+      service, real privilege enforcement, Kafka refund delivery, refund timing,
+      multi-order group cancellation or production Keycloak behavior is inferred.
+    source: >-
+      tests/order-detail.spec.ts; tests/orders.spec.ts; playwright.orders.config.ts;
+      postman/mocks/order-list-api/default.js; test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-12'
+  - id: simulated-forbidden-request-lifecycle
+    status: supported
+    claim: >-
+      In the repeated local Next development scenarios, a cancelled initial
+      detail transport can reach the stand-in before the replayed mount request.
+      The revised 403 check distinguishes this from an HTTP retry after 403.
+    reason: >-
+      The original assertion counted every request received by the stand-in as
+      a completed request. Browser traces show an aborted initial request with
+      no response followed by exactly one completed 403. Whether the cancelled
+      attempt reaches the stand-in depends on timing. The test now requires
+      exactly one completed 403, allows only explicitly observed ERR_ABORTED
+      attempts before that response, rejects requests started after 403, and
+      bounds the stand-in count by completed plus explicitly aborted attempts.
+      All received requests must still match the authorized foreign-order GET,
+      history must remain unread, and the visible error/navigation/overflow
+      checks are preserved. Production HTTP and fixture behavior are unchanged.
+    verification: >-
+      On 2026-11-12 at fingerprint order-detail-browser-lifecycle-review,
+      repeated the unchanged foreign-order browser test six times with tracing:
+      four passed and two failed only its exact stand-in-count assertion, which
+      observed two GETs instead of one. Both failures had one cancelled browser
+      transport and one completed 403; the UI checks passed. After correcting
+      the test, all ten repeated runs passed in 1.2 minutes. Every run's
+      forbidden-request-outcomes attachment records one net::ERR_ABORTED attempt
+      followed by one completed 403, with no request started after that response.
+      In those ten runs the stand-in received only the completed request. This
+      is the measured local failure, not a claim to reproduce the reviewer's
+      separately reported failure frequency. A full-suite run also exposed the
+      same initial cancellation in the detail-503/manual-retry test: the trace
+      had an aborted transport, a completed 503 and a completed 200. That test
+      now requires exactly one additional GET after its explicit Retry action,
+      relative to the observed failed-read baseline; history remains unread
+      until recovery. After both test corrections, the whole focused order
+      suite passed all 27 cases in 1.2 minutes with tracing enabled, including
+      the unchanged order-list 401 case. The repeated and final runs used
+      isolated app/API/OIDC/order ports 3118/3921/3923/3924 and dist directory
+      .next-orders-flake after pre-existing default-port fixture collisions.
+      Existing Next security reminders interrupted some server startups; those
+      connection-refused runs did not establish application behavior and the
+      unchanged commands were retried. The unrelated existing order-list 401
+      test was not changed or independently investigated here.
+    source: >-
+      tests/order-detail.spec.ts; playwright.orders.config.ts;
+      postman/mocks/order-list-api/default.js;
+      Playwright forbidden-request-outcomes attachment and trace.zip;
+      test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-12'
+  - id: merged-shipment-empty-read
+    status: supported
+    claim: >-
+      In the merged local order-detail scenarios, an authenticated successful
+      empty shipment list hides tracking without introducing a shipping error.
+    reason: >-
+      Develop's shipment controller and OpenAPI describe the protected list
+      envelope with sibling pagination. The merged detail page now performs
+      that initial lookup for each visible order; the older order stand-in
+      did not model it and would return 501. The fixture now answers the exact
+      orderId/page=0/size=1 read with data=[], number=0, size=1 and zero totals,
+      recording auth/query evidence. It does not invent a shipment or tracking
+      history. The existing upstream shipment browser cases keep their explicit
+      route fixtures for active/history/error/polling behavior.
+    verification: >-
+      On 2026-11-12 at fingerprint order-detail-develop-merge-8a2ff658,
+      ran the focused merged browser config with tracing on isolated
+      app/API/OIDC/order ports 3128/3931/3933/3934 and .next-orders-develop-merge.
+      The run passed 37 of 38 cases in 2.5 minutes: all 17 detail cases, all
+      11 shipment cases and nine existing list cases. The list-to-detail case
+      asserts an authenticated shipment lookup with exact paging and no tracking
+      card or alert. NDJSON recorded 18 shipment GETs, all HTTP 200 with empty
+      lists. Shipment screenshots at 375x812 and 1440px were visually inspected.
+      The unchanged list-401 test failed its known exact received-request count,
+      expecting two GETs and receiving three, then failed the same assertion on
+      one unchanged targeted rerun. Its visible sign-in/error assertions passed;
+      it was not changed as part of the merge. The subsequent general browser
+      regression suite passed all 55 cases in 3.8 minutes, intentionally skipping
+      these 38 focused order/shipment cases. Browser startup required unchanged
+      retries after the existing Next security reminder. This is a local fixture result,
+      not a live shipment, gateway or carrier integration check.
+    source: >-
+      tests/order-detail.spec.ts; tests/orders.spec.ts;
+      postman/mocks/order-list-api/default.js; playwright.orders.config.ts;
+      ../be-project-nexus/shipment-service/src/main/java/com/group5/shipmentservice/shipping/controller/ShipmentController.java;
+      ../be-project-nexus/docs/api/openapi/shipment-service.yaml;
+      test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-12'
 fingerprints:
   - id: order-list-154
     date: '2026-11-04'
@@ -118,3 +276,15 @@ fingerprints:
     date: '2026-11-06'
     commit: 'c40ae3e3 merged with resolved payment polling b7c923a5 and additive list/group reconciliation'
     cli: 'Installed Postman CLI'
+  - id: order-detail-history-cancel-20261112
+    date: '2026-11-12'
+    commit: '4f083ee0 with uncommitted order-detail frontend/backend/contract/test changes'
+    cli: 'Postman 1.73.0; postman status is unavailable in this installed version'
+  - id: order-detail-browser-lifecycle-review
+    date: '2026-11-12'
+    commit: 'b2e8c2e6 with uncommitted review corrections; browser lifecycle changes affect tests only'
+    cli: 'Postman 1.73.0; local Next dev, Chrome and real HTTP Postman simulation'
+  - id: order-detail-develop-merge-8a2ff658
+    date: '2026-11-12'
+    commit: '806b9bc2 merged with origin/develop 8a2ff658; uncommitted merge and minimal empty-shipment fixture changes'
+    cli: 'Postman 1.73.0; local Next dev, Chrome and HTTP Postman order simulation'

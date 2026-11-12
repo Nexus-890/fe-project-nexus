@@ -12,6 +12,7 @@
 | [Place order](place-order.md) | Idempotency key reuse, price confirmation, stock feedback and payment handoff |
 | [Notifications](notifications.md) | Header unread count/latest ten, single-read/mark-all actions, list/count refetch and session isolation |
 | [Order list](order-list.md) | Buyer orders, URL status/paging, status badges and pending group-payment links; mock evidence while #138 and the payment route are pending |
+| [Order detail](order-detail.md) | Purchased items, current status/history, backend-controlled cancellation, refund status and visible authorization errors |
 | [Shipment tracking](shipment-tracking.md) | Carrier, copyable tracking code and persisted shipment history on the order detail page; successful empty shipment lookup hides the card |
 
 These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Payment execution, carrier booking, auction bidding and forgotten-password recovery are outside the current frontend implementation scope. Authentication tokens stay in memory; reload restoration uses the provider's SSO session.
