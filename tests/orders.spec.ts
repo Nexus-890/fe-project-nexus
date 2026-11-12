@@ -87,6 +87,13 @@ test("buyer opens an order snapshot, reads history and cancels with a reason", a
   await expect(page.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
   await expect(page.getByTestId("order-breakdown-discount")).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "Order receipt" })).toContainText("170.900,00 ₫");
+  const receiptTotal = page.getByRole("complementary", { name: "Order receipt" }).getByTestId("order-receipt-total");
+  await expect(receiptTotal).toHaveText("Total170.900,00 ₫");
+  expect(await receiptTotal.evaluate((total) => {
+    const items = document.querySelector('[data-testid="order-breakdown-items"]');
+    return items !== null && Boolean(total.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })).toBe(true);
+  await expect(page.getByTestId("order-breakdown-items")).toHaveClass(/text-muted-foreground/);
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   await page.getByRole("button", { name: "Cancel order", exact: true }).click();
   await page.getByLabel("Why do you want to cancel?", { exact: true }).fill("  Changed my mind  ");

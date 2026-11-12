@@ -3,7 +3,7 @@ import type { OrderPriceBreakdown as Breakdown } from "../types/orderResponseTyp
 
 const isZero = (amount: string) => Number(amount) === 0;
 
-export function OrderPriceRows({ breakdown, compact = false }: { breakdown: Breakdown; compact?: boolean }) {
+export function OrderPriceRows({ breakdown, muted = false }: { breakdown: Breakdown; muted?: boolean }) {
   const rows = [
     { id: "items", label: "Items subtotal", value: formatVND(breakdown.subtotal) },
     { id: "shipping", label: "Shipping fee", value: isZero(breakdown.shippingFee) ? "Free" : formatVND(breakdown.shippingFee) },
@@ -11,8 +11,8 @@ export function OrderPriceRows({ breakdown, compact = false }: { breakdown: Brea
     ...(isZero(breakdown.taxAmount) ? [] : [{ id: "tax", label: "Tax", value: formatVND(breakdown.taxAmount) }]),
   ];
   return <>
-    {rows.map((row, index) => <div key={row.id} data-testid={`order-breakdown-${row.id}`} className={`flex flex-wrap justify-between gap-x-5 gap-y-0.5${index === 0 && !compact ? " border-t border-border pt-4" : ""}`}>
-      <dt className="text-muted-foreground">{row.label}</dt>
+    {rows.map((row) => <div key={row.id} data-testid={`order-breakdown-${row.id}`} className={`flex flex-wrap justify-between gap-x-5 gap-y-0.5${muted ? " mt-1 text-xs text-muted-foreground" : ""}`}>
+      <dt className={muted ? undefined : "text-muted-foreground"}>{row.label}</dt>
       <dd className="ml-auto min-w-0 text-right font-mono tabular-nums [overflow-wrap:anywhere]">{row.value}</dd>
     </div>)}
   </>;
@@ -27,7 +27,7 @@ export function OrderTotalPill({ total, breakdown, testId }: { total: string; br
       <span className="sr-only">Show price breakdown</span>
     </summary>
     <dl className="mt-2 min-w-0 space-y-1 rounded-sm border border-border bg-card p-3 text-xs font-normal">
-      <OrderPriceRows breakdown={breakdown} compact />
+      <OrderPriceRows breakdown={breakdown} />
       <div className="flex flex-wrap justify-between gap-x-5 gap-y-0.5 border-t border-border pt-1 font-semibold"><dt>Total</dt><dd className="ml-auto min-w-0 text-right font-mono tabular-nums [overflow-wrap:anywhere]">{formatVND(total)}</dd></div>
     </dl>
   </details>;
