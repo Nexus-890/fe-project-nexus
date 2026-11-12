@@ -96,6 +96,9 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | PATCH `/api/v1/notifications/read-all` | Header mark-all action, Bearer + NOTIFICATION.VIEW; bodyless 204 |
 | GET `/api/v1/orders/groups/{id}` | Payment status polling every 3 seconds; Bearer; expected #138 read using the existing OrderGroup DTO, currently supplied only by the explicit test simulation |
 | GET `/api/v1/orders` | Own order list after payment; Bearer + ORDER.LIST; delivered data[] plus sibling page metadata |
+| GET `/api/v1/orders/{id}` | Buyer order snapshot; Bearer + ORDER.VIEW + ownership/Admin; backend `canCancel` controls the cancellation action |
+| GET `/api/v1/orders/{id}/history` | Protected chronological status history; nullable historical reason/actor |
+| POST `/api/v1/orders/{id}/cancel` | Bearer + ORDER.CANCEL + ownership/Admin/Support; trimmed reason; success refreshes orders, payment and cart; stale eligibility returns 409 |
 
 Notification mutations use the common origin and the #109 routes included in the merged notification-service controller and delivered OpenAPI. After a successful bodyless PATCH/204, the feature refetches the list and unread count. Live integration requires a running backend containing those operations. See [notifications](../features/notifications.md).
 

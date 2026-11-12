@@ -107,7 +107,8 @@ export const listOwnOrders = async (
 export const parseOrderDetail = (value: unknown): OrderDetail => {
   const summary = parseOrderSummary(value);
   if (!isRecord(value) || !isUuid(value.userId) || !isUuid(value.sellerId) ||
-    (value.orderType !== "STANDARD" && value.orderType !== "AUCTION") || !Array.isArray(value.items))
+    (value.orderType !== "STANDARD" && value.orderType !== "AUCTION") || !Array.isArray(value.items) ||
+    (value.canCancel !== undefined && typeof value.canCancel !== "boolean"))
     throw createInvalidResponseError("Invalid order details");
   const items: OrderDetailItem[] = value.items.map((item) => {
     if (!isRecord(item) || !isUuid(item.orderItemId) || !isUuid(item.productId) || !isUuid(item.skuId) ||
@@ -123,7 +124,9 @@ export const parseOrderDetail = (value: unknown): OrderDetail => {
   });
   if (new Set(items.map((item) => item.orderItemId)).size !== items.length)
     throw createInvalidResponseError("Duplicate order items");
-  return { ...summary, userId: value.userId, sellerId: value.sellerId, orderType: value.orderType, items };
+  // Older responses remain readable but cannot authorize a cancellation action.
+  return { ...summary, userId: value.userId, sellerId: value.sellerId, orderType: value.orderType,
+    items, canCancel: value.canCancel === true };
 };
 
 export const getOrder = async (orderId: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
@@ -143,10 +146,10 @@ export const getOrderHistory = async (orderId: string, options: ServiceRequestOp
   });
   if (!Array.isArray(data)) throw createInvalidResponseError("Invalid order history");
   return data.map((entry) => {
-    if (!isRecord(entry) || !isUuid(entry.id) || !isUuid(entry.changedBy) || !isInstant(entry.createdAt) ||
+    if (!isRecord(entry) || !isUuid(entry.id) || (entry.changedBy !== null && !isUuid(entry.changedBy)) || !isInstant(entry.createdAt) ||
       !isOrderStatus(entry.newStatus) || (entry.previousStatus !== null && !isOrderStatus(entry.previousStatus)) ||
-      typeof entry.reason !== "string") throw createInvalidResponseError("Invalid order history entry");
-    return { id: entry.id, changedBy: entry.changedBy, createdAt: entry.createdAt,
+      (entry.reason !== null && typeof entry.reason !== "string")) throw createInvalidResponseError("Invalid order history entry");
+    return { id: entry.id, changedBy: entry.changedBy as string | null, createdAt: entry.createdAt,
       newStatus: entry.newStatus, previousStatus: entry.previousStatus as OrderStatus | null, reason: entry.reason };
   });
 };
