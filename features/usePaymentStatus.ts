@@ -67,5 +67,5 @@ export function usePaymentStatus(orderGroupId: string, payment: PaymentInstructi
     };
   }, [payment, orderGroupId, queryClient, sessionId]);
 
-  return { seconds, outcome: getPaymentOutcome(status.data), error: status.error?.kind === "aborted" ? null : status.error };
+  return { seconds, group: status.data, outcome: getPaymentOutcome(status.data), error: status.error?.kind === "aborted" ? null : status.error };
 }

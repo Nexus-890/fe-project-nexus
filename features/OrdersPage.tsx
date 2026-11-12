@@ -26,11 +26,11 @@ function OrderRow({ order }: { order: OrderSummary }) {
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Order</span>
         <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="font-mono text-sm hover:text-primary hover:underline [overflow-wrap:anywhere]">{order.orderNumber}</Link>
       </th>
-      <td className="min-w-0 text-sm xl:w-[22%] xl:px-4 xl:py-6">
+      <td className="col-span-2 min-w-0 text-sm sm:col-span-1 xl:w-[22%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Date</span>
         <time dateTime={order.createdAt}>{dateFormatter.format(new Date(order.createdAt))}</time>
       </td>
-      <td className="min-w-0 text-sm font-medium xl:w-[22%] xl:px-4 xl:py-6">
+      <td className="col-span-2 min-w-0 text-sm sm:col-span-1 font-medium xl:w-[22%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs font-normal text-muted-foreground xl:hidden">Total</span>
         <OrderTotalPill total={order.totalAmount} breakdown={order.breakdown} testId={`order-total-${order.orderId}`} />
       </td>

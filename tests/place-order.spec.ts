@@ -107,7 +107,7 @@ test("retry after an ambiguous response reuses the key and body and recovers the
   const first = await evidence(request);
   expect(first.orderRequests).toBe(1);
   expect(first.groups).toHaveLength(1);
-  await expect(page.getByLabel("Address line", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("House number and street", { exact: true })).toBeDisabled();
   await placeOrder(page).click();
   await expect(page).toHaveURL(new RegExp(`${paymentPath}$`));
   const actual = await evidence(request);

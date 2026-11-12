@@ -87,6 +87,13 @@ test("buyer opens an order snapshot, reads history and cancels with a reason", a
   await expect(page.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
   await expect(page.getByTestId("order-breakdown-discount")).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "Order receipt" })).toContainText("170.900,00 ₫");
+  const receiptTotal = page.getByRole("complementary", { name: "Order receipt" }).getByTestId("order-receipt-total");
+  await expect(receiptTotal).toHaveText("Total170.900,00 ₫");
+  expect(await receiptTotal.evaluate((total) => {
+    const items = document.querySelector('[data-testid="order-breakdown-items"]');
+    return items !== null && Boolean(total.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })).toBe(true);
+  await expect(page.getByTestId("order-breakdown-items")).toHaveClass(/text-muted-foreground/);
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   await page.getByRole("button", { name: "Cancel order", exact: true }).click();
   await page.getByLabel("Why do you want to cancel?", { exact: true }).fill("  Changed my mind  ");
@@ -134,6 +141,18 @@ test("three orders display number, date, total and status with only pending paym
   await expect(pay).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   expect((await evidence(request)).reads).toContainEqual({ method: "GET", status: null, page: "0", size: "10", authorized: true });
   await capture(page, info, "orders-desktop-1440.png");
+  const breakdownFits = () => pendingTotal.locator("dl").evaluate((list) => {
+    const box = list.getBoundingClientRect(), cell = list.closest("td")!.getBoundingClientRect();
+    return { page: document.documentElement.scrollWidth <= innerWidth, list: list.scrollWidth <= list.clientWidth,
+      inCell: box.left >= cell.left - 1 && box.right <= cell.right + 1, onScreen: box.right <= innerWidth };
+  });
+  const fits = { page: true, list: true, inCell: true, onScreen: true };
+  for (const width of [375, 320]) {
+    await page.setViewportSize({ width, height: 812 });
+    await expect(pendingTotal.getByTestId("order-breakdown-items")).toBeVisible();
+    expect(await breakdownFits()).toEqual(fits);
+    await capture(page, info, `orders-mobile-breakdown-${width}x812.png`);
+  }
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await capture(page, info, "orders-mobile-375x812.png");

@@ -3,17 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, Landmark, LoaderCircle, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, Landmark, LoaderCircle, QrCode, ReceiptText, RefreshCw, ShieldCheck } from "lucide-react";
 import CopyableField from "../components/CopyableField";
 import CountdownTimer from "../components/CountdownTimer";
+import { OrderPriceRows } from "../components/OrderPriceBreakdown";
 import { formatVND } from "../components/formatPrice";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { initiatePayment } from "../service/paymentService";
 import type { PaymentInstructions } from "../types/paymentResponseType";
+import type { OrderGroup } from "../types/orderResponseType";
 import type { ApiError } from "../types/commonResponseType";
 import { usePaymentStatus } from "./usePaymentStatus";
+
+const SESSION_NOT_READY = "PAYMENT_SESSION_NOT_FOUND";
+const SESSION_READY_RETRIES = 3;
+const SESSION_READY_DELAY_MS = 1000;
 
 const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary disabled:cursor-wait disabled:opacity-50";
 
@@ -59,7 +65,11 @@ function PaymentContents({ orderGroupId }: { orderGroupId: string }) {
     queryKey: queryKeys.payment.group(sessionId, orderGroupId),
     service: (signal) => initiatePayment({ orderGroupId }, { context: requestContext, signal }),
     meta: { requiresAuth: true },
-  }, { retry: false, retryOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: "always", gcTime: 0 });
+  }, {
+    retry: (count, error) => error.code === SESSION_NOT_READY && count < SESSION_READY_RETRIES,
+    retryDelay: (count) => SESSION_READY_DELAY_MS * 2 ** count,
+    retryOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: "always", gcTime: 0,
+  });
   const paymentStatus = usePaymentStatus(orderGroupId, payment.data);
 
   // Load the account route while the buyer pays so confirmation can navigate promptly.
@@ -89,7 +99,7 @@ function PaymentContents({ orderGroupId }: { orderGroupId: string }) {
       <p className="mt-1 text-muted-foreground">{paymentStatus.error.detail || paymentStatus.error.title}</p>
       {paymentStatus.error.errors?.length ? <ul className="mt-2 list-inside list-disc">{paymentStatus.error.errors.map((field, index) => <li key={`${field.field}:${index}`}>{field.detail}</li>)}</ul> : null}
     </div>}
-    <PaymentDetails key={payment.data.receivedAt} payment={payment.data} seconds={paymentStatus.seconds} orderGroupId={orderGroupId} refreshing={payment.isFetching} onRefresh={() => void payment.refetch()} />
+    <PaymentDetails key={payment.data.receivedAt} payment={payment.data} group={paymentStatus.group} seconds={paymentStatus.seconds} orderGroupId={orderGroupId} refreshing={payment.isFetching} onRefresh={() => void payment.refetch()} />
   </>;
 }
 
@@ -106,7 +116,22 @@ function PaymentError({ error, pending, onRetry }: { error: ApiError | null; pen
   </div>;
 }
 
-function PaymentDetails({ payment, seconds, orderGroupId, refreshing, onRefresh }: { payment: PaymentInstructions; seconds: number; orderGroupId: string; refreshing: boolean; onRefresh: () => void }) {
+function PaymentBill({ group }: { group: OrderGroup }) {
+  const multiple = group.orders.length > 1;
+  if (!multiple && !group.orders[0].breakdown) return null;
+  return <section aria-labelledby="payment-bill-title" data-testid="payment-bill" className="mt-4 rounded-sm border border-border p-4 text-sm">
+    <h3 id="payment-bill-title" className="flex items-center gap-2 font-medium"><ReceiptText size={16} className="text-primary" aria-hidden="true" />What you are paying for</h3>
+    {group.orders.map((order) => <dl key={order.orderId} data-testid="payment-bill-order" className={`mt-3 min-w-0 ${multiple ? "border-t border-border pt-3" : ""}`}>
+      {multiple && <div className="flex flex-wrap justify-between gap-x-5 gap-y-0.5 font-medium">
+        <dt className="font-mono [overflow-wrap:anywhere]">{order.orderNumber}</dt>
+        <dd className="ml-auto min-w-0 text-right font-mono tabular-nums [overflow-wrap:anywhere]">{formatVND(order.totalAmount)}</dd>
+      </div>}
+      {order.breakdown && <OrderPriceRows breakdown={order.breakdown} muted />}
+    </dl>)}
+  </section>;
+}
+
+function PaymentDetails({ payment, group, seconds, orderGroupId, refreshing, onRefresh }: { payment: PaymentInstructions; group: OrderGroup | undefined; seconds: number; orderGroupId: string; refreshing: boolean; onRefresh: () => void }) {
   const [qrFailed, setQrFailed] = useState(false);
   const expired = seconds === 0;
 
@@ -138,6 +163,7 @@ function PaymentDetails({ payment, seconds, orderGroupId, refreshing, onRefresh 
           <CopyableField label="Bank account" value={payment.bankAccount} disabled={expired} />
           <CopyableField label="Transfer memo" value={payment.transferContent} disabled={expired} />
         </dl>
+        {group && <PaymentBill group={group} />}
         <div className="mt-3 flex items-start gap-3 rounded-sm bg-primary/5 p-4 text-sm">
           <CircleAlert size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
           <p>Copy the exact amount and transfer memo so your payment can be matched to your order.</p>

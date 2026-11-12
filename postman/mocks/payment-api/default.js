@@ -3,14 +3,14 @@ const http = require("node:http");
 const { createHash } = require("node:crypto");
 const groupId = "a1000000-0000-4000-8000-000000000001";
 const buyerId = "68000000-0000-4000-8000-000000000003";
-const shops = [{ sellerId: "shop-one", amount: 200000 }, { sellerId: "shop-two", amount: 150000 }];
+const shops = [{ sellerId: "shop-one", amount: 200000, subtotal: 180000, shippingFee: 20000 }, { sellerId: "shop-two", amount: 150000, subtotal: 150000, shippingFee: 0 }];
 const initial = () => ({ paymentRequests: [], authenticatedPayments: 0, qrRequests: 0, groupRequests: [], authenticatedGroups: 0, orderPatches: [], orderListRequests: 0 });
 const initialOrders = () => shops.map((shop, index) => ({
   orderId: `a2000000-0000-4000-8000-00000000000${index + 1}`,
   orderNumber: `NX-20261104-000${index + 1}`, userId: buyerId,
   sellerId: `a3000000-0000-4000-8000-00000000000${index + 1}`,
   orderType: "STANDARD", status: "PENDING", createdAt: "2026-11-04T00:00:00Z",
-  totalAmount: shop.amount, items: [],
+  totalAmount: shop.amount, subtotal: shop.subtotal, shippingFee: shop.shippingFee, discountAmount: 0, taxAmount: 0, items: [],
 }));
 // Requests run concurrently; serialize evidence writes to avoid losing a poll
 // when the header cart/profile request completes at the same time.
@@ -82,10 +82,12 @@ const server = http.createServer(async (req, res) => {
     await pm.state.set("payment-api:order-mode", "success");
     await pm.state.set("payment-api:order-delay", 0);
     await pm.state.set("payment-api:mode", url.searchParams.get("mode") || "success");
+    await pm.state.set("payment-api:session-misses", 0);
     return json(res, {});
   }
   if (url.pathname === "/test/mode") {
     await pm.state.set("payment-api:mode", url.searchParams.get("mode") || "success");
+    await pm.state.set("payment-api:session-misses", 0);
     return json(res, {});
   }
   if (url.pathname === "/test/order-mode") {
@@ -176,6 +178,13 @@ const server = http.createServer(async (req, res) => {
     if (body.orderGroupId !== groupId)
       return problem(res, 404, "PAYMENT_SESSION_NOT_FOUND", "Payment instructions are not ready for this group.");
     const mode = await pm.state.get("payment-api:mode") || "success";
+    if (mode === "session-pending" || mode === "session-missing") {
+      const misses = await pm.state.get("payment-api:session-misses") || 0;
+      if (mode === "session-missing" || misses < 2) {
+        await pm.state.set("payment-api:session-misses", misses + 1);
+        return problem(res, 404, "PAYMENT_SESSION_NOT_FOUND", "Payment instructions are not ready for this group.");
+      }
+    }
     if (mode === "unavailable") return problem(res, 503, "PAYMENT_PROVIDER_UNAVAILABLE", "Bank transfer instructions are temporarily unavailable.");
     if (mode === "expired") return problem(res, 409, "PAYMENT_SESSION_NOT_PAYABLE", "This payment session has expired.");
     const sessions = await pm.state.get("payment-api:sessions") || {};
