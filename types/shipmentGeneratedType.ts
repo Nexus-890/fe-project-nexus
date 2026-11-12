@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Tạo shipment thủ công từ snapshot đơn đã thanh toán
-         * @description Yêu cầu SHIPPING.CREATE_SHIPMENT và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Buyer có privilege tạo nhưng thiếu vai trò vận hành vẫn bị từ chối 403. Nguồn buyerId, shippingFee và shippingInfo lấy từ đơn đã thanh toán, không nhận các trường này từ client và không đọc commerce_db. Khi chưa có shipment, gọi trực tiếp GET /internal/v1/orders/{id}/shipping-snapshot của commerce bằng bearer của caller, có timeout và circuit breaker. Chỉ đơn PAID có snapshot hợp lệ được tạo. Đơn không tồn tại trả 404 SHIPMENT_ORDER_NOT_FOUND; chưa PAID trả 409 SHIPMENT_ORDER_NOT_PAID; upstream không khả dụng trả 503 SHIPMENT_COMMERCE_UNAVAILABLE; snapshot sai trả 502 SHIPMENT_INVALID_ORDER_SNAPSHOT. warehouseId, carrier và serviceType tùy chọn được dùng để chọn dispatch cho shipment mới. Kho và pickup phải có nguồn tin cậy; không dùng pickup cũ cho kho khác. Bỏ trống dùng lựa chọn tin cậy của đơn hoặc cấu hình shipping. Khi shipment đã tồn tại, các giá trị nếu gửi phải khớp lựa chọn đã lưu; không đổi carrier/service/kho sau khi có request identity. Khác lựa chọn trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. Mỗi order chỉ có một shipment. Cùng Idempotency-Key và cùng yêu cầu trả lại shipment đã tạo; tái dùng khóa cho yêu cầu khác hoặc lựa chọn xung đột với shipment hiện có trả 409. Key đầu tiên được lưu trên shipment cùng fingerprint nội dung request; một key khác cho shipment đã gắn key cũng trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. Phản hồi thành công luôn là 201 với Location của shipment. Carrier tạm lỗi hoặc thiếu dữ liệu chuẩn bị giữ shipment PENDING_TRACKING với trackingCode=null; job retry dùng shipment.id làm request identity ổn định. Manual transaction ghi shipment/history/outbox trước khi gọi carrier; consumer OrderPaid còn ghi processed marker trong cùng transaction. Hai đường tạo dùng cùng khóa order và unique order_id, nên chạy đồng thời vẫn chỉ có một shipment và một creation event. ShipmentCreated ghi nhận creation PENDING_TRACKING, trackingCode=null; GET phản ánh tracking được bổ sung sau, không ghi thêm ShipmentCreated. Retry không thể tự cấp parcel/pickup còn thiếu và #202 chưa có endpoint bổ sung dữ liệu chuẩn bị.
+         * @description Yêu cầu SHIPPING.CREATE_SHIPMENT và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Buyer có privilege tạo nhưng thiếu vai trò vận hành vẫn bị từ chối 403. Nguồn buyerId, shippingFee và shippingInfo lấy từ đơn đã thanh toán, không nhận các trường này từ client và không đọc commerce_db. Khi chưa có shipment, gọi trực tiếp GET /internal/v1/orders/{id}/shipping-snapshot của commerce bằng bearer của caller, có timeout và circuit breaker. Chỉ đơn PAID có snapshot hợp lệ được tạo. Đơn không tồn tại trả 404 SHIPMENT_ORDER_NOT_FOUND; chưa PAID trả 409 SHIPMENT_ORDER_NOT_PAID; upstream không khả dụng trả 503 SHIPMENT_COMMERCE_UNAVAILABLE; snapshot sai trả 502 SHIPMENT_INVALID_ORDER_SNAPSHOT. warehouseId, carrier và serviceType tùy chọn được dùng để chọn dispatch cho shipment mới. Kho và pickup phải có nguồn tin cậy; không dùng pickup cũ cho kho khác. Bỏ trống dùng lựa chọn tin cậy của đơn hoặc cấu hình shipping. Khi shipment đã tồn tại, các giá trị nếu gửi phải khớp lựa chọn đã lưu; không đổi carrier/service/kho sau khi có request identity. Khác lựa chọn trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. OrderCancelled đến trước shipment được lưu thành tombstone bền vững; yêu cầu tạo thủ công sau đó trả 409 SHIPMENT_ORDER_NOT_PAID và OrderPaid giao muộn không tạo/book shipment cho đơn đã hủy. Mỗi order chỉ có một shipment. Cùng Idempotency-Key và cùng yêu cầu trả lại shipment đã tạo; tái dùng khóa cho yêu cầu khác hoặc lựa chọn xung đột với shipment hiện có trả 409. Key đầu tiên được lưu trên shipment cùng fingerprint nội dung request; một key khác cho shipment đã gắn key cũng trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. Phản hồi thành công luôn là 201 với Location của shipment. Carrier tạm lỗi hoặc thiếu dữ liệu chuẩn bị giữ shipment PENDING_TRACKING với trackingCode=null; job retry dùng shipment.id làm request identity ổn định. Manual transaction ghi shipment/history/outbox trước khi gọi carrier; consumer OrderPaid còn ghi processed marker trong cùng transaction. Hai đường tạo dùng cùng khóa order và unique order_id, nên chạy đồng thời vẫn chỉ có một shipment và một creation event. ShipmentCreated ghi nhận creation PENDING_TRACKING, trackingCode=null; GET phản ánh tracking được bổ sung sau, không ghi thêm ShipmentCreated. Retry không thể tự cấp parcel/pickup còn thiếu và #202 chưa có endpoint bổ sung dữ liệu chuẩn bị.
          */
         post: operations["createShipment"];
         delete?: never;
@@ -144,10 +144,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shipments/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Đọc lịch sử trạng thái shipment
+         * @description Yêu cầu SHIPPING.VIEW_SHIPMENT. ADMIN/SUPPORT_STAFF đọc mọi shipment; actor khác chỉ đọc shipment có buyerId bằng sub, hoặc role SELLER với sellerId tin cậy bằng sub. Không có quyền sở hữu trả 404 SHIPMENT_NOT_FOUND. Đọc history đã lưu, không gọi carrier theo mỗi request. Sắp xếp changedAt giảm dần, sau đó id giảm dần. Trang vượt cuối trả 200, data=[] và tổng thực tế.
+         */
+        get: operations["getShipmentHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cập nhật trạng thái shipment
+         * @description Yêu cầu privilege tương ứng và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Mọi nguồn cập nhật dùng chung quy tắc chuyển trạng thái và khóa shipment. Cho phép bỏ qua bước khi tiến về phía trước; DELIVERY_FAILED có thể trở lại OUT_FOR_DELIVERY để giao lại. DELIVERED, CANCELLED và RETURNED là trạng thái kết thúc; kể cả override cũng không cho DELIVERED -> IN_TRANSIT. Cùng trạng thái là no-op, trả 200 và không thêm history/event. Mỗi thay đổi được chấp nhận ghi status/version, đúng một history và một Shipment* outbox trong cùng transaction; event phát lên nexus.shipment.events. actor lấy từ JWT, source=MANUAL; reason được chuẩn hóa để audit. reason tùy chọn. Khi đích là CANCELLED trước pickup, hủy booking qua CarrierAdapter trước khi chốt trạng thái; carrier từ chối hoặc lỗi thì không ghi local cancellation. Khi chưa có trackingCode, thao tác thủ công chỉ được giữ nguyên trạng thái hoặc chuyển CANCELLED. Mọi thay đổi thủ công khác trả 409 SHIPMENT_INVALID_TRANSITION để giữ nguyên luồng retry booking PENDING_TRACKING.
+         */
+        patch: operations["updateShipmentStatus"];
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Điều chỉnh trạng thái shipment có lý do
+         * @description Yêu cầu privilege tương ứng và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Mọi nguồn cập nhật dùng chung quy tắc chuyển trạng thái và khóa shipment. Cho phép bỏ qua bước khi tiến về phía trước; DELIVERY_FAILED có thể trở lại OUT_FOR_DELIVERY để giao lại. DELIVERED, CANCELLED và RETURNED là trạng thái kết thúc; kể cả override cũng không cho DELIVERED -> IN_TRANSIT. Cùng trạng thái là no-op, trả 200 và không thêm history/event. Mỗi thay đổi được chấp nhận ghi status/version, đúng một history và một Shipment* outbox trong cùng transaction; event phát lên nexus.shipment.events. actor lấy từ JWT, source=MANUAL; reason được chuẩn hóa để audit. Override bắt buộc reason có nội dung; đây là điều chỉnh có audit, vẫn tuân thủ quy tắc chuyển trạng thái. Khi đích là CANCELLED trước pickup, hủy booking qua CarrierAdapter trước khi chốt trạng thái; carrier từ chối hoặc lỗi thì không ghi local cancellation. Khi chưa có trackingCode, thao tác thủ công chỉ được giữ nguyên trạng thái hoặc chuyển CANCELLED. Mọi thay đổi thủ công khác trả 409 SHIPMENT_INVALID_TRANSITION để giữ nguyên luồng retry booking PENDING_TRACKING.
+         */
+        post: operations["overrideShipmentStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/carriers/{carrier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nhận callback trạng thái carrier
+         * @description Endpoint giao thức carrier được đánh dấu @ProtocolResponse; HTTP 200 giữ body xác nhận riêng, không bọc ApiResponse. GHN hỗ trợ cấu hình custom header ở portal; cấu hình X-Carrier-Signature bằng callback secret của adapter. Giá trị được so sánh constant-time trước khi parse payload và trước mọi ghi dữ liệu. Đây là token xác thực callback qua header, không phải khẳng định GHN tạo HMAC cho body. Thiếu/sai token hoặc chưa cấu hình secret trả 401 Problem Details và không đổi dữ liệu. Mỗi webhook trùng được chấp nhận 200, không lặp history/event; sự kiện cũ không được đảo ngược trạng thái. GHN OrderCode xác định shipment theo carrier/trackingCode; danh tính callback được tạo ổn định bằng hash của OrderCode, Type, Status và Time. Cùng status là no-op. Mỗi thay đổi hợp lệ ghi đúng một history và một Shipment* outbox. GHN dùng GHN_WEBHOOK_SECRET. Fake dùng FAKE_WEBHOOK_SECRET, cùng dạng callback nhưng không cần ShopID và Status là enum nội bộ. Status nằm trong danh tính để hai trạng thái khác nhau cùng timestamp vẫn được phân biệt; thay đổi Reason hoặc định dạng JSON không tạo danh tính mới.
+         */
+        post: operations["receiveCarrierWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        FakeStatusWebhook: {
+            OrderCode: string;
+            /**
+             * @description Loại callback GHN.
+             * @enum {string}
+             */
+            Type: "create" | "switch_status" | "update_weight" | "update_cod" | "update_fee" | "update_payment_type" | "cod" | "update_partial_return";
+            Status: components["schemas"]["ShipmentStatus"];
+            /** Format: date-time */
+            Time: string;
+            Reason?: string | null;
+            Description?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        UpdateShipmentStatusRequest: {
+            status: components["schemas"]["ShipmentStatus"];
+            /** @description Lý do được chuẩn hóa và lưu cùng lịch sử. */
+            reason?: string | null;
+        };
+        OverrideShipmentStatusRequest: {
+            status: components["schemas"]["ShipmentStatus"];
+            /** @description Lý do bắt buộc; chuỗi chỉ có khoảng trắng không hợp lệ. */
+            reason: string;
+        };
+        ShipmentTrackingEntryResponse: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["ShipmentStatus"];
+            description: string | null;
+            /** @enum {string} */
+            source: "SYSTEM" | "CARRIER_WEBHOOK" | "POLLER" | "MANUAL";
+            carrierEventId: string | null;
+            /** Format: uuid */
+            changedBy: string | null;
+            /** Format: date-time */
+            changedAt: string;
+        };
+        ShipmentTrackingListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["ShipmentTrackingEntryResponse"][];
+            page: components["schemas"]["ShipmentPageInfo"];
+        };
+        GhnStatusWebhook: {
+            /** @description Shop GHN gửi callback; phải khớp shopId đã cấu hình trong adapter. */
+            ShopID: number;
+            OrderCode: string;
+            /**
+             * @description Loại callback GHN.
+             * @enum {string}
+             */
+            Type: "create" | "switch_status" | "update_weight" | "update_cod" | "update_fee" | "update_payment_type" | "cod" | "update_partial_return";
+            /** @description Trạng thái GHN được ánh xạ sang đúng một ShipmentStatus nội bộ. */
+            Status: string;
+            /** Format: date-time */
+            Time: string;
+            /** @description Lý do carrier nếu có; được chuẩn hóa trước khi lưu. */
+            Reason?: string | null;
+            /** @description Mô tả carrier nếu không có Reason; được chuẩn hóa trước khi lưu. */
+            Description?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        CarrierWebhookAcknowledgement: {
+            /** @enum {integer} */
+            code: 200;
+            /** @enum {string} */
+            message: "Success";
+        };
         CreateShipmentRequest: {
             /**
              * Format: uuid
@@ -386,7 +538,7 @@ export interface components {
             /** Format: uri-reference */
             instance: string;
             /** @enum {string} */
-            code: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_IDEMPOTENCY_KEY_REQUIRED" | "SHIPMENT_IDEMPOTENCY_CONFLICT" | "SHIPMENT_ORDER_NOT_FOUND" | "SHIPMENT_ORDER_NOT_PAID" | "SHIPMENT_INVALID_ORDER_SNAPSHOT" | "SHIPMENT_COMMERCE_UNAVAILABLE" | "SHIPMENT_NOT_FOUND" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_UNAUTHENTICATED" | "UNAUTHENTICATED" | "SHIPMENT_FORBIDDEN" | "FORBIDDEN" | "SHIPMENT_WAREHOUSE_NOT_FOUND" | "SHIPMENT_SKU_NOT_FOUND" | "SHIPMENT_METHOD_NOT_ALLOWED" | "SHIPMENT_NOT_ACCEPTABLE" | "SHIPMENT_UNSUPPORTED_MEDIA_TYPE" | "SHIPMENT_NO_SERVICE" | "RATE_LIMITED" | "SHIPMENT_INTERNAL_ERROR" | "INTERNAL_ERROR" | "SHIPMENT_INVALID_CARRIER_RESPONSE" | "SHIPMENT_INVALID_CATALOG_RESPONSE" | "SHIPMENT_CARRIER_UNAVAILABLE" | "SHIPMENT_CIRCUIT_OPEN" | "SHIPMENT_CARRIER_CONFIGURATION_ERROR" | "SHIPMENT_CATALOG_UNAVAILABLE" | "SERVICE_UNAVAILABLE" | "GATEWAY_TIMEOUT";
+            code: "SHIPMENT_INVALID_SIGNATURE" | "SHIPMENT_INVALID_TRANSITION" | "SHIPMENT_UNSUPPORTED_CARRIER" | "SHIPMENT_INVALID_WEBHOOK" | "SHIPMENT_CARRIER_CANCELLATION_REJECTED" | "SHIPMENT_INVALID_CARRIER_STATUS" | "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_IDEMPOTENCY_KEY_REQUIRED" | "SHIPMENT_IDEMPOTENCY_CONFLICT" | "SHIPMENT_ORDER_NOT_FOUND" | "SHIPMENT_ORDER_NOT_PAID" | "SHIPMENT_INVALID_ORDER_SNAPSHOT" | "SHIPMENT_COMMERCE_UNAVAILABLE" | "SHIPMENT_NOT_FOUND" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_UNAUTHENTICATED" | "UNAUTHENTICATED" | "SHIPMENT_FORBIDDEN" | "FORBIDDEN" | "SHIPMENT_WAREHOUSE_NOT_FOUND" | "SHIPMENT_SKU_NOT_FOUND" | "SHIPMENT_METHOD_NOT_ALLOWED" | "SHIPMENT_NOT_ACCEPTABLE" | "SHIPMENT_UNSUPPORTED_MEDIA_TYPE" | "SHIPMENT_NO_SERVICE" | "RATE_LIMITED" | "SHIPMENT_INTERNAL_ERROR" | "INTERNAL_ERROR" | "SHIPMENT_INVALID_CARRIER_RESPONSE" | "SHIPMENT_INVALID_CATALOG_RESPONSE" | "SHIPMENT_CARRIER_UNAVAILABLE" | "SHIPMENT_CIRCUIT_OPEN" | "SHIPMENT_CARRIER_CONFIGURATION_ERROR" | "SHIPMENT_CATALOG_UNAVAILABLE" | "SERVICE_UNAVAILABLE" | "GATEWAY_TIMEOUT";
             /** @description Chỉ xuất hiện khi yêu cầu có trace đang hoạt động. */
             traceId?: string;
             errors?: {
@@ -397,6 +549,76 @@ export interface components {
         };
     };
     responses: {
+        /** @description Chuyển trạng thái không hợp lệ hoặc carrier từ chối hủy booking trước pickup. */
+        ShipmentMutationConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /** @enum {integer} */
+                    status?: 409;
+                    /** @enum {string} */
+                    code?: "SHIPMENT_INVALID_TRANSITION" | "SHIPMENT_CARRIER_CANCELLATION_REJECTED";
+                };
+            };
+        };
+        /** @description Trạng thái đích xung đột quy tắc chuyển trạng thái hiện tại. */
+        InvalidShipmentTransition: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /** @enum {integer} */
+                    status?: 409;
+                    /** @enum {string} */
+                    code?: "SHIPMENT_INVALID_TRANSITION";
+                };
+            };
+        };
+        /** @description Callback token thiếu, sai hoặc adapter chưa cấu hình secret; không ghi dữ liệu. */
+        InvalidCarrierSignature: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /** @enum {integer} */
+                    status?: 401;
+                    /** @enum {string} */
+                    code?: "SHIPMENT_INVALID_SIGNATURE";
+                };
+            };
+        };
+        /** @description Trạng thái carrier chưa có trong bảng ánh xạ nội bộ. */
+        InvalidCarrierStatus: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /** @enum {integer} */
+                    status?: 422;
+                    /** @enum {string} */
+                    code?: "SHIPMENT_INVALID_CARRIER_STATUS";
+                };
+            };
+        };
+        /** @description Carrier chưa đăng ký hoặc nội dung callback không hợp lệ. */
+        CarrierWebhookBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /** @enum {integer} */
+                    status?: 400;
+                    /** @enum {string} */
+                    code?: "SHIPMENT_UNSUPPORTED_CARRIER" | "SHIPMENT_INVALID_WEBHOOK" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER";
+                };
+            };
+        };
         /** @description Khóa idempotency, body, UUID/enum, carrier chưa đăng ký hoặc phân trang không hợp lệ. */
         ShipmentBadRequest: {
             headers: {
@@ -1115,6 +1337,207 @@ export interface operations {
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadUpstream"];
             503: components["responses"]["Unavailable"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    getShipmentHistory: {
+        parameters: {
+            query?: {
+                /** @description Chỉ số trang bắt đầu từ 0. */
+                page?: number;
+                /** @description Số dòng lịch sử tối đa mỗi trang. */
+                size?: number;
+            };
+            header?: never;
+            path: {
+                /** @description UUID của shipment. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lịch sử đã lưu và thông tin phân trang. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "00000000-0000-4000-8000-000000000041",
+                     *           "status": "IN_TRANSIT",
+                     *           "description": "Carrier xác nhận đang vận chuyển",
+                     *           "source": "CARRIER_WEBHOOK",
+                     *           "carrierEventId": "GHN:GHN-12345:switch_status:2026-11-11T10:00:00Z",
+                     *           "changedBy": "00000000-0000-0000-0000-000000000000",
+                     *           "changedAt": "2026-11-11T10:00:00Z"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 20,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ShipmentTrackingListResponse"];
+                };
+            };
+            400: components["responses"]["ShipmentBadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["ShipmentNotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            406: components["responses"]["NotAcceptable"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["RoutingUnavailable"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    updateShipmentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID của shipment. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "status": "IN_TRANSIT",
+                 *       "reason": "Đã đối chiếu carrier"
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateShipmentStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Shipment sau thay đổi hoặc kết quả no-op. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentEnvelope"];
+                };
+            };
+            400: components["responses"]["ShipmentBadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["ShipmentNotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            406: components["responses"]["NotAcceptable"];
+            409: components["responses"]["ShipmentMutationConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["CarrierBadUpstream"];
+            503: components["responses"]["CarrierUnavailable"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    overrideShipmentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID của shipment. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "status": "IN_TRANSIT",
+                 *       "reason": "Support xác nhận kiện hàng đang vận chuyển"
+                 *     }
+                 */
+                "application/json": components["schemas"]["OverrideShipmentStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Shipment sau thay đổi hoặc kết quả no-op. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentEnvelope"];
+                };
+            };
+            400: components["responses"]["ShipmentBadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["ShipmentNotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            406: components["responses"]["NotAcceptable"];
+            409: components["responses"]["ShipmentMutationConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["CarrierBadUpstream"];
+            503: components["responses"]["CarrierUnavailable"];
+            504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    receiveCarrierWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Namespace carrier; GHN nhận callback OrderCode/Status/Type/Time.
+                 * @example ghn
+                 */
+                carrier: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GhnStatusWebhook"] | components["schemas"]["FakeStatusWebhook"];
+            };
+        };
+        responses: {
+            /** @description Callback đã xử lý, cùng trạng thái hoặc bản giao lại đã được nhận trước đó. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 200,
+                     *       "message": "Success"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CarrierWebhookAcknowledgement"];
+                };
+            };
+            400: components["responses"]["CarrierWebhookBadRequest"];
+            401: components["responses"]["InvalidCarrierSignature"];
+            404: components["responses"]["ShipmentNotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            406: components["responses"]["NotAcceptable"];
+            409: components["responses"]["InvalidShipmentTransition"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["InvalidCarrierStatus"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["RoutingUnavailable"];
             504: components["responses"]["GatewayTimeout"];
         };
     };
