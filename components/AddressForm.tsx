@@ -8,13 +8,11 @@ type AddressFormProps = {
   values: CheckoutAddress;
   errors: Partial<Record<keyof CheckoutAddress, string>>;
   provinces: ShippingLocality[];
-  districts: ShippingLocality[];
   wards: ShippingLocality[];
   provinceState: LocalityState;
-  districtState: LocalityState;
   wardState: LocalityState;
   onChange: (field: keyof CheckoutAddress, value: string) => void;
-  onRetry: (level: "province" | "district" | "ward") => void;
+  onRetry: (level: "province" | "ward") => void;
   onSubmit: () => void;
   busy?: boolean;
 };
@@ -26,10 +24,8 @@ function AddressForm({
   values,
   errors,
   provinces,
-  districts,
   wards,
   provinceState,
-  districtState,
   wardState,
   onChange,
   onRetry,
@@ -71,24 +67,14 @@ function AddressForm({
       placeholder: "Choose province / city",
     },
     {
-      field: "districtCode",
-      level: "district",
-      label: "District",
-      plural: "districts",
-      options: districts,
-      state: districtState,
-      enabled: Boolean(values.provinceCode),
-      placeholder: values.provinceCode ? "Choose district" : "Choose a province first",
-    },
-    {
       field: "wardCode",
       level: "ward",
       label: "Ward",
       plural: "wards",
       options: wards,
       state: wardState,
-      enabled: Boolean(values.districtCode),
-      placeholder: values.districtCode ? "Choose ward" : "Choose a district first",
+      enabled: Boolean(values.provinceCode),
+      placeholder: values.provinceCode ? "Choose ward" : "Choose a province first",
     },
   ] as const;
 
@@ -145,7 +131,7 @@ function AddressForm({
             state.error && `checkout-${field}-load-error`,
           ].filter(Boolean).join(" ") || undefined;
           return (
-            <div key={field} className={`min-w-0 ${field === "wardCode" ? "sm:col-span-2" : ""}`}>
+            <div key={field} className="min-w-0">
               <label htmlFor={`checkout-${field}`} className="mb-2 block text-sm font-medium">
                 {label}
               </label>

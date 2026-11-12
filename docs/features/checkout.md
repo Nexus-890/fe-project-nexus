@@ -19,12 +19,12 @@ or inventory reservation timer. All money remains VND.
 - Name, phone and address line start from the authenticated `/users/me` profile.
   Locality selections always start empty. Profile absence/errors do not produce
   a partially authenticated checkout.
-- All six fields have validation, associated errors and an announced summary.
+- All five fields have validation, associated errors and an announced summary.
   Invalid submission focuses the first invalid field and makes no preview or
   order request. Phone punctuation is allowed but 8–15 digits are required.
-- Province changes clear district and ward; district changes clear ward. Each
-  child query is filtered by its parent's code. Code strings, including leading
-  zeroes, are retained separately from display names for the future order flow.
+- The address has two levels, as GHN v3 and #201 deliver it: province, then ward.
+  A province change clears the ward, and wards are filtered by `provinceCode`. Code
+  strings, including leading zeroes, are kept separately from display names.
 - Complete valid destinations automatically request a preview. Changing any
   address field selects a new query; obsolete requests are canceled. A pending,
   failed, unavailable or obsolete quote never shows a final payable amount.
@@ -59,15 +59,13 @@ flat component architecture. No duplicate old component tree is restored.
 | --- | --- |
 | GET `/api/v1/users/me` | Delivered; existing auth provider supplies profile data |
 | GET `/api/v1/carts/me` | Delivered; shared `useCart` supplies the snapshot |
-| GET `/api/v1/shipping/provinces` | #201 pending; provisional `data: [{code,name}]` with sibling page metadata |
-| GET `/api/v1/shipping/districts?provinceCode=...` | #201 pending; same provisional list shape |
-| GET `/api/v1/shipping/wards?districtCode=...` | #201 pending; same provisional list shape |
+| GET `/api/v1/shipping/provinces` | #201 delivered; `data: [{code,name}]` with sibling page metadata |
+| GET `/api/v1/shipping/wards?provinceCode=...` | #201 delivered; same list shape |
 | POST `/api/v1/checkout/preview` | #188 delivered contract; numeric item/amount fields normalized into decimal strings |
 
-The preview request follows #188's delivered contract: `shippingAddress` contains
-`recipientName`, `phoneNumber`, `addressLine`, `city`, `district`, `ward` and
-`countryCode: "VN"`, alongside `paymentMethod: "SEPAY"`. The form's three codes
-are retained locally, not sent as undocumented fields to the names-only contract.
+The preview and order requests follow #138's contract: `shippingAddress` contains
+`recipientName`, `phoneNumber`, `addressLine`, `provinceCode`, `wardCode` and
+`countryCode: "VN"`, alongside `paymentMethod: "SEPAY"`. Display names stay in the form.
 Order creation also uses the delivered names-only address contract; code-based
 shipping integration still needs an agreed backend contract.
 The inspected #188 implementation currently returns `shippingFee: null`, so
@@ -127,7 +125,7 @@ fixtures in production. It uses the already installed Postman CLI.
 
 Use Continue to sign in, then the local fixture account `buyer@nexus.local`
 with fixture password `Fixture-pass-123!`. These are test-only values. Choose
-Ho Chi Minh City → District 4 → Ward 4 for the 30,000 VND fee, or Ward 5 for the
+Ho Chi Minh City → Ward 4 for the 30,000 VND fee, or Ward 5 for the
 45,000 VND scenario. The cart has two lines totaling 425,000 VND. Reloading
 requires signing in again because the application keeps authentication in memory.
 The process prints the existing framework advisory if a startup retry is needed.

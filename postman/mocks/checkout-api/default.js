@@ -16,19 +16,14 @@ const items = [
   { id: "10000000-0000-4000-8000-000000000002", productId: "20000000-0000-4000-8000-000000000002", skuId: "30000000-0000-4000-8000-000000000002", quantity: 1, unitPrice: 125000 },
 ];
 const provinces = [{ code: "202", name: "Ho Chi Minh City" }, { code: "201", name: "Ha Noi" }];
-const districts = {
-  "202": [{ code: "1442", name: "District 4" }, { code: "1443", name: "District 1" }],
-  "201": [{ code: "1542", name: "Ba Dinh" }],
-};
 const wards = {
-  "1442": [{ code: "20308", name: "Ward 4" }, { code: "20309", name: "Ward 5" }],
-  "1443": [{ code: "20310", name: "Ben Nghe" }],
-  "1542": [{ code: "20701", name: "Phuc Xa" }],
+  "202": [{ code: "20308", name: "Ward 4" }, { code: "20309", name: "Ward 5" }, { code: "20310", name: "Ben Nghe" }],
+  "201": [{ code: "20701", name: "Phuc Xa" }],
 };
 const defaults = () => ({
   emptyProfile: false, emptyCart: false, previewFailure: false,
   malformedPreview: false, nullShippingFee: false, fieldError: false,
-  districtsFailure: false, wardsFailure: false, slowWard: false,
+  wardsFailure: false, slowWard: false,
   metadataFailure: false, changedPreview: false,
   priceChanged: false, insufficientStock: false, stockSkuOnly: false,
   orderLostResponse: false, slowOrder: false, orderValidation: false,
@@ -239,15 +234,10 @@ const server = http.createServer(async (req, res) => {
     await save();
     return json(res, list(provinces));
   }
-  if (url.pathname === "/v1/shipping/districts") {
-    await save();
-    if (options.districtsFailure) return problem(res, 503, "SHIPPING_UNAVAILABLE", "Districts are temporarily unavailable.");
-    return json(res, list(districts[url.searchParams.get("provinceCode")] || []));
-  }
   if (url.pathname === "/v1/shipping/wards") {
     await save();
     if (options.wardsFailure) return problem(res, 503, "SHIPPING_UNAVAILABLE", "Wards are temporarily unavailable.");
-    return json(res, list(wards[url.searchParams.get("districtCode")] || []));
+    return json(res, list(wards[url.searchParams.get("provinceCode")] || []));
   }
   if (url.pathname === "/v1/checkout/preview" && req.method === "POST") {
     const body = bodyOf(req);

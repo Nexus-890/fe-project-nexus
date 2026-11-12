@@ -22,9 +22,7 @@ import type {
   ShippingLocality,
 } from "../types/checkoutType";
 
-// #201 is not delivered yet. These code/name list contracts are provisional.
 export const PROVINCES_PATH = "/api/v1/shipping/provinces";
-export const DISTRICTS_PATH = "/api/v1/shipping/districts";
 export const WARDS_PATH = "/api/v1/shipping/wards";
 // Preview follows the delivered #188 contract; locality codes remain a #201 dependency.
 export const CHECKOUT_PREVIEW_PATH = "/api/v1/checkout/preview";
@@ -63,30 +61,16 @@ export const getProvinces = async (
   return parseShippingLocalities(response);
 };
 
-export const getDistricts = async (
+export const getWards = async (
   provinceCode: string,
   options: ServiceRequestOptions = {},
 ): Promise<ShippingLocality[]> => {
   if (!isNonBlankString(provinceCode))
     throw createInvalidResponseError("provinceCode is required");
-  const response = await requestApi<unknown>("GET", DISTRICTS_PATH, undefined, {
-    ...options,
-    auth: true,
-    params: { provinceCode },
-  });
-  return parseShippingLocalities(response);
-};
-
-export const getWards = async (
-  districtCode: string,
-  options: ServiceRequestOptions = {},
-): Promise<ShippingLocality[]> => {
-  if (!isNonBlankString(districtCode))
-    throw createInvalidResponseError("districtCode is required");
   const response = await requestApi<unknown>("GET", WARDS_PATH, undefined, {
     ...options,
     auth: true,
-    params: { districtCode },
+    params: { provinceCode },
   });
   return parseShippingLocalities(response);
 };
@@ -166,12 +150,12 @@ const createOrderBody = (
   destination: CheckoutDestination,
 ): components["schemas"]["CreateOrder"] => {
   const {
-    recipientName, phoneNumber, addressLine, provinceCode, districtCode, wardCode,
-    city, district, ward, countryCode,
+    recipientName, phoneNumber, addressLine, provinceCode, wardCode,
+    city, ward, countryCode,
   } = destination;
   if (
-    ![recipientName, phoneNumber, addressLine, provinceCode, districtCode, wardCode,
-      city, district, ward].every(isNonBlankString) ||
+    ![recipientName, phoneNumber, addressLine, provinceCode, wardCode,
+      city, ward].every(isNonBlankString) ||
     countryCode !== "VN"
   )
     throw createInvalidResponseError("A complete shipping address is required");

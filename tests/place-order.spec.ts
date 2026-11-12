@@ -45,7 +45,6 @@ async function openCheckout(page: Page) {
 async function readyToOrder(page: Page) {
   await openCheckout(page);
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
-  await page.getByLabel("District", { exact: true }).selectOption("1442");
   await page.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await page.getByRole("button", { name: "Review address", exact: true }).click();
@@ -62,7 +61,6 @@ test("placing an order requires a reviewed valid address and an available quote"
   await openCheckout(page);
   await expect(placeOrder(page)).toBeDisabled();
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
-  await page.getByLabel("District", { exact: true }).selectOption("1442");
   await page.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await expect(placeOrder(page)).toBeDisabled();

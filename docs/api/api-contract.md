@@ -87,7 +87,7 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
 | PUT `/api/v1/carts/me/items/{lineId}` | Prepared quantity call `{quantity}`; newer BE mapping exists but returns bare DTO and is absent from delivered OpenAPI |
 | DELETE `/api/v1/carts/me/items/{lineId}` | Prepared no-body removal expecting 204; newer BE mapping exists with CART.REMOVE_ITEM but is absent from delivered OpenAPI |
-| GET `/api/v1/shipping/provinces`, `/districts?provinceCode=...`, `/wards?districtCode=...` | Checkout provisional #201 consumers; protected code/name lists with sibling page metadata in the explicit local mock |
+| GET `/api/v1/shipping/provinces`, `/wards?provinceCode=...` | Checkout #201 consumers; protected code/name lists with sibling page metadata in the explicit local mock |
 | POST `/api/v1/checkout/preview` | Checkout follows merged #188; preview only, no order write; names-only address and numeric wire money |
 | POST `/api/v1/payments` | Payment page, Bearer + CHECKOUT.START + group ownership; idempotent read of existing group instructions, current serverNow and full transferContent |
 | GET `/api/v1/notifications?page=0&size=10` | Header latest ten, Bearer + NOTIFICATION.VIEW |

@@ -138,7 +138,6 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
     await expect.poll(async () => (await evidence(request)).requests.some((row: { method: string; path: string }) => row.method === "POST" && row.path === "/api/v1/carts/me/items")).toBe(true);
     await buyerPage.goto("/checkout");
     await buyerPage.getByLabel("Province / City", { exact: true }).selectOption("202");
-    await buyerPage.getByLabel("District", { exact: true }).selectOption("1442");
     await buyerPage.getByLabel("Ward", { exact: true }).selectOption("20308");
     await buyerPage.getByRole("button", { name: "Review address", exact: true }).click();
     await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();

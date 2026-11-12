@@ -12,7 +12,7 @@ import { createCanceledError, createInvalidResponseError } from "../configs/api"
 import { queryKeys } from "../configs/queryKeys";
 import { useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
-import { getCheckoutPreview, getDistricts, getProvinces, getWards } from "../service/checkoutService";
+import { getCheckoutPreview, getProvinces, getWards } from "../service/checkoutService";
 import type { CheckoutAddress } from "../types/checkoutType";
 import type { CartItem } from "../types/cartResponseType";
 import type { UserResponse } from "../types/authResponseType";
@@ -68,7 +68,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   const { requestContext, sessionId, isSessionCurrent } = useAuth();
   const [values, setValues] = useState<CheckoutAddress>(() => ({
     recipientName: user.fullName, phoneNumber: user.phone, addressLine: user.address ?? "",
-    provinceCode: "", districtCode: "", wardCode: "",
+    provinceCode: "", wardCode: "",
   }));
   const [submitted, setSubmitted] = useState(false);
   const [reviewedAddress, setReviewedAddress] = useState<string | null>(null);
@@ -77,18 +77,13 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     queryKey: queryKeys.checkout.provinces(sessionId), meta,
     service: (signal) => getProvinces({ context: requestContext, signal }),
   }, { retry: false });
-  const districts = useApiQuery({
-    queryKey: queryKeys.checkout.districts(sessionId, values.provinceCode), meta,
-    service: (signal) => getDistricts(values.provinceCode, { context: requestContext, signal }),
-  }, { enabled: Boolean(values.provinceCode), retry: false });
   const wards = useApiQuery({
-    queryKey: queryKeys.checkout.wards(sessionId, values.districtCode), meta,
-    service: (signal) => getWards(values.districtCode, { context: requestContext, signal }),
-  }, { enabled: Boolean(values.districtCode), retry: false });
+    queryKey: queryKeys.checkout.wards(sessionId, values.provinceCode), meta,
+    service: (signal) => getWards(values.provinceCode, { context: requestContext, signal }),
+  }, { enabled: Boolean(values.provinceCode), retry: false });
 
   const destination = getCheckoutDestination(values,
     provinces.isError ? [] : provinces.data ?? [],
-    districts.isError ? [] : districts.data ?? [],
     wards.isError ? [] : wards.data ?? []);
   const cartSignature = JSON.stringify(items);
   const preview = useApiQuery({
@@ -102,7 +97,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
       return quote;
     },
   }, {
-    enabled: Boolean(destination) && !provinces.isError && !districts.isError && !wards.isError,
+    enabled: Boolean(destination) && !provinces.isError && !wards.isError,
     retry: false, staleTime: 0, gcTime: 0,
   });
   const quote = destination && !preview.isFetching && !preview.isError ? preview.data : undefined;
@@ -124,8 +119,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     setReviewedAddress(null);
     setValues((previous) => ({
       ...previous, [field]: value,
-      ...(field === "provinceCode" ? { districtCode: "", wardCode: "" } : {}),
-      ...(field === "districtCode" ? { wardCode: "" } : {}),
+      ...(field === "provinceCode" ? { wardCode: "" } : {}),
     }));
   };
   const reviewAddress = () => {
@@ -152,12 +146,11 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
           <AddressForm
             busy={order.addressLocked}
             values={values} errors={errors}
-            provinces={provinces.data ?? []} districts={districts.data ?? []} wards={wards.data ?? []}
+            provinces={provinces.data ?? []} wards={wards.data ?? []}
             provinceState={{ loading: provinces.isFetching, error: provinces.error?.detail || provinces.error?.title }}
-            districtState={{ loading: districts.isFetching, error: districts.error?.detail || districts.error?.title }}
             wardState={{ loading: wards.isFetching, error: wards.error?.detail || wards.error?.title }}
             onChange={changeAddress} onSubmit={reviewAddress}
-            onRetry={(level) => { void (level === "province" ? provinces : level === "district" ? districts : wards).refetch(); }}
+            onRetry={(level) => { void (level === "province" ? provinces : wards).refetch(); }}
           />
           {ready && <p role="status" className="rounded-sm border border-border bg-muted p-4 text-sm">Address ready. Review the delivery fee and order total below.</p>}
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="delivery-title">

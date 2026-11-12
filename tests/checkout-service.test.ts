@@ -4,7 +4,6 @@ import { test } from "node:test";
 import { isApiError } from "../configs/api";
 import {
   getCheckoutPreview,
-  getDistricts,
   getProvinces,
   getWards,
 } from "../service/checkoutService";
@@ -15,10 +14,8 @@ const destination: CheckoutDestination = {
   phoneNumber: "0901234567",
   addressLine: "12 Nguyen Trai",
   provinceCode: "202",
-  districtCode: "1442",
   wardCode: "20308",
   city: "Ho Chi Minh City",
-  district: "District 4",
   ward: "Ward 4",
   countryCode: "VN",
 };
@@ -67,23 +64,21 @@ test("checkout services send locality filters/current auth and the #188 preview 
   try {
     assert.deepEqual(await getProvinces({ context, auth: false, params: { ignored: true } }), [{ code: "001", name: "A locality" }]);
     token = "second-session";
-    await getDistricts("202 /?#", { context, params: { provinceCode: "wrong" } });
-    await getWards("001442", { context });
+    await getWards("202 /?#", { context, params: { provinceCode: "wrong" } });
     const result = await getCheckoutPreview(destination, { context, auth: false });
     assert.equal(result.items[0].unitPrice, "125000.25");
     assert.equal(result.items[0].lineTotal, "250000.50");
     assert.equal(result.subtotal, "300000.50");
     assert.equal(result.shippingFee, "30000.00");
     assert.equal(result.total, "330000.50");
-    assert.deepEqual(seen.slice(0, 3), [
+    assert.deepEqual(seen.slice(0, 2), [
       { method: "GET", url: "/api/v1/shipping/provinces", body: "", auth: "Bearer first-session" },
-      { method: "GET", url: "/api/v1/shipping/districts?provinceCode=202+%2F%3F%23", body: "", auth: "Bearer second-session" },
-      { method: "GET", url: "/api/v1/shipping/wards?districtCode=001442", body: "", auth: "Bearer second-session" },
+      { method: "GET", url: "/api/v1/shipping/wards?provinceCode=202+%2F%3F%23", body: "", auth: "Bearer second-session" },
     ]);
-    assert.equal(seen[3].method, "POST");
-    assert.equal(seen[3].url, "/api/v1/checkout/preview");
-    assert.equal(seen[3].auth, "Bearer second-session");
-    assert.deepEqual(JSON.parse(seen[3].body), {
+    assert.equal(seen[2].method, "POST");
+    assert.equal(seen[2].url, "/api/v1/checkout/preview");
+    assert.equal(seen[2].auth, "Bearer second-session");
+    assert.deepEqual(JSON.parse(seen[2].body), {
       shippingAddress: {
         recipientName: destination.recipientName,
         phoneNumber: destination.phoneNumber,
@@ -196,7 +191,6 @@ test("preview rejects malformed amounts and totals that cannot be reconciled", a
 test("empty address/filter values reject before transport and in-flight preview cancellation stays AbortError", async () => {
   let calls = 0;
   const context = { fetch: async () => { calls++; return new Response(); } };
-  await assert.rejects(getDistricts(" ", { context }), invalidResponse);
   await assert.rejects(getWards("", { context }), invalidResponse);
   for (const field of Object.keys(destination)) {
     await assert.rejects(getCheckoutPreview({ ...destination, [field]: "" }, { context }), invalidResponse);

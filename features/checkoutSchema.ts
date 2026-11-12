@@ -11,7 +11,6 @@ export const checkoutSchema = z.object({
     .refine((value) => { const digits = value.replace(/\D/g, ""); return digits.length >= 8 && digits.length <= 15; }, "Enter a valid phone number"),
   addressLine: z.string().trim().min(1, "Address line is required").max(500, "Use 500 characters or fewer"),
   provinceCode: z.string().trim().min(1, "Province / City is required"),
-  districtCode: z.string().trim().min(1, "District is required"),
   wardCode: z.string().trim().min(1, "Ward is required"),
 });
 
@@ -27,20 +26,18 @@ export const validateCheckoutAddress = (values: CheckoutAddress): CheckoutErrors
   return errors;
 };
 
-/** Names are only preview compatibility fields; the buyer's three GHN codes stay in state. */
+/** Names are only preview compatibility fields; the buyer's two GHN codes stay in state. */
 export const getCheckoutDestination = (
   values: CheckoutAddress,
   provinces: readonly ShippingLocality[],
-  districts: readonly ShippingLocality[],
   wards: readonly ShippingLocality[],
 ): CheckoutDestination | null => {
   const parsed = checkoutSchema.safeParse(values);
   if (!parsed.success) return null;
   const province = provinces.find((item) => item.code === parsed.data.provinceCode);
-  const district = districts.find((item) => item.code === parsed.data.districtCode);
   const ward = wards.find((item) => item.code === parsed.data.wardCode);
-  if (!province || !district || !ward) return null;
-  return { ...parsed.data, city: province.name, district: district.name, ward: ward.name, countryCode: "VN" };
+  if (!province || !ward) return null;
+  return { ...parsed.data, city: province.name, ward: ward.name, countryCode: "VN" };
 };
 
 export const getCheckoutFieldErrors = (error: ApiError | null): CheckoutErrors => {
@@ -48,8 +45,8 @@ export const getCheckoutFieldErrors = (error: ApiError | null): CheckoutErrors =
   if (error?.code !== "VALIDATION_FAILED") return result;
   const aliases: Record<string, keyof CheckoutAddress> = {
     recipientName: "recipientName", phoneNumber: "phoneNumber", addressLine: "addressLine",
-    provinceCode: "provinceCode", districtCode: "districtCode", wardCode: "wardCode",
-    city: "provinceCode", district: "districtCode", ward: "wardCode",
+    provinceCode: "provinceCode", wardCode: "wardCode",
+    city: "provinceCode", ward: "wardCode",
   };
   for (const entry of error.errors ?? []) {
     const name = entry.field.replace(/^shippingAddress\./, "");

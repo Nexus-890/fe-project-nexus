@@ -40,8 +40,7 @@ export const queryKeys = {
   checkout: {
     group: (sessionId: number, orderGroupId: string) => ["checkout", sessionId, "group", orderGroupId] as const,
     provinces: (sessionId: number) => ["checkout", sessionId, "provinces"] as const,
-    districts: (sessionId: number, provinceCode: string) => ["checkout", sessionId, "districts", provinceCode] as const,
-    wards: (sessionId: number, districtCode: string) => ["checkout", sessionId, "wards", districtCode] as const,
+    wards: (sessionId: number, provinceCode: string) => ["checkout", sessionId, "wards", provinceCode] as const,
     preview: (sessionId: number, cartSignature: string, destination: CheckoutDestination | null) =>
       ["checkout", sessionId, "preview", cartSignature, destination] as const,
   },

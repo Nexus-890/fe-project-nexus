@@ -6,7 +6,7 @@ import type { CartItem } from "../types/cartResponseType";
 
 const address: CheckoutAddress = {
   recipientName: " Buyer ", phoneNumber: "+84 912 345 678", addressLine: " 10 Main Street ",
-  provinceCode: "202", districtCode: "1442", wardCode: "00123",
+  provinceCode: "202", wardCode: "00123",
 };
 test("checkout validates every required field, trims text and preserves locality codes including leading zeroes", () => {
   const blank = Object.fromEntries(Object.keys(address).map((key) => [key, " "])) as CheckoutAddress;
@@ -18,12 +18,12 @@ test("checkout validates every required field, trims text and preserves locality
   assert.ok(validateCheckoutAddress({ ...address, recipientName: "N".repeat(151) }).recipientName);
   assert.ok(validateCheckoutAddress({ ...address, addressLine: "A".repeat(501) }).addressLine);
   const destination = getCheckoutDestination(address,
-    [{ code: "202", name: "City" }], [{ code: "1442", name: "District" }], [{ code: "00123", name: "Ward" }]);
+    [{ code: "202", name: "City" }], [{ code: "00123", name: "Ward" }]);
   assert.equal(destination?.recipientName, "Buyer");
   assert.equal(destination?.addressLine, "10 Main Street");
   assert.equal(destination?.wardCode, "00123");
   assert.equal(destination?.ward, "Ward");
-  assert.equal(getCheckoutDestination(address, [{ code: "201", name: "Other province" }], [], []), null);
+  assert.equal(getCheckoutDestination(address, [{ code: "201", name: "Other province" }], []), null);
 });
 
 test("checkout maps Problem Details fields by code and known paths, leaving unknown fields at form level", () => {

@@ -6,7 +6,6 @@ export type CheckoutAddress = {
   phoneNumber: string;
   addressLine: string;
   provinceCode: string;
-  districtCode: string;
   wardCode: string;
 };
 
@@ -15,7 +14,6 @@ export type ShippingLocality = { code: string; name: string };
 
 export type CheckoutDestination = CheckoutAddress & {
   city: string;
-  district: string;
   ward: string;
   countryCode: "VN";
 };

@@ -13,8 +13,8 @@ import type { components } from "../types/commerceGeneratedType";
 
 const destination: CheckoutDestination = {
   recipientName: " Buyer Name ", phoneNumber: "0901234567",
-  addressLine: "12 Nguyen Trai", provinceCode: "202", districtCode: "1442",
-  wardCode: "20308", city: "Ho Chi Minh City", district: "District 4",
+  addressLine: "12 Nguyen Trai", provinceCode: "202",
+  wardCode: "20308", city: "Ho Chi Minh City",
   ward: "Ward 4", countryCode: "VN",
 };
 const key = "c8000000-0000-4000-8000-000000000007";

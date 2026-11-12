@@ -41,7 +41,6 @@ async function openCheckout(page: Page) {
 }
 async function destination(page: Page, ward = "20308") {
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
-  await page.getByLabel("District", { exact: true }).selectOption("1442");
   await page.getByLabel("Ward", { exact: true }).selectOption(ward);
 }
 async function capture(page: Page, info: TestInfo, name: string) {
@@ -80,7 +79,6 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("0901234567");
   await expect(page.getByLabel("Address line", { exact: true })).toHaveValue("227 Nguyen Van Cu");
   await expect(page.getByLabel("Province / City", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("District", { exact: true })).toBeDisabled();
   await expect(page.getByLabel("Ward", { exact: true })).toBeDisabled();
   await expect(page.getByTestId(`checkout-item-${lineIds[0]}`)).toContainText("150.000,00 ₫");
   await expect(page.getByTestId(`checkout-item-${lineIds[0]}`)).toContainText("300.000,00 ₫");
@@ -114,7 +112,7 @@ test("empty address reports each required field and sends no checkout request", 
   await options(request, { emptyProfile: true });
   await openCheckout(page);
   await page.getByRole("button", { name: "Review address", exact: true }).click();
-  for (const name of ["Recipient name", "Phone number", "Address line", "Province / City", "District", "Ward"])
+  for (const name of ["Recipient name", "Phone number", "Address line", "Province / City", "Ward"])
     await expect(page.getByLabel(name, { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByLabel("Recipient name", { exact: true })).toBeFocused();
   await expect(page.getByRole("alert").filter({ hasText: "Check the highlighted address fields below." })).toBeVisible();
@@ -123,30 +121,23 @@ test("empty address reports each required field and sends no checkout request", 
   expect(actual.orderRequests).toBe(0);
 });
 
-test("parent selectors reset child codes and a ward change refreshes the quote", async ({ page, request }) => {
+test("a province change resets the ward and a ward change refreshes the quote", async ({ page, request }) => {
   await openCheckout(page);
   await destination(page);
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await page.getByLabel("Ward", { exact: true }).selectOption("20309");
   await expect(page.getByTestId("checkout-shipping")).toHaveText("45.000,00 ₫");
   await expect(page.getByTestId("checkout-total")).toHaveText("470.000,00 ₫");
-  await page.getByLabel("District", { exact: true }).selectOption("1443");
-  await expect(page.getByLabel("Ward", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Ward", { exact: true }).locator("option[value='20309']")).toHaveCount(0);
-  await expect(page.getByTestId("checkout-total")).not.toHaveText("470.000,00 ₫");
   await page.getByLabel("Ward", { exact: true }).selectOption("20310");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await page.getByLabel("Province / City", { exact: true }).selectOption("201");
-  await expect(page.getByLabel("District", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Ward", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Ward", { exact: true })).toBeDisabled();
-  await expect(page.getByLabel("District", { exact: true }).locator("option[value='1443']")).toHaveCount(0);
-  await page.getByLabel("District", { exact: true }).selectOption("1542");
+  await expect(page.getByLabel("Ward", { exact: true }).locator("option[value='20310']")).toHaveCount(0);
   await page.getByLabel("Ward", { exact: true }).selectOption("20701");
   await expect.poll(async () => (await evidence(request)).previews.at(-1)?.shippingAddress.wardCode).toBe("20701");
   const actual = await evidence(request);
-  expect(actual.requests.some((entry) => entry.path.endsWith("/districts") && entry.query === "?provinceCode=201")).toBe(true);
-  expect(actual.requests.some((entry) => entry.path.endsWith("/wards") && entry.query === "?districtCode=1542")).toBe(true);
+  expect(actual.requests.some((entry) => entry.path.endsWith("/wards") && entry.query === "?provinceCode=201")).toBe(true);
+  expect(actual.requests.some((entry) => entry.path.endsWith("/districts"))).toBe(false);
 });
 
 test("a late quote for a previous ward cannot replace the current total", async ({ page, request }) => {
@@ -162,15 +153,14 @@ test("a late quote for a previous ward cannot replace the current total", async 
   expect((await evidence(request)).orderRequests).toBe(0);
 });
 
-test("district failures are recoverable without discarding the parent selection", async ({ page, request }) => {
-  await options(request, { districtsFailure: true });
+test("ward failures are recoverable without discarding the province", async ({ page, request }) => {
+  await options(request, { wardsFailure: true });
   await openCheckout(page);
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
-  await expect(page.getByRole("alert").filter({ hasText: "Districts are temporarily unavailable." })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Wards are temporarily unavailable." })).toBeVisible();
   await expect(page.getByLabel("Province / City", { exact: true })).toHaveValue("202");
-  await options(request, { districtsFailure: false });
-  await page.getByRole("button", { name: /Retry districts/i }).click();
-  await page.getByLabel("District", { exact: true }).selectOption("1442");
+  await options(request, { wardsFailure: false });
+  await page.getByRole("button", { name: /Retry wards/i }).click();
   await page.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
 });
