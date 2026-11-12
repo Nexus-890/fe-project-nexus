@@ -9,7 +9,7 @@ export const checkoutSchema = z.object({
   phoneNumber: z.string().trim().min(1, "Phone number is required")
     .regex(/^[+\d][\d\s()-]{6,19}$/, "Enter a valid phone number")
     .refine((value) => { const digits = value.replace(/\D/g, ""); return digits.length >= 8 && digits.length <= 15; }, "Enter a valid phone number"),
-  addressLine: z.string().trim().min(1, "Address line is required").max(500, "Use 500 characters or fewer"),
+  addressLine: z.string().trim().min(1, "House number and street is required").max(500, "Use 500 characters or fewer"),
   provinceCode: z.string().trim().min(1, "Province / City is required"),
   wardCode: z.string().trim().min(1, "Ward is required"),
 });
