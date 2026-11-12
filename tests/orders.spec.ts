@@ -58,7 +58,8 @@ test("buyer opens an order snapshot, reads history and cancels with a reason", a
   const snapshot = () => ({
     orderId: pendingId, orderNumber: "NX-260929-DETAIL", orderGroupId: pendingGroupId,
     userId: "68000000-0000-4000-8000-000000000003", sellerId: "69000000-0000-4000-8000-000000000001",
-    orderType: "STANDARD", status: canceled ? "CANCELED" : "PENDING", createdAt, totalAmount: 150000,
+    orderType: "STANDARD", status: canceled ? "CANCELED" : "PENDING", createdAt, totalAmount: 170900,
+    subtotal: 150000, shippingFee: 20900, discountAmount: 0, taxAmount: 0,
     items: [{ orderItemId: "69000000-0000-4000-8000-000000000011", productId: "69000000-0000-4000-8000-000000000012", skuId: "69000000-0000-4000-8000-000000000013", productName: "Purchased product snapshot", skuCode: "WHITE-M", imageUrl: null, quantity: 2, unitPrice: 75000, totalPrice: 150000 }],
   });
   const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
@@ -82,6 +83,10 @@ test("buyer opens an order snapshot, reads history and cancels with a reason", a
   await expect(page.getByRole("heading", { name: "Order NX-260929-DETAIL", exact: true })).toBeVisible();
   await expect(page.getByText("Purchased product snapshot", { exact: true })).toBeVisible();
   await expect(page.getByText("Order created", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("order-breakdown-items")).toHaveText("Items subtotal150.000,00 ₫");
+  await expect(page.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
+  await expect(page.getByTestId("order-breakdown-discount")).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "Order receipt" })).toContainText("170.900,00 ₫");
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   await page.getByRole("button", { name: "Cancel order", exact: true }).click();
   await page.getByLabel("Why do you want to cancel?", { exact: true }).fill("  Changed my mind  ");
@@ -116,6 +121,14 @@ test("three orders display number, date, total and status with only pending paym
     await expect(row).toContainText(total);
     await expect(row.getByText(status, { exact: true })).toBeVisible();
   }
+  const pendingTotal = page.getByTestId(`order-total-${pendingId}`);
+  await expect(pendingTotal.getByText("Items subtotal", { exact: true })).toBeHidden();
+  await pendingTotal.locator("summary").click();
+  await expect(pendingTotal.getByTestId("order-breakdown-items")).toHaveText("Items subtotal9.834.000,00 ₫");
+  await expect(pendingTotal.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
+  await page.getByTestId("order-total-68000000-0000-4000-8000-000000000001").locator("summary").click();
+  await expect(page.getByTestId("order-total-68000000-0000-4000-8000-000000000001").getByTestId("order-breakdown-shipping")).toHaveText("Shipping feeFree");
+  await expect(page.getByTestId("order-total-68000000-0000-4000-8000-000000000003")).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("link", { name: "Pay Now", exact: true })).toHaveCount(1);
   const pay = page.getByTestId(`order-row-${pendingId}`).getByRole("link", { name: "Pay Now", exact: true });
   await expect(pay).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);

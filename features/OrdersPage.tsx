@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ReceiptText } from "lucide-react";
 import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatusBadge";
 import { Pagination } from "../components/Pagination";
-import { formatVND } from "../components/formatPrice";
+import { OrderTotalPill } from "../components/OrderPriceBreakdown";
 import { ORDER_STATUSES, isOrderStatus } from "../service/orderService";
 import { useOrders } from "./useOrders";
 import type { OrderSummary } from "../types/orderResponseType";
@@ -32,7 +32,7 @@ function OrderRow({ order }: { order: OrderSummary }) {
       </td>
       <td className="min-w-0 text-sm font-medium xl:w-[22%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs font-normal text-muted-foreground xl:hidden">Total</span>
-        <span className="tabular-nums [overflow-wrap:anywhere]">{formatVND(order.totalAmount)}</span>
+        <OrderTotalPill total={order.totalAmount} breakdown={order.breakdown} testId={`order-total-${order.orderId}`} />
       </td>
       <td className="col-span-2 min-w-0 xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Status</span>

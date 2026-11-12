@@ -2,7 +2,7 @@
  * it is deliberately not claimed as delivered by develop's OrderResponse. */
 const http = require("node:http");
 const userId = "68000000-0000-4000-8000-000000000003";
-const order = (index, status, totalAmount, orderNumber, productName) => ({
+const order = (index, status, totalAmount, orderNumber, productName, price = {}) => ({
   orderId: `68000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
   orderGroupId: `c8000000-0000-4000-8000-${String(index + 100).padStart(12, "0")}`,
   orderNumber, userId, sellerId: "68000000-0000-4000-8000-000000000004",
@@ -14,10 +14,13 @@ const order = (index, status, totalAmount, orderNumber, productName) => ({
     productName, skuCode: "SILVER", imageUrl: null,
     quantity: 1, unitPrice: totalAmount, totalPrice: totalAmount,
   }],
+  ...price,
 });
 const initialOrders = () => [
-  order(1, "PAID", 300000.5, "NX-260929-0042", "Apple AirPods Max Silver"),
-  order(2, "PENDING", 9854900, "NX-260929-0038", "Rolex Submariner Watch"),
+  order(1, "PAID", 300000.5, "NX-260929-0042", "Apple AirPods Max Silver",
+    { subtotal: 300000.5, shippingFee: 0, discountAmount: 0, taxAmount: 0 }),
+  order(2, "PENDING", 9854900, "NX-260929-0038", "Rolex Submariner Watch",
+    { subtotal: 9834000, shippingFee: 20900, discountAmount: 0, taxAmount: 0 }),
   order(3, "CANCELED", 93190, "NX-260921-0311", "Puma Future Rider Trainers"),
 ];
 const initialEvidence = () => ({ reads: [], rejected: 0 });

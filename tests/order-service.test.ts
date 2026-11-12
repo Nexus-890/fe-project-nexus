@@ -52,7 +52,7 @@ test("order list sends status and zero-based paging over HTTP using the current 
     assert.deepEqual(result, {
       content: [{
         orderId, orderGroupId, orderNumber: order.orderNumber,
-        createdAt: order.createdAt, status: "PENDING", totalAmount: "150000.25",
+        createdAt: order.createdAt, status: "PENDING", totalAmount: "150000.25", breakdown: null,
       }],
       page: 1, size: 10, totalElements: 13, totalPages: 2,
     });
@@ -94,6 +94,19 @@ test("delivered orders remain readable without a group id and never substitute a
     { ...order, totalAmount: "150000.25" },
     { ...order, totalAmount: Infinity },
     { ...order, orderGroupId: "/checkout/payment/arbitrary-path" },
+  ]) assert.throws(() => parseOrderSummary(value), invalidResponse);
+});
+
+test("order summary keeps the price parts that add up to the total", () => {
+  const priced = { ...order, subtotal: 129100.25, shippingFee: 20900, discountAmount: 0, taxAmount: 0 };
+  assert.deepEqual(parseOrderSummary(priced).breakdown, {
+    subtotal: "129100.25", shippingFee: "20900.00", discountAmount: "0.00", taxAmount: "0.00",
+  });
+  assert.equal(parseOrderSummary(order).breakdown, null);
+  for (const value of [
+    { ...priced, shippingFee: -1 },
+    { ...priced, subtotal: "129100.25" },
+    { ...priced, taxAmount: null },
   ]) assert.throws(() => parseOrderSummary(value), invalidResponse);
 });
 

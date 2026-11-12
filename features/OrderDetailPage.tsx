@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowLeft, Check, CircleAlert, CircleCheck, Package, ReceiptText, Truck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatVND } from "../components/formatPrice";
+import { OrderPriceRows } from "../components/OrderPriceBreakdown";
 import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatusBadge";
 import ProductImage from "../components/ProductImage";
 import { queryKeys } from "../configs/queryKeys";
@@ -37,6 +38,7 @@ function OrderReceipt({ order }: { order: OrderDetail }) {
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Placed</dt><dd className="text-right"><time dateTime={order.createdAt}>{dateFormatter.format(new Date(order.createdAt))}</time></dd></div>
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Items</dt><dd>{order.items.reduce((sum, item) => sum + item.quantity, 0)}</dd></div>
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Order type</dt><dd>{order.orderType === "AUCTION" ? "Auction" : "Shop purchase"}</dd></div>
+      {order.breakdown && <OrderPriceRows breakdown={order.breakdown} />}
       <div className="flex justify-between gap-5 border-t border-border pt-4 font-semibold"><dt>Total</dt><dd className="font-mono tabular-nums text-primary">{formatVND(order.totalAmount)}</dd></div>
     </dl>
     <OrderProgress status={order.status} />
