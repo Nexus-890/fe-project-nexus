@@ -99,6 +99,12 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await seller.getByLabel("Length (cm) new SKU", { exact: true }).fill("30");
   await seller.getByLabel("Width (cm) new SKU", { exact: true }).fill("20");
   await seller.getByLabel("Height (cm) new SKU", { exact: true }).fill("15");
+  const costPrice = seller.getByRole("textbox", { name: "cost price new SKU", exact: true });
+  await costPrice.fill("-1");
+  await seller.getByRole("button", { name: "Save SKU", exact: true }).click();
+  await expect(seller.getByRole("main").getByRole("alert")).toContainText("Enter a cost price of zero or more");
+  expect((await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`)).toHaveLength(0);
+  await costPrice.fill("90000");
   await seller.getByRole("button", { name: "Save SKU", exact: true }).click();
   await expect.poll(async () => (await evidence(request)).products[0].skus.length).toBe(1);
   state = await evidence(request);
@@ -107,8 +113,10 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   const savedCode = seller.getByRole("textbox", { name: `SKU code ${generatedCode}`, exact: true });
   await expect(savedCode).toHaveValue(generatedCode);
   await expect(savedCode).not.toBeEditable();
-  expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000, shippingParcel: { weightGrams: 1200, lengthCm: 30, widthCm: 20, heightCm: 15 } });
+  expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000, costPrice: 90000, shippingParcel: { weightGrams: 1200, lengthCm: 30, widthCm: 20, heightCm: 15 } });
   await expect(seller.getByRole("button", { name: "Save SKU", exact: true })).toHaveCount(0);
+  await expect(seller.getByTestId(`cost-price-${state.products[0].skus[0].id}`)).toHaveText("90.000,00 ₫");
+  await expect(seller.getByTestId(`selling-price-${state.products[0].skus[0].id}`)).toHaveText("150.000,00 ₫");
   await expect(seller.getByText("Publish the product to add stock for this SKU.", { exact: true })).toBeVisible();
   await expect(publish).toBeDisabled();
   await seller.getByLabel("Product image file", { exact: true }).setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
@@ -119,7 +127,11 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await request.post(`${api}/test/control`, { data: { rejectPublish: false } });
   await publish.click();
   await expect.poll(async () => (await evidence(request)).products[0].status).toBe("ACTIVE");
+  const publicProduct = await (await request.get(`${api}/v1/products/${productId}`)).json();
+  expect(publicProduct.data.minPrice).toBe(150000);
+  expect(JSON.stringify(publicProduct)).not.toContain("costPrice");
   await seller.reload();
+  await expect(seller.getByTestId(`cost-price-${state.products[0].skus[0].id}`)).toHaveText("90.000,00 ₫");
   await expect(seller.getByLabel("Product Name", { exact: true })).toHaveValue("Back-office end-to-end demo headphones");
   state = await evidence(request); const skuId = state.products[0].skus[0].id;
   await expect(seller.getByTestId(`stock-${skuId}`)).toHaveText("0");
@@ -198,9 +210,11 @@ test("Seller completes a legacy SKU parcel with browser bounds before publishing
   const save = page.getByRole("button", { name: "Save SKU", exact: true });
   const putRequests = async () => (await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/skus/${sku.id}`);
   await expect(weight).toBeEmpty();
+  await expect(page.getByRole("textbox", { name: `cost price ${sku.skuCode}`, exact: true })).toBeEmpty();
+  await page.getByRole("textbox", { name: `cost price ${sku.skuCode}`, exact: true }).fill("90000");
   await save.click();
   await expect.poll(async () => (await putRequests()).length).toBe(1);
-  expect((await putRequests())[0].body).toEqual({ color: "Black", size: "Standard", price: 150000 });
+  expect((await putRequests())[0].body).toEqual({ color: "Black", size: "Standard", price: 150000, costPrice: 90000 });
   expect((await evidence(request)).products[0].skus[0].shippingParcel).toBeNull();
   await expect(publish).toBeDisabled();
   await page.getByRole("button", { name: `Edit SKU ${sku.skuCode}`, exact: true }).click();
@@ -232,7 +246,7 @@ test("Seller completes a legacy SKU parcel with browser bounds before publishing
   await save.click();
   await expect.poll(async () => (await putRequests()).length).toBe(2);
   expect((await putRequests())[1].body).toEqual({
-    color: "Black", size: "Standard", price: 150000,
+    color: "Black", size: "Standard", price: 150000, costPrice: 90000,
     shippingParcel: { weightGrams: 50000, lengthCm: 200, widthCm: 1, heightCm: 1 },
   });
   await expect(publish).toBeEnabled();

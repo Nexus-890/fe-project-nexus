@@ -47,10 +47,13 @@ export const parseProductSku = (value: unknown): ProductSku => {
     throw createInvalidResponseError("Invalid product SKU");
   const price = normalizeMoney(value.price);
   if (price === null) throw createInvalidResponseError("Invalid SKU price");
+  const costPrice = value.costPrice == null ? null : normalizeMoney(value.costPrice);
+  if (value.costPrice != null && costPrice === null) throw createInvalidResponseError("Invalid SKU cost price");
   const shippingParcel = parseShippingParcel(value.shippingParcel);
   return {
     id: value.id, productId: value.productId, skuCode: value.skuCode,
     color: value.color, size: value.size, status: value.status, price,
+    ...(costPrice === null ? {} : { costPrice }),
     ...(value.shippingParcel === undefined ? {} : { shippingParcel }),
   };
 };
