@@ -34,6 +34,12 @@ displays its server message and an All orders link, with no history request or
 retry action. A 401 offers sign-in; retryable read failures have explicit retries.
 All protected requests and caches retain the shared session generation guards.
 
+Paginated buyer reads (with and without a status filter) and management/sales
+reads fetch `orderGroup` through an entity graph. This lets `canCancel` read the
+group status without an additional query for every pending order. The graph
+fetches only the to-one group; items retain their existing batch loading so
+database pagination and page counts remain intact.
+
 ## Refund status
 
 Refund state comes from the order and its persisted history. A cancelled order
@@ -78,6 +84,47 @@ successful pending cancellation. The initial generated-type check found existing
 commerce schema drift; regeneration also includes the already-delivered shipping
 snapshot and invoice operations. Existing Next security reminders stopped initial
 browser/build invocations; rerunning the unchanged commands completed successfully.
-Docker was unavailable, so PostgreSQL/Kafka integration and a live payment/refund
-workflow were not exercised. Local mock results do not establish deployed service
-compatibility.
+During the initial feature checks Docker was unavailable, so PostgreSQL/Kafka
+integration and a live payment/refund workflow were not exercised. The later
+PostgreSQL read verification is recorded below. Local mock results do not
+establish deployed service compatibility.
+
+## Review follow-up — 2026-11-12
+
+The pending-order list regression uses 45 distinct groups, page sizes 5/20 and
+pages 0/1 across buyer reads, status-filtered buyer reads, management and sales.
+Before the entity graph, buyer/management pages executed 8 SQL statements for
+5 orders and 23 for 20, including one secondary group load per order. With the
+graph restored, all 16 reads execute at most 3 statements with no secondary
+`OrderGroup` fetches. The regression also checks items, stable ordering, total
+counts, pagination and caller-specific cancellation eligibility.
+
+The entire `OrderManagementReadTest` and the existing eligibility, controller
+security, HTTP contract and status tests passed: 104 tests on an isolated real
+PostgreSQL 18.6 instance. This ran Flyway's 12 migrations and Hibernate schema
+validation. It establishes the order read/query behavior; Kafka refund delivery
+and a full application startup remain separate checks.
+
+The default database test still uses Testcontainers. An existing disposable
+PostgreSQL database can run the same checks without Docker:
+
+```powershell
+mvn -o -f be-project-nexus/commerce-service/pom.xml "-Dtest=OrderManagementReadTest,OrderCancellationEligibilityTest,OrderResponseContractTest,OrderControllerSecurityTest,OrderStatusTest" "-Dnexus.test.postgres.url=jdbc:postgresql://127.0.0.1:5432/nexus_test" "-Dnexus.test.postgres.username=postgres" test
+```
+
+`nexus.test.postgres.url`, `.username` (default `postgres`) and `.password`
+(default empty) are test-only system properties. Use a disposable test database;
+the test owns and truncates its `commerce_management_reads` schema.
+
+The 403 browser check now distinguishes a cancelled dev mount request from a
+completed response: it requires exactly one completed 403, permits only explicitly
+observed aborted attempts before that response, and rejects requests started
+after the 403. The detail-503/manual-retry check likewise measures exactly one
+additional GET after Retry. Ten repeated 403 runs and all 27 focused order
+scenarios passed. The separate existing 401 scenario was unchanged. See the
+simulation context for trace evidence and the limits of this local reproduction.
+
+Review verification also passed all 253 FE unit tests, generated-type drift,
+lint, typecheck and production build. The unchanged unit suite had an initial
+cart-service worker failure, then all 253 passed on rerun. Existing Next security
+reminders required unchanged browser/build command retries.

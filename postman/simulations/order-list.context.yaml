@@ -175,6 +175,54 @@ assumptions:
       tests/order-detail.spec.ts; tests/orders.spec.ts; playwright.orders.config.ts;
       postman/mocks/order-list-api/default.js; test-results/order-list-simulation.ndjson
     updated_at: '2026-11-12'
+  - id: simulated-forbidden-request-lifecycle
+    status: supported
+    claim: >-
+      In the repeated local Next development scenarios, a cancelled initial
+      detail transport can reach the stand-in before the replayed mount request.
+      The revised 403 check distinguishes this from an HTTP retry after 403.
+    reason: >-
+      The original assertion counted every request received by the stand-in as
+      a completed request. Browser traces show an aborted initial request with
+      no response followed by exactly one completed 403. Whether the cancelled
+      attempt reaches the stand-in depends on timing. The test now requires
+      exactly one completed 403, allows only explicitly observed ERR_ABORTED
+      attempts before that response, rejects requests started after 403, and
+      bounds the stand-in count by completed plus explicitly aborted attempts.
+      All received requests must still match the authorized foreign-order GET,
+      history must remain unread, and the visible error/navigation/overflow
+      checks are preserved. Production HTTP and fixture behavior are unchanged.
+    verification: >-
+      On 2026-11-12 at fingerprint order-detail-browser-lifecycle-review,
+      repeated the unchanged foreign-order browser test six times with tracing:
+      four passed and two failed only its exact stand-in-count assertion, which
+      observed two GETs instead of one. Both failures had one cancelled browser
+      transport and one completed 403; the UI checks passed. After correcting
+      the test, all ten repeated runs passed in 1.2 minutes. Every run's
+      forbidden-request-outcomes attachment records one net::ERR_ABORTED attempt
+      followed by one completed 403, with no request started after that response.
+      In those ten runs the stand-in received only the completed request. This
+      is the measured local failure, not a claim to reproduce the reviewer's
+      separately reported failure frequency. A full-suite run also exposed the
+      same initial cancellation in the detail-503/manual-retry test: the trace
+      had an aborted transport, a completed 503 and a completed 200. That test
+      now requires exactly one additional GET after its explicit Retry action,
+      relative to the observed failed-read baseline; history remains unread
+      until recovery. After both test corrections, the whole focused order
+      suite passed all 27 cases in 1.2 minutes with tracing enabled, including
+      the unchanged order-list 401 case. The repeated and final runs used
+      isolated app/API/OIDC/order ports 3118/3921/3923/3924 and dist directory
+      .next-orders-flake after pre-existing default-port fixture collisions.
+      Existing Next security reminders interrupted some server startups; those
+      connection-refused runs did not establish application behavior and the
+      unchanged commands were retried. The unrelated existing order-list 401
+      test was not changed or independently investigated here.
+    source: >-
+      tests/order-detail.spec.ts; playwright.orders.config.ts;
+      postman/mocks/order-list-api/default.js;
+      Playwright forbidden-request-outcomes attachment and trace.zip;
+      test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-12'
 fingerprints:
   - id: order-list-154
     date: '2026-11-04'
@@ -192,3 +240,7 @@ fingerprints:
     date: '2026-11-12'
     commit: '4f083ee0 with uncommitted order-detail frontend/backend/contract/test changes'
     cli: 'Postman 1.73.0; postman status is unavailable in this installed version'
+  - id: order-detail-browser-lifecycle-review
+    date: '2026-11-12'
+    commit: 'b2e8c2e6 with uncommitted review corrections; browser lifecycle changes affect tests only'
+    cli: 'Postman 1.73.0; local Next dev, Chrome and real HTTP Postman simulation'

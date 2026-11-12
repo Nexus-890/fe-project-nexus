@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page, type Request, type TestInfo } from "@playwright/test";
 
 test.skip(!process.env.NEXUS_ORDER_LIST_TEST, "Run with playwright.orders.config.ts for the order HTTP simulation.");
 
@@ -177,16 +177,47 @@ test("409 keeps the backend message, refreshes stale eligibility and never retri
 });
 
 test("another buyer's order displays the 403 message without requesting history", async ({ page, request }, info) => {
+  const detailPath = `/api/v1/orders/${foreignId}`;
+  const detailAttempts: { request: Request; afterForbidden: boolean }[] = [];
+  let forbiddenReceived = false;
+  page.on("request", (outgoing) => {
+    if (new URL(outgoing.url()).pathname === detailPath)
+      detailAttempts.push({ request: outgoing, afterForbidden: forbiddenReceived });
+  });
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === detailPath && response.status() === 403) forbiddenReceived = true;
+  });
   await signIn(page, `/order/${foreignId}`);
   await expect(page.getByRole("heading", { name: "You cannot view this order", exact: true })).toBeVisible();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("You do not have access to this order.");
   await expect(page.getByRole("link", { name: "All orders", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry order", exact: true })).toHaveCount(0);
-  const calls = await evidence(request);
-  expect(calls.details).toEqual([{ method: "GET", orderId: foreignId, authorized: true }]);
-  expect(calls.histories).toEqual([]);
   await assertNoOverflow(page);
   await capture(page, info, "order-detail-forbidden-mobile-375x812.png");
+  const outcomes = await Promise.all(detailAttempts.map(async (attempt) => {
+    const response = await attempt.request.response();
+    const responseFailure = response ? await response.finished() : null;
+    return { status: response?.status() ?? null,
+      failure: attempt.request.failure()?.errorText ?? responseFailure?.message ?? null,
+      afterForbidden: attempt.afterForbidden };
+  }));
+  await info.attach("forbidden-request-outcomes", { body: JSON.stringify(outcomes), contentType: "application/json" });
+  // Next dev replays the mount effect and can abort its first transport after it
+  // reaches the mock. Exactly one completed 403, with no request started after
+  // that response, verifies no retry without mistaking cancellation for a retry.
+  const completed = outcomes.filter((outcome) => outcome.failure === null);
+  expect(completed).toEqual([{ status: 403, failure: null, afterForbidden: false }]);
+  for (const aborted of outcomes.filter((outcome) => outcome.failure !== null)) {
+    expect(aborted).toEqual({ status: null, failure: "net::ERR_ABORTED", afterForbidden: false });
+  }
+  const calls = await evidence(request);
+  expect(calls.details).toEqual(Array.from({ length: calls.details.length }, () => ({
+    method: "GET", orderId: foreignId, authorized: true,
+  })));
+  // A cancelled transport can stop before the mock receives it.
+  expect(calls.details.length).toBeGreaterThanOrEqual(completed.length);
+  expect(calls.details.length).toBeLessThanOrEqual(outcomes.length);
+  expect(calls.histories).toEqual([]);
 });
 
 test("history failure preserves the snapshot and retries independently", async ({ page, request }) => {
@@ -206,9 +237,12 @@ test("order failure has a retry and only requests history after recovery", async
   await control(request, "detail-mode?mode=detail-unavailable");
   await signIn(page, `/order/${pendingId}`);
   await expect(page.getByRole("main").getByRole("alert")).toContainText("This order is temporarily unavailable.");
-  expect((await evidence(request)).histories).toEqual([]);
+  const failedCalls = await evidence(request);
+  expect(failedCalls.histories).toEqual([]);
   await control(request, "detail-mode?mode=success");
   await page.getByRole("button", { name: "Retry order", exact: true }).click();
   await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Order created from cart");
-  expect((await evidence(request)).details).toHaveLength(2);
+  // The initial dev mount may include a cancelled transport. The explicit
+  // retry must add exactly one request to that observed baseline.
+  expect((await evidence(request)).details).toHaveLength(failedCalls.details.length + 1);
 });
