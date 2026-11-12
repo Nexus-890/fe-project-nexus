@@ -48,7 +48,7 @@ function AdminStockPage() {
   if (!isAdmin) return <SellerPanel title="403 · Administrator access required"><p className="text-sm text-muted-foreground">Stock intake is available only to administrators.</p></SellerPanel>;
 
   return <>
-    <SellerHeading title="Add stock" description="Receive units into a SKU’s warehouse balance. Only administrators can add stock." />
+    <SellerHeading title="Add stock" description="Receive units into any SKU’s warehouse balance. Sellers add stock to their own SKUs from the product page." />
     <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)]">
       <SellerPanel title="Stock intake">
         <form className="space-y-5" onSubmit={(event) => {

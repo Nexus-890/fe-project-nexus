@@ -9,6 +9,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { queryKeys } from "../configs/queryKeys";
 import { getCategoryTree, isValidShippingParcel } from "../service/catalogService";
+import { getProductAvailability, intakeStock } from "../service/backofficeService";
 import { canPublishSellerProduct, changeSellerProductStatus, createSellerProduct, getSellerProduct, removeSellerImage, saveSellerSku, uploadSellerImage } from "../service/sellerService";
 import ProductImage from "../components/ProductImage";
 import { formatVND } from "../components/formatPrice";
@@ -72,7 +73,39 @@ function SkuEditor({ productId, sku, onSaved, onRemove }: { productId: string; s
   </form>;
 }
 
-function SavedSku({ productId, sku, onSaved }: { productId: string; sku: ProductSku; onSaved: (sku: ProductSku) => void }) {
+function SkuStock({ sku, active }: { sku: ProductSku; active: boolean }) {
+  const auth = useAuth();
+  const [quantity, setQuantity] = useState("");
+  const [validation, setValidation] = useState("");
+  const [notice, setNotice] = useState("");
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
+  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(sku.id), service: (signal) => getProductAvailability(sku.id, { signal }) }, { enabled: active, retry: false });
+  const intake = useApiMutation({
+    execute: (amount: number) => {
+      const controller = new AbortController(); pending.current = controller;
+      return intakeStock({ skuId: sku.id, quantity: amount }, { context: auth.requestContext, signal: controller.signal });
+    },
+    isCurrent: () => auth.isSessionCurrent(auth.sessionId) && pending.current?.signal.aborted !== true,
+    invalidateKey: [["inventory", "available"], queryKeys.seller.all(auth.sessionId)],
+  }, { onSuccess: (balance, amount) => { setQuantity(""); setNotice(`Added ${amount.toLocaleString("en-US")} units. Available now: ${balance.available.toLocaleString("en-US")}.`); } });
+  if (!active) return <p className="text-xs text-muted-foreground">Publish the product to add stock for this SKU.</p>;
+  return <form aria-label={`Stock ${sku.skuCode}`} className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
+    event.preventDefault(); setValidation(""); setNotice("");
+    if (intake.isPending) return;
+    const amount = Number(quantity);
+    if (!/^\d+$/.test(quantity) || !Number.isSafeInteger(amount) || amount < 1 || amount > 2147483647) { setValidation("Enter a whole quantity of at least 1."); return; }
+    intake.mutate(amount);
+  }}>
+    <div className="min-w-32"><p className="text-xs text-muted-foreground">In stock</p><p data-testid={`stock-${sku.id}`} className="mt-3 font-mono text-sm">{stock.isPending ? "…" : stock.isError ? "Unavailable" : stock.data.toLocaleString("en-US")}</p></div>
+    <label className="text-xs text-muted-foreground">Quantity to add<input aria-label={`Quantity to add ${sku.skuCode}`} type="number" inputMode="numeric" min={1} step={1} required value={quantity} disabled={intake.isPending} onChange={(event) => setQuantity(event.target.value)} className={`${sellerInput} mt-2 w-40`} /></label>
+    <button type="submit" className={sellerButton} disabled={intake.isPending}>{intake.isPending ? "Adding…" : "Add stock"}</button>
+    {(validation || intake.error) && <p role="alert" className="w-full text-sm text-danger">{intake.error?.detail || intake.error?.title || validation}</p>}
+    {notice && !intake.error && <p role="status" className="w-full text-sm text-success">{notice}</p>}
+  </form>;
+}
+
+function SavedSku({ productId, sku, active, onSaved }: { productId: string; sku: ProductSku; active: boolean; onSaved: (sku: ProductSku) => void }) {
   const [editing, setEditing] = useState(false);
   if (editing) return <SkuEditor productId={productId} sku={sku} onSaved={(saved) => { onSaved(saved); setEditing(false); }} onRemove={() => setEditing(false)} />;
   return <div className="space-y-3 border-t border-border py-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -80,7 +113,7 @@ function SavedSku({ productId, sku, onSaved }: { productId: string; sku: Product
     <div><p className="text-xs text-muted-foreground">Color</p><p className="mt-3 break-words text-sm">{sku.color || "—"}</p></div>
     <div><p className="text-xs text-muted-foreground">Size</p><p className="mt-3 break-words text-sm">{sku.size || "—"}</p></div>
     <div><p className="text-xs text-muted-foreground">Price</p><p className="mt-3 font-mono text-sm">{formatVND(sku.price)}</p></div>
-  </div><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{sku.shippingParcel ? `${sku.shippingParcel.weightGrams.toLocaleString("en-US")} g · ${sku.shippingParcel.lengthCm} × ${sku.shippingParcel.widthCm} × ${sku.shippingParcel.heightCm} cm` : "Shipping measurements missing"}</p><button type="button" aria-label={`Edit SKU ${sku.skuCode}`} className={sellerButton} onClick={() => setEditing(true)}>Edit SKU</button></div></div>;
+  </div><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{sku.shippingParcel ? `${sku.shippingParcel.weightGrams.toLocaleString("en-US")} g · ${sku.shippingParcel.lengthCm} × ${sku.shippingParcel.widthCm} × ${sku.shippingParcel.heightCm} cm` : "Shipping measurements missing"}</p><button type="button" aria-label={`Edit SKU ${sku.skuCode}`} className={sellerButton} onClick={() => setEditing(true)}>Edit SKU</button></div><SkuStock sku={sku} active={active} /></div>;
 }
 
 function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newProduct: boolean }) {
@@ -140,7 +173,7 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
           <SellerPanel title="Media"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{images.map((image, index) => <div key={image.id} className="min-w-0"><div className="aspect-square overflow-hidden rounded-sm bg-muted"><ProductImage src={image.imageUrl} alt={`${name} ${index + 1}`} productName={name} /></div><button type="button" className={`${sellerButton} mt-2 w-full`} disabled={busy} onClick={() => imageRemove.mutate(image)}>Remove</button></div>)}<button type="button" className="flex aspect-square min-h-24 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-input p-3 text-sm disabled:opacity-50" disabled={images.length >= 5 || busy} onClick={() => fileInput.current?.click()}><Upload size={20} aria-hidden="true" />{imageSave.isPending ? "Uploading…" : "Add Image"}</button></div>
             <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Product image file" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { setNotice("Choose a JPEG, PNG or WebP image up to 5 MiB."); return; } imageSave.mutate(file); }} /><p className="mt-3 text-xs text-muted-foreground">Up to 5 images, JPEG/PNG/WebP, 5 MiB each.</p>
           </SellerPanel>
-          <SellerPanel title="Pricing & SKUs">{skus.map((sku) => <SavedSku key={sku.id} productId={initial.id} sku={sku} onSaved={(saved) => { setSkus((current) => current.map((row) => row.id === saved.id ? saved : row)); setNotice("SKU saved."); }} />)}{skuForms.map((key) => <SkuEditor key={key} productId={initial.id} onSaved={(sku) => { setSkus((current) => [...current, sku]); setSkuForms((current) => current.filter((row) => row !== key)); setNotice("SKU saved."); }} onRemove={() => setSkuForms((current) => current.filter((row) => row !== key))} />)}<button type="button" className={`${sellerButton} mt-4`} onClick={() => setSkuForms((current) => [...current, crypto.randomUUID()])}><Plus size={16} aria-hidden="true" />Add SKU</button></SellerPanel>
+          <SellerPanel title="Pricing & SKUs">{skus.map((sku) => <SavedSku key={sku.id} productId={initial.id} sku={sku} active={status === "ACTIVE"} onSaved={(saved) => { setSkus((current) => current.map((row) => row.id === saved.id ? saved : row)); setNotice("SKU saved."); }} />)}{skuForms.map((key) => <SkuEditor key={key} productId={initial.id} onSaved={(sku) => { setSkus((current) => [...current, sku]); setSkuForms((current) => current.filter((row) => row !== key)); setNotice("SKU saved."); }} onRemove={() => setSkuForms((current) => current.filter((row) => row !== key))} />)}<button type="button" className={`${sellerButton} mt-4`} onClick={() => setSkuForms((current) => [...current, crypto.randomUUID()])}><Plus size={16} aria-hidden="true" />Add SKU</button></SellerPanel>
         </>}
       </div>
       <aside><SellerPanel title="Status"><p className="font-medium">{status}</p>{!newProduct && <button type="button" className={`${sellerPrimary} mt-4 w-full`} disabled={busy || status !== "ACTIVE" && !publishReady} onClick={() => statusSave.mutate(status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{statusSave.isPending ? "Updating…" : status === "ACTIVE" ? "Unpublish" : "Publish"}</button>}{!newProduct && !publishReady && <p className="mt-3 text-xs leading-5 text-muted-foreground">Save at least one SKU and upload an image before publishing. Every saved SKU needs weight, length, width and height. Unsaved SKU rows do not count.</p>}</SellerPanel></aside>

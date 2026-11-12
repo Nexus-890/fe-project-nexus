@@ -109,6 +109,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await expect(savedCode).not.toBeEditable();
   expect(state.requests.find((row: { method: string; path: string }) => row.method === "POST" && row.path === `/api/v1/products/${productId}/skus`).body).toEqual({ color: "Black", size: "Standard", price: 150000, shippingParcel: { weightGrams: 1200, lengthCm: 30, widthCm: 20, heightCm: 15 } });
   await expect(seller.getByRole("button", { name: "Save SKU", exact: true })).toHaveCount(0);
+  await expect(seller.getByText("Publish the product to add stock for this SKU.", { exact: true })).toBeVisible();
   await expect(publish).toBeDisabled();
   await seller.getByLabel("Product image file", { exact: true }).setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
   await expect(publish).toBeEnabled();
@@ -121,6 +122,18 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await seller.reload();
   await expect(seller.getByLabel("Product Name", { exact: true })).toHaveValue("Back-office end-to-end demo headphones");
   state = await evidence(request); const skuId = state.products[0].skus[0].id;
+  await expect(seller.getByTestId(`stock-${skuId}`)).toHaveText("0");
+  const quantityToAdd = seller.getByLabel(`Quantity to add ${generatedCode}`, { exact: true });
+  await quantityToAdd.fill("0");
+  await seller.getByRole("button", { name: "Add stock", exact: true }).click();
+  expect((await evidence(request)).requests.some((row: { path: string }) => row.path === "/api/v1/inventory/intake")).toBe(false);
+  await quantityToAdd.fill("6");
+  await seller.getByRole("button", { name: "Add stock", exact: true }).click();
+  await expect(seller.getByRole("status").filter({ hasText: "Added 6 units" })).toContainText("Available now: 6.");
+  await expect(seller.getByTestId(`stock-${skuId}`)).toHaveText("6");
+  await expect(quantityToAdd).toHaveValue("");
+  state = await evidence(request);
+  expect(state.requests.find((row: { method: string; path: string; role: string }) => row.method === "POST" && row.path === "/api/v1/inventory/intake" && row.role === "SELLER").body).toEqual({ skuId, quantity: 6 });
 
   const adminContext = await browser.newContext(), buyerContext = await browser.newContext();
   const adminPage = await adminContext.newPage(), buyerPage = await buyerContext.newPage();
@@ -128,7 +141,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
     await signIn(adminPage, request, "ADMIN", "/backoffice/stock");
     await adminPage.getByLabel("Product", { exact: true }).selectOption(productId);
     await adminPage.getByLabel("SKU", { exact: true }).selectOption(skuId);
-    await adminPage.getByLabel("Quantity", { exact: true }).fill("10");
+    await adminPage.getByLabel("Quantity", { exact: true }).fill("4");
     await adminPage.getByRole("button", { name: "Add stock", exact: true }).click();
     await expect.poll(async () => (await evidence(request)).balances[skuId]?.available).toBe(10);
     await expect(adminPage.getByRole("status")).toContainText(/10/);
