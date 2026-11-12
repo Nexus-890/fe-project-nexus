@@ -39,10 +39,21 @@ export const getOrderShipment = async (
   const shipment: unknown = shipments[0];
   if (!isRecord(shipment) || !isUuid(shipment.id) || !isUuid(shipment.orderId) || !sameId(shipment.orderId, orderId))
     throw createInvalidResponseError("Invalid order shipment");
-  const { data } = await requestApi<unknown>("GET", `${SHIPMENTS_PATH}/${encodeURIComponent(shipment.id)}/tracking`, undefined, {
+  return getShipmentTracking(shipment.id, orderId, options);
+};
+
+/** Refresh a resolved shipment without repeating the order-to-shipment lookup. */
+export const getShipmentTracking = async (
+  shipmentId: string,
+  orderId: string,
+  options: ServiceRequestOptions = {},
+): Promise<ShipmentTracking> => {
+  if (!isUuid(shipmentId) || !isUuid(orderId))
+    throw createInvalidResponseError("Valid shipment and order references are required");
+  const { data } = await requestApi<unknown>("GET", `${SHIPMENTS_PATH}/${encodeURIComponent(shipmentId)}/tracking`, undefined, {
     ...options, auth: true, params: undefined,
   });
-  if (!isRecord(data) || !isUuid(data.shipmentId) || !sameId(data.shipmentId, shipment.id) ||
+  if (!isRecord(data) || !isUuid(data.shipmentId) || !sameId(data.shipmentId, shipmentId) ||
     !isUuid(data.orderId) || !sameId(data.orderId, orderId) || !isNonBlank(data.carrier) ||
     (data.trackingCode !== null && !isNonBlank(data.trackingCode)) || !isStatus(data.status) || !Array.isArray(data.history))
     throw createInvalidResponseError("Invalid shipment tracking");

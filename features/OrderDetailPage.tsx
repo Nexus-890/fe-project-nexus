@@ -12,8 +12,9 @@ import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { cancelOrder, getOrder, getOrderHistory } from "../service/orderService";
-import { getOrderShipment } from "../service/shipmentService";
+import { getOrderShipment, getShipmentTracking } from "../service/shipmentService";
 import type { OrderDetail, OrderGroup, OrderStatus } from "../types/orderResponseType";
+import type { ShipmentTracking as ShipmentTrackingData } from "../types/shipmentResponseType";
 
 const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border px-5 text-sm font-medium hover:bg-secondary disabled:opacity-50";
 const dateFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
@@ -61,8 +62,22 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
   }, { enabled: !result && order.isSuccess, retry: false });
   const shipment = useApiQuery({
     queryKey: queryKeys.orders.shipment(auth.sessionId, orderId), meta: { requiresAuth: true },
-    service: (signal) => getOrderShipment(orderId, { context: auth.requestContext, signal }),
-  }, { enabled: !result && order.isSuccess, refetchInterval: 30_000 });
+    service: (signal) => {
+      const cached = client.getQueryData<ShipmentTrackingData | null>(queryKeys.orders.shipment(auth.sessionId, orderId));
+      const options = { context: auth.requestContext, signal };
+      return cached ? getShipmentTracking(cached.shipmentId, orderId, options) : getOrderShipment(orderId, options);
+    },
+  }, {
+    enabled: !result && order.isSuccess,
+    // Read every order once; refresh only an existing, active shipment on an active order.
+    refetchInterval: (query) =>
+      !result && order.isSuccess && (order.data.status === "PAID" || order.data.status === "SHIPPED") &&
+      query.state.status === "success" && query.state.data &&
+      !["DELIVERED", "RETURNED", "CANCELLED"].includes(query.state.data.status) ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
   const cancellation = useApiMutation<OrderGroup, { reason: string; sessionId: number }>({
     mutationKey: ["orders", auth.sessionId, "cancel", orderId],
     isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId),

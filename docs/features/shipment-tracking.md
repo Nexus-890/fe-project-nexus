@@ -34,10 +34,52 @@ different order/shipment, invalid statuses/timestamps and duplicate history IDs
 are rejected. Wire types are generated from the delivered shipment OpenAPI.
 
 `OrderDetailPage` uses the shared query hook and a private session-scoped order
-key. Reads start after the order is available and refresh every 30 seconds while
-the page is visible. Account changes reuse the provider's private-query cleanup
-and cancellation behavior. The UI renders history separately from the commerce
+key. Each loaded order gets an initial lookup, including canceled/delivered orders
+that may retain persisted shipment history. A successful empty result hides the
+card and stops automatic requests; reload or revisit to discover a later shipment.
+Only orders in `PAID` or `SHIPPED` with a successfully loaded shipment poll every
+30 seconds while the page is visible. Shipment statuses `DELIVERED`, `RETURNED`
+and `CANCELLED`, all other order statuses, and failed reads stop the timer.
+`DELIVERY_FAILED` and `RETURNING` can still change, so they remain active.
+Retries remain explicit after the ordinary bounded query retry. Window focus
+and network reconnection do not restart a stopped query.
+
+After resolving the shipment ID, refreshes call only
+`GET /api/v1/shipments/{id}/tracking`; the initial list lookup is not repeated
+on every tick. Account changes reuse the provider's private-query cleanup and
+cancellation behavior. The UI renders history separately from the commerce
 order timeline.
+
+### Coordination with #203
+
+This MR supplies the persisted `/tracking` read subset for #206. The #203 owner
+(Tú) needs to review/reuse `ShipmentTrackingResponse`, `ShipmentHistoryResponse`
+and the endpoint before merge so that the read is not implemented twice. Carrier
+webhooks, polling ingestion, status updates and overrides remain owned by #203.
+This note records the handoff needed; owner review/approval has not been recorded.
+
+### Review correction — 2026-11-12
+
+MR !164 identified unconditional polling on pending/canceled/delivered orders,
+empty results and completed shipments. The refresh policy above replaces that
+timer and reuses the resolved shipment ID, reducing each active poll from two
+requests to one. The initial read remains available for historical shipment data.
+
+Unit tests passed 259/259 after this correction. The focused order browser suite
+passed 22/22, including simulated elapsed time beyond two polling intervals for
+empty results, errors, inactive orders and terminal shipment statuses. It also
+verifies that an active shipment refresh calls only `/tracking` and stops after
+the response becomes `DELIVERED`. These tests use controlled HTTP fixtures; they
+do not replace authenticated live-backend verification.
+
+The correction also passed generated-type drift checking, lint, typecheck and
+the isolated `.next-shipment-review-build` production build. The general browser
+suite passed 55 scenarios and intentionally skipped the 22 focused order tests.
+Browser/build startup required unchanged retries after the existing Next.js
+security reminder. No backend implementation changed in this correction.
+
+The branch incorporates `origin/develop` at `551f4744`. Those incoming changes
+affect auction configuration/cancellation; they do not change the shipment API.
 
 ## Local setup
 

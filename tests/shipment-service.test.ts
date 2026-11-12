@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { test } from "node:test";
 import { isApiError } from "../configs/api";
-import { getOrderShipment } from "../service/shipmentService";
+import { getOrderShipment, getShipmentTracking } from "../service/shipmentService";
 import type { ApiContext } from "../types/commonRequestType";
 
 const orderId = "a1000000-0000-4000-8000-000000000001";
@@ -75,6 +75,29 @@ test("a successful empty shipment list returns null without requesting tracking"
     assert.equal(await getOrderShipment(orderId, { context: { baseUrl: await listen(server) } }), null);
     assert.equal(requests.length, 1);
     assert.ok(requests[0].startsWith("/api/v1/shipments?"));
+  } finally { await close(server); }
+});
+
+test("refreshing a known shipment reads only its tracking resource with current auth and no lookup parameters", async () => {
+  const requests: Array<{ method?: string; url?: string; auth?: string }> = [];
+  const server = createServer((request, response) => {
+    requests.push({ method: request.method, url: request.url, auth: request.headers.authorization });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(envelope(tracking)));
+  });
+  let token = "first-private-token";
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => token };
+  try {
+    assert.deepEqual(await getShipmentTracking(shipmentId, orderId, { context, auth: false, params: { orderId: otherId } }), tracking);
+    token = "current-private-token";
+    assert.deepEqual(await getShipmentTracking(shipmentId, orderId, { context }), tracking);
+    assert.deepEqual(requests, [
+      { method: "GET", url: `/api/v1/shipments/${shipmentId}/tracking`, auth: "Bearer first-private-token" },
+      { method: "GET", url: `/api/v1/shipments/${shipmentId}/tracking`, auth: "Bearer current-private-token" },
+    ]);
+    await assert.rejects(getShipmentTracking("not-a-shipment", orderId, { context }), invalidResponse);
+    await assert.rejects(getShipmentTracking(shipmentId, "not-an-order", { context }), invalidResponse);
+    assert.equal(requests.length, 2);
   } finally { await close(server); }
 });
 
