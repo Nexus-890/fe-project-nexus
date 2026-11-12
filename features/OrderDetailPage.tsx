@@ -7,10 +7,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { formatVND } from "../components/formatPrice";
 import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatusBadge";
 import ProductImage from "../components/ProductImage";
+import ShipmentTracking from "../components/ShipmentTracking";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { cancelOrder, getOrder, getOrderHistory } from "../service/orderService";
+import { getOrderShipment } from "../service/shipmentService";
 import type { OrderDetail, OrderGroup, OrderStatus } from "../types/orderResponseType";
 
 const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border px-5 text-sm font-medium hover:bg-secondary disabled:opacity-50";
@@ -57,6 +59,10 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
     queryKey: queryKeys.orders.history(auth.sessionId, orderId), meta: { requiresAuth: true },
     service: (signal) => getOrderHistory(orderId, { context: auth.requestContext, signal }),
   }, { enabled: !result && order.isSuccess, retry: false });
+  const shipment = useApiQuery({
+    queryKey: queryKeys.orders.shipment(auth.sessionId, orderId), meta: { requiresAuth: true },
+    service: (signal) => getOrderShipment(orderId, { context: auth.requestContext, signal }),
+  }, { enabled: !result && order.isSuccess, refetchInterval: 30_000 });
   const cancellation = useApiMutation<OrderGroup, { reason: string; sessionId: number }>({
     mutationKey: ["orders", auth.sessionId, "cancel", orderId],
     isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId),
@@ -106,6 +112,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
       </div>
       <OrderReceipt order={current} />
     </div>
+    {!result && (shipment.isPending ? <p role="status" className="mt-10 text-sm text-muted-foreground">Checking shipping updates…</p> : shipment.isError ? <div className="mt-10 rounded-sm border border-border p-5"><p role="alert" className="text-sm text-danger">{shipment.error.detail || "Unable to load shipping updates."}</p><button type="button" className={`${buttonClass} mt-3`} onClick={() => void shipment.refetch()}>Retry shipping updates</button></div> : shipment.data ? <ShipmentTracking shipment={shipment.data} /> : null)}
     {!result && <div className="mt-10 grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
       <section className="min-w-0 rounded-sm border border-border p-5 sm:p-6" aria-label="Order items">
         <h2 className="flex items-center gap-2 text-heading-20"><Package size={20} aria-hidden="true" />Your items</h2>

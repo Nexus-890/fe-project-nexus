@@ -116,3 +116,15 @@ The table lists FE consumers/prepared calls, not every BE endpoint or a guarante
 Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, `commerceGeneratedType.ts`, `paymentGeneratedType.ts`, `notificationGeneratedType.ts`, and `gatewayGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
 
 Generated types do not validate live JSON. Keep runtime guards/parsers for auth, trees, products, SKU/images, cart and paging. Update fixtures and parser tests in the same contract change. Do not keep a permissive dual wire-shape parser indefinitely to hide mismatched deployment versions.
+
+## Order shipment tracking — SHP-05
+
+The delivered [shipment OpenAPI](../../../be-project-nexus/docs/api/openapi/shipment-service.yaml)
+also generates `types/shipmentGeneratedType.ts`. The order detail page resolves
+the buyer's shipment through protected `GET /api/v1/shipments?orderId=...&page=0&size=1`,
+then reads `GET /api/v1/shipments/{shipmentId}/tracking`. Both require
+`SHIPPING.VIEW_SHIPMENT`; the service enforces buyer ownership. A successful
+empty list hides tracking. Authentication, authorization, transport and malformed
+response failures remain errors. Tracking includes the carrier, nullable tracking
+code, current status and actual persisted status history. See
+[shipment tracking](../features/shipment-tracking.md) for readiness and verification.

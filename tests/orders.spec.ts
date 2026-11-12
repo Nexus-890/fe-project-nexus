@@ -7,6 +7,17 @@ const simulation = `http://127.0.0.1:${process.env.NEXUS_ORDER_LIST_PORT || "391
 const provider = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
 const pendingId = "68000000-0000-4000-8000-000000000002";
 const pendingGroupId = "c8000000-0000-4000-8000-000000000102";
+const shipmentId = "69000000-0000-4000-8000-000000000050";
+const shipmentEnvelope = (data: unknown) => ({ code: 0, message: "response success", data });
+const shipmentList = (exists: boolean) => ({
+  ...shipmentEnvelope(exists ? [{ id: shipmentId, orderId: pendingId }] : []),
+  page: { number: 0, size: 1, totalElements: exists ? 1 : 0, totalPages: exists ? 1 : 0 },
+});
+const shipmentHistory = [
+  { id: "69000000-0000-4000-8000-000000000051", status: "CREATED", description: "Shipment accepted by carrier", createdAt: "2026-11-10T01:00:00Z" },
+  { id: "69000000-0000-4000-8000-000000000052", status: "SHIPPED", description: "Collected from the warehouse", createdAt: "2026-11-10T04:00:00Z" },
+  { id: "69000000-0000-4000-8000-000000000053", status: "IN_TRANSIT", description: "Arrived at sorting facility", createdAt: "2026-11-11T04:00:00Z" },
+];
 const rows = (page: Page) => page.getByTestId(/^order-row-/);
 
 async function evidence(request: APIRequestContext) {
@@ -39,6 +50,23 @@ async function capture(page: Page, info: TestInfo, filename: string) {
   await info.attach(filename, { path: output, contentType: "image/png" });
 }
 
+async function prepareShippedOrder(page: Page) {
+  const order = {
+    orderId: pendingId, orderNumber: "NX-261110-SHIPPING", orderGroupId: pendingGroupId,
+    userId: "68000000-0000-4000-8000-000000000003", sellerId: "69000000-0000-4000-8000-000000000001",
+    orderType: "STANDARD", status: "SHIPPED", createdAt: "2026-11-10T00:30:00Z", totalAmount: 150000,
+    items: [{ orderItemId: "69000000-0000-4000-8000-000000000011", productId: "69000000-0000-4000-8000-000000000012", skuId: "69000000-0000-4000-8000-000000000013", productName: "Purchased product snapshot", skuCode: "WHITE-M", imageUrl: null, quantity: 2, unitPrice: 75000, totalPrice: 150000 }],
+  };
+  await page.route(`**/api/v1/orders/${pendingId}`, (route) => route.fulfill({ json: shipmentEnvelope(order) }));
+  await page.route(`**/api/v1/orders/${pendingId}/history`, (route) => route.fulfill({ json: shipmentEnvelope([]) }));
+}
+
+async function openShippedOrder(page: Page) {
+  await signIn(page);
+  await page.goto(`/order/${pendingId}`);
+  await expect(page.getByRole("heading", { name: "Order NX-261110-SHIPPING", exact: true })).toBeVisible();
+}
+
 test.beforeEach(async ({ page, request }) => {
   expect((await request.get(`${provider}/keycloak/test/reset`)).ok()).toBe(true);
   expect((await request.get(`${provider}/api/test/reset`)).ok()).toBe(true);
@@ -49,6 +77,92 @@ test.beforeEach(async ({ page, request }) => {
       id: "order-header-cart", userId: "68000000-0000-4000-8000-000000000003", status: "ACTIVE", items: [],
     },
   } }));
+  // Existing order scenarios have no shipment; this models the delivered empty-list contract.
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => route.fulfill({ json: shipmentList(false) }));
+});
+
+test("shipped order displays carrier, copyable tracking and chronological history at mobile and desktop sizes", async ({ page }, info) => {
+  await prepareShippedOrder(page);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const trackingCode = "GHN-1234567890123456789012345678901234567890123456789012345678901234567890";
+  let listReads = 0;
+  let trackingReads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    const url = new URL(route.request().url());
+    expect(Object.fromEntries(url.searchParams)).toEqual({ orderId: pendingId, page: "0", size: "1" });
+    expect(route.request().headers().authorization).toMatch(/^Bearer /);
+    listReads++;
+    return route.fulfill({ json: shipmentList(true) });
+  });
+  await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => {
+    expect(route.request().headers().authorization).toMatch(/^Bearer /);
+    trackingReads++;
+    return route.fulfill({ json: shipmentEnvelope({ shipmentId, orderId: pendingId, carrier: "GHN", trackingCode, status: "IN_TRANSIT", history: shipmentHistory }) });
+  });
+  await openShippedOrder(page);
+  const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+  await expect(region).toBeVisible();
+  await expect(region.getByText("GHN", { exact: true })).toBeVisible();
+  await expect(region.getByText(trackingCode, { exact: true })).toBeVisible();
+  const updates = region.getByRole("list", { name: "Shipment status history" }).getByRole("listitem");
+  await expect(updates).toHaveText([/Shipment created[\s\S]*Shipment accepted by carrier/, /Shipped[\s\S]*Collected from the warehouse/, /In transit[\s\S]*Arrived at sorting facility/]);
+  await expect(updates.last()).toHaveAttribute("aria-current", "step");
+  await region.getByRole("button", { name: "Copy tracking code", exact: true }).click();
+  await expect(region.getByRole("status")).toHaveText("Tracking code copied.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(trackingCode);
+  expect(listReads).toBeGreaterThan(0);
+  expect(trackingReads).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, info, "shipment-tracking-mobile-375x812.png");
+  await page.setViewportSize({ width: 1440, height: 1060 });
+  await expect(region).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, info, "shipment-tracking-desktop-1440.png");
+});
+
+test("order with no shipment hides tracking completely without an error", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await openShippedOrder(page);
+  await expect(page.getByText("Checking shipping updates…", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Your items", exact: true })).toBeVisible();
+});
+
+test("shipment awaiting a carrier code shows preparation and empty history without inventing updates", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => route.fulfill({ json: shipmentList(true) }));
+  await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => route.fulfill({ json: shipmentEnvelope({
+    shipmentId, orderId: pendingId, carrier: "GHN", trackingCode: null, status: "PENDING_TRACKING", history: [],
+  }) }));
+  await openShippedOrder(page);
+  const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+  await expect(region.getByText("Preparing shipment", { exact: true })).toBeVisible();
+  await expect(region.getByText("The carrier hasn’t assigned a tracking code yet.", { exact: true })).toBeVisible();
+  await expect(region.getByText("No shipping updates yet.", { exact: true })).toBeVisible();
+  await expect(region.getByRole("button", { name: "Copy tracking code", exact: true })).toHaveCount(0);
+  await expect(region.getByRole("list", { name: "Shipment status history" })).toHaveCount(0);
+});
+
+test("shipment access failure remains visible and an explicit retry can recover", async ({ page }) => {
+  await prepareShippedOrder(page);
+  let fail = true;
+  let reads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    reads++;
+    return fail ? route.fulfill({ status: 403, contentType: "application/problem+json", json: {
+      title: "Forbidden", status: 403, code: "SHIPMENT_FORBIDDEN", detail: "You cannot view shipment updates.",
+    } }) : route.fulfill({ json: shipmentList(false) });
+  });
+  await openShippedOrder(page);
+  await expect(page.getByRole("alert").filter({ hasText: "You cannot view shipment updates." })).toBeVisible();
+  expect(reads).toBe(1);
+  fail = false;
+  await page.getByRole("button", { name: "Retry shipping updates", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "You cannot view shipment updates." })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry shipping updates", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toHaveCount(0);
+  expect(reads).toBe(2);
 });
 
 test("buyer opens an order snapshot, reads history and cancels with a reason", async ({ page }) => {
