@@ -96,6 +96,9 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | PATCH `/api/v1/notifications/read-all` | Header mark-all action, Bearer + NOTIFICATION.VIEW; bodyless 204 |
 | GET `/api/v1/orders/groups/{id}` | Payment status polling every 3 seconds; Bearer; expected #138 read using the existing OrderGroup DTO, currently supplied only by the explicit test simulation |
 | GET `/api/v1/orders` | Own order list after payment; Bearer + ORDER.LIST; delivered data[] plus sibling page metadata |
+| GET `/api/v1/orders/{id}` | Buyer order snapshot; Bearer + ORDER.VIEW + ownership/Admin; backend `canCancel` controls the cancellation action |
+| GET `/api/v1/orders/{id}/history` | Protected chronological status history; nullable historical reason/actor |
+| POST `/api/v1/orders/{id}/cancel` | Bearer + ORDER.CANCEL + ownership/Admin/Support; trimmed reason; success refreshes orders, payment and cart; stale eligibility returns 409 |
 
 Notification mutations use the common origin and the #109 routes included in the merged notification-service controller and delivered OpenAPI. After a successful bodyless PATCH/204, the feature refetches the list and unread count. Live integration requires a running backend containing those operations. See [notifications](../features/notifications.md).
 
@@ -116,3 +119,15 @@ The table lists FE consumers/prepared calls, not every BE endpoint or a guarante
 Run `npm run generate:types` after changing delivered OpenAPI. The pinned openapi-typescript 7.13.0 tooling produces flat `types/userGeneratedType.ts`, `catalogGeneratedType.ts`, `commerceGeneratedType.ts`, `paymentGeneratedType.ts`, `notificationGeneratedType.ts`, and `gatewayGeneratedType.ts` from their respective delivered specs. `npm run generate:types:check` detects drift. Domain request/response files expose wire aliases or explicitly normalized models. Do not hand-edit generated output or duplicate DTOs by hand. UI props, query/context types, form values and normalized money models are application code and remain distinct.
 
 Generated types do not validate live JSON. Keep runtime guards/parsers for auth, trees, products, SKU/images, cart and paging. Update fixtures and parser tests in the same contract change. Do not keep a permissive dual wire-shape parser indefinitely to hide mismatched deployment versions.
+
+## Order shipment tracking — SHP-05
+
+The delivered [shipment OpenAPI](../../../be-project-nexus/docs/api/openapi/shipment-service.yaml)
+also generates `types/shipmentGeneratedType.ts`. The order detail page resolves
+the buyer's shipment through protected `GET /api/v1/shipments?orderId=...&page=0&size=1`,
+then reads `GET /api/v1/shipments/{shipmentId}/tracking`. Both require
+`SHIPPING.VIEW_SHIPMENT`; the service enforces buyer ownership. A successful
+empty list hides tracking. Authentication, authorization, transport and malformed
+response failures remain errors. Tracking includes the carrier, nullable tracking
+code, current status and actual persisted status history. See
+[shipment tracking](../features/shipment-tracking.md) for readiness and verification.

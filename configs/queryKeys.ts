@@ -56,6 +56,8 @@ export const queryKeys = {
       ["notification", sessionId, "unread-count"] as const,
   },
   orders: {
+    shipment: (sessionId: number, orderId: string) =>
+      ["orders", sessionId, "shipment", orderId] as const,
     detail: (sessionId: number, orderId: string) =>
       ["orders", sessionId, "detail", orderId] as const,
     history: (sessionId: number, orderId: string) =>

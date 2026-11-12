@@ -26,6 +26,7 @@ const item: components["schemas"]["OrderItem"] = {
 const order: components["schemas"]["Order"] = {
   orderId: "order-1", orderNumber: "NX001", userId: "buyer-1", sellerId: "seller-1",
   orderType: "STANDARD", status: "PENDING", createdAt: "2026-11-04T10:00:00Z",
+  canCancel: true,
   totalAmount: 300000, items: [item],
   orderGroupId: "c8000000-0000-4000-8000-000000000006",
   subtotal: 300000, shippingFee: 0, discountAmount: 0, taxAmount: 0,

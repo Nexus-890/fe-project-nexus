@@ -1,5 +1,25 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
+    "/internal/v1/orders/{id}/shipping-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the trusted shipping snapshot of a paid order
+         * @description Direct commerce-service endpoint used by shipment-service for manual creation. The gateway does not route /internal/v1. Requires SHIPPING.CREATE_SHIPMENT AND ADMIN or SUPPORT_STAFF; the caller's bearer is forwarded and checked here. Reads one repeatable-read commerce transaction and accepts only status PAID with a persisted paidAt. Returns persisted buyer/fee/recipient and items built from order_items, not a caller-supplied address or price. Missing parcel/pickup data and legacy addresses without verified locality codes may be returned for preparation; locality names are never promoted to codes. No inventory/shipment/payment database is read. The response represents state at the read and does not establish an atomic cross-service cancellation boundary.
+         */
+        get: operations["getOrderShippingSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/carts/me": {
         parameters: {
             query?: never;
@@ -228,6 +248,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the completed order HTML receipt
+         * @description Requires ORDER.VIEW and buyer ownership by the JWT subject, including for ADMIN and SUPPORT_STAFF. Ownership is checked before completion, so another user receives 403 for every order status. Only COMPLETED orders return a document; other statuses return 409 COMMERCE_ORDER_NOT_COMPLETED. The HTML receipt uses stored seller-order item and price snapshots. The 200 response is a protocol document marked @ProtocolResponse, without a JSON envelope; errors remain Problem Details.
+         */
+        get: operations["getInvoice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/status": {
         parameters: {
             query?: never;
@@ -352,6 +392,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OrderShippingSnapshotEnvelope: {
+            /** @example 0 */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["OrderShippingSnapshotResponse"];
+        };
+        OrderShippingSnapshotResponse: {
+            /** Format: uuid */
+            orderId: string;
+            /** Format: uuid */
+            buyerId: string;
+            /** Format: int64 */
+            orderVersion: number;
+            /** @enum {string} */
+            status: "PAID";
+            /** Format: date-time */
+            paidAt: string;
+            /**
+             * Format: uuid
+             * @description Trusted persisted warehouse selection when available. Manual creation can otherwise select a configured warehouse.
+             */
+            warehouseId: string | null;
+            /** @description This seller order's persisted VND fee, never the order-group total or a caller override. */
+            shippingFee: number;
+            /** @description Stored recipient and optional parcel/pickup data, normalized without fabricating locality codes. The items array is built from this order's persisted SKU IDs, product-name snapshots and quantities. */
+            shippingInfo: {
+                [key: string]: unknown;
+            };
+        };
         UpdateCartItem: {
             /** Format: int32 */
             quantity: number;
@@ -641,6 +711,8 @@ export interface components {
             /** @enum {string} */
             orderType: "STANDARD" | "AUCTION";
             status: components["schemas"]["OrderStatus"];
+            /** @description Cancellation eligibility for the current caller: ORDER.CANCEL and ownership (or ADMIN/SUPPORT_STAFF), and either PAID or PENDING in a PENDING group. This is a read-time snapshot; cancellation rechecks locked state and can return 409. Missing on older backends must be treated as false. */
+            canCancel: boolean;
             /** Format: date-time */
             createdAt: string;
             /** @description Sum of stored item line totals. */
@@ -674,9 +746,13 @@ export interface components {
             /** @enum {string|null} */
             previousStatus: "PENDING" | "PAID" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELED" | "REFUND_REQUESTED" | "REFUNDED" | null;
             newStatus: components["schemas"]["OrderStatus"];
-            reason: string;
-            /** Format: uuid */
-            changedBy: string;
+            /** @description May be unavailable for historical or system-generated history. */
+            reason: string | null;
+            /**
+             * Format: uuid
+             * @description May be unavailable for historical or system-generated history.
+             */
+            changedBy: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -749,6 +825,83 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getOrderShippingSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Canonical seller order UUID, not the order-group UUID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative paid-order snapshot for shipment creation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderShippingSnapshotEnvelope"];
+                };
+            };
+            /** @description Invalid UUID path parameter; INVALID_PARAMETER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid bearer; UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Caller lacks the required privilege or operational role; FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Order does not exist; COMMERCE_ORDER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Order is not PAID or its stored snapshot cannot support shipment creation. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unexpected internal failure; INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getOwnCart: {
         parameters: {
             query?: never;
@@ -2821,6 +2974,7 @@ export interface operations {
                      *             "sellerId": "68000000-0000-4000-8000-000000000003",
                      *             "orderType": "STANDARD",
                      *             "status": "PENDING",
+                     *             "canCancel": true,
                      *             "createdAt": "2026-11-11T08:00:00Z",
                      *             "subtotal": 300000,
                      *             "shippingFee": 30000,
@@ -3086,6 +3240,190 @@ export interface operations {
                         status?: 406;
                         /** @enum {string} */
                         code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Too Many Requests. Codes: `RATE_LIMITED`. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: `INTERNAL_ERROR`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: `SERVICE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description Gateway Timeout. Codes: `GATEWAY_TIMEOUT`. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource UUID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HTML receipt for the caller's completed seller order. */
+            200: {
+                headers: {
+                    /** @description Keep the private receipt out of shared and browser caches. */
+                    "Cache-Control"?: "no-store";
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Bad Request. Codes: `INVALID_PARAMETER`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`, `COMMERCE_UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`, `COMMERCE_FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: `COMMERCE_ORDER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "COMMERCE_ORDER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description Not Acceptable. Codes: `NOT_ACCEPTABLE`. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: `COMMERCE_ORDER_NOT_COMPLETED`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "COMMERCE_ORDER_NOT_COMPLETED";
                     };
                 };
             };

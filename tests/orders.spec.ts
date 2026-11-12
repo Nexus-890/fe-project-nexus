@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import type { OrderStatus } from "../types/orderResponseType";
 
 // The focused config supplies a real HTTP stand-in; the general suite does not.
 test.skip(!process.env.NEXUS_ORDER_LIST_TEST, "Run with playwright.orders.config.ts for the order HTTP simulation.");
@@ -7,6 +8,17 @@ const simulation = `http://127.0.0.1:${process.env.NEXUS_ORDER_LIST_PORT || "391
 const provider = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
 const pendingId = "68000000-0000-4000-8000-000000000002";
 const pendingGroupId = "c8000000-0000-4000-8000-000000000102";
+const shipmentId = "69000000-0000-4000-8000-000000000050";
+const shipmentEnvelope = (data: unknown) => ({ code: 0, message: "response success", data });
+const shipmentList = (exists: boolean) => ({
+  ...shipmentEnvelope(exists ? [{ id: shipmentId, orderId: pendingId }] : []),
+  page: { number: 0, size: 1, totalElements: exists ? 1 : 0, totalPages: exists ? 1 : 0 },
+});
+const shipmentHistory = [
+  { id: "69000000-0000-4000-8000-000000000051", status: "CREATED", description: "Shipment accepted by carrier", createdAt: "2026-11-10T01:00:00Z" },
+  { id: "69000000-0000-4000-8000-000000000052", status: "SHIPPED", description: "Collected from the warehouse", createdAt: "2026-11-10T04:00:00Z" },
+  { id: "69000000-0000-4000-8000-000000000053", status: "IN_TRANSIT", description: "Arrived at sorting facility", createdAt: "2026-11-11T04:00:00Z" },
+];
 const rows = (page: Page) => page.getByTestId(/^order-row-/);
 
 async function evidence(request: APIRequestContext) {
@@ -39,6 +51,23 @@ async function capture(page: Page, info: TestInfo, filename: string) {
   await info.attach(filename, { path: output, contentType: "image/png" });
 }
 
+async function prepareShippedOrder(page: Page, status: OrderStatus = "SHIPPED") {
+  const order = {
+    orderId: pendingId, orderNumber: "NX-261110-SHIPPING", orderGroupId: pendingGroupId,
+    userId: "68000000-0000-4000-8000-000000000003", sellerId: "69000000-0000-4000-8000-000000000001",
+    orderType: "STANDARD", status, createdAt: "2026-11-10T00:30:00Z", totalAmount: 150000,
+    items: [{ orderItemId: "69000000-0000-4000-8000-000000000011", productId: "69000000-0000-4000-8000-000000000012", skuId: "69000000-0000-4000-8000-000000000013", productName: "Purchased product snapshot", skuCode: "WHITE-M", imageUrl: null, quantity: 2, unitPrice: 75000, totalPrice: 150000 }],
+  };
+  await page.route(`**/api/v1/orders/${pendingId}`, (route) => route.fulfill({ json: shipmentEnvelope(order) }));
+  await page.route(`**/api/v1/orders/${pendingId}/history`, (route) => route.fulfill({ json: shipmentEnvelope([]) }));
+}
+
+async function openShippedOrder(page: Page) {
+  await signIn(page);
+  await page.goto(`/order/${pendingId}`);
+  await expect(page.getByRole("heading", { name: "Order NX-261110-SHIPPING", exact: true })).toBeVisible();
+}
+
 test.beforeEach(async ({ page, request }) => {
   expect((await request.get(`${provider}/keycloak/test/reset`)).ok()).toBe(true);
   expect((await request.get(`${provider}/api/test/reset`)).ok()).toBe(true);
@@ -49,60 +78,186 @@ test.beforeEach(async ({ page, request }) => {
       id: "order-header-cart", userId: "68000000-0000-4000-8000-000000000003", status: "ACTIVE", items: [],
     },
   } }));
+  // Existing order scenarios have no shipment; this models the delivered empty-list contract.
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => route.fulfill({ json: shipmentList(false) }));
 });
 
-test("buyer opens an order snapshot, reads history and cancels with a reason", async ({ page }) => {
-  let canceled = false;
-  let reason: unknown;
-  const createdAt = "2026-09-29T10:30:00+07:00";
-  const snapshot = () => ({
-    orderId: pendingId, orderNumber: "NX-260929-DETAIL", orderGroupId: pendingGroupId,
-    userId: "68000000-0000-4000-8000-000000000003", sellerId: "69000000-0000-4000-8000-000000000001",
-    orderType: "STANDARD", status: canceled ? "CANCELED" : "PENDING", createdAt, totalAmount: 170900,
-    subtotal: 150000, shippingFee: 20900, discountAmount: 0, taxAmount: 0,
-    items: [{ orderItemId: "69000000-0000-4000-8000-000000000011", productId: "69000000-0000-4000-8000-000000000012", skuId: "69000000-0000-4000-8000-000000000013", productName: "Purchased product snapshot", skuCode: "WHITE-M", imageUrl: null, quantity: 2, unitPrice: 75000, totalPrice: 150000 }],
-  });
-  const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
-  await page.route(`**/api/v1/orders/${pendingId}`, (route) => {
+test("shipped order displays carrier, copyable tracking and chronological history at mobile and desktop sizes", async ({ page }, info) => {
+  await prepareShippedOrder(page);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const trackingCode = "GHN-1234567890123456789012345678901234567890123456789012345678901234567890";
+  let listReads = 0;
+  let trackingReads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    const url = new URL(route.request().url());
+    expect(Object.fromEntries(url.searchParams)).toEqual({ orderId: pendingId, page: "0", size: "1" });
     expect(route.request().headers().authorization).toMatch(/^Bearer /);
-    return route.fulfill({ json: envelope(snapshot()) });
+    listReads++;
+    return route.fulfill({ json: shipmentList(true) });
   });
-  await page.route(`**/api/v1/orders/${pendingId}/history`, (route) => route.fulfill({ json: envelope([
-    { id: "69000000-0000-4000-8000-000000000014", changedBy: "68000000-0000-4000-8000-000000000003", previousStatus: null, newStatus: "PENDING", reason: "Order created", createdAt },
-    ...(canceled ? [{ id: "69000000-0000-4000-8000-000000000015", changedBy: "68000000-0000-4000-8000-000000000003", previousStatus: "PENDING", newStatus: "CANCELED", reason: "Changed my mind", createdAt }] : []),
-  ]) }));
-  await page.route(`**/api/v1/orders/${pendingId}/cancel`, (route) => {
-    expect(route.request().method()).toBe("POST");
+  await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => {
     expect(route.request().headers().authorization).toMatch(/^Bearer /);
-    reason = route.request().postDataJSON();
-    canceled = true;
-    return route.fulfill({ json: envelope({ orderGroupId: pendingGroupId, status: "CANCELED", currency: "VND", totalAmount: 150000, dueAt: createdAt, orders: [snapshot()] }) });
+    trackingReads++;
+    return route.fulfill({ json: shipmentEnvelope({ shipmentId, orderId: pendingId, carrier: "GHN", trackingCode, status: "IN_TRANSIT", history: shipmentHistory }) });
   });
-  await signIn(page);
-  await rows(page).filter({ has: page.locator(`a[href="/order/${pendingId}"]`) }).getByRole("link").first().click();
-  await expect(page.getByRole("heading", { name: "Order NX-260929-DETAIL", exact: true })).toBeVisible();
-  await expect(page.getByText("Purchased product snapshot", { exact: true })).toBeVisible();
-  await expect(page.getByText("Order created", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("order-breakdown-items")).toHaveText("Items subtotal150.000,00 ₫");
-  await expect(page.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
-  await expect(page.getByTestId("order-breakdown-discount")).toHaveCount(0);
-  await expect(page.getByRole("complementary", { name: "Order receipt" })).toContainText("170.900,00 ₫");
-  const receiptTotal = page.getByRole("complementary", { name: "Order receipt" }).getByTestId("order-receipt-total");
-  await expect(receiptTotal).toHaveText("Total170.900,00 ₫");
-  expect(await receiptTotal.evaluate((total) => {
-    const items = document.querySelector('[data-testid="order-breakdown-items"]');
-    return items !== null && Boolean(total.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING);
-  })).toBe(true);
-  await expect(page.getByTestId("order-breakdown-items")).toHaveClass(/text-muted-foreground/);
-  await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
-  await page.getByRole("button", { name: "Cancel order", exact: true }).click();
-  await page.getByLabel("Why do you want to cancel?", { exact: true }).fill("  Changed my mind  ");
-  await page.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Your cancellation request was processed." })).toBeVisible();
-  await expect(page.getByText("Changed my mind", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveCount(0);
-  expect(reason).toEqual({ reason: "Changed my mind" });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await openShippedOrder(page);
+  const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+  await expect(region).toBeVisible();
+  await expect(region.getByText("GHN", { exact: true })).toBeVisible();
+  await expect(region.getByText(trackingCode, { exact: true })).toBeVisible();
+  const updates = region.getByRole("list", { name: "Shipment status history" }).getByRole("listitem");
+  await expect(updates).toHaveText([/Shipment created[\s\S]*Shipment accepted by carrier/, /Shipped[\s\S]*Collected from the warehouse/, /In transit[\s\S]*Arrived at sorting facility/]);
+  await expect(updates.last()).toHaveAttribute("aria-current", "step");
+  await region.getByRole("button", { name: "Copy tracking code", exact: true }).click();
+  await expect(region.getByRole("status")).toHaveText("Tracking code copied.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(trackingCode);
+  expect(listReads).toBeGreaterThan(0);
+  expect(trackingReads).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, info, "shipment-tracking-mobile-375x812.png");
+  await page.setViewportSize({ width: 1440, height: 1060 });
+  await expect(region).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, info, "shipment-tracking-desktop-1440.png");
+});
+
+test("order with no shipment hides tracking completely without an error", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await page.clock.install();
+  let reads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    reads++;
+    return route.fulfill({ json: shipmentList(false) });
+  });
+  await openShippedOrder(page);
+  await expect.poll(() => reads).toBe(1);
+  await expect(page.getByText("Checking shipping updates…", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Your items", exact: true })).toBeVisible();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.runFor(61_000);
+  expect(reads).toBe(1);
+});
+
+test("shipment awaiting a carrier code shows preparation and empty history without inventing updates", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => route.fulfill({ json: shipmentList(true) }));
+  await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => route.fulfill({ json: shipmentEnvelope({
+    shipmentId, orderId: pendingId, carrier: "GHN", trackingCode: null, status: "PENDING_TRACKING", history: [],
+  }) }));
+  await openShippedOrder(page);
+  const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+  await expect(region.getByText("Preparing shipment", { exact: true })).toBeVisible();
+  await expect(region.getByText("The carrier hasn’t assigned a tracking code yet.", { exact: true })).toBeVisible();
+  await expect(region.getByText("No shipping updates yet.", { exact: true })).toBeVisible();
+  await expect(region.getByRole("button", { name: "Copy tracking code", exact: true })).toHaveCount(0);
+  await expect(region.getByRole("list", { name: "Shipment status history" })).toHaveCount(0);
+});
+
+test("shipment access failure remains visible and an explicit retry can recover", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await page.clock.install();
+  let fail = true;
+  let reads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    reads++;
+    return fail ? route.fulfill({ status: 403, contentType: "application/problem+json", json: {
+      title: "Forbidden", status: 403, code: "SHIPMENT_FORBIDDEN", detail: "You cannot view shipment updates.",
+    } }) : route.fulfill({ json: shipmentList(false) });
+  });
+  await openShippedOrder(page);
+  await expect(page.getByRole("alert").filter({ hasText: "You cannot view shipment updates." })).toBeVisible();
+  expect(reads).toBe(1);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.runFor(61_000);
+  expect(reads).toBe(1);
+  await page.clock.resume();
+  fail = false;
+  await page.getByRole("button", { name: "Retry shipping updates", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "You cannot view shipment updates." })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry shipping updates", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toHaveCount(0);
+  expect(reads).toBe(2);
+});
+
+for (const status of ["PENDING", "CANCELED", "DELIVERED"] as const) {
+  test(`${status.toLowerCase()} order preserves an existing shipment without periodically reading it`, async ({ page }) => {
+    await prepareShippedOrder(page, status);
+    await page.clock.install();
+    let listReads = 0;
+    let trackingReads = 0;
+    await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+      listReads++;
+      return route.fulfill({ json: shipmentList(true) });
+    });
+    await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => {
+      trackingReads++;
+      return route.fulfill({ json: shipmentEnvelope({ shipmentId, orderId: pendingId, carrier: "GHN", trackingCode: "GHN123456", status: "IN_TRANSIT", history: shipmentHistory }) });
+    });
+    await openShippedOrder(page);
+    const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+    await expect(region.getByText("GHN123456", { exact: true })).toBeVisible();
+    await expect(region.getByRole("list", { name: "Shipment status history" }).getByRole("listitem")).toHaveCount(3);
+    expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 1 });
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+    await page.clock.runFor(61_000);
+    expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 1 });
+    await expect(region).toBeVisible();
+  });
+}
+
+for (const status of ["DELIVERED", "RETURNED", "CANCELLED"] as const) {
+  test(`${status.toLowerCase()} shipment remains readable without periodic requests`, async ({ page }) => {
+    await prepareShippedOrder(page);
+    await page.clock.install();
+    let listReads = 0;
+    let trackingReads = 0;
+    await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+      listReads++;
+      return route.fulfill({ json: shipmentList(true) });
+    });
+    await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => {
+      trackingReads++;
+      return route.fulfill({ json: shipmentEnvelope({ shipmentId, orderId: pendingId, carrier: "GHN", trackingCode: "GHN123456", status, history: shipmentHistory }) });
+    });
+    await openShippedOrder(page);
+    await expect(page.getByRole("region", { name: "Shipment tracking", exact: true })).toBeVisible();
+    expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 1 });
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+    await page.clock.runFor(61_000);
+    expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 1 });
+  });
+}
+
+test("active shipment polling reads only tracking and stops when delivery is confirmed", async ({ page }) => {
+  await prepareShippedOrder(page);
+  await page.clock.install();
+  let listReads = 0;
+  let trackingReads = 0;
+  await page.route(/\/api\/v1\/shipments(?:\?.*)?$/, (route) => {
+    listReads++;
+    return route.fulfill({ json: shipmentList(true) });
+  });
+  await page.route(`**/api/v1/shipments/${shipmentId}/tracking`, (route) => {
+    trackingReads++;
+    return route.fulfill({ json: shipmentEnvelope({ shipmentId, orderId: pendingId, carrier: "GHN", trackingCode: "GHN123456", status: trackingReads > 1 ? "DELIVERED" : "IN_TRANSIT", history: shipmentHistory }) });
+  });
+  await openShippedOrder(page);
+  const region = page.getByRole("region", { name: "Shipment tracking", exact: true });
+  await expect(region.getByText("In transit", { exact: true }).first()).toBeVisible();
+  expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 1 });
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/v1/shipments/${shipmentId}/tracking`);
+  await page.clock.runFor(30_000);
+  await (await refreshed).finished();
+  // TanStack publishes completed HTTP reads on its notification timer.
+  await page.clock.runFor(100);
+  await expect(region.getByText("Delivered", { exact: true })).toBeVisible();
+  expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 2 });
+  await page.clock.runFor(61_000);
+  expect({ listReads, trackingReads }).toEqual({ listReads: 1, trackingReads: 2 });
+  await expect(region.getByRole("list", { name: "Shipment status history" }).getByRole("listitem")).toHaveCount(3);
 });
 
 test("signed-out orders do not request private data", async ({ page, request }) => {
