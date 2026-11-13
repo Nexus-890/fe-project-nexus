@@ -404,6 +404,11 @@ export interface components {
             orderId: string;
             /** Format: uuid */
             buyerId: string;
+            /**
+             * Format: uuid
+             * @description Trusted orders.seller_id used by shipment-service for seller ownership; never taken from shippingInfo or the caller.
+             */
+            sellerId: string;
             /** Format: int64 */
             orderVersion: number;
             /** @enum {string} */
