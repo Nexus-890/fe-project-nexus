@@ -49,6 +49,7 @@ function OrderRow({ order }: { order: OrderSummary }) {
             <p className="text-xs text-muted-foreground">Payment link unavailable.</p>
           </div>
         ))}
+        {order.status !== "PENDING" && <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="inline-flex min-h-11 items-center justify-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-secondary xl:whitespace-nowrap">{order.status === "DELIVERED" ? "Order received" : "View Order"}</Link>}
       </td>
     </tr>
   );

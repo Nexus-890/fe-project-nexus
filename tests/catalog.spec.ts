@@ -387,6 +387,75 @@ test("header category selection reaches the product API and All Categories clear
   await expect(categoryPicker).toContainText("All Categories");
 });
 
+test("search filters survive reload, paging, category changes and header searches", async ({ page }, info) => {
+  await page.goto("/search?q=wireless&category=headphones&sort=price%2Casc&page=2");
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.getByRole("button", { name: "More filters", exact: true }).click();
+  await page.getByRole("radio", { name: "Auction", exact: true }).click();
+  await expect(page).toHaveURL(/listingType=auction/);
+  expect(new URL(page.url()).searchParams.has("page")).toBe(false);
+  await page.getByRole("checkbox", { name: "Trusted", exact: true }).click();
+  await page.getByRole("group", { name: "Condition", exact: true }).getByRole("checkbox", { name: "New", exact: true }).click();
+  await page.getByRole("radio", { name: "4 stars and up", exact: true }).click();
+  const price = page.locator("#catalog-max-price");
+  await price.focus();
+  await price.press("ArrowLeft");
+  await expect(page).toHaveURL(/maxPrice=49900000/);
+
+  const expectPreservedFilters = async () => {
+    await expect.poll(() => {
+      const params = new URL(page.url()).searchParams;
+      return [params.get("sort"), params.get("listingType"), params.getAll("trust"), params.getAll("condition"), params.get("maxPrice"), params.get("minRating")];
+    }).toEqual(["price,asc", "auction", ["trusted"], ["new"], "49900000", "4"]);
+  };
+  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expectPreservedFilters();
+  await page.reload();
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.getByRole("button", { name: "More filters", exact: true }).click();
+  await expect(page.getByRole("radio", { name: "Auction", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("checkbox", { name: "Trusted", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(price).toHaveValue("49900000");
+  await expectPreservedFilters();
+  await mobileChecks(page);
+  await page.screenshot({ path: info.outputPath("search-filters-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await layoutChecks(page);
+  await page.screenshot({ path: info.outputPath("search-filters-desktop.png"), fullPage: true });
+
+  await page.getByRole("complementary", { name: "Filters" }).getByRole("link", { name: "Electronics", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("category")).toBe("electronics");
+  expect(new URL(page.url()).searchParams.has("page")).toBe(false);
+  await expectPreservedFilters();
+  const search = page.getByRole("textbox", { name: "Search for anything" });
+  await search.fill("camera & lens");
+  await search.press("Enter");
+  await expect(page.getByRole("heading", { name: "Results for “camera & lens”", exact: true })).toBeVisible();
+  await expectPreservedFilters();
+  await page.goBack();
+  await expect(search).toHaveValue("wireless");
+  await expectPreservedFilters();
+  await page.getByRole("link", { name: "Remove filter Seller Trust Level: Trusted", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.getAll("trust")).toEqual([]);
+  expect(new URL(page.url()).searchParams.get("condition")).toBe("new");
+  await page.getByRole("link", { name: "Clear All", exact: true }).click();
+  await expect(page).toHaveURL(/\/search$/);
+  await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue("relevance");
+});
+
+test("an empty search response shows a helpful empty state without an error", async ({ page }) => {
+  await page.route("**/api/v1/products?*", (route) => route.fulfill({ json: {
+    code: 0, message: "response success", data: [],
+    page: { number: 0, size: 12, totalElements: 0, totalPages: 0 },
+  } }));
+  await page.goto("/search?q=missing+item");
+  await expect(page.getByRole("heading", { name: "No products found", exact: true })).toBeVisible();
+  await expect(page.getByText("Try another category or change your filters.", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 results", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Search results" }).getByRole("alert")).toHaveCount(0);
+});
+
 test("product hearts share the visit watchlist across shop navigation", async ({ page }) => {
   await page.goto("/search");
   await page.getByRole("button", { name: "Save Product 1 to watchlist", exact: true }).click();

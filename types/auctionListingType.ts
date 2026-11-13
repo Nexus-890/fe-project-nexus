@@ -2,6 +2,7 @@
 export type AuctionListing = {
   auctionId: string;
   productId: string;
+  sellerId?: string;
   name: string;
   imageUrl: string | undefined;
   currentBid: string;

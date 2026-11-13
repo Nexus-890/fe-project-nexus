@@ -82,7 +82,7 @@ test("list opens a snapshot with lines, total, status and history on desktop and
   await expect(page.getByRole("region", { name: "Order items", exact: true })).toContainText("SILVER");
   await expect(page.getByRole("region", { name: "Order items", exact: true })).toContainText("Qty 1");
   await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("9.854.900,00 ₫");
-  await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("To Pay");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("To Pay");
   const receiptTotal = page.getByRole("complementary", { name: "Order receipt", exact: true }).getByTestId("order-receipt-total");
   await expect(receiptTotal).toHaveText("Total9.854.900,00 ₫");
   await expect(page.getByTestId("order-breakdown-items")).toHaveText("Items subtotal9.834.000,00 ₫");
@@ -121,7 +121,7 @@ test("pending cancellation posts one trimmed reason and refreshes order and hist
   await cancel(page, "  Changed my mind  ");
   await expect(page.getByRole("status").filter({ hasText: "Your cancellation request was processed." })).toBeVisible();
   await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Changed my mind");
-  await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("Cancelled");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Cancelled");
   await expect(page.getByRole("button", { name: "Cancel order", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Refund status", exact: true })).toHaveCount(0);
@@ -185,7 +185,7 @@ test("409 keeps the backend message, refreshes stale eligibility and never retri
   await signIn(page, `/order/${pendingId}`);
   await cancel(page);
   await expect(page.getByRole("main").getByRole("alert")).toContainText("This order has shipped and can no longer be cancelled.");
-  await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("Shipping");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Shipping");
   await expect(page.getByRole("button", { name: "Cancel order", exact: true })).toHaveCount(0);
   expect((await evidence(request)).cancellations).toHaveLength(1);
 });
@@ -259,4 +259,80 @@ test("order failure has a retry and only requests history after recovery", async
   // The initial dev mount may include a cancelled transport. The explicit
   // retry must add exactly one request to that observed baseline.
   expect((await evidence(request)).details).toHaveLength(failedCalls.details.length + 1);
+});
+
+test("delivered order keeps its status until the buyer confirms once", async ({ page, request }, info) => {
+  await page.setViewportSize({ width: 1440, height: 1060 });
+  await control(request, `order?id=${pendingId}&status=DELIVERED&deliveredAt=2026-11-13T08%3A00%3A00Z&autoCompleteAt=2026-11-20T08%3A00%3A00Z`);
+  await signIn(page, `/order/${pendingId}`);
+  const receipt = page.getByRole("region", { name: "Confirm order receipt", exact: true });
+  await expect(receipt).toContainText("Automatically completes on");
+  await expect(receipt.locator("time").last()).toHaveAttribute("datetime", "2026-11-20T08:00:00Z");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Delivered");
+  await expect(page.getByRole("button", { name: "Rate seller", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Order received", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Confirm you received your order", exact: true });
+  await expect(dialog).toBeVisible();
+  await page.getByRole("button", { name: "Not yet", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect((await evidence(request)).receiptConfirmations).toEqual([]);
+  await page.getByRole("button", { name: "Order received", exact: true }).click();
+  await assertNoOverflow(page);
+  await capture(page, info, "buyer-confirm-receipt-desktop.png");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await assertNoOverflow(page);
+  await capture(page, info, "buyer-confirm-receipt-mobile.png");
+  await page.getByRole("button", { name: "Confirm receipt", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Receipt confirmed. Your order is completed." })).toBeVisible();
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Completed");
+  await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Buyer confirmed receipt");
+  await expect(page.getByRole("button", { name: "Order received", exact: true })).toHaveCount(0);
+  expect((await evidence(request)).receiptConfirmations).toEqual([{ method: "POST", orderId: pendingId, authorized: true }]);
+  await page.reload();
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Completed");
+  await expect(page.getByRole("button", { name: "Order received", exact: true })).toHaveCount(0);
+});
+
+test("receipt failure stays delivered and permits an explicit retry", async ({ page, request }) => {
+  await control(request, `order?id=${pendingId}&status=DELIVERED`);
+  await control(request, "detail-mode?mode=receipt-unavailable");
+  await signIn(page, `/order/${pendingId}`);
+  await expect(page.getByRole("region", { name: "Confirm order receipt", exact: true })).toContainText("The automatic completion date is not available yet.");
+  await page.getByRole("button", { name: "Order received", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm receipt", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Receipt confirmation is temporarily unavailable.");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Delivered");
+  expect((await evidence(request)).receiptConfirmations).toHaveLength(1);
+  await control(request, "detail-mode?mode=success");
+  await page.getByRole("button", { name: "Confirm receipt", exact: true }).click();
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Completed");
+  expect((await evidence(request)).receiptConfirmations).toHaveLength(2);
+});
+
+test("stale receipt conflict refreshes status without repeating the POST", async ({ page, request }) => {
+  await control(request, `order?id=${pendingId}&status=DELIVERED`);
+  await control(request, "detail-mode?mode=receipt-conflict");
+  await signIn(page, `/order/${pendingId}`);
+  await page.getByRole("button", { name: "Order received", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm receipt", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("This order has already completed.");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Completed");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect((await evidence(request)).receiptConfirmations).toHaveLength(1);
+});
+
+test("server automatic completion refreshes the delivered screen without a buyer write", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  await control(request, `order?id=${pendingId}&status=DELIVERED&autoCompleteAt=2026-11-01T00%3A00%3A00Z`);
+  await signIn(page, `/order/${pendingId}`);
+  await expect(page.getByRole("button", { name: "Order received", exact: true })).toBeVisible();
+  // A date in the past does not complete the order in the client.
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Delivered");
+  await control(request, `auto-complete?id=${pendingId}`);
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Completed", { timeout: 35_000 });
+  await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Automatically completed after the receipt confirmation period");
+  expect((await evidence(request)).receiptConfirmations).toEqual([]);
+  await page.getByRole("link", { name: "All orders", exact: true }).click();
+  await expect(page.getByTestId(`order-row-${pendingId}`)).toContainText("Completed");
+  await expect(page.getByTestId(`order-row-${pendingId}`).getByRole("link", { name: "Order received", exact: true })).toHaveCount(0);
 });

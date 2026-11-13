@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { test } from "node:test";
 import { isApiError } from "../configs/api";
-import { cancelOrder, getOrder, getOrderHistory, getOrders, parseOrderDetail, parseOrderSummary } from "../service/orderService";
+import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, getOrders, parseOrderDetail, parseOrderSummary } from "../service/orderService";
 import type { ApiContext } from "../types/commonRequestType";
 import type { OrderFilters } from "../types/orderRequestType";
 
@@ -305,3 +305,64 @@ test("order detail rejects invalid item money, duplicate ids and mismatched orde
   await assert.rejects(cancelOrder(orderId, " ", { context }), invalidResponse);
   await assert.rejects(getOrder("invalid-id", { context }), invalidResponse);
 });
+
+test("receipt confirmation posts once with current Bearer, no body and validates the completed order", async () => {
+  const seen: Array<{ method?: string; path?: string; auth?: string; body: string }> = [];
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    seen.push({ method: request.method, path: request.url, auth: request.headers.authorization, body });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(envelope({ ...order, status: "COMPLETED", canCancel: false,
+      deliveredAt: "2026-11-13T08:00:00Z", autoCompleteAt: "2026-11-20T08:00:00Z" })));
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "receipt-buyer-token" };
+  try {
+    const result = await confirmReceipt(orderId, { context, auth: false });
+    assert.equal(result.status, "COMPLETED");
+    assert.equal(result.autoCompleteAt, "2026-11-20T08:00:00Z");
+    assert.deepEqual(seen, [{ method: "POST", path: `/api/v1/orders/${orderId}/confirm-receipt`, auth: "Bearer receipt-buyer-token", body: "" }]);
+  } finally { await close(server); }
+});
+
+test("receipt dates come only from valid server instants and older responses do not invent a deadline", () => {
+  assert.equal(parseOrderDetail({ ...order, status: "DELIVERED" }).autoCompleteAt, null);
+  assert.equal(parseOrderDetail({ ...order, status: "DELIVERED" }).deliveredAt, null);
+  assert.equal(parseOrderDetail({ ...order, autoCompleteAt: "2026-11-20T08:00:00+07:00" }).autoCompleteAt, "2026-11-20T08:00:00+07:00");
+  for (const invalid of [
+    { ...order, deliveredAt: "not-a-date" }, { ...order, autoCompleteAt: "2026-11-20" },
+    { ...order, autoCompleteAt: 7 },
+  ]) assert.throws(() => parseOrderDetail(invalid), invalidResponse);
+});
+
+test("receipt confirmation rejects a pending response, foreign reference and bodyless success", async () => {
+  for (const data of [{ ...order, status: "DELIVERED" }, { ...order, orderId: orderGroupId, status: "COMPLETED" }]) {
+    const context: ApiContext = { fetch: async () => new Response(JSON.stringify(envelope(data)), { headers: { "Content-Type": "application/json" } }) };
+    await assert.rejects(confirmReceipt(orderId, { context }), invalidResponse);
+  }
+  await assert.rejects(confirmReceipt(orderId, { context: { fetch: async () => new Response(null, { status: 204 }) } }), invalidResponse);
+  let calls = 0;
+  await assert.rejects(confirmReceipt("invalid-id", { context: { fetch: async () => { calls++; return new Response(); } } }), invalidResponse);
+  assert.equal(calls, 0);
+});
+
+for (const status of [403, 409, 503]) {
+  test(`receipt ${status} keeps Problem Details and does not retry the write`, async () => {
+    let calls = 0;
+    const detail = status === 409 ? "This order has already completed" : "Receipt confirmation unavailable";
+    const context: ApiContext = { fetch: async () => {
+      calls++;
+      return new Response(JSON.stringify({ status, code: "COMMERCE_RECEIPT_ERROR", title: "Receipt error", detail }), {
+        status, headers: { "Content-Type": "application/problem+json" },
+      });
+    } };
+    await assert.rejects(confirmReceipt(orderId, { context }), (error: unknown) => {
+      assert.ok(isApiError(error));
+      assert.equal(error.status, status);
+      assert.equal(error.detail, detail);
+      assert.equal(error.code, "COMMERCE_RECEIPT_ERROR");
+      return true;
+    });
+    assert.equal(calls, 1);
+  });
+}

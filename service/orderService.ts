@@ -114,7 +114,9 @@ export const parseOrderDetail = (value: unknown): OrderDetail => {
   const summary = parseOrderSummary(value);
   if (!isRecord(value) || !isUuid(value.userId) || !isUuid(value.sellerId) ||
     (value.orderType !== "STANDARD" && value.orderType !== "AUCTION") || !Array.isArray(value.items) ||
-    (value.canCancel !== undefined && typeof value.canCancel !== "boolean"))
+    (value.canCancel !== undefined && typeof value.canCancel !== "boolean") ||
+    (value.deliveredAt != null && !isInstant(value.deliveredAt)) ||
+    (value.autoCompleteAt != null && !isInstant(value.autoCompleteAt)))
     throw createInvalidResponseError("Invalid order details");
   const items: OrderDetailItem[] = value.items.map((item) => {
     if (!isRecord(item) || !isUuid(item.orderItemId) || !isUuid(item.productId) || !isUuid(item.skuId) ||
@@ -132,7 +134,9 @@ export const parseOrderDetail = (value: unknown): OrderDetail => {
     throw createInvalidResponseError("Duplicate order items");
   // Older responses remain readable but cannot authorize a cancellation action.
   return { ...summary, userId: value.userId, sellerId: value.sellerId, orderType: value.orderType,
-    items, canCancel: value.canCancel === true };
+    items, canCancel: value.canCancel === true,
+    deliveredAt: value.deliveredAt == null ? null : value.deliveredAt as string,
+    autoCompleteAt: value.autoCompleteAt == null ? null : value.autoCompleteAt as string };
 };
 
 export const getOrder = async (orderId: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
@@ -171,4 +175,16 @@ export const cancelOrder = async (orderId: string, reason: string, options: Serv
   if (!group.orders.some((order) => order.orderId.toLowerCase() === orderId.toLowerCase()))
     throw createInvalidResponseError("Canceled order reference mismatch");
   return group;
+};
+
+/** Provisional #258 contract; the backend owns the locked transition, history and completion event. */
+export const confirmReceipt = async (orderId: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
+  if (!isUuid(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  const { data } = await requestApi<unknown>("POST", `${ORDERS_PATH}/${encodeURIComponent(orderId)}/confirm-receipt`, undefined, {
+    ...options, auth: true, params: undefined,
+  });
+  const order = parseOrderDetail(data);
+  if (order.orderId.toLowerCase() !== orderId.toLowerCase() || order.status !== "COMPLETED")
+    throw createInvalidResponseError("Receipt confirmation did not return the completed order");
+  return order;
 };

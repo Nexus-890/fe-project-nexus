@@ -35,6 +35,9 @@ export type OrderDetail = OrderSummary & Pick<
 > & {
   items: OrderDetailItem[];
   canCancel: boolean;
+  /** Provisional #258 fields: dates are supplied by the server, never inferred in the browser. */
+  deliveredAt?: string | null;
+  autoCompleteAt?: string | null;
 };
 
 export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];

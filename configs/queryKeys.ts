@@ -5,6 +5,11 @@ import type { NotificationFilters } from "../types/notificationRequestType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  reputation: {
+    seller: (sessionId: number, sellerId: string) => ["reputation", sessionId, "seller", sellerId] as const,
+    orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>
+      ["rating", sessionId, "order", sellerId, buyerId, orderId] as const,
+  },
   backoffice: {
     products: (sessionId: number, page: number) => ["backoffice", sessionId, "products", page] as const,
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,

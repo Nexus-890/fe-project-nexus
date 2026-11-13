@@ -24,6 +24,7 @@ export const getActiveAuctions = async (
     if (currentBid === null) throw createInvalidResponseError("Invalid auction price");
     return {
       auctionId: item.id, productId: item.productId, name: item.title,
+      sellerId: typeof item.sellerId === "string" ? item.sellerId : undefined,
       imageUrl: item.imageUrl ?? undefined, currentBid,
       bidCount: item.bidCount as number, currency: item.currency, closesAt: item.endAt,
     };

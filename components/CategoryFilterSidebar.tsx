@@ -10,7 +10,9 @@ import {
   categoryHref,
   flattenCategories,
   searchHref,
+  type SearchState,
 } from "@/features/catalogUtils";
+import { SEARCH_MAX_PRICE, searchFilterGroups } from "@/features/searchUtils";
 import { CategoryTree } from "./CategoryTree";
 
 interface CategoryFilterSidebarProps {
@@ -18,29 +20,17 @@ interface CategoryFilterSidebarProps {
   selectedSlug?: string;
   basePath: string;
   clearHref: string;
-  searchQuery?: string;
+  searchState?: SearchState;
+  onSearchChange?: (patch: Partial<SearchState>) => void;
   loading?: boolean;
   error?: boolean;
   retrying?: boolean;
   onRetry?: () => void;
 }
 
-const filterGroups = [
-  { title: "Listing Type", options: ["All listings", "Buy Now", "Auction"] },
-  {
-    title: "Seller Trust Level",
-    options: ["Top Seller", "Trusted", "Standard", "New"],
-  },
-  {
-    title: "Condition",
-    options: ["New", "Like New", "Used — Good", "For parts"],
-  },
-] as const;
-
-const defaultSelectedFilters: Record<string, string[]> = {
-  "Listing Type": ["All listings"],
-  "Seller Trust Level": ["Top Seller", "Trusted"],
-  Condition: [],
+const defaultSelectedFilters: SearchState = {
+  listingType: "all", trust: ["top-seller", "trusted"], condition: [],
+  maxPrice: SEARCH_MAX_PRICE, minRating: 0,
 };
 
 export function CategoryFilterSidebar({
@@ -48,7 +38,8 @@ export function CategoryFilterSidebar({
   selectedSlug,
   basePath,
   clearHref,
-  searchQuery,
+  searchState,
+  onSearchChange,
   loading = false,
   error = false,
   retrying = false,
@@ -56,31 +47,41 @@ export function CategoryFilterSidebar({
 }: CategoryFilterSidebarProps) {
   const router = useRouter();
   const options = flattenCategories(categories);
-  const [selectedFilters, setSelectedFilters] = useState<
-    Record<string, string[]>
-  >(defaultSelectedFilters);
-  const [maxPrice, setMaxPrice] = useState(50000000);
-  const [minRating, setMinRating] = useState(0);
+  const [localFilters, setLocalFilters] = useState(defaultSelectedFilters);
+  const selectedFilters = searchState ?? localFilters;
+  const maxPrice = selectedFilters.maxPrice ?? SEARCH_MAX_PRICE;
+  const minRating = selectedFilters.minRating ?? 0;
   const [expanded, setExpanded] = useState(false);
 
-  function toggleFilter(group: string, option: string) {
-    setSelectedFilters((current) => {
-      const selected = current[group] ?? [];
-      const next = selected.includes(option)
-        ? selected.filter((value) => value !== option)
-        : [...selected, option];
-      return { ...current, [group]: next };
-    });
+  function updateFilters(patch: Partial<SearchState>) {
+    if (searchState) {
+      if (onSearchChange) {
+        onSearchChange(patch);
+        return;
+      }
+      router.push(searchHref({ ...searchState, ...patch, page: 1 }), { scroll: false });
+      return;
+    }
+    setLocalFilters((current) => ({ ...current, ...patch }));
+  }
+
+  function toggleFilter(key: "listingType" | "trust" | "condition", option: string) {
+    if (key === "listingType") {
+      updateFilters({ listingType: option });
+      return;
+    }
+    const selected = selectedFilters[key] ?? [];
+    updateFilters({ [key]: selected.includes(option)
+      ? selected.filter((value) => value !== option) : [...selected, option] });
   }
 
   function changeCategory(slug: string) {
-    if (!slug) {
-      router.push(clearHref);
+    if (basePath === "/search") {
+      updateFilters({ category: slug });
       return;
     }
-
-    if (basePath === "/search") {
-      router.push(searchHref({ q: searchQuery, category: slug }));
+    if (!slug) {
+      router.push(clearHref);
       return;
     }
 
@@ -96,7 +97,7 @@ export function CategoryFilterSidebar({
         </h2>
         <Link
           href={clearHref}
-          onClick={() => { setSelectedFilters(defaultSelectedFilters); setMaxPrice(50000000); setMinRating(0); }}
+          onClick={() => setLocalFilters(defaultSelectedFilters)}
           className="inline-flex min-h-11 items-center text-sm text-primary hover:underline"
         >
           Clear All
@@ -162,30 +163,33 @@ export function CategoryFilterSidebar({
 
       <button type="button" aria-expanded={expanded} aria-controls="catalog-extra-filters" onClick={() => setExpanded((current) => !current)} className="flex min-h-11 w-full items-center justify-between rounded-sm border border-border px-3 text-sm lg:hidden">{expanded ? "Hide filters" : "More filters"}<ChevronDown size={16} className={expanded ? "rotate-180" : ""} aria-hidden="true" /></button>
       <div id="catalog-extra-filters" className={`${expanded ? "block" : "hidden"} space-y-5 lg:block`}>
-      {filterGroups.map((group) => (
+      {searchFilterGroups.map((group) => (
         <fieldset key={group.title} className="border-t border-border pt-4">
           <legend className="mb-2 text-sm font-semibold">{group.title}</legend>
           <div className="space-y-1">
-            {group.options.map((option) => (
+            {group.options.map((option) => {
+              const checked = group.key === "listingType"
+                ? (selectedFilters.listingType ?? "all") === option.value
+                : selectedFilters[group.key]?.includes(option.value) ?? false;
+              return (
               <button
-                key={option}
+                key={option.value}
                 type="button"
-                role="checkbox"
-                aria-checked={
-                  selectedFilters[group.title]?.includes(option) ?? false
-                }
-                onClick={() => toggleFilter(group.title, option)}
+                role={group.key === "listingType" ? "radio" : "checkbox"}
+                aria-checked={checked}
+                onClick={() => toggleFilter(group.key, option.value)}
                 className="flex min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-muted"
               >
                 <span
                   aria-hidden="true"
-                  className={`grid size-5 shrink-0 place-items-center rounded border border-border text-xs ${selectedFilters[group.title]?.includes(option) ? "border-primary bg-primary text-primary-foreground" : ""}`}
+                  className={`grid size-5 shrink-0 place-items-center rounded border border-border text-xs ${checked ? "border-primary bg-primary text-primary-foreground" : ""}`}
                 >
-                  {selectedFilters[group.title]?.includes(option) ? "✓" : ""}
+                  {checked ? "✓" : ""}
                 </span>
-                {option}
+                {option.label}
               </button>
-            ))}
+              );
+            })}
           </div>
         </fieldset>
       ))}
@@ -193,17 +197,17 @@ export function CategoryFilterSidebar({
       <fieldset className="space-y-3 border-t border-border pt-4">
         <legend className="text-sm font-semibold">Price range</legend>
         <label className="block text-xs text-muted-foreground" htmlFor="catalog-max-price">Up to {formatVND(String(maxPrice))}</label>
-        <input id="catalog-max-price" type="range" min={0} max={50000000} step={100000} value={maxPrice} onChange={(event) => setMaxPrice(Number(event.target.value))} className="min-h-11 w-full accent-primary" />
+        <input id="catalog-max-price" type="range" min={0} max={SEARCH_MAX_PRICE} step={100000} value={maxPrice} onChange={(event) => updateFilters({ maxPrice: Number(event.target.value) })} className="min-h-11 w-full accent-primary" />
         <div className="flex items-center justify-between text-xs text-muted-foreground"><span>0 ₫</span><span>50.000.000 ₫</span></div>
       </fieldset>
-      <fieldset className="border-t border-border pt-4"><legend className="mb-2 text-sm font-semibold">Seller rating</legend>{[4, 3, 2].map((rating) => <button key={rating} type="button" role="radio" aria-checked={minRating === rating} onClick={() => setMinRating(minRating === rating ? 0 : rating)} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 text-left text-xs hover:bg-muted"><span className={`size-4 rounded-full border ${minRating === rating ? "border-4 border-primary" : "border-border"}`} aria-hidden="true" /><span className="flex text-warning" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < rating ? "currentColor" : "none"} />)}</span>& up</button>)}</fieldset>
+      <fieldset className="border-t border-border pt-4"><legend className="mb-2 text-sm font-semibold">Seller rating</legend>{[4, 3, 2].map((rating) => <button key={rating} type="button" role="radio" aria-label={`${rating} stars and up`} aria-checked={minRating === rating} onClick={() => updateFilters({ minRating: minRating === rating ? 0 : rating })} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 text-left text-xs hover:bg-muted"><span className={`size-4 rounded-full border ${minRating === rating ? "border-4 border-primary" : "border-border"}`} aria-hidden="true" /><span className="flex text-warning" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < rating ? "currentColor" : "none"} />)}</span>& up</button>)}</fieldset>
       <p className="rounded-sm bg-muted p-3 text-xs leading-5 text-muted-foreground">Category browsing is live. Other filters are a preview and do not change catalog results.</p>
       </div>
 
       {!loading && !error ? (
         <div className="border-t border-border pt-4">
           <h3 className="mb-2 text-sm font-semibold">Browse categories</h3>
-          <CategoryTree categories={categories} activeSlug={selectedSlug} />
+          <CategoryTree categories={categories} activeSlug={selectedSlug} searchState={searchState} />
         </div>
       ) : null}
     </aside>

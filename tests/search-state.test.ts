@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { searchHref } from "../features/catalogUtils";
+import { readSearchState, searchFilterChips, SEARCH_MAX_PRICE } from "../features/searchUtils";
+
+test("search state round-trips all filters and safely normalizes untrusted URL values", () => {
+  const state = readSearchState({
+    q: "  wireless & wired  ", category: "headphones", sort: "price,asc", page: "2",
+    listingType: "auction", trust: ["trusted", "trusted", "invalid", "top-seller"],
+    condition: ["used-good", "new"], maxPrice: "1250000", minRating: "4",
+  });
+  const url = new URL(searchHref(state), "https://nexus.test");
+  const query = Object.fromEntries([...new Set(url.searchParams.keys())].map((key) => [
+    key, ["trust", "condition"].includes(key) ? url.searchParams.getAll(key) : url.searchParams.get(key)!,
+  ]));
+  assert.deepEqual(readSearchState(query), state);
+  assert.deepEqual(state.trust, ["top-seller", "trusted"]);
+  assert.equal(state.maxPrice, 1200000);
+  assert.equal(state.q, "wireless & wired");
+  const invalid = readSearchState({
+    sort: "unsafe", page: "-1", listingType: "invalid", trust: "invalid",
+    condition: "invalid", maxPrice: "1e10", minRating: "5",
+  });
+  assert.equal(searchHref(invalid), "/search");
+  assert.equal(invalid.maxPrice, SEARCH_MAX_PRICE);
+});
+
+test("removing one filter chip preserves independent search selections and resets the page", () => {
+  const state = readSearchState({
+    q: "shoes", category: "fashion", sort: "createdAt,desc", page: "3",
+    trust: ["trusted", "top-seller"], condition: "new", minRating: "4",
+  });
+  const chip = searchFilterChips(state).find((item) => item.key === "trust-trusted")!;
+  const url = new URL(searchHref({ ...state, ...chip.remove, page: 1 }), "https://nexus.test");
+  assert.deepEqual(url.searchParams.getAll("trust"), ["top-seller"]);
+  assert.equal(url.searchParams.get("condition"), "new");
+  assert.equal(url.searchParams.get("q"), "shoes");
+  assert.equal(url.searchParams.get("sort"), "createdAt,desc");
+  assert.equal(url.searchParams.has("page"), false);
+});
