@@ -67,7 +67,56 @@ assumptions:
       test-results/auction/ (ignored local traces);
       docs/features/auction-evidence/{desktop,leading,mobile,won}.png
     updated_at: '2026-11-13'
+  - id: buyer-list-and-offer-provider-contract
+    status: unknown
+    claim: >-
+      Backend #208 provides the proposed private buyer offer list and accept/decline
+      paths, selects the recipient's own highest amount, enforces eligibility,
+      a single open offer and expiry, and creates/settles one order after acceptance.
+    reason: >-
+      No offer schema, controller, DTO or OpenAPI exists at this baseline. The
+      isolated frontend service and local mock describe an explicit proposal;
+      successful simulation cannot establish backend database or payment guarantees.
+    verification: >-
+      On 2026-11-13 compared delivered auction OpenAPI/controllers/migrations and
+      #205/#268 issue screenshots. Read-only list/mine routes are delivered; offers
+      are not. Address confirmation/payment handoff also awaits #172/#208.
+    source: >-
+      service/auctionOfferService.ts; docs/features/auction-list-my-bids.md;
+      ../be-project-nexus/docs/api/openapi/auction-service.yaml;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice
+    updated_at: '2026-11-13'
+  - id: buyer-list-my-bids-offer-browser-behavior
+    status: supported
+    claim: >-
+      In nine modeled scenarios, real Next preserves public list pagination and
+      ticking countdowns, collects private bid pages for final-state filters,
+      displays only returned seller offers at their recipient amount, guards
+      accept writes, handles decline/expiry/outages and reconciles an interrupted
+      acceptance from a read without repeating the write; controls fit 375px.
+    reason: >-
+      Tests exercise the actual frontend HTTP/auth boundary against local Postman
+      dependencies and assert resulting UI plus dependency request/order evidence.
+      No production mock fallback or provider implementation is substituted into Next.
+    verification: >-
+      On 2026-11-13 ran npm run test:auction-list: nine passed in 31.6 seconds;
+      final complete image captures rerun passed nine in 37.6 seconds.
+      Inspected modeled list ACTIVE page0/page1/SCHEDULED, private mine page0/page1
+      and offer reads, accept/decline POSTs, injected 404/503 outcomes, screenshot
+      captures and no unmodeled 501 calls. Existing room regression passed 14
+      cases after an unchanged retry following the installed Next reminder.
+      These results establish caller behavior against stand-ins, not #208 delivery.
+    source: >-
+      tests/auction-list.spec.ts; tests/auction-list-service.test.ts;
+      postman/mocks/auction-api/default.js; playwright.auction-list.config.ts;
+      test-results/auction-list-simulation.ndjson (ignored local evidence);
+      docs/features/auction-list-evidence/; docs/features/auction-list-verification.md
+    updated_at: '2026-11-13'
 fingerprints:
+  - id: auction-list-205-20261113
+    date: '2026-11-13'
+    commit: 'aebc78e3 plus uncommitted #205 frontend additions on fsa_ChungTQ/chore/205-fe-auction-list-my-bids-and-second-chance-offer-card'
+    cli: '1.73.0'
   - id: auction-room-20261113
     date: '2026-11-13'
     commit: 'origin/develop 09b3cf6f; implementation prepared on fsa_ChungTQ/chore/178-fe-auction-room-state-and-countdown-bid-panel-bid-history-and-end-state-live-updates'

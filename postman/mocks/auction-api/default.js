@@ -15,13 +15,45 @@ const imageUrl = `${origin}/api/test/watch.svg`;
 const page = (number, size, totalElements) => ({ number, size, totalElements, totalPages: Math.ceil(totalElements / size) });
 const success = (data, metadata) => ({ code: 0, message: "response success", data, ...(metadata ? { page: metadata } : {}) });
 const streams = new Set();
-let evidence = { requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0 };
+const initialEvidence = () => ({ requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0, offerRequests: [], offerOrders: 0 });
+let evidence = initialEvidence();
 let mode = "normal";
 let detail;
 let bids;
 let frozenBids = null;
 let own;
 let attempts = {};
+let listMode = false;
+let listings = [];
+let mineRows = [];
+let offers = [];
+const offerId = "00000091-1111-4111-8111-111111111111";
+const listId = (index) => `000000${String(51 + index).padStart(2, "0")}-1111-4111-8111-111111111111`;
+function seedLists() {
+  const names = [title, "Rolex Datejust 36mm, Jubilee Bracelet", "Nike Air Jordan 1 Red And Black, US 10", "Annibale Colombo Sofa — Italian Leather", "Kawasaki Z800 (2019), 8,200 km", "Apple Watch Series 4 Gold, 40mm", "Longines Master Collection, Automatic", "Annibale Colombo Bed — Queen, Walnut", "Vintage camera", "Classic turntable", "Scheduled Omega watch", "Scheduled leather briefcase", "Won collector watch", "Lost collector watch"];
+  listings = names.map((name, index) => ({
+    ...detail, id: listId(index), title: name, imageUrl: `${imageUrl}?item=${index}`,
+    startingPrice: index === 0 ? 6000 : 100, currentPrice: [9850, 8420, 212, 1640, 6150, 186, 1050, 1210][index] ?? 500,
+    bidCount: index >= 10 && index < 12 ? 0 : 12 + index,
+    startAt: new Date(Date.now() + (index >= 10 && index < 12 ? 3600000 : -3600000)).toISOString(),
+    endAt: new Date(Date.now() + (index >= 12 ? -60000 : 252000 + index * 3600000)).toISOString(),
+    status: index < 10 ? "ACTIVE" : index < 12 ? "SCHEDULED" : "WON",
+    orderId: index === 12 ? orderId : null,
+    paymentDueAt: index === 12 ? new Date(Date.now() + 86400000).toISOString() : null,
+  }));
+  mineRows = listings.filter((row) => row.status !== "SCHEDULED").map((row, index) => ({
+    auctionId: row.id, title: row.title, amount: row.currentPrice - (index % 2 ? 120 : 0),
+    placedAt: new Date(Date.now() - 60000 * index).toISOString(), auctionStatus: row.status,
+    leading: row.status === "ACTIVE" && index % 2 === 0, won: row.id === listId(12),
+  }));
+}
+function createSellerOffer() {
+  if (offers.length) return;
+  // Only explicit test seller action creates a row. A timeout by itself creates no offer.
+  offers = [{ id: offerId, auctionId, title, imageUrl, currency: "VND", amount: 4800000,
+    status: "OFFERED", offeredAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    orderId: null, paymentDueAt: null }];
+}
 function reset() {
   const now = Date.now();
   detail = {
@@ -38,6 +70,10 @@ function reset() {
   own = { auctionId, title, amount: 9850, placedAt: bids[0].placedAt, auctionStatus: "ACTIVE", leading: true, won: false };
   attempts = {};
   frozenBids = null;
+  listMode = false;
+  listings = [];
+  mineRows = [];
+  offers = [];
 }
 reset();
 function state() {
@@ -80,7 +116,7 @@ http.createServer(async (req, res) => {
   if (path === "/test/reset") {
     mode = url.searchParams.get("mode") || "normal";
     streams.forEach((stream) => stream.end()); streams.clear();
-    evidence = { requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0 };
+    evidence = initialEvidence();
     reset();
     await pm.state.set("auction-api:attempts", {});
     return json(res, {});
@@ -89,6 +125,13 @@ http.createServer(async (req, res) => {
   if (path === "/test/control") {
     const changes = typeof req.body === "object" && req.body ? req.body : {};
     if (changes.mode) mode = changes.mode;
+    if (changes.listMode === true) { listMode = true; seedLists(); }
+    if (changes.sellerOffers === true) createSellerOffer();
+    if (typeof changes.offerRemainingMs === "number" && offers[0]) {
+      offers[0].expiresAt = new Date(Date.now() + changes.offerRemainingMs).toISOString();
+      offers[0].offeredAt = new Date(Date.parse(offers[0].expiresAt) - 86400000).toISOString();
+    }
+    if (changes.offerStatus && offers[0]) offers[0].status = changes.offerStatus;
     if (changes.disconnect) { streams.forEach((stream) => stream.end()); streams.clear(); }
     if (changes.freezeHistory === true) frozenBids = structuredClone(bids);
     if (changes.freezeHistory === false) frozenBids = null;
@@ -132,6 +175,39 @@ http.createServer(async (req, res) => {
   if (["/v1/notifications", "/v1/notifications/unread-count"].includes(path)) return json(res, path.endsWith("unread-count") ? success({ count: 0 }) : success([], page(0, 10, 0)));
   if (path === "/v1/carts/me") return json(res, success({ id: "auction-cart", userId: buyerId, status: "ACTIVE", items: [] }));
   if (path === "/v1/users/me") return json(res, success({ id: buyerId, email: "buyer@nexus.local", fullName: "Fixture Buyer", phone: "0901234567", gender: "OTHER", address: "Ho Chi Minh City", dateOfBirth: "2000-01-01", roles: ["BUYER"], status: "ACTIVE", createdAt: "2026-11-13T00:00:00Z" }));
+  if (path === "/v1/auctions" && req.method === "GET") {
+    if (mode === "list-unavailable") return problem(res, 503, "AUCTION_UNAVAILABLE", "Auctions are temporarily unavailable.");
+    const status = url.searchParams.get("status") || "ACTIVE";
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 8;
+    const rows = (listMode ? listings : [detail]).filter((row) => row.status === status);
+    return json(res, success(rows.slice(number * size, (number + 1) * size), page(number, size, rows.length)));
+  }
+  if (path === "/v1/auctions/offers/mine" && req.method === "GET") {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your offers.");
+    if (mode === "offers-unavailable") return problem(res, 404, "NOT_FOUND", "Offers are not available yet.");
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 10;
+    for (const offer of offers) if (offer.status === "OFFERED" && Date.parse(offer.expiresAt) <= Date.now()) offer.status = "EXPIRED";
+    return json(res, success(offers.slice(number * size, (number + 1) * size), page(number, size, offers.length)));
+  }
+  if (path === `/v1/auctions/${auctionId}/offers/${offerId}/accept` || path === `/v1/auctions/${auctionId}/offers/${offerId}/decline`) {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to respond to the offer.");
+    if (req.method !== "POST") return problem(res, 405, "METHOD_NOT_ALLOWED", "Use POST.");
+    const action = path.endsWith("/accept") ? "accept" : "decline";
+    evidence.offerRequests.push({ action, authorized: authenticated, at: Date.now() });
+    const offer = offers[0];
+    if (!offer) return problem(res, 404, "OFFER_NOT_FOUND", "There is no seller offer.");
+    if (offer.status === "ACCEPTED" && action === "accept") return json(res, success(offer));
+    if (offer.status !== "OFFERED" || Date.parse(offer.expiresAt) <= Date.now()) return problem(res, 409, "OFFER_EXPIRED", "This offer is no longer available.");
+    if (mode === "offer-slow") await new Promise((resolve) => setTimeout(resolve, 800));
+    if (action === "accept") {
+      offer.status = "ACCEPTED"; offer.orderId = orderId;
+      offer.paymentDueAt = new Date(Date.now() + 86400000).toISOString(); evidence.offerOrders += 1;
+    } else offer.status = "DECLINED";
+    if (mode === "offer-lost-response") return problem(res, 503, "OFFER_UNAVAILABLE", "The offer response was interrupted.");
+    return json(res, success(offer));
+  }
   if (path === `/v1/products/${productId}`) return json(res, success({
     id: productId, name: title, slug: `rolex-submariner-${productId}`, categoryId: "00000010-1111-4111-8111-111111111111", sellerId, status: "ACTIVE", auctionEnable: true,
     description: "Pre-owned — excellent, serviced 2025. Submariner Date, 41 mm, two-tone. Box & papers: 2022 warranty card. Ships from District 1, Ho Chi Minh City.", minPrice: 6000, maxPrice: 6000,
@@ -140,8 +216,12 @@ http.createServer(async (req, res) => {
   }));
   if (path === "/v1/bids/mine") {
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your bids.");
-    return json(res, success([own], page(0, Number(url.searchParams.get("size")) || 100, 1)));
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 100;
+    const rows = listMode ? mineRows : [own];
+    return json(res, success(rows.slice(number * size, (number + 1) * size), page(number, size, rows.length)));
   }
+  if (listMode && req.method === "GET" && listings.some((row) => path === `/v1/auctions/${row.id}`)) return json(res, success(listings.find((row) => path === `/v1/auctions/${row.id}`)));
   if (path === `/v1/auctions/${auctionId}` && req.method === "GET") return json(res, success(detail));
   if (path === `/v1/auctions/${auctionId}/state`) {
     if (mode === "missing-read") return problem(res, 404, "NOT_FOUND", "Auction state endpoint is not available.");

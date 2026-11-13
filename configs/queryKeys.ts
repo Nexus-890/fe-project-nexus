@@ -20,6 +20,9 @@ export const queryKeys = {
   },
 
   auctions: {
+    list: (status: string, page: number) => ["auctions", "list", status, page] as const,
+    own: (sessionId: number, page: number) => ["auction-bids", sessionId, "list", page] as const,
+    offers: (sessionId: number, page: number) => ["auction-offers", sessionId, page] as const,
     active: ["auctions", "active"] as const,
     detail: (id: string) => ["auctions", id, "detail"] as const,
     state: (id: string) => ["auctions", id, "state"] as const,

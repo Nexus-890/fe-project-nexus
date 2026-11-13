@@ -20,7 +20,7 @@ const isStatus = (value: unknown): value is AuctionStatus =>
 const requireAuctionId = (id: string) => {
   if (!isUuid(id)) throw createInvalidResponseError("A valid auction reference is required");
 };
-const parseAuctionMoney = (value: unknown): string => {
+export const parseAuctionMoney = (value: unknown): string => {
   const normalized = typeof value === "number" ? normalizeMoney(value) : null;
   if (normalized === null || !/^\d+\.\d{2}$/.test(normalized) ||
     Number(normalized) !== value || BigInt(normalized.replace(".", "")) > BigInt(Number.MAX_SAFE_INTEGER))
@@ -96,7 +96,7 @@ export const getAuctionState = async (id: string, options: ServiceRequestOptions
   return state;
 };
 
-const parseAuctionPage = <T>(response: ApiResponse<unknown>, page: number, parse: (value: unknown) => T): Page<T> => {
+export const parseAuctionPage = <T>(response: ApiResponse<unknown>, page: number, parse: (value: unknown) => T): Page<T> => {
   if (!Array.isArray(response.data) || !response.page || response.page.number !== page)
     throw createInvalidResponseError("Invalid auction page");
   const metadata = response.page;
@@ -132,6 +132,32 @@ const parseMyAuctionBid = (value: unknown): MyAuctionBid => {
     throw createInvalidResponseError("Invalid personal auction bid");
   return { auctionId: value.auctionId, title: value.title, amount: parseAuctionMoney(value.amount),
     placedAt: value.placedAt, auctionStatus: value.auctionStatus, leading: value.leading, won: value.won };
+};
+
+export const getAuctions = async (
+  status: "ACTIVE" | "SCHEDULED" | "ENDED", page = 0, options: ServiceRequestOptions = {},
+): Promise<Page<AuctionRoom>> => {
+  requirePage(page);
+  if (!["ACTIVE", "SCHEDULED", "ENDED"].includes(status))
+    throw createInvalidResponseError("Invalid auction list status");
+  const response = await requestApi<unknown>("GET", "/api/v1/auctions", undefined, {
+    ...options, auth: false, params: { status, page, size: 8 },
+  });
+  return parseAuctionPage(response, page, (value) => {
+    const auction = parseAuctionRoom(value);
+    if (auction.status !== status) throw createInvalidResponseError("Auction list status does not match");
+    return auction;
+  });
+};
+
+export const getMyAuctionBids = async (
+  page = 0, options: ServiceRequestOptions = {},
+): Promise<Page<MyAuctionBid>> => {
+  requirePage(page);
+  const response = await requestApi<unknown>("GET", "/api/v1/bids/mine", undefined, {
+    ...options, auth: true, params: { page, size: 10 },
+  });
+  return parseAuctionPage(response, page, parseMyAuctionBid);
 };
 
 export const getMyAuctionBid = async (
