@@ -71,6 +71,17 @@ test("two shops use one QR and selectable copyable group values at 375x812", asy
     await expect(field).toBeVisible();
     expect(await field.evaluate((element) => getComputedStyle(element).userSelect)).toBe("text");
   }
+  const bill = page.getByTestId("payment-bill");
+  await expect(bill.getByRole("heading", { name: "What you are paying for", exact: true })).toBeVisible();
+  const billOrders = bill.getByTestId("payment-bill-order");
+  await expect(billOrders).toHaveCount(2);
+  await expect(billOrders.nth(0).getByTestId("order-breakdown-items")).toHaveText(/Items subtotal\s*180\.000(,00)? ₫/);
+  await expect(billOrders.nth(0).getByTestId("order-breakdown-shipping")).toHaveText(/Shipping fee\s*20\.000(,00)? ₫/);
+  await expect(billOrders.nth(0)).toContainText(/NX-20261104-0001\s*200\.000(,00)? ₫/);
+  await expect(billOrders.nth(1).getByTestId("order-breakdown-items")).toHaveText(/Items subtotal\s*150\.000(,00)? ₫/);
+  await expect(billOrders.nth(1).getByTestId("order-breakdown-shipping")).toHaveText(/Shipping fee\s*Free/);
+  await expect(billOrders.nth(1)).toContainText(/NX-20261104-0002\s*150\.000(,00)? ₫/);
+  await expect(bill.getByTestId("order-breakdown-discount")).toHaveCount(0);
   await page.getByRole("button", { name: "Copy bank account", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Bank account copied." })).toBeVisible();
   await page.getByRole("button", { name: "Copy amount", exact: true }).click();
@@ -197,4 +208,26 @@ test("refresh reporting non-payable session removes previously valid QR and copy
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("This payment session has expired.");
   await expect(page.getByRole("img", { name: "Payment QR code" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Copy transfer memo" })).toHaveCount(0);
+});
+
+test("session created a moment after the order is waited for instead of showing an error", async ({ page, request }) => {
+  await mode(request, "session-pending");
+  await signIn(page);
+  await assertQr(page);
+  await expect(page.getByRole("heading", { name: "Unable to prepare payment", exact: true })).toHaveCount(0);
+  const calls = (await evidence(request)).paymentRequests.length;
+  expect(calls).toBeGreaterThanOrEqual(3);
+  expect(calls).toBeLessThanOrEqual(4);
+});
+
+test("session that never appears stops retrying and shows the error", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  await mode(request, "session-missing");
+  await signIn(page);
+  await expect(page.getByRole("heading", { name: "Unable to prepare payment", exact: true })).toBeVisible({ timeout: 20_000 });
+  const calls = (await evidence(request)).paymentRequests.length;
+  expect(calls).toBeGreaterThanOrEqual(4);
+  expect(calls).toBeLessThanOrEqual(5);
+  await page.waitForTimeout(3_000);
+  expect((await evidence(request)).paymentRequests).toHaveLength(calls);
 });

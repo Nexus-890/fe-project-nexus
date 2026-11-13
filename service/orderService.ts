@@ -3,7 +3,7 @@ import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
 import type { OrderFilters } from "../types/orderRequestType";
-import type { OrderDetail, OrderDetailItem, OrderGroup, OrderHistoryEntry, OrderStatus, OrderSummary } from "../types/orderResponseType";
+import type { OrderDetail, OrderDetailItem, OrderGroup, OrderHistoryEntry, OrderPriceBreakdown, OrderStatus, OrderSummary } from "../types/orderResponseType";
 import type { operations } from "../types/commerceGeneratedType";
 
 export type OwnOrdersFilters = NonNullable<operations["listOwnOrders"]["parameters"]["query"]>;
@@ -29,6 +29,12 @@ const parseAmount = (value: unknown): string => {
     throw createInvalidResponseError("Invalid order amount");
   return amount;
 };
+const parseBreakdown = (value: Record<string, unknown>): OrderPriceBreakdown | null => {
+  const fields = [value.subtotal, value.shippingFee, value.discountAmount, value.taxAmount];
+  if (fields.every((field) => field == null)) return null;
+  const [subtotal, shippingFee, discountAmount, taxAmount] = fields.map(parseAmount);
+  return { subtotal, shippingFee, discountAmount, taxAmount };
+};
 
 export const parseOrderSummary = (value: unknown): OrderSummary => {
   if (
@@ -41,7 +47,7 @@ export const parseOrderSummary = (value: unknown): OrderSummary => {
   const totalAmount = parseAmount(value.totalAmount);
   return {
     orderId: value.orderId, orderNumber: value.orderNumber,
-    createdAt: value.createdAt, status: value.status, totalAmount,
+    createdAt: value.createdAt, status: value.status, totalAmount, breakdown: parseBreakdown(value),
     orderGroupId: value.orderGroupId == null ? null : value.orderGroupId as string,
   };
 };

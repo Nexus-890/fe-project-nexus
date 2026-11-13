@@ -77,7 +77,9 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await openCheckout(page);
   await expect(page.getByLabel("Recipient name", { exact: true })).toHaveValue("Nguyen Thi Lan");
   await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("0901234567");
-  await expect(page.getByLabel("Address line", { exact: true })).toHaveValue("227 Nguyen Van Cu");
+  await expect(page.getByLabel("House number and street", { exact: true })).toHaveValue("227 Nguyen Van Cu");
+  await expect(page.getByLabel("House number and street", { exact: true })).toHaveAccessibleDescription("Ward and province are chosen below.");
+  await expect(page.getByTestId("checkout-address-preview")).toHaveText("Delivering to: 227 Nguyen Van Cu");
   await expect(page.getByLabel("Province / City", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Ward", { exact: true })).toBeDisabled();
   await expect(page.getByTestId(`checkout-item-${lineIds[0]}`)).toContainText("150.000,00 ₫");
@@ -89,6 +91,7 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await expect(page.getByRole("main")).not.toContainText("999.999");
   expect((await evidence(request)).previews).toEqual([]);
   await destination(page);
+  await expect(page.getByTestId("checkout-address-preview")).toHaveText("Delivering to: 227 Nguyen Van Cu, Ward 4, Ho Chi Minh City");
   await expect(page.getByTestId("checkout-shipping")).toHaveText("30.000,00 ₫");
   await expect(page.getByText("Total", { exact: true })).toBeVisible();
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
@@ -112,7 +115,7 @@ test("empty address reports each required field and sends no checkout request", 
   await options(request, { emptyProfile: true });
   await openCheckout(page);
   await page.getByRole("button", { name: "Review address", exact: true }).click();
-  for (const name of ["Recipient name", "Phone number", "Address line", "Province / City", "Ward"])
+  for (const name of ["Recipient name", "Phone number", "House number and street", "Province / City", "Ward"])
     await expect(page.getByLabel(name, { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByLabel("Recipient name", { exact: true })).toBeFocused();
   await expect(page.getByRole("alert").filter({ hasText: "Check the highlighted address fields below." })).toBeVisible();
@@ -207,7 +210,7 @@ test("mobile checkout wraps content, preserves metadata fallbacks and provides 4
   await options(request, { metadataFailure: true });
   await openCheckout(page);
   await page.getByLabel("Recipient name", { exact: true }).fill("Nguyen Thi Lan With A Long Recipient Name For Mobile Layout");
-  await page.getByLabel("Address line", { exact: true }).fill("Apartment 1204, 227 Nguyen Van Cu, a long address line to verify mobile checkout layout");
+  await page.getByLabel("House number and street", { exact: true }).fill("Apartment 1204, 227 Nguyen Van Cu, a long address line to verify mobile checkout layout");
   await destination(page);
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
   await expect(page.getByTestId(`checkout-item-${lineIds[0]}`)).toContainText("150.000,00 ₫");

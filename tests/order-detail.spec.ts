@@ -83,6 +83,16 @@ test("list opens a snapshot with lines, total, status and history on desktop and
   await expect(page.getByRole("region", { name: "Order items", exact: true })).toContainText("Qty 1");
   await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("9.854.900,00 ₫");
   await expect(page.getByRole("complementary", { name: "Order receipt", exact: true })).toContainText("To Pay");
+  const receiptTotal = page.getByRole("complementary", { name: "Order receipt", exact: true }).getByTestId("order-receipt-total");
+  await expect(receiptTotal).toHaveText("Total9.854.900,00 ₫");
+  await expect(page.getByTestId("order-breakdown-items")).toHaveText("Items subtotal9.834.000,00 ₫");
+  await expect(page.getByTestId("order-breakdown-shipping")).toHaveText("Shipping fee20.900,00 ₫");
+  await expect(page.getByTestId("order-breakdown-discount")).toHaveCount(0);
+  await expect(page.getByTestId("order-breakdown-items")).toHaveClass(/text-muted-foreground/);
+  expect(await receiptTotal.evaluate((total) => {
+    const items = document.querySelector('[data-testid="order-breakdown-items"]');
+    return items !== null && Boolean(total.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })).toBe(true);
   await expect(page.getByRole("region", { name: "Order history", exact: true })).toContainText("Order created from cart");
   await expect(page.getByRole("link", { name: "Pay now", exact: true })).toHaveAttribute("href", `/checkout/payment/${pendingGroupId}`);
   await expect(page.getByText("Checking shipping updates…", { exact: true })).toHaveCount(0);

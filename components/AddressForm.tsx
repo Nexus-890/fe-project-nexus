@@ -49,12 +49,17 @@ function AddressForm({
     },
     {
       field: "addressLine",
-      label: "Address line",
+      label: "House number and street",
       autoComplete: "shipping address-line1",
-      placeholder: "House number and street name",
+      placeholder: "e.g. 12 Nguyen Hue",
       maxLength: 500,
     },
   ] as const;
+  const deliveryAddress = [
+    values.addressLine.trim(),
+    wards.find((ward) => ward.code === values.wardCode)?.name,
+    provinces.find((province) => province.code === values.provinceCode)?.name,
+  ].filter(Boolean).join(", ");
   const localityFields = [
     {
       field: "provinceCode",
@@ -98,33 +103,44 @@ function AddressForm({
       </p>
       {Object.keys(errors).length > 0 && <p role="alert" className="mt-4 text-sm text-danger">Check the highlighted address fields below.</p>}
       <div className="mt-6 grid min-w-0 gap-4 sm:grid-cols-2">
-        {textFields.map(({ field, label, autoComplete, placeholder, maxLength }) => (
-          <div key={field} className={`min-w-0 ${field === "addressLine" ? "sm:col-span-2" : ""}`}>
-            <label htmlFor={`checkout-${field}`} className="mb-2 block text-sm font-medium">
-              {label}
-            </label>
-            <input
-              id={`checkout-${field}`}
-              name={field}
-              type={field === "phoneNumber" ? "tel" : "text"}
-              autoComplete={autoComplete}
-              value={values[field]}
-              maxLength={maxLength}
-              placeholder={placeholder}
-              required
-              disabled={busy}
-              aria-invalid={Boolean(errors[field])}
-              aria-describedby={errors[field] ? `checkout-${field}-error` : undefined}
-              className={controlClass}
-              onChange={(event) => onChange(field, event.target.value)}
-            />
-            {errors[field] ? (
-              <p id={`checkout-${field}-error`} className="mt-2 break-words text-sm text-danger">
-                {errors[field]}
-              </p>
-            ) : null}
-          </div>
-        ))}
+        {textFields.map(({ field, label, autoComplete, placeholder, maxLength }) => {
+          const describedBy = [
+            field === "addressLine" && "checkout-addressLine-hint",
+            errors[field] && `checkout-${field}-error`,
+          ].filter(Boolean).join(" ") || undefined;
+          return (
+            <div key={field} className={`min-w-0 ${field === "addressLine" ? "sm:col-span-2" : ""}`}>
+              <label htmlFor={`checkout-${field}`} className="mb-2 block text-sm font-medium">
+                {label}
+              </label>
+              <input
+                id={`checkout-${field}`}
+                name={field}
+                type={field === "phoneNumber" ? "tel" : "text"}
+                autoComplete={autoComplete}
+                value={values[field]}
+                maxLength={maxLength}
+                placeholder={placeholder}
+                required
+                disabled={busy}
+                aria-invalid={Boolean(errors[field])}
+                aria-describedby={describedBy}
+                className={controlClass}
+                onChange={(event) => onChange(field, event.target.value)}
+              />
+              {field === "addressLine" ? (
+                <p id="checkout-addressLine-hint" className="mt-2 text-xs leading-5 text-muted-foreground">
+                  Ward and province are chosen below.
+                </p>
+              ) : null}
+              {errors[field] ? (
+                <p id={`checkout-${field}-error`} className="mt-2 break-words text-sm text-danger">
+                  {errors[field]}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
         {localityFields.map(({ field, level, label, plural, options, state, enabled, placeholder }) => {
           const describedBy = [
             errors[field] && `checkout-${field}-error`,
@@ -182,6 +198,12 @@ function AddressForm({
           );
         })}
       </div>
+      {deliveryAddress ? (
+        <p data-testid="checkout-address-preview" aria-live="polite" className="mt-4 break-words rounded-sm bg-muted px-3 py-2.5 text-sm">
+          <span className="text-muted-foreground">Delivering to: </span>
+          {deliveryAddress}
+        </p>
+      ) : null}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
         <p className="max-w-sm text-xs leading-5 text-muted-foreground">
           Shipping is recalculated when your delivery address changes.
