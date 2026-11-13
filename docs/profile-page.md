@@ -8,8 +8,8 @@ query. This change is frontend only.
 ## Structure and navigation
 
 - `app/(account)/profile/page.tsx` provides the route and page metadata.
-- `features/ProfilePage.tsx` composes four separate main cards:
-  `ReputationCard`, `PersonalInformationCard`, `ChangePasswordCard`, and
+- `features/ProfilePage.tsx` composes the main cards:
+  `ReputationCard`, `PersonalInformationCard`, `PhoneVerificationCard`, `ChangePasswordCard`, and
   `PenaltyHistoryCard`.
 - The cards, sidebar, footer, avatar, and Skeleton live in
   `components/`. The feature files compose the page and
@@ -98,17 +98,18 @@ profile page does not provide a separate session protocol.
 
 ## Backend dependencies
 
-The current PUT intentionally ignores `phone`; it has no phone field or phone
-validation in `UpdateProfileRequest`. Phone remains read-only in this FE-only
-scope. Supporting real phone changes and a real backend phone 400 response
-requires a future backend contract change.
+The current profile PUT intentionally ignores `phone`; it has no phone field.
+The separate [phone verification card](features/account-verification.md) proposes
+the #210 OTP operation for changing/verifying the phone. The personal information
+form retains its read-only phone until the authoritative profile is refreshed.
 
-`PENDING_ACCOUNT_ENDPOINTS` in `service/accountService.ts` records these proposed paths:
+`PENDING_ACCOUNT_ENDPOINTS` in `service/accountService.ts` records the remaining
+proposed avatar/reputation/penalty paths. Password management uses Keycloak:
 
 | Feature | Proposed endpoint, pending backend confirmation | Current UI |
 | --- | --- | --- |
 | Avatar | `/api/v1/users/me/avatar` | Initials avatar; photo actions disabled |
-| Password | `/api/v1/users/me/password` | Password fields and update action disabled |
+| Password | Keycloak account console | Change password opens credential settings; [Nexus password pages](features/password-pages.md) |
 | Reputation | `/api/v1/users/me/reputation` | Unavailable score/statistics shown as `—` |
 | Penalties | `/api/v1/users/me/penalties` | Pending empty state |
 

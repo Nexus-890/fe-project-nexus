@@ -9,7 +9,6 @@ export const PROFILE_PATH = ME_PATH;
 /** These account capabilities remain disabled until their contracts are delivered. */
 export const PENDING_ACCOUNT_ENDPOINTS = {
   avatar: "/api/v1/users/me/avatar",
-  password: "/api/v1/users/me/password",
   reputation: "/api/v1/users/me/reputation",
   penalties: "/api/v1/users/me/penalties",
 } as const;

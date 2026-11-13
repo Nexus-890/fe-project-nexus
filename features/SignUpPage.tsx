@@ -182,7 +182,7 @@ function SignUpPage() {
       setFormError(mapServerError(result.error, setError));
       return;
     }
-    router.push("/sign-in");
+    router.push(`/check-email?email=${encodeURIComponent(payload.email)}`);
   }
 
   return (

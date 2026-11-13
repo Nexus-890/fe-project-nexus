@@ -1,0 +1,117 @@
+purpose:
+  stands_in_for: >-
+    Reused local Keycloak and gateway-session dependencies plus the existing
+    checkout API fixture. An explicitly enabled account handler adds provisional
+    #210 email resend, phone OTP, seller application and saved address resources.
+    These responses do not establish that #210 has delivered those APIs.
+  unblocks: >-
+    Real frontend browser checks for #219 account screens and saved-address
+    checkout behavior before the owning backend contract becomes available.
+assumptions:
+  - id: account-provisional-contract
+    status: unknown
+    claim: >-
+      The provisional resource paths and shapes documented by the account
+      frontend will match the eventual #210 delivered API and #257 seller profile.
+    reason: >-
+      The current delivered user-service OpenAPI/controllers have no phone OTP,
+      email resend, seller application or address book operations. The local
+      handler models the frontend's explicit boundary; it cannot establish
+      backend compatibility or authorization.
+    verification: >-
+      Inspected user-service OpenAPI/controllers on develop 09b3cf6f on
+      2026-11-13. Reused existing local OIDC/checkout mocks. postman status is
+      unavailable in installed CLI 1.73.0, so owner workspace discovery was
+      skipped; no mock was published or deployed. Contract agreement, live
+      persistence, OTP storage/rate limits and admin authorization remain #210.
+    source: >-
+      service/verificationService.ts; service/sellerApplicationService.ts;
+      service/addressBookService.ts; docs/features/seller-application.md;
+      docs/features/address-book.md; postman/mocks/account-api/handler.js;
+      ../be-project-nexus/docs/api/openapi/user-service.yaml
+    updated_at: "2026-11-13"
+  - id: seller-ui-local-behavior
+    status: supported
+    claim: >-
+      In the exercised local browser scenarios, the frontend validates seller
+      inputs, displays pending status after submission/reload, allows rejected
+      applicants to reapply, refreshes state after a 409, exposes retry on read
+      failure and requires a new sign-in after approval before seller back office.
+    reason: >-
+      Tests run the actual Next frontend and its shared HTTP/session boundary
+      against local Postman dependencies. The handler checks the issued access
+      token's hash, persists application state and records request outcomes.
+    verification: >-
+      Initial npm run test:account on 2026-11-13 passed all five seller scenarios,
+      including anonymous redirect. The full initial run had 14 passes
+      and one address assertion mismatch; address paragraph locator was corrected.
+      A repeat run was interrupted by the installed Next advisory startup
+      interstitial, followed by a coordinated pause for other regression suites.
+      Final npm run test:account on 2026-11-14 passed all 16 scenarios in
+      48.5 seconds after correcting two test locators. The final run exercises
+      registration as well and retains local HTTP events and seven responsive
+      screenshots under test-results/account. No live #210 API was exercised.
+    source: >-
+      tests/account.spec.ts; postman/mocks/account-api/handler.js;
+      features/SellerApplicationPage.tsx; test-results/account-simulation.ndjson
+    updated_at: "2026-11-14"
+  - id: verification-ui-local-behavior
+    status: supported
+    claim: >-
+      In the exercised local browser scenarios, the frontend sends public email
+      resend requests after its minute cooldown, verifies a phone with a valid
+      code, presents incorrect/rate-limited responses, disables expired code
+      submission and treats a changed number as needing new verification.
+    reason: >-
+      Browser tests exercise real HTTP serialization and UI feedback with stateful
+      dependency responses. Sixth incorrect attempt and fourth send failures are
+      modeled by the stand-in; live enforcement and SMS/email delivery remain
+      unknown. OTP/password inputs are excluded from the fixture's evidence body.
+    verification: >-
+      Initial account browser run on 2026-11-13 passed the valid/wrong-code,
+      sixth-attempt, fourth-send/expiry and check-email cooldown/public-resend
+      scenarios. Final npm run test:account on 2026-11-14 passed all 16 scenarios.
+      Its HTTP log includes phone send 200/429, confirm 200/400/429 and public
+      email resend 200. Registration routes to check-email without creating a
+      session cookie. These checks do not prove email/SMS delivery or backend
+      OTP storage, attempt counters or resend enforcement.
+    source: >-
+      tests/account.spec.ts; features/PhoneVerificationCard.tsx;
+      features/CheckEmailPage.tsx; postman/mocks/account-api/handler.js
+    updated_at: "2026-11-14"
+  - id: address-ui-local-behavior
+    status: supported
+    claim: >-
+      In six local browser scenarios, the frontend saves/edits/removes addresses,
+      selects one default, preselects that default at checkout, preserves the
+      same ward/province codes and simulated quotes as manual entry, supports
+      saving a new checkout address, displays the ten-address UI cap, retains
+      manual checkout when the book is unavailable and suppresses a late
+      default that would overwrite typed fields.
+    reason: >-
+      The actual frontend writes and reads state through Postman HTTP fixtures.
+      The browser compares checkout payload codes and modeled quote results;
+      a delayed GET tests the ordering race. This supports caller behavior in
+      those scenarios, not real cross-user isolation, concurrent max-ten
+      enforcement, persistence or GHN pricing.
+    verification: >-
+      Final npm run test:account on 2026-11-14 passed all 16 scenarios, including
+      all six address scenarios. The HTTP log records address POST 201, PUT and
+      PATCH 200, DELETE 204, GET 200 and injected 503 responses. Desktop/mobile
+      address book and desktop saved-address checkout screenshots were inspected;
+      controls and cards match existing account styling without horizontal
+      overflow. Ownership and real carrier quotes remain dependent on #210.
+    source: >-
+      tests/account-addresses.spec.ts; features/AddressesPage.tsx;
+      features/CheckoutPage.tsx; postman/mocks/account-api/addresses.js;
+      test-results/account-simulation.ndjson; test-results/account/http-summary.json
+    updated_at: "2026-11-14"
+fingerprints:
+  - id: account-219-develop-baseline
+    date: "2026-11-13"
+    commit: "09b3cf6f72fce255a0c6984978c50ffa2c1706f1"
+    cli: "Postman CLI 1.73.0"
+  - id: account-219-final-browser-run
+    date: "2026-11-14"
+    commit: "09b3cf6f72fce255a0c6984978c50ffa2c1706f1 plus the #219 working changes"
+    cli: "Postman CLI 1.73.0; npm run test:account; 16 passed"

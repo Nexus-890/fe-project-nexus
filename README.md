@@ -86,8 +86,14 @@ Configure `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM` and `NEXT_PUB
 Explicit auth/product/cart development fixtures are blocked in production. The auth stub supplies registration/profile responses to injected test adapters; it does not replace the Keycloak redirect flow or provision real accounts.
 
 Signed-in users can open `/profile` from the header or My Nexus, edit supported
-personal information and save to the shared profile/header query. Phone is read-only;
-avatar, password, reputation and penalties await backend support. See the
+personal information and save to the shared profile/header query. The profile
+links password management to Keycloak and includes a phone verification card.
+The account menu also exposes seller applications and saved addresses for checkout.
+Verification, seller application and address APIs remain provisional under #210;
+see [account verification](docs/features/account-verification.md),
+[seller applications](docs/features/seller-application.md) and
+[address book](docs/features/address-book.md). Avatar, reputation and penalties
+await backend support. See the
 [profile page](docs/profile-page.md) and [verification](docs/profile-verification.md).
 
 ## Code layout
@@ -120,6 +126,7 @@ npm run test:auth
 npm run test:catalog
 npm run test:cart
 npm run test:profile
+npm run test:account
 npm run test:auth:browser
 npm run build
 ```
@@ -134,7 +141,7 @@ Verified rebuild on 2026-10-30: lint, regenerated-route typecheck, generated DTO
 
 Use the [delivered API specs](../be-project-nexus/docs/api/openapi/), not the older future-operation drafts. The frontend consumes `{code,message,data,page?}` and Problem Details field entries `{field,code,detail}`. Cart reuses the shared HTTP boundary and delivered DTO fields. Its `CART_API_BASE_URL` in `service/cartService.ts` is intentionally blank for the user to fill. Delivered OpenAPI now includes GET/POST/PUT/DELETE and the controller wraps PUT in the shared envelope. Live authenticated Cart acceptance remains unverified; PUT/DELETE principal binding still differs from GET/POST. Read the [Cart handoff](docs/features/cart.md#api-configuration) and dated [implementation report](docs/features/cart-page-implementation.md). [ADR-008](../be-project-nexus/docs/adr/ADR-008-api-contract.md) still records coordinated release as pending.
 
-The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require authenticated runtime verification. [Checkout address and quote review](docs/features/checkout.md) is implemented; shipping remains provisional under #201 and preview consumes merged #188. [Order placement](docs/features/place-order.md) supports safe retries and price confirmation. Payment execution, auction bidding and password-recovery UI remain outside scope. Reload restores the gateway cookie session.
+The products controller currently accepts categoryId/page/size; real q/sort search remains a contract dependency even though the UI preserves those URL values. Cart UI is implemented; real update/remove and peer acceptance still require authenticated runtime verification. [Checkout address and quote review](docs/features/checkout.md) is implemented; shipping remains provisional under #201 and preview consumes merged #188. [Order placement](docs/features/place-order.md) supports safe retries and price confirmation. Password recovery uses the Nexus-themed Keycloak pages; live reset delivery still needs verification. Reload restores the gateway cookie session.
 
 Product detail already consumes image URLs from its real GET endpoint. Product cards support optional list images, but the delivered product list response currently has none; those cards keep the placeholder until BE upload task #122 supplies image data. See [product image gallery](docs/features/product-image-gallery.md) for ordering, fallback, reserved media dimensions and verification scope. The API base URL still defaults to `""` when neither public API environment variable is set; service paths use the existing product endpoints.
 

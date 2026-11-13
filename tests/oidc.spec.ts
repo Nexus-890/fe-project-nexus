@@ -237,7 +237,7 @@ test("a persistently rejected profile is renewed and retried once before clearin
   expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 5, logouts: 0 });
 });
 
-test("registration accepts the backend 201 user envelope and sends the user to sign in", async ({ page, request }) => {
+test("registration accepts the backend 201 user envelope and asks the user to check email", async ({ page, request }) => {
   await page.goto("/sign-up");
   await page.getByLabel("Full Name", { exact: true }).fill("New Buyer");
   await page.getByLabel("Email", { exact: true }).fill("new-buyer@nexus.local");
@@ -254,8 +254,10 @@ test("registration accepts the backend 201 user envelope and sends the user to s
   const registration = await registrationResponse;
   expect(registration.status()).toBe(201);
   expect(await registration.json()).toMatchObject({ code: 0, message: "response success", data: { email: "new-buyer@nexus.local", fullName: "New Buyer" } });
-  await expect(page).toHaveURL(`${app}/sign-in`);
-  await expect(page.getByRole("button", { name: "Continue to sign in", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(`${app}/check-email?email=new-buyer%40nexus.local`);
+  await expect(page.getByRole("heading", { name: "Check your email", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue("new-buyer@nexus.local");
+  await expect(page.getByRole("link", { name: "Continue to sign in", exact: true })).toBeVisible();
   expect(await evidence(request, "api")).toMatchObject({ registrations: 1, loginRequests: 0, meRequests: 0, passwordLeaks: 0 });
   expect(await evidence(request, "keycloak")).toMatchObject({ authorizations: 0, codeExchanges: 0 });
 });
