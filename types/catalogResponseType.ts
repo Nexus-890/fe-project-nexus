@@ -12,8 +12,9 @@ export type ProductSummary = Pick<ProductWireResponse, "id" | "name" | "slug"> &
     images?: ProductImage[];
   };
 export type ShippingParcel = NonNullable<components["schemas"]["ShippingParcel"]>;
-export type ProductSku = Omit<components["schemas"]["Sku"], "price" | "shippingParcel"> & {
+export type ProductSku = Omit<components["schemas"]["Sku"], "price" | "costPrice" | "shippingParcel"> & {
   price: string;
+  costPrice?: string;
   shippingParcel?: ShippingParcel | null;
 };
 export type ProductImage = components["schemas"]["Image"];

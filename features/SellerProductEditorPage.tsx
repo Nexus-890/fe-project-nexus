@@ -24,10 +24,20 @@ const parcelFields = [
   { key: "heightCm", label: "Height (cm)", max: 200 },
 ] as const;
 
+const skuFields = [
+  { key: "color", label: "Color", aria: "color", money: false },
+  { key: "size", label: "Size", aria: "size", money: false },
+  { key: "costPrice", label: "Cost price (VND)", aria: "cost price", money: true },
+  { key: "price", label: "Selling price (VND)", aria: "price", money: true },
+] as const;
+
+const moneyOf = (text: string): number | null =>
+  /^\d+(?:\.\d{1,2})?$/.test(text) && Number(text) <= Number.MAX_SAFE_INTEGER / 100 ? Number(text) : null;
+
 function SkuEditor({ productId, sku, onSaved, onRemove }: { productId: string; sku?: ProductSku; onSaved: (sku: ProductSku) => void; onRemove: () => void }) {
   const auth = useAuth();
   const [input, setInput] = useState({
-    color: sku?.color ?? "", size: sku?.size ?? "Standard", price: sku?.price ?? "",
+    color: sku?.color ?? "", size: sku?.size ?? "Standard", price: sku?.price ?? "", costPrice: sku?.costPrice ?? "",
     weightGrams: sku?.shippingParcel?.weightGrams.toString() ?? "",
     lengthCm: sku?.shippingParcel?.lengthCm.toString() ?? "",
     widthCm: sku?.shippingParcel?.widthCm.toString() ?? "",
@@ -50,18 +60,20 @@ function SkuEditor({ productId, sku, onSaved, onRemove }: { productId: string; s
   return <form className="space-y-4 border-t border-border py-5" onSubmit={(event) => {
     event.preventDefault(); setValidation("");
     if (submitting.current || save.isPending) return;
-    const price = Number(input.price);
-    if (!/^\d+(?:\.\d{1,2})?$/.test(input.price) || !Number.isFinite(price) || price <= 0 || price > Number.MAX_SAFE_INTEGER / 100) { setValidation("Enter a positive price with at most two decimals within the supported range."); return; }
+    const price = moneyOf(input.price);
+    if (price === null || price <= 0) { setValidation("Enter a positive selling price with at most two decimals within the supported range."); return; }
+    const costPrice = moneyOf(input.costPrice);
+    if (costPrice === null) { setValidation("Enter a cost price of zero or more with at most two decimals within the supported range."); return; }
     const shippingParcel = { weightGrams: Number(input.weightGrams), lengthCm: Number(input.lengthCm), widthCm: Number(input.widthCm), heightCm: Number(input.heightCm) };
     if ((!sku || hasMeasurements) && !isValidShippingParcel(shippingParcel)) {
       setValidation("Enter all four whole-number measurements: weight 1–50,000 g; length, width and height 1–200 cm."); return;
     }
     submitting.current = true;
-    save.mutate({ color: input.color, size: input.size, price, ...(!sku || hasMeasurements ? { shippingParcel } : {}) });
+    save.mutate({ color: input.color, size: input.size, price, costPrice, ...(!sku || hasMeasurements ? { shippingParcel } : {}) });
   }}>
     <fieldset disabled={save.isPending} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-xs text-muted-foreground">SKU code<input aria-label={`SKU code ${labelSuffix}`} readOnly value={sku?.skuCode ?? "Generated when saved"} className={`${sellerInput} mt-2 bg-muted font-mono text-xs`} /></label>
-      {(["color", "size", "price"] as const).map((key) => <label key={key} className="text-xs text-muted-foreground">{key === "price" ? "Price (VND)" : key === "color" ? "Color" : "Size"}<input aria-label={`${key} ${labelSuffix}`} required maxLength={key === "price" ? 17 : 50} value={input[key]} inputMode={key === "price" ? "decimal" : undefined} onChange={(event) => setInput({ ...input, [key]: event.target.value })} className={`${sellerInput} mt-2`} /></label>)}
+      {skuFields.map(({ key, label, aria, money }) => <label key={key} className="text-xs text-muted-foreground">{label}<input aria-label={`${aria} ${labelSuffix}`} required maxLength={money ? 17 : 50} value={input[key]} inputMode={money ? "decimal" : undefined} onChange={(event) => setInput({ ...input, [key]: event.target.value })} className={`${sellerInput} mt-2`} /></label>)}
     </fieldset>
     <fieldset disabled={save.isPending} className="space-y-3">
       <legend className="text-sm font-medium">Shipping measurements per SKU unit</legend>
@@ -112,7 +124,8 @@ function SavedSku({ productId, sku, active, onSaved }: { productId: string; sku:
     <label className="text-xs text-muted-foreground">SKU code<input aria-label={`SKU code ${sku.skuCode}`} readOnly value={sku.skuCode} className={`${sellerInput} mt-2 bg-muted font-mono text-xs`} /></label>
     <div><p className="text-xs text-muted-foreground">Color</p><p className="mt-3 break-words text-sm">{sku.color || "—"}</p></div>
     <div><p className="text-xs text-muted-foreground">Size</p><p className="mt-3 break-words text-sm">{sku.size || "—"}</p></div>
-    <div><p className="text-xs text-muted-foreground">Price</p><p className="mt-3 font-mono text-sm">{formatVND(sku.price)}</p></div>
+    <div><p className="text-xs text-muted-foreground">Cost price</p><p data-testid={`cost-price-${sku.id}`} className="mt-3 font-mono text-sm">{sku.costPrice ? formatVND(sku.costPrice) : "—"}</p></div>
+    <div><p className="text-xs text-muted-foreground">Selling price</p><p data-testid={`selling-price-${sku.id}`} className="mt-3 font-mono text-sm">{formatVND(sku.price)}</p></div>
   </div><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{sku.shippingParcel ? `${sku.shippingParcel.weightGrams.toLocaleString("en-US")} g · ${sku.shippingParcel.lengthCm} × ${sku.shippingParcel.widthCm} × ${sku.shippingParcel.heightCm} cm` : "Shipping measurements missing"}</p><button type="button" aria-label={`Edit SKU ${sku.skuCode}`} className={sellerButton} onClick={() => setEditing(true)}>Edit SKU</button></div><SkuStock sku={sku} active={active} /></div>;
 }
 

@@ -125,3 +125,40 @@ test("malformed saved parcels and mismatched updated SKU IDs reject rather than 
     context: { fetch: async () => Response.json({ code: 0, message: "response success", data: { ...savedSku, id: "other-sku", shippingParcel: parcel } }) },
   }), invalid);
 });
+
+test("SKU writes send the optional cost price apart from the selling price and keep the saved cost", async () => {
+  const bodies: unknown[] = [];
+  const context: ApiContext = { fetch: async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ code: 0, message: "response success", data: { ...savedSku, price: 150000, costPrice: 90000.5 } }, { status: init?.method === "POST" ? 201 : 200 });
+  } };
+  const created = await createSellerSku("product-1", { color: "Silver", size: "Standard", price: 150000, costPrice: 90000.5 }, { context });
+  assert.equal(created.price, "150000.00"); assert.equal(created.costPrice, "90000.50");
+  await updateSellerSku("product-1", "persisted-sku", { color: "Silver", size: "Standard", price: 150000, costPrice: 0 }, { context });
+  await updateSellerSku("product-1", "persisted-sku", { color: "Silver", size: "Standard", price: 150000, costPrice: null }, { context });
+  assert.deepEqual(bodies, [
+    { color: "Silver", size: "Standard", price: 150000, costPrice: 90000.5 },
+    { color: "Silver", size: "Standard", price: 150000, costPrice: 0 },
+    { color: "Silver", size: "Standard", price: 150000 },
+  ]);
+  const publicSku = await createSellerSku("product-1", { color: "Silver", size: "Standard", price: 150000 }, {
+    context: { fetch: async () => Response.json({ code: 0, message: "response success", data: savedSku }, { status: 201 }) },
+  });
+  assert.equal("costPrice" in publicSku, false);
+});
+
+test("invalid cost prices are rejected before any request and a malformed saved cost is refused", async () => {
+  let calls = 0;
+  const context: ApiContext = { fetch: async () => { calls += 1; return Response.json({ code: 0, message: "response success", data: savedSku }); } };
+  for (const costPrice of [-1, 1.001, Number.NaN, 1e17]) {
+    const body = { color: "Silver", size: "Standard", price: 150000, costPrice };
+    await assert.rejects(createSellerSku("product-1", body, { context }), invalid);
+    await assert.rejects(updateSellerSku("product-1", "persisted-sku", body, { context }), invalid);
+  }
+  assert.equal(calls, 0);
+  for (const costPrice of [-1, "90000"]) {
+    await assert.rejects(createSellerSku("product-1", { color: "Silver", size: "Standard", price: 150000 }, {
+      context: { fetch: async () => Response.json({ code: 0, message: "response success", data: { ...savedSku, costPrice } }, { status: 201 }) },
+    }), invalid);
+  }
+});

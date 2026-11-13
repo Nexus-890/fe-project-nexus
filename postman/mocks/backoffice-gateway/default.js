@@ -19,6 +19,8 @@ const validParcel = (parcel) => parcel !== null && typeof parcel === "object" &&
   [["weightGrams", 50000], ["lengthCm", 200], ["widthCm", 200], ["heightCm", 200]]
     .every(([field, max]) => Number.isInteger(parcel[field]) && parcel[field] >= 1 && parcel[field] <= max);
 const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Math.min(...product.skus.map((sku) => sku.price)) : null, maxPrice: product.skus.length ? Math.max(...product.skus.map((sku) => sku.price)) : null });
+const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key]) => key !== "costPrice"));
+const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 async function session(req, res, url) {
   const upstream = await fetch(`${origin}/session${url.pathname}`, { method: req.method, headers: { "Content-Type": "application/json", Origin: req.headers.origin || "http://127.0.0.1:3110", "X-Requested-With": req.headers["x-requested-with"] || "", ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}) }, ...(req.method === "POST" ? { body: typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}) } : {}) });
@@ -63,19 +65,19 @@ const server = http.createServer(async (req, res) => {
   if (path === "/v1/categories/tree") return list(res, [{ id: category, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }], url);
   if (path === "/v1/products/mine") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); return list(res, products.filter((product) => product.sellerId === claims.sub).map(withPrice), url); }
   if (/^\/v1\/products\/mine\//.test(path)) { const product = products.find((item) => item.id === path.split("/").at(-1)); if (!has("SELLER") || product?.sellerId !== claims.sub) return problem(res, 403, "Product owner required"); return product ? ok(res, withPrice(product)) : problem(res, 404, "Product missing"); }
-  if (path === "/v1/products" && req.method === "GET") return list(res, products.filter((product) => product.status === "ACTIVE").map(withPrice), url);
+  if (path === "/v1/products" && req.method === "GET") return list(res, products.filter((product) => product.status === "ACTIVE").map(publicProduct), url);
   if (path === "/v1/products" && req.method === "POST") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); const body = bodyOf(req), id = randomUUID(); const product = { ...body, id, sellerId: claims.sub, slug: `demo-${id}`, status: "DRAFT", images: [], skus: [] }; products.push(product); return ok(res, withPrice(product), 201); }
   const productMatch = /^\/v1\/products\/([^/]+)(.*)$/.exec(path);
   if (productMatch) {
     const product = products.find((item) => item.id === productMatch[1]), suffix = productMatch[2]; if (!product) return problem(res, 404, "Product missing");
-    if (req.method === "GET" && !suffix) return product.status === "ACTIVE" ? ok(res, withPrice(product)) : problem(res, 404, "Active products only");
-    if (req.method === "GET" && suffix === "/skus") return list(res, product.skus, url);
+    if (req.method === "GET" && !suffix) return product.status === "ACTIVE" ? ok(res, publicProduct(product)) : problem(res, 404, "Active products only");
+    if (req.method === "GET" && suffix === "/skus") return list(res, product.skus.map(publicSku), url);
     if (!has("SELLER") || product.sellerId !== claims.sub) return problem(res, 403, "Product owner required");
     if (req.method === "POST" && suffix === "/skus") {
       const body = bodyOf(req);
       if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
       const skuCode = `SKU-${product.id.replaceAll("-", "")}-${String(product.skus.length + 1).padStart(2, "0")}`;
-      const sku = { color: body.color, size: body.size, price: body.price, shippingParcel: body.shippingParcel == null ? null : { ...body.shippingParcel }, skuCode, id: randomUUID(), productId: product.id, status: "ACTIVE" };
+      const sku = { color: body.color, size: body.size, price: body.price, ...(body.costPrice == null ? {} : { costPrice: body.costPrice }), shippingParcel: body.shippingParcel == null ? null : { ...body.shippingParcel }, skuCode, id: randomUUID(), productId: product.id, status: "ACTIVE" };
       product.skus.push(sku); return ok(res, sku, 201);
     }
     if (req.method === "POST" && suffix === "/images") { if (!String(req.headers["content-type"]).startsWith("multipart/form-data; boundary=")) return problem(res, 400, "Multipart boundary missing"); const image = { id: randomUUID(), imageUrl: `${origin}/api/test/image.svg`, sortOrder: product.images.length }; product.images.push(image); return ok(res, image, 201); }
@@ -90,6 +92,7 @@ const server = http.createServer(async (req, res) => {
     const body = bodyOf(req);
     if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
     Object.assign(sku, { color: body.color, size: body.size, price: body.price });
+    if (body.costPrice != null) sku.costPrice = body.costPrice;
     // Catalog preserves existing metadata when an older client omits/nulls the parcel.
     if (body.shippingParcel != null) sku.shippingParcel = { ...body.shippingParcel };
     return ok(res, sku);

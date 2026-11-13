@@ -87,21 +87,25 @@ export const changeSellerProductStatus = async (id: string, status: SellerProduc
   return parseProductWrite(data);
 };
 
+const isMoney = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1e17 && Number(value.toFixed(2)) === value;
+
 export const saveSellerSku = async (productId: string, skuId: string | null, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> => {
   if (!productId.trim() || (skuId !== null && (!skuId.trim() || skuId.startsWith("new-"))) ||
     typeof body.color !== "string" || !body.color.trim() || body.color.trim().length > 50 ||
     typeof body.size !== "string" || !body.size.trim() || body.size.trim().length > 50 ||
-    typeof body.price !== "number" || !Number.isFinite(body.price) || body.price <= 0 || body.price >= 1e17 ||
-    Number(body.price.toFixed(2)) !== body.price)
+    !isMoney(body.price) || body.price <= 0 || (body.costPrice != null && !isMoney(body.costPrice)))
     throw createInvalidResponseError("Invalid SKU input");
   const shippingParcel = parseShippingParcel(body.shippingParcel);
   const payload: SellerSkuInput = { color: body.color.trim(), size: body.size.trim(), price: body.price,
+    ...(body.costPrice == null ? {} : { costPrice: body.costPrice }),
     ...(body.shippingParcel === undefined ? {} : { shippingParcel }) };
   const path = skuId === null ? `/api/v1/products/${encodeURIComponent(productId)}/skus` : `/api/v1/skus/${encodeURIComponent(skuId)}`;
   const { data } = await requestApi(skuId === null ? "POST" : "PUT", path, payload, { ...options, auth: true });
   const sku = parseProductSku(data);
   if (!sku.id.trim() || sku.id.startsWith("new-") || sku.productId !== productId || !sku.skuCode.trim() ||
-    !isRecord(data) || typeof data.price !== "number" || (skuId !== null && sku.id !== skuId))
+    !isRecord(data) || typeof data.price !== "number" ||
+    (data.costPrice != null && typeof data.costPrice !== "number") || (skuId !== null && sku.id !== skuId))
     throw createInvalidResponseError("Invalid saved SKU");
   return sku;
 };
