@@ -21,6 +21,10 @@ export const queryKeys = {
 
   auctions: {
     active: ["auctions", "active"] as const,
+    detail: (id: string) => ["auctions", id, "detail"] as const,
+    state: (id: string) => ["auctions", id, "state"] as const,
+    bids: (id: string, page: number) => ["auctions", id, "bids", page] as const,
+    mine: (sessionId: number, id: string) => ["auction-bids", sessionId, id] as const,
   },
   catalog: {
     stock: (skuId: string) => ["inventory", "available", skuId] as const,

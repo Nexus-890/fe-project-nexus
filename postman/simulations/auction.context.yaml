@@ -1,0 +1,74 @@
+purpose:
+  stands_in_for: >-
+    Local auction-service HTTP dependencies, catalog media/detail, gateway cookie
+    session and Keycloak protocol. The auction detail, numeric POST bid and own
+    bid list use delivered DTOs; state and public history use the #168/#169 draft.
+    SSE /events and named events are provisional #253 assumptions. No published
+    owner mock was identified: installed CLI 1.73.0 has no postman status command,
+    and postman mock list --json lists only local mocks with null IDs.
+  unblocks: >-
+    Real Next.js browser acceptance of the Auction room with state polling,
+    server-derived countdown, idempotent bid retry, masked history, end states,
+    SSE fallback and responsive layout. The browser has no HTTP proxy setting,
+    so dedicated one-port dependency routing uses 3928 and the app uses 3118.
+assumptions:
+  - id: draft-read-and-sse-delivery
+    status: conflicting
+    claim: >-
+      The backend supplies GET auction state and public bid history, an SSE
+      stream, and winner settlement/order fields for the complete room flow.
+    reason: >-
+      The supplied task requires these capabilities and draft auction OpenAPI
+      documents state/history, but origin/develop 09b3cf6f controllers do not
+      implement state, public history or SSE. AuctionResponse omits finalPrice,
+      paymentDueAt and orderId. A local fixture cannot establish their delivery.
+    verification: >-
+      On 2026-11-13 compared delivered and draft OpenAPI and the auction/bid
+      controllers. Browser cases deliberately model the intended task contract
+      and separately exercise 404 read responses and SSE 503 fallback.
+    source: >-
+      ../be-project-nexus/docs/api/auction-service.yaml;
+      ../be-project-nexus/docs/api/openapi/auction-service.yaml;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionController.java;
+      postman/mocks/auction-api/default.js; tests/auction.spec.ts
+    updated_at: '2026-11-13'
+  - id: auction-browser-behavior
+    status: supported
+    claim: >-
+      The real frontend passed fourteen locally modeled Auction room scenarios:
+      two-second public updates, server-clock countdown, authenticated numeric
+      bidding, server minimum correction, safe same-key replay, winner order
+      link, draft-read failure feedback, SSE disconnect fallback, mobile bounds,
+      zero-countdown closure with late extension reopening, stale-history
+      leading protection, 429 recovery, SSE burst coalescing and unsafe-money
+      validation.
+    reason: >-
+      The suite runs Next and its actual API boundary against Postman HTTP
+      dependency servers. Assertions inspect the resulting UI and fixture
+      request/write evidence. This establishes caller behavior against these
+      stand-ins; it does not establish delivery of the missing backend routes.
+    verification: >-
+      On 2026-11-13 ran npm run test:browser -- --config playwright.auction.config.ts:
+      fourteen passed in 1.1 minutes after an unchanged retry when the Next
+      security reminder stopped the first startup. The run covered successful,
+      deliberate 404/429/503 and terminal responses, 30-event SSE burst
+      coalescing, one safe same-key replay write, and no unmodeled 501 calls.
+      Inspected and preserved desktop, mobile, leading and winner PNGs in
+      docs/features/auction-evidence/; mobile controls remain within 375px and
+      the leading button hover keeps readable contrast. Initial attempts before
+      the final unchanged retry stopped on the cross-drive dependency junction
+      or security reminder; copying installed dependencies into this worktree
+      resolved the environment issue. No production bundler or backend source
+      was changed. Ports 3118/3928 stopped after runner cleanup.
+    source: >-
+      tests/auction.spec.ts; playwright.auction.config.ts;
+      tests/auction-fixture.mjs; postman/mocks/auction-api/default.js;
+      test-results/auction-simulation.ndjson (ignored local evidence);
+      test-results/auction/ (ignored local traces);
+      docs/features/auction-evidence/{desktop,leading,mobile,won}.png
+    updated_at: '2026-11-13'
+fingerprints:
+  - id: auction-room-20261113
+    date: '2026-11-13'
+    commit: 'origin/develop 09b3cf6f; implementation prepared on fsa_ChungTQ/chore/178-fe-auction-room-state-and-countdown-bid-panel-bid-history-and-end-state-live-updates'
+    cli: '1.73.0'

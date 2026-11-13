@@ -1,0 +1,8 @@
+name: Auction
+values:
+  - key: fixtureProviderOrigin
+    value: http://127.0.0.1:3928/keycloak
+    enabled: true
+  - key: fixtureAppOrigin
+    value: http://127.0.0.1:3118
+    enabled: true
