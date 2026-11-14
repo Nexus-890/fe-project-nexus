@@ -2,6 +2,16 @@
 
 Base: `origin/develop` `09b3cf6f`; branch `fsa_ChungTQ/chore/178-fe-auction-room-state-and-countdown-bid-panel-bid-history-and-end-state-live-updates` in the attached `buyer-auction-room` worktree. The original checkout's three backend edits were preserved. The latest revision includes frontend fixes and an additive winner-only projection on the existing private own-bids read. It adds no endpoint or migration.
 
+Develop advanced during final packaging to `a686c099`. It was merged without conflicts
+after the verified implementation commit `b2cb4d03`; the merge changed no auction
+service or frontend runtime source. Commerce/inventory/payment generated DTOs were
+regenerated for that upstream API inventory. Generated drift, lint, fresh typecheck,
+all 289 frontend unit tests and the isolated production build passed again; API
+inventory now passes 101 operations. The build's unchanged retry passed after the
+same installed Next security reminder.
+The 26-case auction and 55-case catalog browser evidence below was recorded before
+that upstream-only merge and remains scoped to those actual runs.
+
 ## Latest heartbeat and private projection revision
 
 The reviewed #253 target uses `/stream`, named `state` and named transport `heartbeat` every 15 seconds. `open` starts a 30-second grace window; silence for 30 seconds or a stream error restores two-second polling. A heartbeat renews connection health only; its payload is opaque and cannot change state or reset the countdown. Valid matching state updates apply immediately, with supporting REST coalesced separately. Older/regressing snapshots and late REST completions cannot overwrite accepted state. ENDED remains pending until settlement.
@@ -15,7 +25,7 @@ The minimal backend change extends `MyBidQuery`, `MyBidResponse` and delivered O
 | `npm run test:auth` | 289 passed; includes heartbeat liveness, private-order lag/reconciliation, nullable private parsing and shipping HTTP coverage |
 | Focused `AuctionMineIntegrationTest` | 23 passed, zero failures/errors/skips, native disposable PostgreSQL 18.6 and Java 21.0.11 |
 | Selected auction-service Maven verify | 268 Surefire + 10 Failsafe passed (278 total); exactly two existing Docker-only fixtures excluded because the daemon was unavailable; unfiltered verify not claimed |
-| Delivered API inventory | 100 operations checked; passed |
+| Delivered API inventory | 100 operations before synchronization; 101 operations passed after merging develop `a686c099` |
 | OpenAPI lint | Redocly 2.72 passed |
 | Full generated-type drift, lint, typecheck | Passed after the last private-projection/hook changes |
 | Latest `npm run test:auction` | 26/26 passed, 3.2 minutes; no production changes followed this run |

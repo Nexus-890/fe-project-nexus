@@ -2,6 +2,10 @@
 
 Scope: the combined Auction room frontend work (#178, #179, #180 and the frontend portion of #267), based on `origin/develop` at `09b3cf6f`. `/auctions/[id]` follows the room frame in `03 · Buyer · Auction.png`; homepage auction cards enter that room. Auction listing and My Bids are separate tasks. The latest review also adds the minimal private winner read fields needed to connect the room to the recorded order. Live #180/#267 integration remains open.
 
+Before push, develop advanced to `a686c099` and was merged without conflicts.
+Its unrelated commerce/inventory/payment DTO additions were regenerated; the
+auction implementation and frontend runtime source did not change in that merge.
+
 ## UI and behavior
 
 The shop header/footer wrap the desktop columns and mobile stack: product gallery, item details, title/status, countdown, bid panel and masked paginated history. Product and auction responses supply content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Money uses decimal strings and exact-cent arithmetic; V2's `numeric(19,2)` supersedes the attached V1 diagram's `bigint` columns.

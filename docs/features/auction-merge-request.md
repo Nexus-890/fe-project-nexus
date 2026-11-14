@@ -69,6 +69,7 @@ Config keys: none added. Existing API origin/proxy configuration is reused.
 
 - The narrow backend read addition closes the winner-order contract gap. Public DTOs remain free of winner checkout references; there is no SKU/title matching or unbounded order discovery.
 - Generated auction types follow the updated delivered spec. #168 reads were inspected at `ec75d5c0`; #172 shipping/settlement at `b17f3275`; neither commit is imported wholesale.
+- Final packaging merges develop `a686c099` without conflicts and regenerates its commerce/inventory/payment DTO changes. Post-merge generated drift, lint, typecheck, 289 unit tests and production build passed; API inventory now covers 101 operations. Browser evidence predates that upstream-only merge; no auction/frontend runtime source changed in it.
 - PostgreSQL/MVC tests verify the real stored-reference read and privacy boundary with seeded settlement data. Browser evidence runs the actual Next app against explicit local HTTP/QR fixtures.
 - Keep live #180/#267 acceptance open. Fixture screens do not prove STAGING settlement, provider readiness or a bank transfer.
 - An earlier heartbeat timing assertion mixed StrictMode connections; the corrected harness measures spacing per connection and retains the 15-second requirement.
