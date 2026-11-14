@@ -1,83 +1,74 @@
 ## Summary
 
-Implement `/auctions/[id]` from the Auction room Figma frame with automatic price/countdown, bids, masked history and explicit settlement states. Follow the #253 reviewer contract (`/stream`, named `state`) with immediate validated push updates and silent-stream polling fallback. Add conditional winner address review, #172 shipping confirmation and payment navigation while keeping the missing live order-reference handoff explicit.
+Implement the buyer Auction room with server-clock countdowns, bids, masked history and verified end states. Follow #253's named `state`/`heartbeat` contract and expose the recorded settlement order to its winner through the existing private own-bids read, connecting the room to address confirmation and payment.
 
-Related: #178, #179, #180 and frontend #267. #180 and live #267 acceptance remain incomplete pending the integration items below.
+Related: #178, #179, #180, #198 and frontend #267. Live staging/load acceptance remains open.
 
 ## Changes
 
-- Add the responsive room, gallery, bid panel, history and direct homepage entry.
-- Use server-clock countdowns, two-second fallback polling, `/stream` named-state updates without a push coalescing delay, and a five-second valid-state heartbeat deadline. Throttle supporting REST separately; prevent stale responses from regressing accepted state.
-- Keep ENDED pending, reconcile delayed own/detail results, and show distinct verified winner, loser, failed and cancelled states.
-- Preserve exact bid minimum/decimal validation and safe same-key retry after uncertain writes.
-- Add a conditional winner address form and native review dialog. POST the verified #172 direct-address contract, show returned shipping/total/deadline, and open the existing payment route with the returned group id. Same-address recovery preserves an uncertain intent.
-- Add shipping HTTP/service tests and expand Postman/browser fixtures for two contexts, raw state messages, silence, delayed settlement, winner payment handoff and all mobile control bounds/44px targets.
-- Document the integration branch contract, missing auction-to-order reference and explicit live acceptance gaps.
+- `features/useAuctionState.ts`, `auctionStateReconciliation.ts`: receive transport `heartbeat` every 15 seconds, use a 30-second silence threshold, and apply validated `state` immediately. Keep native reconnect and two-second fallback; reject older/regressing snapshots.
+- `auction-service/bidding/MyBidQuery.java`, `MyBidResponse.java`: add nullable `orderId`, `paymentDueAt`, `finalPrice` to `/bids/mine`, gated by authenticated recorded winner and WON/SETTLED/PAYMENT_TIMEOUT. Read stored columns; add no settlement write, endpoint or migration.
+- `service/auctionService.ts`, generated/domain types, `AuctionRoomPage.tsx`: consume checkout references only from the private result. Poll the winner's own result every two seconds until its recorded order arrives; stop on loss, timeout, deadline or completed handoff.
+- `AuctionWinnerCheckout.tsx`: review address, confirm shipping using #172's direct body, display returned totals/deadline, then open the existing payment page. Preserve uncertain retries and typed address across settlement refreshes.
+- PostgreSQL/MVC privacy regressions and HTTP/browser fixtures cover recorded references, 15-second heartbeat timing, 30-second fallback and room-to-shipping-to-QR navigation. Evidence distinguishes database tests, HTTP stand-ins and live staging acceptance.
 
 ## API
 
-This frontend MR adds no backend endpoints. Delivered `develop` consumption:
+No new endpoints. The existing private read receives additive nullable fields:
 
 | **Method** | **Path** | **Access** | **Success** | **Errors** |
 | ---------- | -------- | ---------- | ----------- | ---------- |
 | GET | `/api/v1/auctions/{id}` | Public | 200 | 400, 404 |
 | POST | `/api/v1/auctions/{id}/bids` | BUYER + `AUCTION.BID` | 201 new / 200 replay | 400, 401, 403, 409 |
-| GET | `/api/v1/bids/mine` | BUYER + `AUCTION.VIEW_BID_HISTORY` | 200 | 400, 401, 403 |
+| GET | `/api/v1/bids/mine` | BUYER + `AUCTION.VIEW_BID_HISTORY` | 200, winner-only nullable fields | 400, 401, 403 |
+| GET | `/api/v1/auctions/{id}/state` | Public, #168 integration | 200 | Missing read shows explicit fallback |
+| GET | `/api/v1/auctions/{id}/bids` | Public, #169 integration | 200 page | Missing read shows explicit history failure |
+| GET | `/api/v1/auctions/{id}/stream` | Public target #253 | Named `state`, `heartbeat` every 15s | Error or 30s silence restores polling |
+| POST | `/api/v1/orders/{id}/shipping-confirmation` | BUYER + `CHECKOUT.START` + winner ownership, #172 `b17f3275` | 200 / identical-address replay | 400, 401, 403, 404, 409, 422, 500, 502, 503 |
 
-Integration targets, distinguished from delivery on this baseline:
-
-| **Method** | **Path** | **Access** | **Success** | **Errors** |
-| ---------- | -------- | ---------- | ----------- | ---------- |
-| GET | `/api/v1/auctions/{id}/state` | Public, draft #168 | 200 draft | Missing read shows snapshot fallback; transient errors recover |
-| GET | `/api/v1/auctions/{id}/bids` | Public, draft #169 | 200 draft page | Missing read shows history failure; transient errors recover |
-| GET | `/api/v1/auctions/{id}/stream` | Public target from reviewer #253 | `text/event-stream`, named `state` | Errors or five seconds of silence restore polling |
-| POST | `/api/v1/orders/{id}/shipping-confirmation` | BUYER + `CHECKOUT.START` + winner ownership, #172 branch `b17f3275` | 200 confirmation / identical-address replay | 400, 401, 403, 404, 409, 422, 500, 502, 503 |
-
-Bid writes send numeric `{amount}` and UUID `Idempotency-Key`. Shipping confirmation sends direct `{recipientName,phoneNumber,addressLine,wardCode,provinceCode,countryCode:"VN"}` without an idempotency key. Its 200 data is `{orderGroupId,shippingFee,totalAmount,dueAt}`. Private calls use the scoped session; public REST/SSE send no Bearer or query token.
+The private fields come from `auctions.order_id`, `payment_due_at` and `final_price`. Rivals/nonwinning states receive null; `orderId` stays null until #172's OrderCreated projection records it. Public AuctionResponse stays unchanged. Delivered OpenAPI and gateway documentation describe the visibility.
 
 Config keys: none added. Existing API origin/proxy configuration is reused.
 
 ## Acceptance criteria
 
-- [x] Price/countdown update automatically; server-clock and bid-minimum behavior was established in the prior local suite and retained in the revised implementation.
-- [x] Two-second fallback uses TanStack Query; no SockJS or STOMP dependency.
-- [x] Bid amount starts at `currentPrice + bidIncrement`; rejection minimum updates the form; uncertain retry retains amount/key.
-- [x] Implement reviewer-requested `/stream` and named `state` handling with immediate state application; only supporting reads are throttled.
-- [x] Implement five-second silent-stream recovery, stale snapshot rejection, pending ENDED and verified winner/loser states.
-- [x] Implement conditional address review, #172 shipping confirmation, returned totals and payment-group navigation when a real order reference is supplied.
-- [x] Revised local browser evidence: 25/25 scenarios, independent browser contexts in 78.60ms against HTTP fixtures, and all mobile controls including retries/pagination at 44px. This is separate from live T4.
-- [x] Conditional winner address review, same-address recovery, preserved input through settlement/read failures, returned totals and navigation to the actual existing payment page with fixture QR.
-- [ ] Live state/history/SSE integration and public gateway policy on the compatible backend.
-- [ ] #267 T4 with two real backend users under one second; 1,000 concurrent live connections.
-- [ ] Complete live #180 winner flow: backend must expose the auction's order reference and compatible settlement/payment capabilities. `b17f3275` supplies shipping confirmation but is unmerged and does not expose this reference.
+- [x] Automatic countdown, exact bid minimum, rejection feedback and same-key recovery are implemented.
+- [x] `/stream` listens to named `state` and opaque transport `heartbeat`; heartbeat cannot mutate the auction snapshot or countdown.
+- [x] Heartbeats at 15 seconds keep the stream healthy; 30 seconds of silence triggers fallback, preserving native reconnect.
+- [x] Existing private API returns the actual stored order only to its winner. PostgreSQL integration verifies rivals get null and public detail exposes no checkout data.
+- [x] Room waits for the private reference, then provides address review, shipping confirmation and payment-group navigation without inventing an order.
+- [x] Mobile room controls include 44x44 minimum targets, including retries and pagination.
+- [x] Revised local auction evidence: 26/26 browser scenarios, 289 unit tests, typecheck/lint/generated drift and production build passed. Same-connection heartbeat spacing was 15,012ms; the local push update measured 116.65ms. See verification for exact scope and remaining live checks.
+- [ ] STAGING demonstration with two real backend users, real state/history/SSE, replay/reconnect and under-one-second updates.
+- [ ] 1,000 live connections and resource/latency acceptance with backend.
+- [ ] Actual settlement-to-stored-order-to-shipping-to-payment-provider integration on the compatible deployment.
 
 ## How to test
 
-1. In `fe-project-nexus`, run `npm run test:auction` with installed Node/npm, Postman CLI 1.70+ and Chrome. The config starts Next on `http://127.0.0.1:3118` and HTTP/OIDC fixtures on `http://127.0.0.1:3928`.
-2. Run generated-type drift, lint, typecheck, unit/auth and relevant browser regressions. Build with an isolated `NEXUS_TEST_DIST_DIR` as described in `docs/ai/task-workflow.md`.
-3. Read `docs/features/auction-verification.md` for executed evidence. Reviewer revision: 25 auction browser scenarios passed in 2.1 minutes; 283 unit tests, generated-type drift, lint, fresh typecheck and production build passed. Full catalog passed 55 with 38 existing configuration skips and zero failures in 2.2 minutes. Two-context local latency was 78.60ms. The previous 14-browser/275-unit result is historical.
-4. For live acceptance, connect the compatible backend and use two real buyers. Verify raw `state` updates, silence/reconnect/replay, delayed settlement, a genuine order reference, shipping confirmation and payment. Fixture measurements/screenshots cannot substitute for this step.
+1. In `fe-project-nexus`, run `npm run test:auction` with Node/npm, Postman CLI and Chrome. Next uses 3118 and HTTP/OIDC stand-ins use 3928. Heartbeat cases observe actual 15-second emissions beyond 30 seconds and a separate silent interval longer than 30 seconds.
+2. Run `npm run generate:types:check`, `npm run lint`, `npm run typecheck`, `npm run test:auth`, `npm run test:catalog`, then an isolated build using `NEXUS_TEST_DIST_DIR`.
+3. Run `AuctionMineIntegrationTest` with Docker or the existing `TEST_POSTGRES_ADMIN_URL` disposable database fixture. See `be-project-nexus/docs/testing/auction-mine.md` for executed commands and two Docker-only exclusions.
+4. Expected: heartbeat keeps transport healthy without state pushes; silence restores two-second polling; `/bids/mine` returns null before order projection, then the stored real id to the winner only. Room uses that private id for shipping and the returned payment group for QR navigation.
+5. For live acceptance deploy compatible #168/#169/#253 reads/stream and #172 settlement/shipping. Use two real buyers; fixture timing and seeded database settlement do not substitute for STAGING.
 
 ## Checklist
 
-- [ ] `.\mvnw.cmd verify` passes in every service touched — not applicable; no Java service changed or Maven verification run here.
-- [ ] Service starts against PostgreSQL with `ddl-auto: validate` — no new live backend startup performed.
-- [ ] No secret, `.env`, `.idea/` or log file in the diff — checked during final packaging before push; retained unchecked for reviewer confirmation. Intentional PNG/timing evidence is documented.
-- [ ] New endpoints registered in gateway/public policies — this MR adds none; #168/#169/#253 remain owning backend work. #172 registers its shipping policy on `b17f3275`.
-- [ ] Branch is up to date with `develop` and free of conflict markers — baseline `09b3cf6f`; ancestry/diff checked during final packaging before push, retained unchecked for reviewer confirmation.
+- [ ] `.\mvnw.cmd verify` passes in every service touched — selected auction-service verify passed 268 Surefire + 10 Failsafe tests. Unfiltered verify is not claimed: Docker is unavailable and two existing Docker-only fixtures were excluded.
+- [ ] The service starts against PostgreSQL with `ddl-auto: validate` — focused Spring integration ran against disposable PostgreSQL 18.6; compatible staging startup remains to be verified.
+- [ ] No secret, `.env`, `.idea/` or log file in the diff — checked at final packaging; intentional PNG/timing evidence is documented.
+- [ ] New endpoints registered in gateway/public policies — no new endpoint; existing private row documents winner visibility. Stream/state/history runtime policy remains backend integration work.
+- [ ] Branch is up to date with `develop` and has no conflict markers — checked at final packaging; left unchecked for reviewer confirmation.
 
 ## Out of scope / follow-ups
 
-- Merge/deliver #168/#169 and #253 backend streaming, replay and live performance evidence.
-- #170/#171 settlement and auction-to-order reference exposure; integrate #172 branch `b17f3275` and the real payment lifecycle.
-- Auction listing/My Bids screens and the existing Next security upgrade remain separate work.
+- Deploy and accept real #253 heartbeat/replay behavior, two real users and SSE load on STAGING.
+- Merge compatible settlement/shipping workers from #172. This change only reads already stored settlement columns.
+- Auction listing/My Bids, provider payment processing and the existing Next security upgrade remain separate work.
 
 ## Notes for reviewers
 
-- Keep draft status while unchecked live acceptance remains unresolved; this description does not close #180 or claim real T4 completion.
-- Generated auction DTOs use delivered OpenAPI. Draft state/history, reviewer-selected SSE and the unmerged #172 application model are identified explicitly; no backend files or generated commerce DTOs are changed to pretend delivery.
-- A winner without `orderId` gets an explicit waiting state. Neither SKU/name matching nor an unsupported order-filter request is used.
-- Public masked names do not identify the buyer. `/bids/mine` owns verified leading/won flags and is searched across pages.
-- The real Next app runs against local Postman HTTP fixtures. Test-only SVG imagery and subsecond fixture latency are not real backend evidence.
-- The final run recorded 1,192 HTTP calls with zero unmodeled 501 responses and no `/events` requests. Six screenshots and the timing JSON are retained under `docs/features/auction-evidence/`. The existing payment page loads its QR from the fixture; no bank transfer is claimed.
-- An earlier targeted regression exposed lost typed address during WON→SETTLED/private-read refresh. It was fixed and the final suite covers preservation. Production build and full catalog passed after unchanged retries of the existing Next advisory/startup shutdown. These interruptions are recorded separately in verification.
+- The narrow backend read addition closes the winner-order contract gap. Public DTOs remain free of winner checkout references; there is no SKU/title matching or unbounded order discovery.
+- Generated auction types follow the updated delivered spec. #168 reads were inspected at `ec75d5c0`; #172 shipping/settlement at `b17f3275`; neither commit is imported wholesale.
+- PostgreSQL/MVC tests verify the real stored-reference read and privacy boundary with seeded settlement data. Browser evidence runs the actual Next app against explicit local HTTP/QR fixtures.
+- Keep live #180/#267 acceptance open. Fixture screens do not prove STAGING settlement, provider readiness or a bank transfer.
+- An earlier heartbeat timing assertion mixed StrictMode connections; the corrected harness measures spacing per connection and retains the 15-second requirement.

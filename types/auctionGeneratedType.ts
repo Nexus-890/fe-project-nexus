@@ -183,6 +183,18 @@ export interface components {
             auctionStatus: components["schemas"]["AuctionStatus"];
             leading: boolean;
             won: boolean;
+            /**
+             * Format: uuid
+             * @description Recorded settlement order id, returned only to the recorded winner in WON/SETTLED/PAYMENT_TIMEOUT. Null before the OrderCreated projection is stored, for other bidders and for other statuses. Never inferred from a product or bid.
+             */
+            orderId?: string | null;
+            /**
+             * Format: date-time
+             * @description Stored auction payment deadline, returned only to the recorded winner in WON/SETTLED/PAYMENT_TIMEOUT; otherwise null. This read never creates or extends the deadline.
+             */
+            paymentDueAt?: string | null;
+            /** @description Stored final auction price as a JSON number, returned only to the recorded winner in WON/SETTLED/PAYMENT_TIMEOUT; otherwise null. Distinct from the caller's latest personal bid amount. */
+            finalPrice?: number | null;
         };
         ListMyBidsResponse: {
             /** @default 0 */
