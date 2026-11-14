@@ -718,6 +718,8 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             /** @description Cancellation eligibility for the current caller: ORDER.CANCEL and ownership (or ADMIN/SUPPORT_STAFF), and either PAID or PENDING in a PENDING group. This is a read-time snapshot; cancellation rechecks locked state and can return 409. Missing on older backends must be treated as false. */
             canCancel: boolean;
+            /** @description Buyer-readable reason set from PaymentUnreconciled (#157) when a transfer for this order's checkout could not be applied, for example a payment after the deadline. It never changes status. Null when there is nothing to report. */
+            paymentNote?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** @description Sum of stored item line totals. */

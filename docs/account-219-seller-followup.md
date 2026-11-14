@@ -44,5 +44,10 @@ regression passed 55 scenarios with 38 existing configured skips. Reviewed mobil
 rejection/reapplication and desktop pending-after-reload screenshots match the
 existing account styling. No temporary test routes/config files are committed.
 
+Before publication, `develop` advanced to `a686c099` (#157). It was merged without
+conflicts, and commerce/inventory/payment DTOs were regenerated from its delivered
+specs. Fresh typecheck, generated drift and 286 unit tests passed after the merge.
+The unchanged build retry passed after Next's existing startup advisory.
+
 No backend service source, migration or gateway permission is changed. #210 must
 implement and verify the own read and full lifecycle before live acceptance.
