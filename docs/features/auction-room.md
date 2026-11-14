@@ -1,33 +1,48 @@
 # Buyer auction room
 
-Scope: the merged frontend Auction room task (#178, #179, #180 and the frontend portion of #267), based on `origin/develop` at `09b3cf6f`. `/auctions/[id]` renders the detail room from `03 · Buyer · Auction.png`; homepage auction cards enter that room. The auction listing and My Bids screens in the same design export are separate tasks.
+Scope: the combined frontend Auction room work (#178, #179, #180 and the frontend portion of #267), based on `origin/develop` at `09b3cf6f`. `/auctions/[id]` follows the room frame in `03 · Buyer · Auction.png`; homepage auction cards enter that room. Auction listing and My Bids are separate tasks. Backend integration and the complete live #180 winner flow remain open.
 
 ## UI and behavior
 
-The existing shop header/footer wrap a two-column desktop layout and a stacked mobile layout: product gallery and item details, title/status, countdown, bid panel, masked paginated history and item link. Product and auction responses supply the content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Monetary values are normalized decimal strings; arithmetic uses exact cents. The actual V2 database migration uses `numeric(19,2)`, superseding the attached V1 diagram's `bigint` price columns.
+The shop header/footer wrap the desktop columns and mobile stack: product gallery, item details, title/status, countdown, bid panel and masked paginated history. Product and auction responses supply content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Money uses decimal strings and exact-cent arithmetic; V2's `numeric(19,2)` supersedes the attached V1 diagram's `bigint` columns.
 
-`useAuctionState` polls state/history at two-second intervals, pauses interval reads while hidden, and uses server time plus a monotonic clock for countdowns when the draft state read is available. The detail snapshot and private own-bid lookup reconcile every 15 seconds; end-time/status changes and accepted bids refresh the relevant reads immediately. If the state route is missing the detail snapshot takes over two-second polling and explicitly reports that live state is unavailable. Temporary 408/429 responses can recover on subsequent intervals.
+`useAuctionState` uses server time plus a monotonic browser clock. Without healthy push data, state/history poll every two seconds, while richer detail and the private own-bid lookup reconcile every 15 seconds. Missing state enables two-second detail fallback. Hidden tabs pause interval reads; transient 408/429 responses can recover on subsequent intervals. End-time extensions update the timer while detail catches up.
 
-Native public `EventSource` has no Bearer or query-string token. Events refetch validated state/history, coalesced at two seconds to limit burst traffic, and connection errors resume two-second polling. An open stream keeps 15-second reconciliation reads. Native reconnect retains `Last-Event-ID`. The stream closes on unmount, hidden tabs and terminal results. End-time extensions keep the server clock offset even while the richer detail read catches up. A stale public history row cannot receive a leading/You badge unless its amount matches the current market price.
+Following the 2026-11-14 reviewer clarification for #253, public native `EventSource` uses `GET /api/v1/auctions/{id}/stream` and the named `state` event. A validated matching payload updates state/price/countdown immediately; push updates have no two-second coalescing delay. Supporting history/private/detail REST refreshes are throttled separately to two seconds. Only accepted state messages prove liveness: an open connection alone is insufficient. Five seconds without valid current state restores two-second polling; errors do the same. Native reconnect preserves `Last-Event-ID`; the stream closes on unmount, hidden tabs and final results. Late REST completions and stale/regressing push data cannot replace newer accepted state. Backend replay and runtime latency are still unverified.
 
-The form starts at `currentPrice + bidIncrement`, which is the delivered backend minimum even before the first bid. A rejected bid shows the validated `AUCTION_BID_TOO_LOW.minimum`; new attempts receive new UUID keys. An uncertain network/5xx or malformed success keeps the same amount/key and locks amount editing until an explicit safe retry resolves it. A replay's accepted price is never used as the latest market price. Authentication and session generation guards apply to private requests; sign-out/remount clears attempt UI. Own leading/won flags come from the authenticated paginated `/bids/mine` read rather than comparing masked public names. Terminal changes trigger a final history and own-bid refresh before showing a loss.
+The bid form starts at `currentPrice + bidIncrement`, matching the delivered backend even before the first bid. A rejected bid uses validated `AUCTION_BID_TOO_LOW.minimum`; a corrected/new bid gets a new UUID key. An uncertain network/5xx or malformed success locks amount editing and preserves the amount/key for explicit retry. POST replay data never replaces current market price. Private requests use the current auth session; remounting on sign-out/account changes clears attempt UI. Authenticated `/bids/mine` supplies leading/won flags rather than identity guesses from masked names. A stale public history row cannot receive a leading/You badge unless its amount matches current price.
 
-## Delivered integration and explicit dependencies
+`ENDED` means settlement is pending. Bidding closes, the page says it is confirming the result, and state reconciliation continues. The last leading bidder is not declared the winner. Confirmed public settlement and a current private result produce explicit winner/loser states; FAILED/CANCELLED remain distinct. Supporting final reads reconcile delayed private/detail results before presenting a win or loss.
 
-Confirmed against Java controllers/DTOs and `be-project-nexus/docs/api/openapi/auction-service.yaml`:
+## Winner address and payment
+
+A verified winner with a server-supplied `orderId` can open the address form, review it in a native confirmation dialog, then submit shipping confirmation. The application service follows #172's implementation on integration branch `b17f3275`, not a guessed request shape:
+
+```text
+POST /api/v1/orders/{id}/shipping-confirmation
+body: {recipientName, phoneNumber, addressLine, wardCode, provinceCode, countryCode: "VN"}
+200 data: {orderGroupId, shippingFee, totalAmount, dueAt}
+```
+
+The endpoint requires BUYER, `CHECKOUT.START` and winner ownership. The direct address body has no `shippingAddress` wrapper or `paymentMethod`. The service validates Vietnamese carrier phone/locality formats, trims fields and maps numeric money into exact decimal strings. The UI displays returned shipping/total/deadline before linking to the existing `/checkout/payment/{orderGroupId}` route. It never invents fees, a payment group or a fresh deadline. An uncertain response retries the same address; #172 returns the saved result for an identical normalized address. An expired known deadline closes shipping/payment controls.
+
+Branch `b17f3275` is not merged into the `develop` baseline. It implements shipping confirmation but its AuctionResponse still omits `orderId`, `finalPrice` and `paymentDueAt`, and OrderResponse exposes no `referenceId`/`auctionId`. A winner without an order reference sees an explicit waiting state. No SKU/title matching or speculative order lookup is performed. This missing auction-to-order handoff prevents claiming the full live #180 acceptance criterion complete.
+
+## Delivered integration and dependencies
+
+Confirmed against `develop` Java/controllers and `be-project-nexus/docs/api/openapi/auction-service.yaml`:
 
 - Public `GET /api/v1/auctions/{id}`.
-- Private `POST /api/v1/auctions/{id}/bids`, numeric `{amount}`, UUID `Idempotency-Key`, creation 201/replay 200.
-- Private paginated `GET /api/v1/bids/mine?page=...&size=100`. The room searches successive pages for its auction.
+- Private `POST /api/v1/auctions/{id}/bids`, numeric `{amount}`, UUID `Idempotency-Key`, 201 creation / 200 replay.
+- Private paginated `GET /api/v1/bids/mine?page=...&size=100`; the room searches successive pages. `won` applies to WON/SETTLED/PAYMENT_TIMEOUT when stored winner matches.
 
-The following remain integration dependencies on this develop baseline:
+Still pending for live integration:
 
-- `GET /auctions/{id}/state` and public `GET /auctions/{id}/bids` appear in the **draft** `docs/api/auction-service.yaml`, but have no implementation/public gateway policies. Their models are explicitly marked provisional; generated detail/bid/mine DTOs use the delivered OpenAPI.
-- #253 has not supplied an SSE contract or implementation. `/auctions/{id}/events` and named events `auction-state`, `bid-placed`, `auction-extended`, `auction-ended` are an explicit frontend integration proposal, exercised by the local fixture; default message events are also supported. Event payloads only trigger validated REST reads.
-- Detail Java DTO currently omits `finalPrice`, `paymentDueAt` and `orderId`; these optional draft fields are parsed when delivered. Winner identity comes from the real own-bids contract. A winner sees an order link only when the server supplies an order id; otherwise the page reports preparation.
-- `/orders/{id}/shipping-confirmation` has neither a delivered body/response contract nor an implementation. No shipping fee, payment total, order group id, address POST or payment request is fabricated. The existing payment route requires a real confirmed order group. Completing the winner shipping/payment UI requires that owning backend contract.
-- Settlement is not implemented: the scheduler currently reaches `ENDED`, while `WON`/`FAILED` and payment transitions cannot be demonstrated against live develop. No artificial trust-score threshold is enforced by this frontend.
+- #168 state and #169 public history exist in the separate draft `docs/api/auction-service.yaml`, with no implementation/public gateway policy on this baseline.
+- #253 `/stream` + named `state` is the reviewer-specified frontend target; no backend implementation was found in inspected develop/MR refs. Reconnect/replay, two real users seeing changes in under one second, and 1,000 concurrent connections have not been demonstrated against real services.
+- #170/#171 settlement is absent from develop. #172 branch `b17f3275` adds commerce settlement/shipping confirmation and WON→SETTLED handling, but does not supply the room's missing order reference.
+- Optional settlement fields are parsed only when supplied. No hardcoded trust threshold is enforced.
 
 ## Verification
 
-`npm run test:auction` runs the real Next app against the dedicated local HTTP/Postman and OIDC fixtures. These scenarios establish frontend behavior against the declared fixture contracts, not live availability of the missing services. See the auction simulation/context, test spec and [verification record](auction-verification.md) for executed results.
+`npm run test:auction` runs the actual Next app against local HTTP/Postman and OIDC fixtures. The reviewer revision passed 25/25 browser scenarios in 2.1 minutes: named raw state, two independent browser contexts, silent-stream fallback, delayed settlement, preserved address input during settlement/private-read failures, conditional winner shipping through the existing payment page's QR, and every mobile control's 44px target. The final two-context bid-click→observer measurement was 78.60ms against the local HTTP stand-in; this is not real-backend T4 evidence. Unit/auth/service tests passed 283; generated-type drift, lint, typecheck and production build passed. Full catalog regression passed 55 with 38 existing configuration skips and zero failures; see [auction-verification.md](auction-verification.md). Fixture results do not establish live readiness or complete #180/#267 acceptance.

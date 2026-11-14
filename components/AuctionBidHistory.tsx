@@ -17,7 +17,7 @@ function AuctionBidHistory({ bids, currency, currentPrice, now, page, totalPages
             <span className="ml-auto font-semibold">{formatAuctionMoney(bid.amount, currency)}</span>
             <time dateTime={bid.placedAt} title={new Date(bid.placedAt).toLocaleString()} className="min-w-12 text-right text-[10px] text-muted-foreground">{formatBidAge(bid.placedAt, now)}</time>
           </li>)}</ol>}
-    {totalPages > 1 ? <nav aria-label="Bid history pages" className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs"><button type="button" disabled={page === 0} onClick={() => onPage(page - 1)} className="min-h-11 px-2 disabled:opacity-40">Previous</button><span>{page + 1} / {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => onPage(page + 1)} className="min-h-11 px-2 disabled:opacity-40">Next</button></nav> : null}
+    {totalPages > 1 ? <nav aria-label="Bid history pages" className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs"><button type="button" disabled={page === 0} onClick={() => onPage(page - 1)} className="min-h-11 min-w-11 px-2 disabled:opacity-40">Previous</button><span>{page + 1} / {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => onPage(page + 1)} className="min-h-11 min-w-11 px-2 disabled:opacity-40">Next</button></nav> : null}
   </section>;
 }
 

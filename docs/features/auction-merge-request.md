@@ -1,22 +1,22 @@
 ## Summary
 
-Implement the buyer Auction room at `/auctions/[id]` with the supplied Figma layout, automatic price/countdown updates, bid submission, masked history, extension notices and end states. Connect delivered auction APIs and provide explicit fallback feedback for the state/history/SSE and winner-checkout capabilities still awaiting backend delivery.
+Implement `/auctions/[id]` from the Auction room Figma frame with automatic price/countdown, bids, masked history and explicit settlement states. Follow the #253 reviewer contract (`/stream`, named `state`) with immediate validated push updates and silent-stream polling fallback. Add conditional winner address review, #172 shipping confirmation and payment navigation while keeping the missing live order-reference handoff explicit.
 
-Closes #178
+Related: #178, #179, #180 and frontend #267. #180 and live #267 acceptance remain incomplete pending the integration items below.
 
 ## Changes
 
-- `app/(shop)/auctions/[id]/page.tsx`, `features/AuctionRoomPage.tsx`: add the responsive room, product gallery, bid panel, history and conditional winning-order link; homepage auction cards now enter the room.
-- `features/useAuctionState.ts`: add server-clock countdowns, two-second state/history polling, slower supporting reads, extension refreshes and public SSE lifecycle with coalescing/fallback.
-- `features/useAuctionBid.ts`: default to the backend minimum, validate exact decimal amounts, display rejected-bid errors and preserve the amount/key after an uncertain response.
-- `service/auctionService.ts`, `types/auctionRoomType.ts`, `types/auctionGeneratedType.ts`: validate/map delivered reads and writes, generate delivered DTOs, and explicitly separate provisional state/history models.
-- `configs/api.ts`, `configs/queryKeys.ts`, `components/Auction*.tsx`, `components/PriceDisplay.tsx`: keep HTTP/SSE configuration and cache keys centralized; render shared price, countdown and history components.
-- `tests/auction*`, `playwright.auction.config.ts`, `postman/`: add real HTTP/Postman browser scenarios and `npm run test:auction`.
-- `docs/features/auction-room.md`, `auction-verification.md`, `auction-evidence/`: document integration limits and preserve desktop/mobile/leading/winner evidence.
+- Add the responsive room, gallery, bid panel, history and direct homepage entry.
+- Use server-clock countdowns, two-second fallback polling, `/stream` named-state updates without a push coalescing delay, and a five-second valid-state heartbeat deadline. Throttle supporting REST separately; prevent stale responses from regressing accepted state.
+- Keep ENDED pending, reconcile delayed own/detail results, and show distinct verified winner, loser, failed and cancelled states.
+- Preserve exact bid minimum/decimal validation and safe same-key retry after uncertain writes.
+- Add a conditional winner address form and native review dialog. POST the verified #172 direct-address contract, show returned shipping/total/deadline, and open the existing payment route with the returned group id. Same-address recovery preserves an uncertain intent.
+- Add shipping HTTP/service tests and expand Postman/browser fixtures for two contexts, raw state messages, silence, delayed settlement, winner payment handoff and all mobile control bounds/44px targets.
+- Document the integration branch contract, missing auction-to-order reference and explicit live acceptance gaps.
 
 ## API
 
-This frontend MR adds no backend endpoints. Delivered API consumption:
+This frontend MR adds no backend endpoints. Delivered `develop` consumption:
 
 | **Method** | **Path** | **Access** | **Success** | **Errors** |
 | ---------- | -------- | ---------- | ----------- | ---------- |
@@ -24,70 +24,60 @@ This frontend MR adds no backend endpoints. Delivered API consumption:
 | POST | `/api/v1/auctions/{id}/bids` | BUYER + `AUCTION.BID` | 201 new / 200 replay | 400, 401, 403, 409 |
 | GET | `/api/v1/bids/mine` | BUYER + `AUCTION.VIEW_BID_HISTORY` | 200 | 400, 401, 403 |
 
-Provisional integration targets; these rows do **not** assert backend delivery:
+Integration targets, distinguished from delivery on this baseline:
 
 | **Method** | **Path** | **Access** | **Success** | **Errors** |
 | ---------- | -------- | ---------- | ----------- | ---------- |
-| GET | `/api/v1/auctions/{id}/state` | Public, proposed #168 | 200, draft | 404 while unavailable; transient HTTP errors handled |
-| GET | `/api/v1/auctions/{id}/bids` | Public, proposed #169 | 200, draft | 404 while unavailable; transient HTTP errors handled |
-| GET | `/api/v1/auctions/{id}/events` | Public, frontend proposal pending #253 | 200 `text/event-stream`, proposed | Missing/error stream falls back to polling |
+| GET | `/api/v1/auctions/{id}/state` | Public, draft #168 | 200 draft | Missing read shows snapshot fallback; transient errors recover |
+| GET | `/api/v1/auctions/{id}/bids` | Public, draft #169 | 200 draft page | Missing read shows history failure; transient errors recover |
+| GET | `/api/v1/auctions/{id}/stream` | Public target from reviewer #253 | `text/event-stream`, named `state` | Errors or five seconds of silence restore polling |
+| POST | `/api/v1/orders/{id}/shipping-confirmation` | BUYER + `CHECKOUT.START` + winner ownership, #172 branch `b17f3275` | 200 confirmation / identical-address replay | 400, 401, 403, 404, 409, 422, 500, 502, 503 |
 
-Bid writes send numeric `{amount}` and UUID `Idempotency-Key`. Public calls omit Bearer; private calls use the current scoped session.
+Bid writes send numeric `{amount}` and UUID `Idempotency-Key`. Shipping confirmation sends direct `{recipientName,phoneNumber,addressLine,wardCode,provinceCode,countryCode:"VN"}` without an idempotency key. Its 200 data is `{orderGroupId,shippingFee,totalAmount,dueAt}`. Private calls use the scoped session; public REST/SSE send no Bearer or query token.
 
-Config keys: none added. The room reuses existing `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_API_BASE_URL` (default: empty, same origin) and existing optional `API_PROXY_TARGET` for local API rewrites.
+Config keys: none added. Existing API origin/proxy configuration is reused.
 
 ## Acceptance criteria
 
-- [x] "Price and countdown update by themselves." — verified changing price/history and decreasing server-clock countdown in browser scenarios, including a browser clock one hour ahead.
-- [x] "2-second polling with TanStack Query, no SockJS and no STOMP" — verified state/history request cadence; no SockJS/STOMP dependency added.
-- [x] "The input starts at the lowest amount the server will accept" — verified `currentPrice + bidIncrement`, numeric POST body and one-click submission.
-- [x] "a refused bid says what the minimum is now" — verified `AUCTION_BID_TOO_LOW.minimum` updates the form and a corrected attempt uses a new key.
-- [x] "who has bid, what happens when the end moves, and what the page shows once it is over" — verified masked history, extension notice/countdown changes, closed controls and authenticated winner/order-link behavior against local fixtures.
-- [x] "Polling stays as the fallback." — verified SSE event refresh, disconnect fallback and burst coalescing against the local HTTP simulation.
-- [x] Same-key retry does not create a duplicate bid — simulated a write followed by a lost success response; two POST attempts produced one write.
-- [x] UI follows the Auction room frame — reviewed desktop/mobile screenshots; controls fit a 375px viewport and the mobile form precedes item details.
-- [ ] Live state/history and SSE integration — backend #168/#169 and SSE contract #253 are not delivered on this `develop` baseline. Current evidence establishes frontend behavior against documented stand-ins.
-- [ ] Complete winner address confirmation and payment handoff — settlement #170/#171 and shipping-confirmation #172 remain backend dependencies. No request body, order group, shipping fee or payment total is fabricated.
+- [x] Price/countdown update automatically; server-clock and bid-minimum behavior was established in the prior local suite and retained in the revised implementation.
+- [x] Two-second fallback uses TanStack Query; no SockJS or STOMP dependency.
+- [x] Bid amount starts at `currentPrice + bidIncrement`; rejection minimum updates the form; uncertain retry retains amount/key.
+- [x] Implement reviewer-requested `/stream` and named `state` handling with immediate state application; only supporting reads are throttled.
+- [x] Implement five-second silent-stream recovery, stale snapshot rejection, pending ENDED and verified winner/loser states.
+- [x] Implement conditional address review, #172 shipping confirmation, returned totals and payment-group navigation when a real order reference is supplied.
+- [x] Revised local browser evidence: 25/25 scenarios, independent browser contexts in 78.60ms against HTTP fixtures, and all mobile controls including retries/pagination at 44px. This is separate from live T4.
+- [x] Conditional winner address review, same-address recovery, preserved input through settlement/read failures, returned totals and navigation to the actual existing payment page with fixture QR.
+- [ ] Live state/history/SSE integration and public gateway policy on the compatible backend.
+- [ ] #267 T4 with two real backend users under one second; 1,000 concurrent live connections.
+- [ ] Complete live #180 winner flow: backend must expose the auction's order reference and compatible settlement/payment capabilities. `b17f3275` supplies shipping confirmation but is unmerged and does not expose this reference.
 
 ## How to test
 
-1. In `fe-project-nexus`, use the installed Node/npm dependencies, Postman CLI 1.70+ and Chrome. Run `npm run test:auction`; its config starts Next at `http://127.0.0.1:3118` and the Postman/OIDC dependency simulation at `http://127.0.0.1:3928`.
-2. Run `npm run generate:types:check`, `npm run lint`, `npm run typecheck`, `npm run test:auth` and `npm run test:catalog`. For the production build in PowerShell, run `$env:NEXUS_TEST_DIST_DIR='.next-auction-build'; npm run build`.
-3. Expected results from the recorded run:
-
-   ```text
-   Auction browser: 14 passed.
-   Unit/auth/service: 275 passed.
-   Catalog/browser regression: 55 passed, 38 existing skips, zero failures.
-   Generated DTO drift, lint, typecheck and production build: passed.
-   Countdown, extension, minimum correction, safe retry, terminal UI,
-   missing-endpoint feedback, SSE fallback and mobile bounds behave as asserted.
-   ```
-
-4. For manual live checks, start the existing frontend with its normal API/session configuration and open `/auctions/<public-auction-uuid>`. On the current backend, unavailable draft reads must show explicit fallback feedback; do not interpret fixture winner/SSE screenshots as proof of live delivery.
+1. In `fe-project-nexus`, run `npm run test:auction` with installed Node/npm, Postman CLI 1.70+ and Chrome. The config starts Next on `http://127.0.0.1:3118` and HTTP/OIDC fixtures on `http://127.0.0.1:3928`.
+2. Run generated-type drift, lint, typecheck, unit/auth and relevant browser regressions. Build with an isolated `NEXUS_TEST_DIST_DIR` as described in `docs/ai/task-workflow.md`.
+3. Read `docs/features/auction-verification.md` for executed evidence. Reviewer revision: 25 auction browser scenarios passed in 2.1 minutes; 283 unit tests, generated-type drift, lint, fresh typecheck and production build passed. Full catalog passed 55 with 38 existing configuration skips and zero failures in 2.2 minutes. Two-context local latency was 78.60ms. The previous 14-browser/275-unit result is historical.
+4. For live acceptance, connect the compatible backend and use two real buyers. Verify raw `state` updates, silence/reconnect/replay, delayed settlement, a genuine order reference, shipping confirmation and payment. Fixture measurements/screenshots cannot substitute for this step.
 
 ## Checklist
 
-- [ ] `.\mvnw.cmd verify` passes in every service touched — not applicable; no Java service was changed or Maven verification run.
-- [ ] The service starts against PostgreSQL with `ddl-auto: validate` — not applicable to this frontend-only MR; no new live database startup was performed.
-- [ ] No secret, `.env`, `.idea/` or log file in the diff — candidate scan passed; left unchecked for reviewer confirmation as requested by the checklist template. Committed PNGs are intentional UI evidence.
-- [ ] New endpoints added to `docs/api/gateway-permissions.md` and to the service's `public-endpoints` when public — no backend endpoints are introduced here; proposed state/history/SSE registration belongs to #168/#169/#253.
-- [ ] Branch is up to date with `develop` and has no conflict markers — based on fetched `origin/develop` `09b3cf6f`; ancestry and diff checks passed before push. Left unchecked for reviewer confirmation as requested by the checklist template.
+- [ ] `.\mvnw.cmd verify` passes in every service touched — not applicable; no Java service changed or Maven verification run here.
+- [ ] Service starts against PostgreSQL with `ddl-auto: validate` — no new live backend startup performed.
+- [ ] No secret, `.env`, `.idea/` or log file in the diff — checked during final packaging before push; retained unchecked for reviewer confirmation. Intentional PNG/timing evidence is documented.
+- [ ] New endpoints registered in gateway/public policies — this MR adds none; #168/#169/#253 remain owning backend work. #172 registers its shipping policy on `b17f3275`.
+- [ ] Branch is up to date with `develop` and free of conflict markers — baseline `09b3cf6f`; ancestry/diff checked during final packaging before push, retained unchecked for reviewer confirmation.
 
 ## Out of scope / follow-ups
 
-- Backend state and public history delivery/public routing: #168 and #169.
-- Final SSE route, event names, replay and gateway behavior: #253; this MR covers the frontend portion of #267.
-- Winner settlement and payment lifecycle: #170/#171; winner shipping-confirmation contract/implementation: #172.
-- Auction listing and My Bids screens in the same Figma export remain separate from the room task.
-- Existing Next 16.4.0 security upgrade: separate maintenance work; no dependency upgrade is included here.
+- Merge/deliver #168/#169 and #253 backend streaming, replay and live performance evidence.
+- #170/#171 settlement and auction-to-order reference exposure; integrate #172 branch `b17f3275` and the real payment lifecycle.
+- Auction listing/My Bids screens and the existing Next security upgrade remain separate work.
 
 ## Notes for reviewers
 
-- Keep the MR in draft while the live integration dependencies remain unresolved. `Closes #178` links the requested issue; the unchecked criteria above must be resolved or explicitly accepted before merge.
-- `docs/api/openapi/auction-service.yaml` is the delivered contract. The separate `docs/api/auction-service.yaml` is a draft; state/history/SSE and settlement evidence are clearly identified as simulated/provisional.
-- The attached V1 schema shows `bigint`, but V2 migrates money to `numeric(19,2)`. Frontend arithmetic uses exact decimal cents and rejects values that cannot safely cross the numeric JSON boundary.
-- Public masked names do not prove the buyer's identity. Own leading/won flags come from authenticated `/bids/mine`, searching successive pages; stale history cannot incorrectly label a previous bidder as "You".
-- Supporting reads reconcile more slowly than state/history to limit gateway traffic. Terminal changes and accepted bids refresh authoritative data; an idempotent replay is never treated as the latest market price.
-- Local browser tests run the actual Next app against Postman HTTP dependencies. Screenshots use explicit test-only SVG product media; production uses API product images and has no silent mock fallback.
-- Installed Next sometimes stopped dev/build to display its existing security reminder; unchanged retries passed. See `docs/features/auction-verification.md` for executed checks and limits.
+- Keep draft status while unchecked live acceptance remains unresolved; this description does not close #180 or claim real T4 completion.
+- Generated auction DTOs use delivered OpenAPI. Draft state/history, reviewer-selected SSE and the unmerged #172 application model are identified explicitly; no backend files or generated commerce DTOs are changed to pretend delivery.
+- A winner without `orderId` gets an explicit waiting state. Neither SKU/name matching nor an unsupported order-filter request is used.
+- Public masked names do not identify the buyer. `/bids/mine` owns verified leading/won flags and is searched across pages.
+- The real Next app runs against local Postman HTTP fixtures. Test-only SVG imagery and subsecond fixture latency are not real backend evidence.
+- The final run recorded 1,192 HTTP calls with zero unmodeled 501 responses and no `/events` requests. Six screenshots and the timing JSON are retained under `docs/features/auction-evidence/`. The existing payment page loads its QR from the fixture; no bank transfer is claimed.
+- An earlier targeted regression exposed lost typed address during WON→SETTLED/private-read refresh. It was fixed and the final suite covers preservation. Production build and full catalog passed after unchanged retries of the existing Next advisory/startup shutdown. These interruptions are recorded separately in verification.

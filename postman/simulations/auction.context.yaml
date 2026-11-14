@@ -3,13 +3,16 @@ purpose:
     Local auction-service HTTP dependencies, catalog media/detail, gateway cookie
     session and Keycloak protocol. The auction detail, numeric POST bid and own
     bid list use delivered DTOs; state and public history use the #168/#169 draft.
-    SSE /events and named events are provisional #253 assumptions. No published
+    SSE /stream with named state follows the 2026-11-14 reviewer clarification
+    for #253; runtime delivery remains unverified. Winner shipping follows the
+    exact controller/OpenAPI contract on unmerged #172 branch b17f3275. No published
     owner mock was identified: installed CLI 1.73.0 has no postman status command,
     and postman mock list --json lists only local mocks with null IDs.
   unblocks: >-
     Real Next.js browser acceptance of the Auction room with state polling,
     server-derived countdown, idempotent bid retry, masked history, end states,
-    SSE fallback and responsive layout. The browser has no HTTP proxy setting,
+    SSE silence fallback, two-browser updates, conditional winner address review
+    and payment handoff, and responsive layout. The browser has no HTTP proxy setting,
     so dedicated one-port dependency routing uses 3928 and the app uses 3118.
 assumptions:
   - id: draft-read-and-sse-delivery
@@ -23,19 +26,23 @@ assumptions:
       implement state, public history or SSE. AuctionResponse omits finalPrice,
       paymentDueAt and orderId. A local fixture cannot establish their delivery.
     verification: >-
-      On 2026-11-13 compared delivered and draft OpenAPI and the auction/bid
-      controllers. Browser cases deliberately model the intended task contract
-      and separately exercise 404 read responses and SSE 503 fallback.
+      On 2026-11-13 compared delivered and draft OpenAPI and auction/bid
+      controllers. Rechecked on 2026-11-14: develop remains 09b3cf6f. #172 branch
+      b17f3275 now implements shipping confirmation but AuctionResponse still
+      omits orderId/finalPrice/paymentDueAt, and OrderResponse exposes no auction
+      reference. Reviewer selected /stream and named state for #253; no backend
+      implementation was found in inspected refs. Local fixture behavior does
+      not settle these runtime dependencies.
     source: >-
       ../be-project-nexus/docs/api/auction-service.yaml;
       ../be-project-nexus/docs/api/openapi/auction-service.yaml;
       ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionController.java;
       postman/mocks/auction-api/default.js; tests/auction.spec.ts
-    updated_at: '2026-11-13'
+    updated_at: '2026-11-14'
   - id: auction-browser-behavior
     status: supported
     claim: >-
-      The real frontend passed fourteen locally modeled Auction room scenarios:
+      The prior frontend revision aebc78e3 passed fourteen local Auction scenarios:
       two-second public updates, server-clock countdown, authenticated numeric
       bidding, server minimum correction, safe same-key replay, winner order
       link, draft-read failure feedback, SSE disconnect fallback, mobile bounds,
@@ -44,9 +51,10 @@ assumptions:
       validation.
     reason: >-
       The suite runs Next and its actual API boundary against Postman HTTP
-      dependency servers. Assertions inspect the resulting UI and fixture
-      request/write evidence. This establishes caller behavior against these
-      stand-ins; it does not establish delivery of the missing backend routes.
+      dependency servers. This is retained historical evidence for the initial
+      room, not validation of the changed stream protocol, settlement UI or
+      winner shipping flow. Assertions inspect UI and fixture request/write
+      evidence; they do not establish real backend delivery.
     verification: >-
       On 2026-11-13 ran npm run test:browser -- --config playwright.auction.config.ts:
       fourteen passed in 1.1 minutes after an unchanged retry when the Next
@@ -59,16 +67,85 @@ assumptions:
       the final unchanged retry stopped on the cross-drive dependency junction
       or security reminder; copying installed dependencies into this worktree
       resolved the environment issue. No production bundler or backend source
-      was changed. Ports 3118/3928 stopped after runner cleanup.
+      was changed. Ports 3118/3928 stopped after runner cleanup. On 2026-11-14
+      reviewer fixes superseded this behavior; expanded suite results must be
+      recorded separately before claiming current browser coverage.
     source: >-
       tests/auction.spec.ts; playwright.auction.config.ts;
       tests/auction-fixture.mjs; postman/mocks/auction-api/default.js;
       test-results/auction-simulation.ndjson (ignored local evidence);
       test-results/auction/ (ignored local traces);
       docs/features/auction-evidence/{desktop,leading,mobile,won}.png
-    updated_at: '2026-11-13'
+    updated_at: '2026-11-14'
+  - id: reviewer-stream-and-terminal-behavior
+    status: supported
+    claim: >-
+      Against the local HTTP fixtures, the revised room applies matching named
+      state immediately, restores polling after silence, rejects stale snapshots
+      and waits for final settlement before a verified winner/loser result.
+    reason: >-
+      The final 25-browser run exercises the real Next caller against the
+      reviewer-specified /stream named-state stand-in. This supports frontend
+      behavior in those cases, not real service delivery or T4 performance.
+    verification: >-
+      On 2026-11-14 the complete auction browser suite passed 25/25 in 2.1
+      minutes; unit/auth/service tests passed 283. Two independent contexts
+      measured 78.5974ms from bid click to observer update. After 5.6 seconds
+      of stream silence two fallback polls occurred. Invalid/foreign state,
+      delayed loss and stale private win cases passed. Evidence counts 1192
+      HTTP calls: API 1044, Keycloak 102, session 46, no unmodeled 501, ten
+      /stream 200 and 26 deliberate /stream 503 responses, no /events. Live
+      #267 T4 and 1000
+      connections remain unverified. The earlier address-preservation failure
+      was fixed before this final full run; initial Next security reminders
+      interrupted startup and unchanged retries succeeded. Final generated-type
+      drift, lint and fresh typecheck pass. The isolated production build at
+      .next-auction-review-build passed after an unchanged security-advisory
+      retry. Full catalog passed 55 with 38 existing configuration skips and
+      zero failures in 2.2 minutes after an unchanged advisory/startup-shutdown
+      retry. No production changes followed the 25-browser run.
+    source: >-
+      features/useAuctionState.ts; features/auctionStateReconciliation.ts;
+      tests/auction-state-reconciliation.test.ts; tests/auction.spec.ts;
+      docs/features/auction-verification.md;
+      docs/features/auction-evidence/two-context-push-timing.json;
+      test-results/auction-simulation.ndjson (ignored local HTTP evidence)
+    updated_at: '2026-11-14'
+  - id: winner-shipping-contract-and-replay
+    status: supported
+    claim: >-
+      On #172 branch b17f3275, shipping confirmation accepts a direct ShippingAddress
+      body and returns group id, numeric shipping/total and the original deadline;
+      an identical normalized address replays its saved confirmation.
+    reason: >-
+      The integration branch controller, service and OpenAPI agree on this
+      contract. It is not merged into develop and has not been exercised here
+      against a real service. The room requires a genuine order id that current
+      read DTOs do not expose, so complete live winner checkout remains open.
+    verification: >-
+      On 2026-11-14 inspected b17f3275 AuctionShippingController,
+      AuctionShippingService and commerce OpenAPI. Four service tests cover
+      direct HTTP serialization/current Bearer, numeric validation, preflight
+      address validation and preserved 409/abort outcomes; the 283-unit run passed.
+      The final 25/25 browser run also passed address review before POST,
+      identical-address recovery with one fixture confirmation, typed-input
+      preservation through WON-to-SETTLED and private 503, and private timeout
+      CTA closure. Navigation loaded the existing payment page and its fixture
+      QR. This proves caller handoff against stand-ins, not a real payment
+      session, transfer or delivered order-reference read API.
+    source: >-
+      b17f3275:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/AuctionShippingController.java;
+      b17f3275:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/AuctionShippingService.java;
+      b17f3275:be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      service/auctionCheckoutService.ts; tests/auction-checkout-service.test.ts;
+      features/AuctionWinnerCheckout.tsx; tests/auction.spec.ts
+    updated_at: '2026-11-14'
 fingerprints:
   - id: auction-room-20261113
     date: '2026-11-13'
     commit: 'origin/develop 09b3cf6f; implementation prepared on fsa_ChungTQ/chore/178-fe-auction-room-state-and-countdown-bid-panel-bid-history-and-end-state-live-updates'
+    cli: '1.73.0'
+  - id: auction-reviewer-revision-20261114
+    date: '2026-11-14'
+    commit: 'aebc78e3 with uncommitted reviewer fixes; develop 09b3cf6f; #172 contract inspected at b17f3275 only'
     cli: '1.73.0'
