@@ -88,6 +88,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auctions/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the live state of a public auction
+         * @description Auction data is cached for one second. Server time is read on every request.
+         */
+        get: operations["getAuctionState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auctions/{id}/bids": {
         parameters: {
             query?: never;
@@ -95,7 +115,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read the paginated bid history of a public auction
+         * @description Bids are ordered by amount descending, then newest first for equal amounts. Names are masked.
+         */
+        get: operations["listAuctionBids"];
         put?: never;
         /**
          * Place a bid as a buyer
@@ -172,6 +196,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuctionState: {
+            /** Format: uuid */
+            auctionId: string;
+            currentPrice: number;
+            bidCount: number;
+            bidIncrement: number;
+            /**
+             * @description Masked name, or null when there is no leader.
+             * @example N***A
+             */
+            leaderBidderName: string | null;
+            /** Format: date-time */
+            endAt: string;
+            status: components["schemas"]["AuctionStatus"];
+            /** Format: date-time */
+            serverTime: string;
+        };
+        GetAuctionStateResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["AuctionState"];
+        };
+        PublicBid: {
+            amount: number;
+            /**
+             * @description Masked display name
+             * @example N***A
+             */
+            bidderName: string;
+            /** Format: date-time */
+            placedAt: string;
+        };
+        ListAuctionBidsResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["PublicBid"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
+        };
         MyBid: {
             /** Format: uuid */
             auctionId: string;
@@ -350,6 +422,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description AUCTION_NOT_FOUND. The auction is missing, deleted or restricted. */
+        PublicAuctionNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description INVALID_PARAMETER, VALIDATION_FAILED or INVALID_REQUEST_BODY; malformed query or paging bounds. */
         MineInvalidQuery: {
             headers: {
@@ -838,6 +919,67 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAuctionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current auction state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetAuctionStateResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["InvalidBearer"];
+            404: components["responses"]["PublicAuctionNotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listAuctionBids: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["MinePage"];
+                /** @description Number of distinct result rows per page. */
+                size?: components["parameters"]["MineSize"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bid history page, empty when the auction has no bids */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAuctionBidsResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["InvalidBearer"];
+            404: components["responses"]["PublicAuctionNotFound"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["UnexpectedError"];
             503: components["responses"]["ServiceUnavailable"];
