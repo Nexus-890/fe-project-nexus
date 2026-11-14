@@ -91,9 +91,11 @@ links password management to Keycloak and includes a phone verification card.
 The account menu also exposes seller applications and saved addresses for checkout.
 The #210 email/phone/address APIs are pinned to backend commit `1e480dda` and
 disabled by default (`NEXT_PUBLIC_ACCOUNT_EXTENSIONS_ENABLED=false`). Seller
-applications use the issue's POST contract and remain disabled by default
+applications read the buyer's own status/rejection feedback using the proposed
+#210 contract and remain disabled by default
 (`NEXT_PUBLIC_SELLER_APPLICATION_ENABLED=false`) until its implementation and
-response contract are agreed. Default registration continues to sign-in;
+response contract are implemented. See the [seller follow-up](docs/account-219-seller-followup.md).
+Default registration continues to sign-in;
 see [review corrections](docs/account-219-review.md). Also see
 [account verification](docs/features/account-verification.md),
 [seller applications](docs/features/seller-application.md) and

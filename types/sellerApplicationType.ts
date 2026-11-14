@@ -1,12 +1,8 @@
-/** Planned seller UI model. No controller/DTO or agreed response contract is delivered yet. */
-export type SellerApplicationInput = {
-  companyName: string;
-  phone: string;
-  note: string;
-};
+import type { components } from "./sellerApplication210GeneratedType";
 
-export type SellerApplication = SellerApplicationInput & {
-  id: string;
-  status: "PENDING" | "ACTIVE" | "REJECTED";
+/** Proposed #210 contract; keep disabled until the backend implements it. */
+export type SellerApplicationInput = components["schemas"]["SellerApplicationInput"];
+
+export type SellerApplication = Omit<components["schemas"]["SellerApplication"], "reason"> & {
   rejectionReason: string | null;
 };

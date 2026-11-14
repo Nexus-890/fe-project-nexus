@@ -1,8 +1,9 @@
 purpose:
   stands_in_for: >-
     Existing OIDC/session/checkout fixtures plus account operations aligned to backend #210 commit
-    1e480dda. Seller POST uses user-provided issue contract; no implementation or own status read
-    exists yet.
+    1e480dda. Seller lifecycle fixtures now implement the explicitly proposed own-application read
+    and complete DTO in docs/api/seller-application-210.openapi.json; backend #210 has not delivered
+    those operations.
   unblocks: >-
     Real frontend browser checks for #219 account screens and saved-address checkout behavior before
     the owning backend contract becomes available.
@@ -33,19 +34,20 @@ assumptions:
   - id: seller-ui-local-behavior
     status: supported
     claim: >-
-      In the corrected account simulation, the frontend validates seller company/contact/note input,
-      sends exactly one buyer POST, handles SELLER_APPLICATION_EXISTS, never calls the Admin list,
-      and opens the existing back office for a SELLER token.
+      Historical submission-only behavior on 8a86cf26: the frontend submitted company/contact/note,
+      handled duplicate acknowledgement and opened seller back office for an existing SELLER token.
+      This behavior did not restore application status after reload and is superseded by
+      seller-own-status-proposal.
     reason: >-
       Tests run the actual Next frontend and its shared HTTP/session boundary against local Postman
       dependencies. The handler checks the issued access token's hash, persists application state
       and records request outcomes. The original fixture guessed the account contract; these
       historical passes do not establish compatibility with #210. Current validation is recorded
-      separately.
+      separately. The follow-up review identified the missing authoritative own read; original
+      no-GET behavior is no longer the current frontend.
     verification: >-
-      Final corrected npm run test:account on 2026-11-14 passed 18 scenarios. The seller cases
-      recorded POST /v1/sellers/applications with {companyName,phone,note}, no buyer GET, 409
-      conflict, retry and SELLER-role routing. No live seller controller or response DTO exists.
+      The earlier submission-only implementation passed historical scenarios before review. It is
+      superseded. The corrected full account run is recorded in seller-own-status-proposal.
     source: >-
       tests/account.spec.ts; postman/mocks/account-api/handler.js;
       features/SellerApplicationPage.tsx; test-results/account-simulation.ndjson
@@ -63,7 +65,7 @@ assumptions:
       fixture's evidence body. The original fixture guessed the account contract; these historical
       passes do not establish compatibility with #210. Current validation is recorded separately.
     verification: >-
-      Final corrected npm run test:account passed 18 scenarios, including resend 204,
+      Final corrected npm run test:account passed 23 scenarios, including resend 204,
       registration-send-failure recovery without duplicate registration, phone code failures,
       expiry, rate limits and changed-phone PUT. Evidence is fixture-only; native Keycloak/Mailpit
       password/verification checks are recorded separately.
@@ -85,7 +87,7 @@ assumptions:
       these historical passes do not establish compatibility with #210. Current validation is
       recorded separately.
     verification: >-
-      Final corrected npm run test:account passed 18 scenarios, including all six address cases.
+      Final corrected npm run test:account passed 23 scenarios, including all six address cases.
       Focused unit tests verify phone/timestamps, page metadata, POST default, validation and quote
       equivalence. Events are fixture-only; ownership and persistence remain backend acceptance.
     source: >-
@@ -104,15 +106,54 @@ assumptions:
       list reads for Admin, so the buyer never calls that list.
     verification: >-
       Source/controller review on 2026-11-14 at 1e480dda. Lint, typecheck, generated drift check and
-      283 unit tests passed. Corrected final account browser run passed 18 scenarios; checkout
-      passed 24. Existing auth scenarios passed 25; the added default-off request-leak case passed
-      in its focused rerun. Default develop registration goes to sign-in. The catalog rerun stopped
-      at the existing Next startup advisory; earlier catalog passes remain historical. Backend
-      persistence/OTP enforcement remains unverified.
+      286 unit tests passed. Corrected account browser run passed 23 scenarios; checkout passed 24;
+      catalog passed 55 with 38 configured skips. Default develop registration remains sign-in and
+      default-off account routes make no unsupported requests. Backend persistence/OTP
+      enforcement/seller lifecycle remain unverified.
     source: >-
       docs/api/account-210.openapi.json; service/verificationService.ts;
       service/addressBookService.ts; configs/account.ts; tests/verification.test.ts;
       docs/api/seller-application-210.md
+    updated_at: '2026-11-14'
+  - id: seller-own-status-proposal
+    status: supported
+    claim: >-
+      In 23 local account browser scenarios, the frontend reads its own full application after
+      reload/navigation, shows stored rejection feedback, reapplies with the same record, refetches
+      after 409, supports read/write retry and keeps two JWT subjects separate.
+    reason: >-
+      Actual Next frontend uses its shared HTTP boundary against stateful Postman dependencies. The
+      own-read/full-resource API is an explicit proposal authorized by the user as frontend/contract
+      work; test controls represent backend Admin decisions, not real Admin APIs.
+    verification: >-
+      On 2026-11-14 npm run test:account passed 23/23 (ten seller scenarios plus the existing
+      address/email/OTP scenarios). The seller cases verify reload without another POST, persisted
+      rejection feedback, same-ID reapplication with reason cleared, navigation-away/refetch, GET
+      retry, POST retry, duplicate refetch, ACTIVE sign-in, existing seller access and two distinct
+      JWT subjects. Screenshots and raw fixture evidence are preserved under the task visualization
+      folder. The fixture represents Admin decisions through a test-only control and does not
+      establish a real Admin endpoint or database.
+    source: >-
+      docs/api/seller-application-210.openapi.json; service/sellerApplicationService.ts;
+      features/SellerApplicationPage.tsx; tests/seller-application.test.ts; tests/account.spec.ts;
+      postman/mocks/account-api/handler.js
+    updated_at: '2026-11-14'
+  - id: seller-own-status-backend-availability
+    status: unknown
+    claim: >-
+      Backend #210 will implement the proposed own-read/full DTO, persisted rejection feedback and
+      same-record rejected resubmission with JWT subject ownership and Admin-only decisions.
+    reason: >-
+      The user explicitly kept backend implementation with #210. No seller controller/migration is
+      delivered in develop09b3cf6f or backend210head1e480dda. Frontend behavior and a fixture cannot
+      establish that backend contract or its authorization.
+    verification: >-
+      Inspected repository refs on 2026-11-14 and recorded user frontend+contract-only scope.
+      Proposed OpenAPI is separate from delivered API specs and the seller feature remains disabled
+      by default.
+    source: >-
+      docs/api/seller-application-210.md; docs/api/seller-application-210.openapi.json;
+      configs/account.ts
     updated_at: '2026-11-14'
 fingerprints:
   - id: account-219-develop-baseline
@@ -126,4 +167,12 @@ fingerprints:
   - id: account-219-corrected-browser-run
     date: '2026-11-14'
     commit: working tree after review corrections
-    cli: npm run test:account; 18 passed
+    cli: npm run test:account; 23 passed
+  - id: seller-own-status-review
+    date: '2026-11-14'
+    commit: 8a86cf26 plus seller frontend/contract follow-up
+    cli: Postman CLI 1.73.0; npm run test:account; 23 passed
+  - id: seller-status-review-run
+    date: '2026-11-14'
+    commit: working tree after own-status follow-up
+    cli: npm run test:account; 23 passed

@@ -1,5 +1,12 @@
 # #219 review corrections (2026-11-14)
 
+The seller portion has a [follow-up correction](account-219-seller-followup.md):
+the buyer now performs a proposed own-application read on entry, reload and
+refresh, displays the server rejection reason and can resubmit. The user chose
+frontend and contract only; #210 must implement that API. Seller remains off by
+default until a compatible backend is available. The submission-only behavior
+described below records the earlier `8a86cf26` correction and is superseded.
+
 Reviewer feedback on 44db51eb was correct: fixtures validated invented account
 routes and registration could strand users on develop. Earlier simulation
 success does not establish backend compatibility. This report supersedes the

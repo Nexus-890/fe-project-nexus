@@ -13,10 +13,11 @@ import { Input } from "@/components/input";
 import { Label } from "@/components/label";
 import { Textarea } from "@/components/textarea";
 import { queryKeys } from "@/configs/queryKeys";
+import { createCanceledError } from "@/configs/api";
 import { SELLER_APPLICATION_ENABLED } from "@/configs/account";
 import { useApiMutation, useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
-import { submitSellerApplication } from "@/service/sellerApplicationService";
+import { getSellerApplication, submitSellerApplication } from "@/service/sellerApplicationService";
 import { readBackofficeRoles } from "@/features/backofficeAccess";
 import { sellerApplicationSchema, type SellerApplicationFormValues } from "@/features/sellerApplicationSchema";
 import type { AuthContextValue } from "@/types/authType";
@@ -30,13 +31,16 @@ function SellerApplicationContent({ auth }: { auth: AuthContextValue }) {
   const { sessionId, isSessionCurrent, requestContext } = auth;
   const key = queryKeys.account.sellerApplication(sessionId);
   const seller = readBackofficeRoles(auth.accessToken).includes("SELLER");
-  // Observe this session's submission acknowledgement only. Issue #210 exposes
-  // an admin-only list, so buyers must never issue a GET to refresh the status.
   const application = useApiQuery<SellerApplication | null>({
     queryKey: key,
     meta: { requiresAuth: true },
-    service: async () => null,
-  }, { enabled: false });
+    service: async (signal) => {
+      if (!isSessionCurrent(sessionId)) throw createCanceledError();
+      const data = await getSellerApplication({ context: requestContext, signal });
+      if (!isSessionCurrent(sessionId)) throw createCanceledError();
+      return data;
+    },
+  }, { enabled: !seller, staleTime: 0, refetchOnMount: "always", refetchOnWindowFocus: true, retry: false });
   const form = useForm<SellerApplicationFormValues>({
     resolver: zodResolver(sellerApplicationSchema),
     defaultValues: { companyName: "", phone: auth.user?.phone ?? "", note: "" },
@@ -44,23 +48,33 @@ function SellerApplicationContent({ auth }: { auth: AuthContextValue }) {
   });
   const submit = useApiMutation<SellerApplication, SubmitOperation>({
     mutationKey: ["account", sessionId, "seller-application", "submit"],
-    execute: ({ body, controller }) => submitSellerApplication(body, { context: requestContext, signal: controller.signal }),
+    execute: async ({ body, controller, sessionId: operationSession }) => {
+      // A read started before submission must not overwrite its persisted result.
+      await queryClient.cancelQueries({ queryKey: key, exact: true });
+      if (!isSessionCurrent(operationSession) || controller.signal.aborted) throw createCanceledError();
+      return submitSellerApplication(body, { context: requestContext, signal: controller.signal });
+    },
     isCurrent: (operation) => isSessionCurrent(operation.sessionId) && !operation.controller.signal.aborted,
   }, {
-    onSuccess: (data) => { queryClient.setQueryData(key, data); form.reset(); },
+    onSuccess: async (data, operation) => {
+      await queryClient.cancelQueries({ queryKey: key, exact: true });
+      if (!isSessionCurrent(operation.sessionId) || operation.controller.signal.aborted) return;
+      queryClient.setQueryData(key, data); form.reset();
+    },
     onError: (error, operation) => {
       if (!isSessionCurrent(operation.sessionId) || operation.controller.signal.aborted || error.kind === "aborted") return;
       for (const field of ["companyName", "phone", "note"] as const) {
         const messages = error.fieldErrors?.[field];
         if (messages?.length) form.setError(field, { type: "server", message: messages.join(" ") });
       }
+      if (error.status === 409) void application.refetch();
     },
   });
 
   useEffect(() => () => pending.current?.abort(), []);
 
   function send(values: SellerApplicationFormValues) {
-    if (!isSessionCurrent(sessionId) || submit.isPending) return;
+    if (!isSessionCurrent(sessionId) || submit.isPending || application.isFetching || application.isError) return;
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
@@ -68,10 +82,9 @@ function SellerApplicationContent({ auth }: { auth: AuthContextValue }) {
   }
 
   const data = application.data;
-  const approved = seller || data?.status === "ACTIVE";
+  const approved = seller || (data?.status === "ACTIVE" && !application.isFetching && !application.isError);
   const rejected = data?.status === "REJECTED";
-  const existingOpen = submit.error?.status === 409 && submit.error.code === "SELLER_APPLICATION_EXISTS";
-  const busy = submit.isPending;
+  const busy = submit.isPending || application.isFetching;
 
   return (
     <div className="min-w-0 space-y-6 pb-12 sm:pb-16">
@@ -89,11 +102,16 @@ function SellerApplicationContent({ auth }: { auth: AuthContextValue }) {
               <Button className="min-h-11 px-4" onClick={() => void auth.signIn("/backoffice")}>Sign in again<ArrowRight aria-hidden="true" /></Button>}
           </CardContent>
         </Card>
-      ) : data?.status === "PENDING" || existingOpen ? (
+      ) : application.isError ? (
+        <Card><CardContent className="space-y-4"><p role="alert" className="text-sm text-danger">{application.error.detail || "Unable to load your application. Please retry to see its current status."}</p><Button variant="outline" disabled={application.isFetching} className="min-h-11" onClick={() => void application.refetch()}>Retry application</Button></CardContent></Card>
+      ) : application.isPending || application.isFetching ? (
+        <Card><CardContent><p role="status" className="text-sm text-muted-foreground">Loading your application…</p></CardContent></Card>
+      ) : data?.status === "PENDING" ? (
         <Card className="rounded-md">
-          <CardHeader><div className="mb-2 flex flex-wrap items-center gap-3"><Clock3 className="size-8 text-warning" aria-hidden="true" /><span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">Pending review</span></div><CardTitle>{existingOpen ? "You already have an open application" : "Your application has been submitted"}</CardTitle><CardDescription>Our team will review your application. After approval, sign in again to access your seller account.</CardDescription></CardHeader>
+          <CardHeader><div className="mb-2 flex flex-wrap items-center gap-3"><Clock3 className="size-8 text-warning" aria-hidden="true" /><span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">Pending review</span></div><CardTitle>Your application has been submitted</CardTitle><CardDescription>Our team will review your application. After approval, sign in again to access your seller account.</CardDescription></CardHeader>
           <CardContent className="space-y-5">
             {data && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">Company name</dt><dd className="mt-1 break-words font-medium">{data.companyName}</dd></div><div><dt className="text-muted-foreground">Contact phone</dt><dd className="mt-1 break-words">{data.phone}</dd></div><div><dt className="text-muted-foreground">Application note</dt><dd className="mt-1 whitespace-pre-wrap break-words">{data.note}</dd></div></dl>}
+            <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void application.refetch()}>Check status</Button>
           </CardContent>
         </Card>
       ) : (
@@ -123,7 +141,7 @@ function SellerApplicationContent({ auth }: { auth: AuthContextValue }) {
           </Card>
         </>
       )}
-      {submit.error && submit.error.kind !== "aborted" && !existingOpen && <p role="alert" className="break-words rounded-md border border-danger/30 bg-card p-4 text-sm text-danger">{submit.error.detail || "Unable to submit your application. Please try again."}</p>}
+      {submit.error && submit.error.kind !== "aborted" && !(submit.error.status === 409 && application.isSuccess && application.data !== null) && <p role="alert" className="break-words rounded-md border border-danger/30 bg-card p-4 text-sm text-danger">{submit.error.status === 409 ? "Your application changed. Check its latest status before trying again." : submit.error.detail || "Unable to submit your application. Please try again."}</p>}
     </div>
   );
 }

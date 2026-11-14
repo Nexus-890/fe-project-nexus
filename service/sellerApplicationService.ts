@@ -2,23 +2,35 @@ import { createInvalidResponseError, isRecord, requestApi } from "../configs/api
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { SellerApplication, SellerApplicationInput } from "../types/sellerApplicationType";
 
-/** Issue #210 defines this buyer POST. Its controller/response DTO is not delivered yet. */
+/** Issue POST plus proposed own-read/full DTO; see docs/api/seller-application-210.openapi.json. */
 export const SELLER_APPLICATION_PATH = "/api/v1/sellers/applications";
+export const OWN_SELLER_APPLICATION_PATH = `${SELLER_APPLICATION_PATH}/me`;
 
-/** Minimal expected seller-row acknowledgement; no timestamp or buyer GET is invented. */
-export function parseSellerApplication(value: unknown, submitted: SellerApplicationInput): SellerApplication {
+export function parseSellerApplication(value: unknown): SellerApplication {
   if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim() ||
+    typeof value.companyName !== "string" || !value.companyName.trim() ||
+    typeof value.phone !== "string" || !/^\+?[0-9]{7,15}$/.test(value.phone) ||
+    typeof value.note !== "string" ||
     typeof value.status !== "string" || !["PENDING", "ACTIVE", "REJECTED"].includes(value.status) ||
-    (value.reason !== undefined && value.reason !== null && typeof value.reason !== "string")) {
+    !("reason" in value) ||
+    (value.status === "REJECTED" ? typeof value.reason !== "string" || !value.reason.trim() : value.reason !== null)) {
     throw createInvalidResponseError("The seller application response is invalid.");
   }
   return {
-    ...submitted,
+    companyName: value.companyName,
+    phone: value.phone,
+    note: value.note,
     id: value.id,
     status: value.status as SellerApplication["status"],
     rejectionReason: typeof value.reason === "string" ? value.reason : null,
   };
 }
+
+export const getSellerApplication = async (options: ServiceRequestOptions = {}): Promise<SellerApplication | null> => {
+  const response = await requestApi<unknown>("GET", OWN_SELLER_APPLICATION_PATH, undefined, { ...options, auth: true, params: undefined });
+  // Only explicit null is no application. Missing endpoints/404 remain errors.
+  return response.data === null ? null : parseSellerApplication(response.data);
+};
 
 export const submitSellerApplication = async (input: SellerApplicationInput, options: ServiceRequestOptions = {}): Promise<SellerApplication> => {
   const body = {
@@ -27,5 +39,5 @@ export const submitSellerApplication = async (input: SellerApplicationInput, opt
     note: input.note.trim(),
   };
   const response = await requestApi<unknown>("POST", SELLER_APPLICATION_PATH, body, { ...options, auth: true });
-  return parseSellerApplication(response.data, body);
+  return parseSellerApplication(response.data);
 };

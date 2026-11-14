@@ -14,15 +14,21 @@ module.exports = async function handleAccount(req, res, url, helpers) {
   const reject = (status, code, detail) => { problem(res, status, code, detail, undefined, {}, "/api" + path); return true; };
   if (path === "/test/account/reset") {
     evidence = initialEvidence();
-    for (const [key, value] of Object.entries({ sellerApplication: null, options: {}, addresses: [], addressFailure: false, phone: { phone: user.phone, phoneVerifiedAt: null }, phoneSends: [], phoneCode: null, emailSends: {}, offset: 0 })) await state.set("account-api:" + key, value);
+    for (const [key, value] of Object.entries({ sellerApplications: {}, options: {}, addresses: [], addressFailure: false, phone: { phone: user.phone, phoneVerifiedAt: null }, phoneSends: [], phoneCode: null, emailSends: {}, offset: 0 })) await state.set("account-api:" + key, value);
     json(res, { ready: true });
     return true;
   }
-  if (path === "/test/account/evidence") { json(res, evidence); return true; }
+  if (path === "/test/account/evidence") { json(res, { ...evidence, sellerApplications: await state.get("account-api:sellerApplications") || {} }); return true; }
   if (path === "/test/account/control") {
     const body = bodyOf(req);
-    for (const key of ["sellerApplication", "addresses", "phone", "addressFailure"]) {
+    for (const key of ["addresses", "phone", "addressFailure"]) {
       if (Object.hasOwn(body, key)) await state.set("account-api:" + key, body[key]);
+    }
+    // Explicit test control represents an admin decision; it is not a product API.
+    if (Object.hasOwn(body, "sellerApplication")) {
+      const applications = await state.get("account-api:sellerApplications") || {};
+      applications[body.sellerBuyerId || user.id] = body.sellerApplication;
+      await state.set("account-api:sellerApplications", applications);
     }
     if (body.advanceMs) await state.set("account-api:offset", (await state.get("account-api:offset") || 0) + body.advanceMs);
     const options = { ...await state.get("account-api:options") || {}, ...body };
@@ -34,17 +40,23 @@ module.exports = async function handleAccount(req, res, url, helpers) {
   const relevant = publicRoute || path === "/v1/users/me" || path.startsWith("/v1/sellers/applications") || path.startsWith("/v1/users/me/phone/verification") || path.startsWith("/v1/users/me/addresses");
   if (!relevant) return false;
   const authorization = req.headers.authorization || "";
-  const expectedHash = await state.get("oidc-keycloak:access-token-hash");
-  const authorized = Boolean(authorization.startsWith("Bearer ") && expectedHash && hash(authorization.slice(7)) === expectedHash);
+  // Only locally issued token hashes are accepted. Parsing these known fixture
+  // tokens scopes records by subject; this does not model production JWT trust.
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const knownTokens = await state.get("oidc-keycloak:access-tokens") || {};
+  const clock = await state.get("oidc-keycloak:clock-time") ?? Date.now();
+  const authorized = Boolean(token && typeof knownTokens[hash(token)] === "number" && knownTokens[hash(token)] > Math.floor(clock / 1000));
+  const claims = authorized ? JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()) : null;
+  const buyerId = claims?.sub;
   const body = ["GET", "HEAD"].includes(req.method) ? null : bodyOf(req);
   // Do not retain OTP values or passwords even in the local evidence record.
-  evidence.requests.push({ method: req.method, path, authorized, body: body ? Object.fromEntries(Object.entries(body).filter(([key]) => !["code", "password"].includes(key))) : null });
+  evidence.requests.push({ method: req.method, path, authorized, subject: buyerId ?? null, body: body ? Object.fromEntries(Object.entries(body).filter(([key]) => !["code", "password"].includes(key))) : null });
   if (!publicRoute && !authorized) return reject(401, "UNAUTHENTICATED", "A valid access token is required.");
   const options = await state.get("account-api:options") || {};
   const now = Date.now() + (await state.get("account-api:offset") || 0);
   if (path === "/v1/users/me" && req.method === "GET") {
     const phone = await state.get("account-api:phone") || { phone: user.phone, phoneVerifiedAt: null };
-    return send({ ...user, phone: phone.phone, phoneVerifiedAt: phone.phoneVerifiedAt });
+    return send({ ...user, id: buyerId, roles: claims.roles, phone: phone.phone, phoneVerifiedAt: phone.phoneVerifiedAt });
   }
   if (path === "/v1/users/me" && req.method === "PUT") {
     const current = await state.get("account-api:phone") || { phone: user.phone, phoneVerifiedAt: null };
@@ -71,21 +83,30 @@ module.exports = async function handleAccount(req, res, url, helpers) {
     evidence.emailSends += 1;
     res.writeHead(204); res.end(); return true;
   }
+  if (path === "/v1/sellers/applications/me" && req.method === "GET") {
+    if (options.sellerReadFailure || options.sellerFailure) return reject(503, "SERVICE_UNAVAILABLE", "Applications are temporarily unavailable.");
+    const applications = await state.get("account-api:sellerApplications") || {};
+    return send(applications[buyerId] ?? null);
+  }
   if (path === "/v1/sellers/applications") {
-    if (options.sellerFailure) return reject(503, "SERVICE_UNAVAILABLE", "Applications are temporarily unavailable.");
-    const application = await state.get("account-api:sellerApplication");
-    // Issue #210 reserves GET list/approve/reject for Admin. This fixture has a
-    // buyer identity; a caller cannot use that list to invent own-status reads.
+    if (options.sellerFailure || options.sellerPostFailure && req.method === "POST") return reject(503, "SERVICE_UNAVAILABLE", "Applications are temporarily unavailable.");
+    const applications = await state.get("account-api:sellerApplications") || {};
+    const application = applications[buyerId];
+    // Buyers read only /me; the administrative list remains forbidden.
     if (req.method === "GET") return reject(403, "FORBIDDEN", "Only Admin can list seller applications.");
     if (req.method === "POST") {
       evidence.sellerSubmissions += 1;
       if (typeof body.companyName !== "string" || !body.companyName.trim() || typeof body.phone !== "string" || !/^\+?\d{7,15}$/.test(body.phone) || typeof body.note !== "string") return reject(400, "VALIDATION_FAILED", "Company name, contact phone and note are required.");
       if (options.sellerConflict || application && application.status !== "REJECTED") {
-        if (!application) await state.set("account-api:sellerApplication", { id: randomUUID(), companyName: body.companyName, phone: body.phone, note: body.note, status: "PENDING" });
+        if (!application) {
+          applications[buyerId] = { id: randomUUID(), companyName: body.companyName, phone: body.phone, note: body.note, status: "PENDING", reason: null };
+          await state.set("account-api:sellerApplications", applications);
+        }
         return reject(409, "SELLER_APPLICATION_EXISTS", "An application is already awaiting review.");
       }
-      const created = { id: randomUUID(), companyName: body.companyName, phone: body.phone, note: body.note, status: "PENDING" };
-      await state.set("account-api:sellerApplication", created);
+      const created = { id: application?.id || randomUUID(), companyName: body.companyName, phone: body.phone, note: body.note, status: "PENDING", reason: null };
+      applications[buyerId] = created;
+      await state.set("account-api:sellerApplications", applications);
       return send(created, 201);
     }
   }
