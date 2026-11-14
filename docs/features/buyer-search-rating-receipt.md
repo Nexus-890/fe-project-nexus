@@ -58,11 +58,12 @@ and automatic completion are blocked while that hold exists. Repeated reporting
 retains the original report. D11 owns investigation/resolution; this MR does not
 invent a dispute-resolution API. The UI shows the report and paused completion.
 
-V14 adds/backfills the delivery window: historical COMPLETED orders are unchanged;
+V15 adds/backfills the delivery window: historical COMPLETED orders are unchanged;
 legacy DELIVERED orders receive a fresh seven-day window at migration. New
-deliveries use the configured window. V15 adds the receipt hold. V13 is the exact
-auction-reference uniqueness migration shared with MR !171 (`b17f3275`), so the
-two branches do not define competing V13 scripts. Later config
+deliveries use the configured window. V16 adds the receipt hold. The latest
+develop (`a686c099`) owns V13 for `order_payment_note`; V14 contains the exact
+auction-reference uniqueness SQL from MR !171 (`b17f3275`). When !171 merges it
+must reuse this V14 instead of reintroducing its old V13 auction script. Later config
 changes do not move persisted deadlines. The UI only observes server
 status/deadlines; a local timer never completes an order.
 
@@ -144,10 +145,11 @@ and replay/concurrent delivery does not duplicate eligibility. SMTP provider,
 recipient lookup and bank execution are not live external integrations.
 
 See [completion acceptance](../../../be-project-nexus/infra/receipt-completion-acceptance/README.md)
-for reproducible commands and exact evidence boundaries. V13 is byte-for-byte
-identical to !171's migration; upgrades from both V12 and !171's V13 are tested.
+for reproducible commands and exact evidence boundaries. V14's SQL is byte-for-byte
+identical to !171's original auction migration; upgrades from V12, develop V13
+and the consolidated V14 baseline are tested.
 
-Final review verification on 2026-11-14:
+Final review verification on 2026-11-14 before synchronizing the new develop merge:
 
 | Check | Result |
 | --- | --- |
@@ -155,7 +157,7 @@ Final review verification on 2026-11-14:
 | Order/rating browser regressions | 48/48 passed |
 | Frontend unit suite, lint, typecheck, generated type drift and production build | 300 passed; all gates passed |
 | Commerce clean verify on native PostgreSQL 18 | 460 tests, zero failures/errors, five existing skips |
-| V12 and !171 V13 upgrade compatibility | Both cases passed; exact V13 blob preserved |
+| V12 and the original shared auction migration baseline | Passed; repeated below with the latest develop migration sequence |
 | Payment verify on a fresh native PostgreSQL database | 274 tests, zero failures/errors, three existing skips; embedded Kafka included |
 | Actual commerce outbox → notification SMTP / payment eligibility acceptance | 5/5 passed |
 | Config-service verify | 7 passed |
@@ -166,3 +168,11 @@ broker relay or real bank execution. An initial dirty `target/classes` retained
 renamed Flyway scripts; `clean verify` resolves that build artifact and is the
 required migration check. Framework security reminders required unchanged Next
 command retries; no unrelated framework upgrade is included.
+
+After synchronizing develop `a686c099`, commerce clean verify passed 475 tests
+(zero failures/errors, five existing skips), payment clean verify passed 282
+(zero failures/errors, three existing skips), and all five cross-service
+acceptance scenarios passed again against the rebuilt service artifacts.
+Migration compatibility covers V12, develop V13 and consolidated V14 through
+V16. Regenerated DTOs, all 300 frontend unit tests, lint, typecheck and production
+build also passed. The !169 room and buyer browser checks remain 25/25 and 48/48.

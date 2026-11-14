@@ -27,7 +27,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List payment attempts for support or for one order
+         * @description With orderId, returns every payment attempt of the order's payment group, oldest first, without paging; the buyer who owns the order, Admin and Support Staff may read it. Without orderId, returns a page of all payment attempts, newest first, optionally filtered by status (for example UNRECONCILED); this needs ORDER.REFUND. The provider reference is masked to its last four characters; idempotency keys and raw provider payloads are never returned.
+         */
+        get: operations["listPayments"];
         put?: never;
         /**
          * Read the buyer's existing group payment instructions
@@ -216,6 +220,44 @@ export interface components {
                 totalPages: number;
             };
         };
+        /** @enum {string} */
+        PaymentTransactionStatus: "PENDING" | "SUCCESS" | "FAILED" | "UNRECONCILED";
+        PaymentView: {
+            /** Format: uuid */
+            transactionId: string;
+            /** Format: uuid */
+            orderGroupId: string;
+            /** @example SEPAY */
+            provider: string;
+            /**
+             * @description Provider transaction reference masked to its last four characters
+             * @example ****8877
+             */
+            providerReference: string | null;
+            /** @example 500000 */
+            amount: number;
+            /** @example VND */
+            currency: string;
+            /** @enum {string} */
+            type: "NORMAL" | "REFUND";
+            status: components["schemas"]["PaymentTransactionStatus"];
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        PaymentListApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["PaymentView"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
+        };
         Problem: {
             type: string;
             title: string;
@@ -318,6 +360,92 @@ export interface operations {
                      *       "code": "PAYMENT_UNAUTHENTICATED"
                      *     }
                      */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPayments: {
+        parameters: {
+            query?: {
+                orderId?: string;
+                status?: components["schemas"]["PaymentTransactionStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payment attempts; with orderId all attempts come in a single page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "transactionId": "4f0c8a52-55d5-4c2e-9a39-0b3f8b1b2a10",
+                     *           "orderGroupId": "9a7d1c3e-1f2b-4c5d-8e9f-0a1b2c3d4e5f",
+                     *           "provider": "SEPAY",
+                     *           "providerReference": "****8877",
+                     *           "amount": 500000,
+                     *           "currency": "VND",
+                     *           "type": "NORMAL",
+                     *           "status": "UNRECONCILED",
+                     *           "receivedAt": "2026-11-14T03:20:00Z"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 20,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PaymentListApiResponse"];
+                };
+            };
+            /** @description Malformed orderId or status, or page/size out of range (INVALID_PARAMETER) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing/invalid bearer token (UNAUTHENTICATED) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description List without ORDER.REFUND (PAYMENT_REFUND_PRIVILEGE_REQUIRED), or the order belongs to another buyer (PAYMENT_ACCESS_DENIED) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No payment exists for this order (PAYMENT_ORDER_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };

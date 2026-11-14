@@ -775,6 +775,8 @@ export interface components {
              * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 7); the scheduler completes due DELIVERED orders. Existing COMPLETED orders are not reopened.
              */
             autoCompleteAt?: string | null;
+            /** @description Buyer-readable reason set from PaymentUnreconciled (#157) when a transfer for this order's checkout could not be applied, for example a payment after the deadline. It never changes status. Null when there is nothing to report. */
+            paymentNote?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** @description Sum of stored item line totals. */
