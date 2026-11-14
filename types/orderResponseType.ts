@@ -31,13 +31,10 @@ export type OrderDetailItem = Omit<components["schemas"]["OrderItem"], "unitPric
 };
 
 export type OrderDetail = OrderSummary & Pick<
-  OrderWireResponse, "userId" | "sellerId" | "orderType"
+  OrderWireResponse, "userId" | "sellerId" | "orderType" | "deliveredAt" | "autoCompleteAt" | "receiptIssueReason" | "receiptIssueReportedAt"
 > & {
   items: OrderDetailItem[];
   canCancel: boolean;
-  /** Provisional #258 fields: dates are supplied by the server, never inferred in the browser. */
-  deliveredAt?: string | null;
-  autoCompleteAt?: string | null;
 };
 
 export type OrderHistoryEntry = components["schemas"]["OrderStatusHistory"];

@@ -1,94 +1,113 @@
-# Buyer search, seller rating and receipt confirmation — #220
+# Buyer search, ratings and receipt confirmation — #220 review
 
-Based on `origin/develop` at `09b3cf6f72fce255a0c6984978c50ffa2c1706f1`, inspected on 2026-11-14.
-Scope is frontend #220, including the merged frontend requirements from #221 and #266.
+The review of `0174be82` found that URL state and fixtures did not establish real
+search, rating API integration or the #258 delivery wait. This revision adds the
+owning backend behavior, delivered OpenAPI and generated frontend types.
 
-## Interface
+## Search
 
-The Account PNG supplied for this task defines the shared account sidebar, order
-detail columns and rating modal. `/order/[orderId]` now uses the account shell;
-the checkout result remains in the shop shell. Existing design tokens, borders,
-typography, orange actions and accessible native dialogs are reused. The missing
-receipt confirmation dialog follows the same style.
+Public `GET /api/v1/products` applies a trimmed, case-insensitive literal product
+title search (`q`, maximum 255 characters), `categoryId`, `listingType` and
+`maxPrice` in PostgreSQL before pagination. Relevance prefers exact/prefix title
+matches, then newest; explicit newest/price sorts have a UUID tie-breaker and
+unpriced products sort last. A price ceiling requires an affordable SKU without
+truncating the product's displayed variant range. Inactive/deleted products stay
+hidden. An unmatched query returns `data: []` with zero totals.
 
-Search retains query, category, sort and visible filter selections in the URL.
-Header submissions, category links, chips, pagination and browser history preserve
-that state. An empty successful result displays the existing empty state.
-The delivered products API supports only `categoryId`, `page` and `size`: full
-dataset text search, price/rating/condition/trust filters and sorting still need
-the PRD-08 backend contract. URL persistence does not establish server filtering.
+The header, category links, chips, sort and pagination preserve these supported
+filters through reload/history. Unsupported seller trust, condition and rating
+controls are disabled; old URL selections are removed instead of pretending to
+filter products. These controls need a real catalog projection before enabling.
 
-Only the authenticated buyer of a `DELIVERED` order can confirm receipt. The UI
-keeps that status until a successful server response; it never completes an order
-with a client timer. Optional `deliveredAt` and `autoCompleteAt` come from the
-server, with no invented waiting period. Refetching observes server completion
-and refreshes history. The list links delivered orders to their receipt action
-and completed orders to seller rating.
+## Rating and auction seller information
 
-Only a completed order offers rating. The feature reads every page of the seller's
-ratings to find this buyer/order before enabling submission, retains server
-ratings after reload, refreshes after a 409, and refuses to enable rating when the
-lookup fails. The server must enforce uniqueness and completed-order eligibility.
-Product detail and the existing live auction cards share seller reputation,
-including loading, unavailable and retry states. Reputation reads require sign-in
-per the gateway permission catalogue; missing scores never fall back to samples.
+Rating-service delivers protected `POST /ratings`, `GET /ratings?userId=` and
+`GET /reputations/{userId}`. The request does not accept the caller identity.
+Only the projected completed order's buyer can rate its seller, with score 1–5
+and an optional comment up to 1000 characters. A pessimistic eligibility lock
+and the existing unique constraint prevent concurrent duplicate ratings. The
+rating and canonical `UserRated` outbox entry commit together. Reputation reads
+the persisted aggregate; #213 owns score recomputation and policy.
 
-## Provisional API dependencies
+The completed-order UI checks all seller rating pages before enabling the modal,
+retains a submitted rating after reload, and refreshes after a duplicate conflict.
+`/auctions/[auctionId]` reads the actual auction snapshot and product details,
+shows seller information/score/trust, and is the destination of homepage auction
+cards. Product detail uses the same reputation component. A missing aggregate
+has an unavailable state; no fabricated score is shown. Bidding is outside #220.
 
-The checked-out backend has no receipt confirmation operation or rating/reputation
-controllers/OpenAPI. The frontend uses explicit provisional boundaries and local
-HTTP simulation, as allowed by the issue's condition. No backend endpoint, schema,
-scheduler, gateway authorization rule or generated wire DTO is added here.
+## Delivery wait and receipt issue hold
 
-| Operation | Provisional boundary / owner |
+Shipment delivery now commits `DELIVERED` and its history, without emitting
+`OrderCompleted`. The first delivery stores `deliveredAt` and `autoCompleteAt`
+from the committed history timestamp and configured confirmation window.
+
+`POST /orders/{id}/confirm-receipt` requires BUYER + ORDER.VIEW and ownership.
+It locks the order, requires DELIVERED, records one completion history row and
+one `OrderCompleted` outbox entry in the same transaction. Replaying an already
+completed own order returns its current snapshot without duplicate effects.
+The scheduler uses the same lock and completion routine for due orders, records
+the automatic completion reason and safely competes with buyer confirmation.
+Administrative PATCH cannot bypass this completion routine.
+
+The buyer can `POST /orders/{id}/receipt-issue` with a reason of 1–500 characters
+while DELIVERED. It uses the same lock and persists a receipt hold; confirmation
+and automatic completion are blocked while that hold exists. Repeated reporting
+retains the original report. D11 owns investigation/resolution; this MR does not
+invent a dispute-resolution API. The UI shows the report and paused completion.
+
+V13 adds/backfills the delivery window: historical COMPLETED orders are unchanged;
+legacy DELIVERED orders receive a fresh seven-day window at migration. New
+deliveries use the configured window. V14 adds the receipt hold. Later config
+changes do not move persisted deadlines. The UI only observes server
+status/deadlines; a local timer never completes an order.
+
+| Config | Default |
 | --- | --- |
-| POST `/api/v1/orders/{id}/confirm-receipt` | No request body; `ApiResponse.data` is the completed Order. Optional detail timestamps: `deliveredAt`, `autoCompleteAt`. Confirm with #258. |
-| POST `/api/v1/ratings` | `{orderId,toUserId,score,comment}`; creation returns one rating in `data`. Caller identity is read from the current session, never sent as `fromUserId`. #212 / #242. |
-| GET `/api/v1/ratings?userId={sellerId}&page=0&size=100` | Rating `data[]` and sibling `page`; all remaining pages checked before allowing a rating. #212 / #242. |
-| GET `/api/v1/reputations/{sellerId}` | `{userId,score,trustLevel,totalTransaction,successfulTransaction,failedTransaction}` in `data`. #213 / #242. |
+| `nexus.order.auto-complete-days` | `7`, must be positive |
+| `nexus.order.auto-complete-interval` | `1m` |
 
-Rating resources contain `id`, `fromUserId`, `toUserId`, `orderId`, `score`,
-nullable `comment` and `createdAt`. Scores are 1–5; reputation scores are 0–100
-and trust levels follow the persisted `NEW`, `BASIC`, `TRUSTED`, `TOP` values.
-The three rating/reputation paths already appear in
-[`gateway-permissions.md`](../../../be-project-nexus/docs/api/gateway-permissions.md).
-#258 owns receipt permissions/public-endpoint classification and the final contract.
-Replace these provisional types with generated wire aliases once those owners
-publish OpenAPI. Runtime validation rejects malformed or mismatched resources.
+Gateway policies and delivered catalog/commerce/rating specifications are
+updated. New receipt writes are protected, so no public-endpoint entry is
+added. Common envelopes, Problem Details, current-session Bearer,
+cancellation, private cache keys and generation guards are retained.
 
-All requests use the common HTTP boundary, protected session keys, current Bearer,
-cancellation and session generation guards. No new `nexus.*` config keys.
+## Verification scope
 
-## Verification
+The original 266-test baseline and `0174be82`'s 280 unit / 57 catalog / 47 orders
+fixture results are historical frontend evidence, not backend integration.
+The review revision runs database/HTTP tests with PostgreSQL 18, Flyway and
+`ddl-auto=validate`, including actual search results, signature-checked rating
+writes, completion concurrency, rollback, history and outbox counts.
 
-Baseline: 266 frontend unit tests passed before implementation. The focused
-existing search browser baseline passed 2/2. Final checks on 2026-11-14:
+For machines without Docker, database tests accept an explicit isolated local
+PostgreSQL URL through `-Dnexus.test.jdbc-url=... -Dnexus.test.jdbc-user=...`
+and optional `-Dnexus.test.jdbc-password=...`. Default CI keeps Testcontainers.
+The native database user must be able to create fresh test databases; never point
+these test options at a shared or production database.
 
-| Command | Result |
+The live browser harness and its dependency boundaries are described in
+[`tests/live-buyer`](../../tests/live-buyer/README.md). Authentication/provider
+stand-ins and manual event projection must not be reported as live
+Keycloak or Kafka integration. Final executed counts are recorded in the MR.
+
+Review verification on 2026-11-14:
+
+| Check | Result |
 | --- | --- |
-| `npm run generate:types:check` | Passed; delivered DTOs unchanged |
-| `npm run lint` | Passed |
-| `npm run typecheck` | Passed |
-| `npm run test:unit` | 280 passed |
-| `npm run test:catalog` | 57 passed; 47 order-only scenarios intentionally skipped in this config |
-| `npm run test:browser -- --config playwright.orders.config.ts` | 47 passed in 2.2 minutes |
-| `npm run build` | Passed, with TypeScript enabled |
+| Generated type drift, ESLint, isolated typecheck, production build | Passed |
+| Frontend unit suite | 283 passed |
+| Catalog/shop browser suite | 58 passed; 49 scenarios belong to separate order/live configs |
+| Order/rating browser suite | 48 passed |
+| Browser against real catalog/commerce/rating jars and PostgreSQL | Passed |
+| Commerce `mvnw.cmd verify` with native PostgreSQL | 459 tests, zero failures/errors, five existing skips; embedded Kafka included |
+| Rating `mvnw.cmd verify` with native PostgreSQL | 8 passed, including HTTP/auth/concurrency and offset validation |
+| Catalog native PostgreSQL `verify` excluding `CategoryOutboxIntegrationTest` | 136 passed; excluded test needs Docker Kafka stop/restart controls |
+| Config-service and API-gateway `mvnw.cmd verify` | 7 and 83 tests passed respectively |
 
-Browser runs used isolated app/API/provider ports and Next output directories.
-Next's existing security advisory initially stopped commands; unchanged retries
-completed, and upgrading the installed framework remains separate work. An
-existing order 401 assertion counted canceled development-mount requests as
-retries; it now checks exactly two completed 401 responses, one refresh and no
-request after the terminal replay, while recording genuine cancellations.
-An intermittent session-restoration stall passed in the final unchanged run.
-Desktop/mobile search, order detail, receipt and rating captures were inspected.
-
-The existing local
-[`order-list` simulation](../../postman/simulations/order-list.sim.yaml) now models
-receipt confirmation and ratings; production never imports these fixtures.
-
-HTTP simulation establishes frontend behavior against the stated assumptions.
-It does not establish live PostgreSQL validation, the backend waiting period,
-one `OrderCompleted` event/history transaction, receipt email/payout timing,
-real gateway privileges or live search/rating availability. Backend #258 and
-#212/#213/#242, and the PRD-08 search API, remain integration dependencies.
+Full default catalog verification remains limited by the unavailable Docker
+engine; its baseline failed container startup before this change. No assertions
+were weakened to bypass it. Next's installed version also reports an existing
+security advisory; unchanged retries completed the frontend gates. Framework
+upgrades, #213 recomputation, D11 resolution and email/payout transport remain
+separate work.

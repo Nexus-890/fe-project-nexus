@@ -81,7 +81,7 @@ Protected queries carry private-query metadata and session-specific keys. Protec
 | POST `/api/v1/auth/register` | Sign-up, public; creation does not sign in |
 | GET `/api/v1/users/me` | Provider profile, Bearer |
 | GET `/api/v1/categories/tree` | Home, shop navigation, category resolution, public |
-| GET `/api/v1/products` | Category/search listing, public; delivered parameters categoryId/page/size |
+| GET `/api/v1/products` | Category/search listing, public; q/categoryId/listingType/maxPrice/sort/page/size applied before paging |
 | GET `/api/v1/products/{id}` | Product detail, public |
 | POST `/api/v1/carts/me/items` | Add item, Bearer; request is `{skuId, quantity}` |
 | GET `/api/v1/carts/me` | Shared page/header query; Bearer with CART.VIEW + CART.CREATE |
@@ -104,7 +104,7 @@ Notification mutations use the common origin and the #109 routes included in the
 
 The group read is pending in #138: it is absent from the delivered commerce controller/OpenAPI. Its expected resource uses the existing generated OrderGroup schema from order creation. Production calls the real endpoint and reports errors; it never falls back to mock data. Polling reads every child's status, because the administrative PATCH can leave group.status unchanged. See [payment status polling](../features/payment-status-polling.md) for acceptance evidence and the pending live integration.
 
-`q`/`sort` exist in UI URL state but are not implemented by the checked-out products controller. A fixture that returns filtered/sorted results does not establish the backend capability. Track the contract extension separately.
+Buyer #220 now delivers database text search, listing type, SKU price ceiling and stable sorting. Unsupported trust/condition/rating filters stay disabled until the catalog has their real projections.
 
 Shipping #201 has no delivered contract and #188's preview is not merged. The
 [checkout integration](../features/checkout.md) records these provisional shapes,
@@ -114,15 +114,16 @@ their OpenAPI; the current normalized UI types do not claim a delivered contract
 
 The table lists FE consumers/prepared calls, not every BE endpoint or a guarantee of availability. The #129 publication branch merged remote `e2411ea4`, which includes BE #111 update/remove source. Its DTO package imports, unresolved symbols/repository calls and authentication-principal binding need correction before a compatible build/runtime can be verified. PUT currently returns bare CartResponse instead of the required envelope; keep FE parsing strict. Confirm response/permissions and update delivered OpenAPI before regenerating wire types or claiming live integration. POST is additive and reprices from the current SKU; it cannot substitute for an absolute edit. See the [Cart implementation report](../features/cart-page-implementation.md).
 
-### Buyer #220 provisional calls
+### Buyer #220 delivered calls
 
 `POST /api/v1/orders/{id}/confirm-receipt`, `POST/GET /api/v1/ratings` and
-`GET /api/v1/reputations/{userId}` are frontend consumers awaiting #258 and
-#212/#213/#242 controllers and delivered OpenAPI. The
+`GET /api/v1/reputations/{userId}` now have controllers and delivered OpenAPI.
+`POST /api/v1/orders/{id}/receipt-issue` pauses completion on a buyer report. The
 [buyer #220 contract and verification notes](../features/buyer-search-rating-receipt.md)
-describe the provisional shapes, protected access and local HTTP simulation.
-These calls do not add or claim a delivered backend endpoint. The rating paths
-already appear in the gateway catalogue; #258 owns receipt authorization.
+describe protected access, real PostgreSQL/HTTP verification and remaining event
+delivery boundaries. Rating and auction wire types are generated alongside
+commerce/catalog types. All new receipt writes require BUYER + ORDER.VIEW and
+ownership. Reputation recomputation remains owned by #213.
 
 ## Type generation and runtime checks
 

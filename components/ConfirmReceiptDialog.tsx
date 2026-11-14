@@ -22,7 +22,7 @@ function ConfirmReceiptDialog({ orderNumber, pending, error, onConfirm, onClose 
       <PackageCheck size={28} className="text-primary" aria-hidden="true" />
       <h2 id="confirm-receipt-title" className="mt-4 text-heading-20">Confirm you received your order</h2>
       <p id="confirm-receipt-help" className="mt-3 text-sm leading-6 text-muted-foreground">Have all items in order <span className="font-mono text-foreground [overflow-wrap:anywhere]">{orderNumber}</span> arrived in good condition? Confirming completes this order and lets you rate the seller.</p>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">If anything is missing or damaged, keep the order open and contact support before confirming.</p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">If anything is missing or damaged, choose Not yet and report a problem to pause completion.</p>
       {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
     </div>
     <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-muted/40 p-4">

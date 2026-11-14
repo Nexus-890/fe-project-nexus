@@ -283,9 +283,49 @@ export interface paths {
         head?: never;
         /**
          * Change an order status
-         * @description ADMIN role required at the service. Allowed transitions: PENDING -> PAID/CANCELED; PAID -> CANCELED/SHIPPED; SHIPPED -> DELIVERED; DELIVERED -> COMPLETED; CANCELED -> REFUND_REQUESTED; REFUND_REQUESTED -> REFUNDED. Concurrent or illegal moves return 409. Every successful change appends status history.
+         * @description ADMIN role required at the service. Allowed administrative transitions: PENDING -> PAID/CANCELED; PAID -> CANCELED/SHIPPED; SHIPPED -> DELIVERED; CANCELED -> REFUND_REQUESTED; REFUND_REQUESTED -> REFUNDED. DELIVERED -> COMPLETED is reserved for buyer confirmation or the automatic completion job and returns 409 here. Delivery persists the confirmation window. Concurrent or illegal moves return 409. Every successful change appends status history.
          */
         patch: operations["changeOrderStatus"];
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/confirm-receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm receipt of a delivered order
+         * @description Requires BUYER and ORDER.VIEW plus buyer ownership, including for callers who also have ADMIN. ShipmentDelivered leaves the order DELIVERED and persists deliveredAt/autoCompleteAt. Confirming locks the order row and moves DELIVERED to COMPLETED, inserts one history row and one OrderCompleted outbox event in the same transaction. Repeating confirmation of an owned COMPLETED order returns it without another history/event. Other statuses return 409 COMMERCE_ORDER_NOT_DELIVERED; another buyer receives 403 before the status check. The automatic job uses the same lock and completion transaction when autoCompleteAt is due. Receipt email, rating and payout consumers remain gated on OrderCompleted. No request body.
+         */
+        post: operations["confirmReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/receipt-issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a receipt issue and pause completion
+         * @description Requires BUYER and ORDER.VIEW plus buyer ownership. While the order is DELIVERED, persist the first trimmed reason and reported timestamp under the same row lock used by completion. Repeated reports retain that original report. An open report prevents both buyer and automatic completion. If completion wins a concurrent race, reporting returns 409 COMMERCE_ORDER_NOT_DELIVERED. D11 owns resolution; this operation does not issue a refund or clear the hold.
+         */
+        post: operations["reportReceiptIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/orders/{id}/cancel": {
@@ -718,6 +758,23 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             /** @description Cancellation eligibility for the current caller: ORDER.CANCEL and ownership (or ADMIN/SUPPORT_STAFF), and either PAID or PENDING in a PENDING group. This is a read-time snapshot; cancellation rechecks locked state and can return 409. Missing on older backends must be treated as false. */
             canCancel: boolean;
+            /** @description First receipt issue reported by the buyer; retained until D11 resolves it. */
+            receiptIssueReason?: string | null;
+            /**
+             * Format: date-time
+             * @description An open report pauses buyer and automatic completion while this timestamp is present.
+             */
+            receiptIssueReportedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description First committed DELIVERED transition time. Duplicate shipment events do not reset it.
+             */
+            deliveredAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 7); the scheduler completes due DELIVERED orders. Existing COMPLETED orders are not reopened.
+             */
+            autoCompleteAt?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** @description Sum of stored item line totals. */
@@ -3693,6 +3750,137 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    confirmReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Completed order, including an idempotent replay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOrderResponse"];
+                };
+            };
+            /** @description Authentication is required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description BUYER, ORDER.VIEW or ownership is missing. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description COMMERCE_ORDER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description COMMERCE_ORDER_NOT_DELIVERED or COMMERCE_RECEIPT_ISSUE_OPEN. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportReceiptIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Delivered order with the original persisted receipt issue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOrderResponse"];
+                };
+            };
+            /** @description Invalid or missing receipt issue reason. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description BUYER, ORDER.VIEW or ownership missing. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description COMMERCE_ORDER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description COMMERCE_ORDER_NOT_DELIVERED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

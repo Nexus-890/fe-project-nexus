@@ -10,11 +10,12 @@ import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatus
 import ProductImage from "../components/ProductImage";
 import ShipmentTracking from "../components/ShipmentTracking";
 import ConfirmReceiptDialog from "../components/ConfirmReceiptDialog";
+import ReceiptIssueDialog from "../components/ReceiptIssueDialog";
 import OrderRating from "./OrderRating";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
-import { cancelOrder, confirmReceipt, getOrder, getOrderHistory } from "../service/orderService";
+import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, reportReceiptIssue } from "../service/orderService";
 import { getOrderShipment, getShipmentTracking } from "../service/shipmentService";
 import type { OrderDetail, OrderGroup, OrderStatus } from "../types/orderResponseType";
 import type { ShipmentTracking as ShipmentTrackingData } from "../types/shipmentResponseType";
@@ -60,6 +61,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reasonError, setReasonError] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
   const order = useApiQuery({
     queryKey: queryKeys.orders.detail(auth.sessionId, orderId), meta: { requiresAuth: true },
     service: (signal) => getOrder(orderId, { context: auth.requestContext, signal }),
@@ -120,6 +122,18 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
         await client.invalidateQueries({ queryKey: ["orders", variables.sessionId], refetchType: "active" });
     },
   });
+  const receiptIssue = useApiMutation<OrderDetail, { reason: string; sessionId: number }>({
+    mutationKey: ["orders", auth.sessionId, "receipt-issue", orderId],
+    isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId),
+    execute: (variables) => reportReceiptIssue(orderId, variables.reason, { context: auth.requestContext }),
+    invalidateKey: [["orders", auth.sessionId]],
+  }, {
+    onSuccess: (held) => { client.setQueryData(queryKeys.orders.detail(auth.sessionId, orderId), held); setIssueOpen(false); },
+    onError: async (error, variables) => {
+      if (error.status === 409 && auth.isSessionCurrent(variables.sessionId))
+        await client.invalidateQueries({ queryKey: ["orders", variables.sessionId], refetchType: "active" });
+    },
+  });
 
   useEffect(() => {
     if (!result && order.data?.status === "COMPLETED")
@@ -169,12 +183,20 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
         {result && <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{paid ? "Thank you for your purchase. Follow your order’s progress here and keep your order reference for support." : pending ? "Your order has been placed and is waiting for payment. Complete your bank transfer using the payment instructions for your order group." : "Check your order details and its latest status below."}</p>}
         {!result && current.status === "DELIVERED" && <section aria-label="Confirm order receipt" className="rounded-sm border border-border bg-card p-5 sm:p-6">
           <h2 className="text-heading-20">Your order has been delivered</h2>
+          {current.receiptIssueReportedAt ? <div role="status" className="mt-3 rounded-sm border border-warning bg-warning/5 p-4 text-sm">
+            <p className="font-medium">Problem reported. Order completion is paused.</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{current.receiptIssueReason}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Reported <time dateTime={current.receiptIssueReportedAt}>{dateFormatter.format(new Date(current.receiptIssueReportedAt))}</time>. The order stays open until the issue is resolved.</p>
+          </div> : <>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Check your items before confirming that you received them. Your order stays open until you confirm or the confirmation period ends.</p>
           {current.deliveredAt && <p className="mt-3 text-sm text-muted-foreground">Delivered <time dateTime={current.deliveredAt}>{dateFormatter.format(new Date(current.deliveredAt))}</time></p>}
           {current.autoCompleteAt ? <p className="mt-2 text-sm text-muted-foreground">Automatically completes on <time dateTime={current.autoCompleteAt}>{dateFormatter.format(new Date(current.autoCompleteAt))}</time> if no issue is reported.</p> : <p className="mt-2 text-sm text-muted-foreground">The automatic completion date is not available yet.</p>}
-          {auth.user?.id === current.userId && <button type="button" disabled={receipt.isPending} onClick={() => { receipt.reset(); setReceiptOpen(true); }} className="mt-4 inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Order received</button>}
+          {auth.user?.id === current.userId && <div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={receipt.isPending || receiptIssue.isPending} onClick={() => { receipt.reset(); setReceiptOpen(true); }} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Order received</button><button type="button" disabled={receipt.isPending || receiptIssue.isPending} onClick={() => { receiptIssue.reset(); setIssueOpen(true); }} className={buttonClass}>Report a problem</button></div>}
+          </>}
         </section>}
-        {!result && receiptOpen && current.status === "DELIVERED" && <ConfirmReceiptDialog orderNumber={current.orderNumber} pending={receipt.isPending} error={receipt.error?.detail || receipt.error?.title} onClose={() => { if (!receipt.isPending) setReceiptOpen(false); }} onConfirm={() => { if (!receipt.isPending) receipt.mutate({ sessionId: auth.sessionId }); }} />}
+        {!result && receiptOpen && current.status === "DELIVERED" && !current.receiptIssueReportedAt && <ConfirmReceiptDialog orderNumber={current.orderNumber} pending={receipt.isPending} error={receipt.error?.detail || receipt.error?.title} onClose={() => { if (!receipt.isPending) setReceiptOpen(false); }} onConfirm={() => { if (!receipt.isPending) receipt.mutate({ sessionId: auth.sessionId }); }} />}
+        {!result && issueOpen && current.status === "DELIVERED" && !current.receiptIssueReportedAt && <ReceiptIssueDialog pending={receiptIssue.isPending} error={receiptIssue.error?.detail || receiptIssue.error?.title} onClose={() => { if (!receiptIssue.isPending) setIssueOpen(false); }} onReport={(reason) => { if (!receiptIssue.isPending) receiptIssue.mutate({ reason, sessionId: auth.sessionId }); }} />}
+        {!result && receiptIssue.error && current.status !== "DELIVERED" && <p role="alert" className="text-sm text-danger">{receiptIssue.error.detail || receiptIssue.error.title}</p>}
         {!result && receipt.isSuccess && <p role="status" className="text-sm text-success">Receipt confirmed. Your order is completed.</p>}
         {!result && receipt.error && (!receiptOpen || current.status !== "DELIVERED") && <p role="alert" className="text-sm text-danger">{receipt.error.detail || receipt.error.title}</p>}
         {!result && <OrderRating key={current.orderId} order={current} />}

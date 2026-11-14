@@ -34,7 +34,7 @@ const initialHistories = () => Object.fromEntries(initialOrders().map((entry, in
   ...(entry.status === "PENDING" ? [] : [historyEntry(entry, index * 10 + 2, "PENDING", entry.status,
     entry.status === "PAID" ? "Payment confirmed" : "Changed my mind")]),
 ]]));
-const initialEvidence = () => ({ reads: [], details: [], histories: [], cancellations: [], receiptConfirmations: [], shipments: [], ratingReads: [], ratingWrites: [], reputations: [], rejected: 0 });
+const initialEvidence = () => ({ reads: [], details: [], histories: [], cancellations: [], receiptConfirmations: [], receiptIssues: [], shipments: [], ratingReads: [], ratingWrites: [], reputations: [], rejected: 0 });
 // Detail/history refetches run together. Serialize read/modify/write evidence so
 // one endpoint cannot overwrite another endpoint's recorded request.
 let evidenceQueue = Promise.resolve();
@@ -134,7 +134,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/test/auto-complete") {
     const orders = await pm.state.get("order-list-api:orders") || initialOrders();
     const entry = orders.find((candidate) => candidate.orderId === url.searchParams.get("id"));
-    if (!entry || entry.status !== "DELIVERED") return problem(res, 409, "FIXTURE_ORDER_NOT_DELIVERED", "Expected a delivered fixture order.");
+    if (!entry || entry.status !== "DELIVERED" || entry.receiptIssueReportedAt) return problem(res, 409, "FIXTURE_ORDER_NOT_DELIVERED", "Expected a delivered fixture order without an open issue.");
     entry.status = "COMPLETED";
     const histories = await pm.state.get("order-list-api:histories") || initialHistories();
     histories[entry.orderId].push(historyEntry(entry, 100 + histories[entry.orderId].length,
@@ -221,13 +221,14 @@ const server = http.createServer(async (req, res) => {
       return json(res, success(rating), 201);
     }
   }
-  const detailMatch = /^\/v1\/orders\/([0-9a-f-]+)(?:\/(history|cancel|confirm-receipt))?$/.exec(url.pathname);
+  const detailMatch = /^\/v1\/orders\/([0-9a-f-]+)(?:\/(history|cancel|confirm-receipt|receipt-issue))?$/.exec(url.pathname);
   if (detailMatch) {
     const [, orderId, action] = detailMatch;
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const authorized = /^Bearer .+/.test(req.headers.authorization || "");
     const recorded = { method: req.method, orderId, authorized };
-    if (action === "confirm-receipt") await recordEvidence("receiptConfirmations", recorded);
+    if (action === "receipt-issue") await recordEvidence("receiptIssues", { ...recorded, body });
+    else if (action === "confirm-receipt") await recordEvidence("receiptConfirmations", recorded);
     else if (action === "cancel") await recordEvidence("cancellations", { ...recorded, body,
       contentType: req.headers["content-type"] });
     else await recordEvidence(action === "history" ? "histories" : "details", recorded);
@@ -244,6 +245,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, success(histories[orderId]));
     }
     if (action === "confirm-receipt" && req.method === "POST") {
+      if (entry.receiptIssueReportedAt) return problem(res, 409, "COMMERCE_RECEIPT_ISSUE_OPEN", "This order has a reported receipt issue and cannot complete until it is resolved");
       if (mode === "receipt-unavailable") return problem(res, 503, "SERVICE_UNAVAILABLE", "Receipt confirmation is temporarily unavailable. Please try again.");
       if (mode === "receipt-conflict") {
         entry.status = "COMPLETED";
@@ -258,6 +260,17 @@ const server = http.createServer(async (req, res) => {
         "DELIVERED", "COMPLETED", "Buyer confirmed receipt"));
       await pm.state.set("order-list-api:orders", orders);
       await pm.state.set("order-list-api:histories", histories);
+      return json(res, success(entry));
+    }
+    if (action === "receipt-issue" && req.method === "POST") {
+      if (entry.status !== "DELIVERED") return problem(res, 409, "COMMERCE_ORDER_NOT_DELIVERED", "Only a delivered order can be reported.");
+      if (!body || typeof body.reason !== "string" || !body.reason.trim() || body.reason.trim().length > 500)
+        return problem(res, 400, "VALIDATION_FAILED", "A receipt issue reason is required.");
+      if (!entry.receiptIssueReportedAt) {
+        entry.receiptIssueReason = body.reason.trim();
+        entry.receiptIssueReportedAt = new Date().toISOString();
+        await pm.state.set("order-list-api:orders", orders);
+      }
       return json(res, success(entry));
     }
     if (action === "cancel" && req.method === "POST") {

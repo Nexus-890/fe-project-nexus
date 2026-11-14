@@ -24,31 +24,23 @@ export const searchFilterGroups = [
 
 type RawSearchQuery = Record<string, string | string[] | undefined>;
 
-/** Parse shareable URL state; preview filters are never treated as delivered API fields. */
+/** Discard unsupported filter values from shared links rather than implying they affect results. */
 export const readSearchState = (query: RawSearchQuery): SearchState => {
-  const readOptions = (key: "trust" | "condition") => {
-    const values = query[key];
-    const selected = Array.isArray(values) ? values : values ? [values] : [];
-    return searchFilterGroups.find((group) => group.key === key)!.options
-      .filter((option) => selected.includes(option.value))
-      .map((option) => option.value);
-  };
   const sort = readQueryValue(query.sort);
   const listingType = readQueryValue(query.listingType);
   const rawPrice = readQueryValue(query.maxPrice);
   const maxPrice = /^\d+$/.test(rawPrice) ? Number(rawPrice) : SEARCH_MAX_PRICE;
-  const minRating = Number(readQueryValue(query.minRating));
   return {
     q: readQueryValue(query.q),
     category: readQueryValue(query.category),
-    sort: ["createdAt,desc", "price,asc", "price,desc"].includes(sort) ? sort : "relevance",
+    sort: sort === "createdAt,desc" || sort === "price,asc" || sort === "price,desc" ? sort : "relevance",
     page: parsePage(query.page),
-    listingType: ["buy-now", "auction"].includes(listingType) ? listingType : "all",
-    trust: readOptions("trust"),
-    condition: readOptions("condition"),
+    listingType: listingType === "buy-now" || listingType === "auction" ? listingType : "all",
+    trust: [],
+    condition: [],
     maxPrice: Number.isSafeInteger(maxPrice) && maxPrice >= 0 && maxPrice <= SEARCH_MAX_PRICE
       ? Math.floor(maxPrice / 100000) * 100000 : SEARCH_MAX_PRICE,
-    minRating: [2, 3, 4].includes(minRating) ? minRating : 0,
+    minRating: 0,
   };
 };
 
@@ -56,15 +48,14 @@ export const searchFilterChips = (state: SearchState) => [
   ...searchFilterGroups.flatMap((group) => group.options
     .filter((option) => group.key === "listingType"
       ? option.value !== "all" && option.value === state.listingType
-      : state[group.key]?.includes(option.value))
+      : false)
     .map((option) => ({
       key: `${group.key}-${option.value}`,
       label: `${group.title}: ${option.label}`,
       remove: group.key === "listingType"
-        ? { listingType: "all" }
+        ? { listingType: "all" as const }
         : { [group.key]: state[group.key]?.filter((value) => value !== option.value) },
     }))),
   ...(state.maxPrice !== undefined && state.maxPrice < SEARCH_MAX_PRICE
     ? [{ key: "maxPrice", label: `Up to ${formatVND(String(state.maxPrice))}`, remove: { maxPrice: SEARCH_MAX_PRICE } }] : []),
-  ...(state.minRating ? [{ key: "minRating", label: `${state.minRating} stars & up`, remove: { minRating: 0 } }] : []),
 ];

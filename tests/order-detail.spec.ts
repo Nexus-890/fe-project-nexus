@@ -336,3 +336,22 @@ test("server automatic completion refreshes the delivered screen without a buyer
   await expect(page.getByTestId(`order-row-${pendingId}`)).toContainText("Completed");
   await expect(page.getByTestId(`order-row-${pendingId}`).getByRole("link", { name: "Order received", exact: true })).toHaveCount(0);
 });
+
+test("reporting a missing item pauses completion and persists through reload", async ({ page, request }) => {
+  await control(request, `order?id=${pendingId}&status=DELIVERED`);
+  await signIn(page, `/order/${pendingId}`);
+  await page.getByRole("button", { name: "Report a problem", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Report a problem", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Submit problem", exact: true })).toBeDisabled();
+  await dialog.getByLabel("What went wrong?", { exact: true }).fill("  One item is missing  ");
+  await dialog.getByRole("button", { name: "Submit problem", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Confirm order receipt", exact: true })).toContainText("Problem reported. Order completion is paused.");
+  await expect(page.getByTestId("order-receipt-status")).toHaveText("Delivered");
+  await expect(page.getByRole("button", { name: "Order received", exact: true })).toHaveCount(0);
+  expect((await evidence(request)).receiptIssues).toEqual([{ method: "POST", orderId: pendingId, authorized: true, body: { reason: "One item is missing" } }]);
+  expect((await evidence(request)).receiptConfirmations).toEqual([]);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Confirm order receipt", exact: true })).toContainText("One item is missing");
+  await expect(page.getByRole("button", { name: "Order received", exact: true })).toHaveCount(0);
+});

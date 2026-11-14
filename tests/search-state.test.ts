@@ -14,7 +14,9 @@ test("search state round-trips all filters and safely normalizes untrusted URL v
     key, ["trust", "condition"].includes(key) ? url.searchParams.getAll(key) : url.searchParams.get(key)!,
   ]));
   assert.deepEqual(readSearchState(query), state);
-  assert.deepEqual(state.trust, ["top-seller", "trusted"]);
+  assert.deepEqual(state.trust, []);
+  assert.deepEqual(state.condition, []);
+  assert.equal(state.minRating, 0);
   assert.equal(state.maxPrice, 1200000);
   assert.equal(state.q, "wireless & wired");
   const invalid = readSearchState({
@@ -25,15 +27,17 @@ test("search state round-trips all filters and safely normalizes untrusted URL v
   assert.equal(invalid.maxPrice, SEARCH_MAX_PRICE);
 });
 
-test("removing one filter chip preserves independent search selections and resets the page", () => {
+test("removing a supported filter preserves search and sorting while unsupported URL values are discarded", () => {
   const state = readSearchState({
     q: "shoes", category: "fashion", sort: "createdAt,desc", page: "3",
-    trust: ["trusted", "top-seller"], condition: "new", minRating: "4",
+    trust: ["trusted", "top-seller"], condition: "new", minRating: "4", listingType: "auction", maxPrice: "200000",
   });
-  const chip = searchFilterChips(state).find((item) => item.key === "trust-trusted")!;
+  const chip = searchFilterChips(state).find((item) => item.key === "listingType-auction")!;
   const url = new URL(searchHref({ ...state, ...chip.remove, page: 1 }), "https://nexus.test");
-  assert.deepEqual(url.searchParams.getAll("trust"), ["top-seller"]);
-  assert.equal(url.searchParams.get("condition"), "new");
+  assert.deepEqual(url.searchParams.getAll("trust"), []);
+  assert.equal(url.searchParams.get("condition"), null);
+  assert.equal(url.searchParams.has("listingType"), false);
+  assert.equal(url.searchParams.get("maxPrice"), "200000");
   assert.equal(url.searchParams.get("q"), "shoes");
   assert.equal(url.searchParams.get("sort"), "createdAt,desc");
   assert.equal(url.searchParams.has("page"), false);

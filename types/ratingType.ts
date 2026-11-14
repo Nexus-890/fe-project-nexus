@@ -1,22 +1,5 @@
-/** Provisional #212/#213 frontend contract; rating-service has no delivered OpenAPI yet. */
-export type CreateRatingRequest = {
-  orderId: string;
-  toUserId: string;
-  score: number;
-  comment: string | null;
-};
+import type { components } from "./ratingGeneratedType";
 
-export type Rating = CreateRatingRequest & {
-  id: string;
-  fromUserId: string;
-  createdAt: string;
-};
-
-export type SellerReputation = {
-  userId: string;
-  score: number;
-  trustLevel: "NEW" | "BASIC" | "TRUSTED" | "TOP";
-  totalTransaction: number;
-  successfulTransaction: number;
-  failedTransaction: number;
-};
+export type CreateRatingRequest = components["schemas"]["CreateRatingRequest"] & { comment: string | null };
+export type Rating = components["schemas"]["Rating"];
+export type SellerReputation = components["schemas"]["Reputation"];

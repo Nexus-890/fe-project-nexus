@@ -134,9 +134,11 @@ test("backend catalog service preserves paths, pagination and public auth policy
       .content,
     [],
   );
+  await getProducts({ q: "wireless & wired", sort: "price,asc", listingType: "auction", maxPrice: 200000, page: 0, size: 12 }, { context });
   assert.deepEqual(calls, [
     { path: "/api/v1/categories/tree", auth: null },
     { path: "/api/v1/products?categoryId=2&page=1&size=12", auth: null },
+    { path: "/api/v1/products?q=wireless+%26+wired&sort=price,asc&listingType=auction&maxPrice=200000&page=0&size=12", auth: null },
   ]);
 });
 test("VND formatting preserves decimal precision, grouping and invalid/null fallbacks", () => {

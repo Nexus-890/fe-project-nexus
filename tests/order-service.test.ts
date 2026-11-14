@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { test } from "node:test";
 import { isApiError } from "../configs/api";
-import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, getOrders, parseOrderDetail, parseOrderSummary } from "../service/orderService";
+import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, getOrders, parseOrderDetail, parseOrderSummary, reportReceiptIssue } from "../service/orderService";
 import type { ApiContext } from "../types/commonRequestType";
 import type { OrderFilters } from "../types/orderRequestType";
 
@@ -366,3 +366,38 @@ for (const status of [403, 409, 503]) {
     assert.equal(calls, 1);
   });
 }
+
+test("receipt issue sends a trimmed reason and requires the server's held delivered order", async () => {
+  const seen: Array<{ method?: string; path: string; auth?: string; body: string }> = [];
+  const held = { ...order, status: "DELIVERED", receiptIssueReason: "Missing item", receiptIssueReportedAt: "2026-11-14T08:00:00Z" };
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    seen.push({ method: request.method, path: request.url ?? "", auth: request.headers.authorization, body });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(envelope(held)));
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "receipt-issue-buyer" };
+  try {
+    const result = await reportReceiptIssue(orderId, "  Missing item  ", { context });
+    assert.equal(result.receiptIssueReason, "Missing item");
+    assert.equal(result.receiptIssueReportedAt, held.receiptIssueReportedAt);
+    assert.deepEqual(seen, [{ method: "POST", path: `/api/v1/orders/${orderId}/receipt-issue`, auth: "Bearer receipt-issue-buyer", body: JSON.stringify({ reason: "Missing item" }) }]);
+  } finally { await close(server); }
+  const respond = (data: unknown): ApiContext => ({ fetch: async () => new Response(JSON.stringify(envelope(data)), { headers: { "Content-Type": "application/json" } }) });
+  for (const data of [{ ...held, status: "COMPLETED" }, { ...order, status: "DELIVERED" }])
+    await assert.rejects(reportReceiptIssue(orderId, "Missing item", { context: respond(data) }), invalidResponse);
+});
+
+test("receipt issue rejects malformed hold pairs and invalid input before HTTP", async () => {
+  for (const value of [
+    { ...order, receiptIssueReason: "Missing item" },
+    { ...order, receiptIssueReportedAt: "2026-11-14T08:00:00Z" },
+    { ...order, receiptIssueReason: " ", receiptIssueReportedAt: "2026-11-14T08:00:00Z" },
+  ]) assert.throws(() => parseOrderDetail(value), invalidResponse);
+  let calls = 0;
+  const context: ApiContext = { fetch: async () => { calls++; return new Response(); } };
+  for (const reason of [" ", "x".repeat(501)])
+    await assert.rejects(reportReceiptIssue(orderId, reason, { context }), invalidResponse);
+  assert.equal(calls, 0);
+});

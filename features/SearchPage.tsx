@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useOptimistic, useTransition } from "react";
+import { useEffect, useOptimistic, useTransition } from "react";
 import { ChevronRight, House, X } from "lucide-react";
 import { useApiQuery } from "@/hooks/useApi";
 import { getCategoryTree, getProducts } from "@/service/catalogService";
@@ -12,6 +12,7 @@ import { CategoryFilterSidebar } from "@/components/CategoryFilterSidebar";
 import { Pagination } from "@/components/Pagination";
 import {
   CATALOG_PAGE_SIZE,
+  SEARCH_MAX_PRICE,
   findCategory,
   searchHref,
   type SearchState,
@@ -30,6 +31,11 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
     (current, patch: Partial<SearchState>) => ({ ...current, ...patch, page: 1 }),
   );
   const [, startTransition] = useTransition();
+  const unsupportedFilters = rawQuery.trust !== undefined || rawQuery.condition !== undefined || rawQuery.minRating !== undefined;
+  const canonicalHref = searchHref(readSearchState(rawQuery));
+  useEffect(() => {
+    if (unsupportedFilters) router.replace(canonicalHref, { scroll: false });
+  }, [unsupportedFilters, canonicalHref, router]);
   function changeSearch(patch: Partial<SearchState>) {
     startTransition(() => {
       setSearchState(patch);
@@ -49,6 +55,8 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
     ...(selectedCategory ? { categoryId: selectedCategory.id } : {}),
     ...(query ? { q: query } : {}),
     ...(sort !== "relevance" ? { sort } : {}),
+    ...(searchState.listingType !== "all" ? { listingType: searchState.listingType } : {}),
+    ...(searchState.maxPrice !== undefined && searchState.maxPrice < SEARCH_MAX_PRICE ? { maxPrice: searchState.maxPrice } : {}),
     page: page - 1,
     size: CATALOG_PAGE_SIZE,
   };
@@ -139,7 +147,7 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
               <select
                 aria-label="Sort by"
                 value={sort}
-                onChange={(event) => changeSearch({ sort: event.target.value })}
+                onChange={(event) => changeSearch({ sort: readSearchState({ sort: event.target.value }).sort })}
                 className="min-h-11 min-w-36 rounded-md border border-border bg-card px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="relevance">Relevance</option>
@@ -149,8 +157,6 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
               </select>
             </label>
           </div>
-
-          {query || sort !== "relevance" ? <p className="rounded-sm bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">Text search and sorting are previews. Results currently follow the selected category.</p> : null}
 
           {products.isSuccess && page > Math.max(1, totalPages) ? (
             <div

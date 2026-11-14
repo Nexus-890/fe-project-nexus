@@ -12,7 +12,7 @@ import {
   searchHref,
   type SearchState,
 } from "@/features/catalogUtils";
-import { SEARCH_MAX_PRICE, searchFilterGroups } from "@/features/searchUtils";
+import { SEARCH_MAX_PRICE, searchFilterGroups, readSearchState } from "@/features/searchUtils";
 import { CategoryTree } from "./CategoryTree";
 
 interface CategoryFilterSidebarProps {
@@ -67,7 +67,7 @@ export function CategoryFilterSidebar({
 
   function toggleFilter(key: "listingType" | "trust" | "condition", option: string) {
     if (key === "listingType") {
-      updateFilters({ listingType: option });
+      updateFilters({ listingType: readSearchState({ listingType: option }).listingType });
       return;
     }
     const selected = selectedFilters[key] ?? [];
@@ -164,8 +164,9 @@ export function CategoryFilterSidebar({
       <button type="button" aria-expanded={expanded} aria-controls="catalog-extra-filters" onClick={() => setExpanded((current) => !current)} className="flex min-h-11 w-full items-center justify-between rounded-sm border border-border px-3 text-sm lg:hidden">{expanded ? "Hide filters" : "More filters"}<ChevronDown size={16} className={expanded ? "rotate-180" : ""} aria-hidden="true" /></button>
       <div id="catalog-extra-filters" className={`${expanded ? "block" : "hidden"} space-y-5 lg:block`}>
       {searchFilterGroups.map((group) => (
-        <fieldset key={group.title} className="border-t border-border pt-4">
+        <fieldset key={group.title} className="border-t border-border pt-4" disabled={!!searchState && group.key !== "listingType"}>
           <legend className="mb-2 text-sm font-semibold">{group.title}</legend>
+          {searchState && group.key !== "listingType" ? <p className="mb-2 text-xs text-muted-foreground">Not available yet</p> : null}
           <div className="space-y-1">
             {group.options.map((option) => {
               const checked = group.key === "listingType"
@@ -178,7 +179,7 @@ export function CategoryFilterSidebar({
                 role={group.key === "listingType" ? "radio" : "checkbox"}
                 aria-checked={checked}
                 onClick={() => toggleFilter(group.key, option.value)}
-                className="flex min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-muted"
+                className="flex min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span
                   aria-hidden="true"
@@ -200,8 +201,8 @@ export function CategoryFilterSidebar({
         <input id="catalog-max-price" type="range" min={0} max={SEARCH_MAX_PRICE} step={100000} value={maxPrice} onChange={(event) => updateFilters({ maxPrice: Number(event.target.value) })} className="min-h-11 w-full accent-primary" />
         <div className="flex items-center justify-between text-xs text-muted-foreground"><span>0 ₫</span><span>50.000.000 ₫</span></div>
       </fieldset>
-      <fieldset className="border-t border-border pt-4"><legend className="mb-2 text-sm font-semibold">Seller rating</legend>{[4, 3, 2].map((rating) => <button key={rating} type="button" role="radio" aria-label={`${rating} stars and up`} aria-checked={minRating === rating} onClick={() => updateFilters({ minRating: minRating === rating ? 0 : rating })} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 text-left text-xs hover:bg-muted"><span className={`size-4 rounded-full border ${minRating === rating ? "border-4 border-primary" : "border-border"}`} aria-hidden="true" /><span className="flex text-warning" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < rating ? "currentColor" : "none"} />)}</span>& up</button>)}</fieldset>
-      <p className="rounded-sm bg-muted p-3 text-xs leading-5 text-muted-foreground">Category browsing is live. Other filters are a preview and do not change catalog results.</p>
+      <fieldset className="border-t border-border pt-4" disabled={!!searchState}><legend className="mb-2 text-sm font-semibold">Seller rating</legend>{searchState ? <p className="mb-2 text-xs text-muted-foreground">Not available yet</p> : null}{[4, 3, 2].map((rating) => <button key={rating} type="button" role="radio" aria-label={`${rating} stars and up`} aria-checked={minRating === rating} onClick={() => updateFilters({ minRating: minRating === rating ? 0 : rating })} className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 text-left text-xs hover:bg-muted"><span className={`size-4 rounded-full border ${minRating === rating ? "border-4 border-primary" : "border-border"}`} aria-hidden="true" /><span className="flex text-warning" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < rating ? "currentColor" : "none"} />)}</span>& up</button>)}</fieldset>
+      {!searchState ? <p className="rounded-sm bg-muted p-3 text-xs leading-5 text-muted-foreground">Category browsing is live. Other filters are a preview and do not change catalog results.</p> : null}
       </div>
 
       {!loading && !error ? (

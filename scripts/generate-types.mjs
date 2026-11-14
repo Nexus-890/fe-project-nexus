@@ -15,6 +15,8 @@ for (const [name, output] of [
   ["api-gateway", "gatewayGeneratedType.ts"],
   ["payment-service", "paymentGeneratedType.ts"],
   ["shipment-service", "shipmentGeneratedType.ts"],
+  ["rating-service", "ratingGeneratedType.ts"],
+  ["auction-service", "auctionGeneratedType.ts"],
 ]) {
   const spec = new URL(
     `../../be-project-nexus/docs/api/openapi/${name}.yaml`,

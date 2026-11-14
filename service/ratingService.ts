@@ -22,7 +22,7 @@ const parseRating = (data: unknown): Rating => {
   };
 };
 
-// Catalogue paths and persisted entities define this provisional boundary until #212/#213 publish OpenAPI.
+// Requests and models follow the delivered rating-service controller/OpenAPI.
 export const createRating = async (
   body: CreateRatingRequest,
   buyerId: string,

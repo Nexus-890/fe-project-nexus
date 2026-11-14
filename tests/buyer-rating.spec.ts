@@ -113,15 +113,39 @@ test("product and auction views show the seller score and trust level returned o
   const reputation = page.getByRole("region", { name: "Seller reputation", exact: true });
   await expect(reputation).toContainText("78/100");
   await expect(reputation).toContainText("Trusted");
+  const auctionId = "68000000-0000-4000-8000-000000000011";
+  const auctionProductId = "68000000-0000-4000-8000-000000000012";
+  const auction = {
+    id: auctionId, sellerId, productId: auctionProductId, skuId: "68000000-0000-4000-8000-000000000013",
+    title: "Auction reputation fixture", imageUrl: null, startingPrice: 100000, bidIncrement: 10000,
+    currentPrice: 150000, bidCount: 2, currency: "VND", status: "ACTIVE",
+    startAt: "2026-01-01T00:00:00Z", endAt: "2099-01-01T00:00:00Z", originalEndAt: "2099-01-01T00:00:00Z", extensionCount: 0,
+  };
+  await page.route(`**/api/v1/auctions/${auctionId}`, (route) => route.fulfill({ json: { code: 0, message: "response success", data: auction } }));
+  await page.route(`**/api/v1/products/${auctionProductId}`, (route) => route.fulfill({ json: {
+    code: 0, message: "response success", data: {
+      id: auctionProductId, name: "Auction reputation fixture", slug: "auction-fixture", categoryId: "electronics",
+      sellerId, status: "ACTIVE", minPrice: 150000, maxPrice: 150000,
+      description: "Verified auction item details", auctionEnable: true, images: [], skus: [],
+    },
+  } }));
   await page.route("**/api/v1/auctions?**", (route) => route.fulfill({ json: {
     code: 0, message: "response success", data: [{
-      id: "auction-1", sellerId, productId: "1", title: "Auction reputation fixture", imageUrl: null,
-      currentPrice: 150000, bidCount: 2, currency: "VND", endAt: "2099-01-01T00:00:00Z",
+      ...auction,
     }], page: { number: 0, size: 5, totalElements: 1, totalPages: 1 },
   } }));
   await page.goto("/");
   await expect(page.getByRole("region", { name: "Live auctions ending soon", exact: true })
     .getByRole("region", { name: "Seller reputation", exact: true })).toContainText("78/100");
+  await page.getByRole("link").filter({ hasText: "Auction reputation fixture" }).click();
+  await expect(page).toHaveURL(new RegExp(`/auctions/${auctionId}$`));
+  await expect(page.getByRole("heading", { name: "Auction reputation fixture", exact: true })).toBeVisible();
+  const roomSeller = page.getByRole("region", { name: "Seller information", exact: true });
+  await expect(roomSeller).toContainText("78/100");
+  await expect(roomSeller).toContainText("Trusted");
+  await expect(page.getByRole("region", { name: "Item details", exact: true })).toContainText("Verified auction item details");
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const calls = await (await request.get(`${simulation}/test/evidence`)).json();
   expect(calls.reputations.some((call: { userId: string; authorized: boolean }) => call.userId === sellerId && call.authorized)).toBe(true);
 });
