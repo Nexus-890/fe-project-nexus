@@ -1,0 +1,9 @@
+version: 1
+name: nexus-auction-api
+slug: nexus-auction-api
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

@@ -1,19 +1,18 @@
-"use client";
+import { Clock3, Zap } from "lucide-react";
+import { formatAuctionCountdown } from "../features/auctionRoomUtils";
 
-import { useEffect, useState } from "react";
-import { Clock3 } from "lucide-react";
-
-function AuctionCountdown({ closesAt }: { closesAt: string }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-  useEffect(() => {
-    const update = () => setRemaining(Math.max(0, Math.floor((Date.parse(closesAt) - Date.now()) / 1000)));
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [closesAt]);
-  const label = remaining === null ? "Live" : remaining === 0 ? "Ended" :
-    `${Math.floor(remaining / 3600).toString().padStart(2, "0")}:${Math.floor(remaining % 3600 / 60).toString().padStart(2, "0")}:${(remaining % 60).toString().padStart(2, "0")}`;
-  return <span className="inline-flex items-center gap-1 rounded-sm bg-foreground px-2 py-1 font-mono text-xs text-background"><Clock3 size={13} aria-hidden="true" />{label}</span>;
+function AuctionCountdown({ seconds, status, extensionCount }: { seconds: number; status: string; extensionCount: number }) {
+  const scheduled = status === "CREATED" || status === "SCHEDULED";
+  const ending = !scheduled && status === "ACTIVE" && seconds <= 300;
+  const finished = !scheduled && (status !== "ACTIVE" || seconds <= 0);
+  const Icon = ending ? Zap : Clock3;
+  return <div className={`flex flex-wrap items-center justify-between gap-3 rounded-sm px-4 py-4 ${ending ? "bg-danger text-white" : "bg-foreground text-background"}`}>
+    <div className="flex items-center gap-3"><Icon size={18} aria-hidden="true" /><div>
+      <p className="text-sm font-medium">{scheduled ? "Starts in" : finished ? "Bidding closed" : ending ? "Ending soon" : "Auction ends in"}</p>
+      <p className="mt-1 text-[11px] leading-4">{extensionCount > 0 ? `End time extended · ${extensionCount} ${extensionCount === 1 ? "extension" : "extensions"}` : "Bids in the final 5 minutes extend the end time."}</p>
+    </div></div>
+    <span role="timer" aria-label={scheduled ? "Time until auction starts" : "Time remaining"} className="font-mono text-2xl font-semibold tabular-nums">{formatAuctionCountdown(finished ? 0 : seconds)}</span>
+  </div>;
 }
 
 export default AuctionCountdown;

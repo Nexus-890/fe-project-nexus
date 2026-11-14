@@ -122,6 +122,13 @@ test("product and auction views show the seller score and trust level returned o
     startAt: "2026-01-01T00:00:00Z", endAt: "2099-01-01T00:00:00Z", originalEndAt: "2099-01-01T00:00:00Z", extensionCount: 0,
   };
   await page.route(`**/api/v1/auctions/${auctionId}`, (route) => route.fulfill({ json: { code: 0, message: "response success", data: auction } }));
+  await page.route(`**/api/v1/auctions/${auctionId}/state`, (route) => route.fulfill({ json: { code: 0, message: "response success", data: {
+    auctionId, currentPrice: auction.currentPrice, bidIncrement: auction.bidIncrement, bidCount: auction.bidCount,
+    endAt: auction.endAt, status: auction.status, leaderBidderName: null, serverTime: new Date().toISOString(),
+  } } }));
+  await page.route(`**/api/v1/auctions/${auctionId}/bids?**`, (route) => route.fulfill({ json: {
+    code: 0, message: "response success", data: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+  } }));
   await page.route(`**/api/v1/products/${auctionProductId}`, (route) => route.fulfill({ json: {
     code: 0, message: "response success", data: {
       id: auctionProductId, name: "Auction reputation fixture", slug: "auction-fixture", categoryId: "electronics",
@@ -140,10 +147,11 @@ test("product and auction views show the seller score and trust level returned o
   await page.getByRole("link").filter({ hasText: "Auction reputation fixture" }).click();
   await expect(page).toHaveURL(new RegExp(`/auctions/${auctionId}$`));
   await expect(page.getByRole("heading", { name: "Auction reputation fixture", exact: true })).toBeVisible();
-  const roomSeller = page.getByRole("region", { name: "Seller information", exact: true });
+  const roomSeller = page.getByRole("region", { name: "Auction seller", exact: true });
   await expect(roomSeller).toContainText("78/100");
   await expect(roomSeller).toContainText("Trusted");
-  await expect(page.getByRole("region", { name: "Item details", exact: true })).toContainText("Verified auction item details");
+  await expect(page.getByRole("region", { name: "Item Details", exact: true })).toContainText("Verified auction item details");
+  await expect(page.getByRole("button", { name: "Place Bid", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const calls = await (await request.get(`${simulation}/test/evidence`)).json();

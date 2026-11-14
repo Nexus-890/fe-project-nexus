@@ -31,10 +31,12 @@ the persisted aggregate; #213 owns score recomputation and policy.
 
 The completed-order UI checks all seller rating pages before enabling the modal,
 retains a submitted rating after reload, and refreshes after a duplicate conflict.
-`/auctions/[auctionId]` reads the actual auction snapshot and product details,
-shows seller information/score/trust, and is the destination of homepage auction
-cards. Product detail uses the same reputation component. A missing aggregate
-has an unavailable state; no fabricated score is shown. Bidding is outside #220.
+`/auctions/[auctionId]` now uses the canonical MR !169 room (`6550d254`),
+preserving bidding, SSE/polling, history, winner reconciliation and checkout.
+Seller information/score/trust is rendered in that same room and homepage cards
+enter it. Product detail uses the same reputation component. A missing aggregate
+has an unavailable state; no fabricated score is shown. The room's state/stream
+and winner API dependencies remain those documented by !169.
 
 ## Delivery wait and receipt issue hold
 
@@ -56,9 +58,11 @@ and automatic completion are blocked while that hold exists. Repeated reporting
 retains the original report. D11 owns investigation/resolution; this MR does not
 invent a dispute-resolution API. The UI shows the report and paused completion.
 
-V13 adds/backfills the delivery window: historical COMPLETED orders are unchanged;
+V14 adds/backfills the delivery window: historical COMPLETED orders are unchanged;
 legacy DELIVERED orders receive a fresh seven-day window at migration. New
-deliveries use the configured window. V14 adds the receipt hold. Later config
+deliveries use the configured window. V15 adds the receipt hold. V13 is the exact
+auction-reference uniqueness migration shared with MR !171 (`b17f3275`), so the
+two branches do not define competing V13 scripts. Later config
 changes do not move persisted deadlines. The UI only observes server
 status/deadlines; a local timer never completes an order.
 
@@ -91,7 +95,7 @@ The live browser harness and its dependency boundaries are described in
 stand-ins and manual event projection must not be reported as live
 Keycloak or Kafka integration. Final executed counts are recorded in the MR.
 
-Review verification on 2026-11-14:
+Verification at `19e97e0f` on 2026-11-14 (before the final review below):
 
 | Check | Result |
 | --- | --- |
@@ -109,5 +113,56 @@ Full default catalog verification remains limited by the unavailable Docker
 engine; its baseline failed container startup before this change. No assertions
 were weakened to bypass it. Next's installed version also reports an existing
 security advisory; unchanged retries completed the frontend gates. Framework
-upgrades, #213 recomputation, D11 resolution and email/payout transport remain
-separate work.
+upgrades, #213 recomputation and D11 resolution remain separate work.
+
+## Completion effects and final review
+
+The cross-service acceptance module reads actual committed commerce outbox
+envelopes and feeds production notification/payment consumers. DELIVERED and
+held orders produce no completion envelope, email or payout eligibility. Buyer
+confirmation and scheduled completion each produce one HTML receipt through the
+real JavaMail sender to a local TCP SMTP inbox. Replay and a refused SMTP attempt
+are exercised, retaining the persisted retry/attempt evidence.
+
+Payment now records a durable completion projection and creates one
+`payout_eligibility` row only when that completion agrees with a funded PAID
+instruction/session, successful normal payment, buyer/group/seller identities,
+version and absence of refund/cancellation. Early completion delivery waits for
+funding; the retry job rechecks the same conditions under the payment-group lock.
+V5 adds this projection and seller identity to the payment instruction. Historical
+instructions with no seller remain ineligible until a verified manifest replay
+provides that identity. `nexus.payment.payout-eligibility.cron` defaults to
+`*/30 * * * * *`.
+
+This is a durable handoff to #261, not a bank-transfer operation. #261 must
+revalidate financial eligibility when creating/executing its payout instruction;
+the queue row is not a claim that money has moved or that a later refund cannot
+occur. No bank accounts, fees or transfer provider are invented here. The module
+tests the committed outbox-to-consumer boundary directly; a separate embedded
+Kafka payment test proves PAID/delivery events do not qualify, completion does,
+and replay/concurrent delivery does not duplicate eligibility. SMTP provider,
+recipient lookup and bank execution are not live external integrations.
+
+See [completion acceptance](../../../be-project-nexus/infra/receipt-completion-acceptance/README.md)
+for reproducible commands and exact evidence boundaries. V13 is byte-for-byte
+identical to !171's migration; upgrades from both V12 and !171's V13 are tested.
+
+Final review verification on 2026-11-14:
+
+| Check | Result |
+| --- | --- |
+| Canonical !169 auction room with score/trust + bidding on the same route | 25/25 browser scenarios passed |
+| Order/rating browser regressions | 48/48 passed |
+| Frontend unit suite, lint, typecheck, generated type drift and production build | 300 passed; all gates passed |
+| Commerce clean verify on native PostgreSQL 18 | 460 tests, zero failures/errors, five existing skips |
+| V12 and !171 V13 upgrade compatibility | Both cases passed; exact V13 blob preserved |
+| Payment verify on a fresh native PostgreSQL database | 274 tests, zero failures/errors, three existing skips; embedded Kafka included |
+| Actual commerce outbox → notification SMTP / payment eligibility acceptance | 5/5 passed |
+| Config-service verify | 7 passed |
+
+The default Docker environment remains unavailable. PostgreSQL runs and embedded
+Kafka/SMTP evidence above are actual local tests; they do not claim a deployed
+broker relay or real bank execution. An initial dirty `target/classes` retained
+renamed Flyway scripts; `clean verify` resolves that build artifact and is the
+required migration check. Framework security reminders required unchanged Next
+command retries; no unrelated framework upgrade is included.

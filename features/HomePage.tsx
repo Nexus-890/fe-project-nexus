@@ -16,7 +16,7 @@ import { getCategoryTree, getProducts } from "@/service/catalogService";
 import { getActiveAuctions } from "@/service/auctionService";
 import { flattenCategories } from "@/features/catalogUtils";
 import SellerReputation from "./SellerReputation";
-import AuctionCountdown from "../components/AuctionCountdown";
+import AuctionCountdown from "../components/AuctionCardCountdown";
 
 const homeFilters = { page: 0, size: 10 };
 

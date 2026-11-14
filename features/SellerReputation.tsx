@@ -18,10 +18,10 @@ function SellerReputation({ sellerId, compact = false }: { sellerId?: string | n
 
   const wrapper = compact ? "border-t border-border px-3 py-3 text-xs" : "rounded-sm border border-border p-4 text-sm";
   if (!sellerId) return <p className={`${wrapper} text-muted-foreground`}>Seller reputation unavailable</p>;
-  if (auth.status === "anonymous") return <p className={`${wrapper} text-muted-foreground`}><Link href="/sign-in" className="underline">Sign in to see seller reputation</Link></p>;
+  if (auth.status === "anonymous") return <p className={`${wrapper} text-muted-foreground`}><Link href="/sign-in" className="inline-flex min-h-11 min-w-11 items-center underline">Sign in to see seller reputation</Link></p>;
   if (auth.status === "error") return <p className={`${wrapper} text-muted-foreground`}>Sign in to see seller reputation.</p>;
   if (auth.status !== "authenticated" || reputation.isPending) return <p role="status" className={`${wrapper} text-muted-foreground`}>Loading seller reputation…</p>;
-  if (reputation.isError) return <div className={wrapper}><p className="text-muted-foreground">Seller reputation is unavailable.</p><button type="button" disabled={reputation.isFetching} onClick={() => void reputation.refetch()} className="mt-1 min-h-9 text-primary underline">Retry reputation</button></div>;
+  if (reputation.isError) return <div className={wrapper}><p className="text-muted-foreground">Seller reputation is unavailable.</p><button type="button" disabled={reputation.isFetching} onClick={() => void reputation.refetch()} className="mt-1 min-h-11 min-w-11 text-primary underline">Retry reputation</button></div>;
   const current = reputation.data;
   return <section aria-label="Seller reputation" className={wrapper}>
     {!compact && <h2 className="mb-3 font-semibold">Seller reputation</h2>}
