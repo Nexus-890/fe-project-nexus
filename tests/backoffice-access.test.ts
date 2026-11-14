@@ -12,7 +12,7 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 });
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
-  assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Products", "Sales"]);
+  assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
   assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Event log", "Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
@@ -23,6 +23,13 @@ test("role menu and direct-route guards agree for seller, admin, support and mix
   assert.equal(canAccessBackofficePath("/backoffice/configuration", ["SUPPORT_STAFF"]), false);
   assert.equal(canAccessBackofficePath("/backoffice", ["BUYER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products-elsewhere", ["SELLER"]), false);
+  for (const path of ["/backoffice/auctions", "/backoffice/auctions/new", "/backoffice/auctions/id", "/backoffice/bank-accounts", "/backoffice/payouts"]) {
+    assert.equal(canAccessBackofficePath(path, ["SELLER"]), true);
+    assert.equal(canAccessBackofficePath(path, ["BUYER"]), false);
+    assert.equal(canAccessBackofficePath(path, ["SUPPORT_STAFF"]), false);
+  }
+  assert.equal(canAccessBackofficePath("/backoffice/admin-payouts", ["ADMIN"]), true);
+  assert.equal(canAccessBackofficePath("/backoffice/admin-payouts", ["SELLER"]), false);
 });
 
 test("role landing preserves allowed return destinations and replaces forbidden ones", () => {

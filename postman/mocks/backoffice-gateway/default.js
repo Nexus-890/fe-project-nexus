@@ -11,7 +11,7 @@ let products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence
 const envelope = (data) => ({ code: 0, message: "response success", data });
 function json(res, body, status = 200) { res.writeHead(status, { "Content-Type": status >= 400 ? "application/problem+json" : "application/json", "Cache-Control": "no-store" }); res.end(status === 204 ? undefined : JSON.stringify(body)); }
 const ok = (res, data, status = 200) => json(res, envelope(data), status);
-const problem = (res, status, detail) => json(res, { type: "urn:problem:backoffice-fixture", title: status === 403 ? "Forbidden" : "Request rejected", status, code: status === 409 ? "CATALOG_STATUS_CHANGE_INVALID" : status === 403 ? "FORBIDDEN" : "INVALID_PARAMETER", detail }, status);
+const problem = (res, status, detail, code = status === 409 ? "CATALOG_STATUS_CHANGE_INVALID" : status === 403 ? "FORBIDDEN" : "INVALID_PARAMETER") => json(res, { type: "urn:problem:backoffice-fixture", title: status === 403 ? "Forbidden" : "Request rejected", status, code, detail }, status);
 function list(res, data, url) { const page = Number(url.searchParams.get("page") || 0), size = Number(url.searchParams.get("size") || 10); return json(res, { ...envelope(data.slice(page * size, (page + 1) * size)), page: { number: page, size, totalElements: data.length, totalPages: Math.ceil(data.length / size) } }); }
 const bodyOf = (req) => typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 const findSku = (id) => products.flatMap((product) => product.skus).find((sku) => sku.id === id);
@@ -22,6 +22,11 @@ const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Ma
 const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key]) => key !== "costPrice"));
 const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
+const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus };
+const auctionFixture = require("./auctions.js").createAuctionFixture(fixtureOptions);
+const offerFixture = require("./offers.js").createOfferFixture(fixtureOptions);
+const payoutFixture = require("./payouts.js").createPayoutFixture(fixtureOptions);
+const sellerFixtures = [auctionFixture, offerFixture, payoutFixture];
 async function session(req, res, url) {
   const upstream = await fetch(`${origin}/session${url.pathname}`, { method: req.method, headers: { "Content-Type": "application/json", Origin: req.headers.origin || "http://127.0.0.1:3110", "X-Requested-With": req.headers["x-requested-with"] || "", ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}) }, ...(req.method === "POST" ? { body: typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}) } : {}) });
   res.statusCode = upstream.status;
@@ -31,12 +36,24 @@ async function session(req, res, url) {
 }
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3110"); res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Idempotency-Key"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Idempotency-Key, If-Match"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
-  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; return json(res, {}); }
+  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; sellerFixtures.forEach((fixture) => fixture.reset()); return json(res, {}); }
+  if (path === "/test/seller-seed" && req.method === "POST") {
+    const id = "a2250000-0000-4000-8000-000000000001", skuId = "a2250000-0000-4000-8000-000000000002";
+    products = [{ id, sellerId: seller, name: "Studio Wireless Headphones", slug: `demo-${id}`, categoryId: category, status: "ACTIVE", description: "Seller operations fixture", auctionEnable: true,
+      images: [{ id: "a2250000-0000-4000-8000-000000000003", imageUrl: `${origin}/api/test/image.svg`, sortOrder: 0 }],
+      skus: [{ id: skuId, productId: id, skuCode: "STUDIO-SILVER", color: "Silver", size: "Standard", price: 4800000, status: "ACTIVE", shippingParcel: { weightGrams: 1000, lengthCm: 20, widthCm: 20, heightCm: 10 } }] }];
+    balances[skuId] = { skuId, warehouseId: warehouse, total: 20, available: 20, reserved: 0, unavailable: 0 };
+    orders = ["PAID", "COMPLETED"].map((status, index) => ({ orderId: `a2250000-0000-4000-8000-00000000001${index}`, orderNumber: `NX-SELLER-${index + 1}`, userId: "68000000-0000-4000-8000-000000000003", sellerId: seller, orderType: "STANDARD", status,
+      createdAt: index ? "2026-10-01T00:00:00Z" : "2026-11-14T03:00:00Z", totalAmount: 4800000, recipientName: "Nguyen Thi Lan", phoneNumber: "0901234567",
+      items: [{ orderItemId: randomUUID(), productId: id, skuId, productName: "Studio Wireless Headphones", skuCode: "STUDIO-SILVER", imageUrl: null, quantity: 1, unitPrice: 4800000, totalPrice: 4800000 }] }));
+    sellerFixtures.forEach((fixture) => fixture.reset());
+    return ok(res, { productId: id, skuId });
+  }
   if (path === "/test/control") { const body = bodyOf(req); rejectPublish = body.rejectPublish ?? rejectPublish; profileRole = body.profileRole ?? null; return json(res, {}); }
   // Explicit test setup for a legacy persisted SKU that predates parcel metadata.
   if (path === "/test/legacy-product" && req.method === "POST") {
@@ -61,6 +78,7 @@ const server = http.createServer(async (req, res) => {
   const operation = { method: req.method, path: `/api${path}`, role: roles.join(","), query: Object.fromEntries(url.searchParams) };
   if (req.method === "POST" && /^\/v1\/products\/[^/]+\/skus$/.test(path) || req.method === "PUT" && /^\/v1\/skus\/[^/]+$/.test(path) || req.method === "POST" && path === "/v1/inventory/intake") operation.body = bodyOf(req);
   evidence.push(operation);
+  for (const fixture of sellerFixtures) if (fixture.handle(req, res, url, claims)) return;
   if (path === "/v1/users/me") { if (!claims) return problem(res, 401, "Sign in first"); const actualRole = roles.includes("SELLER") ? "Seller" : has("ADMIN") ? "Admin" : has("SUPPORT_STAFF") ? "Support" : "Buyer"; return ok(res, { id: claims.sub, email: `${actualRole.toLowerCase()}@nexus.local`, phone: "0901234567", fullName: `Demo ${actualRole}`, gender: "OTHER", address: "1 Demo Street", dateOfBirth: "2000-01-01", roles: profileRole || roles, status: "ACTIVE", createdAt: "2026-11-01T00:00:00Z" }); }
   if (path === "/v1/categories/tree") return list(res, [{ id: category, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }], url);
   if (path === "/v1/products/mine") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); return list(res, products.filter((product) => product.sellerId === claims.sub).map(withPrice), url); }
@@ -106,7 +124,7 @@ const server = http.createServer(async (req, res) => {
   if (path.startsWith("/v1/shipping/")) return list(res, [{ code: path.endsWith("provinces") ? "202" : "20308", name: path.endsWith("provinces") ? "Ho Chi Minh City" : "Ward 4" }], url);
   if (path === "/v1/checkout/preview") { const cart = getCart(claims.sub); const items = cart.items.map((item) => ({ itemId: item.id, productId: item.productId, skuId: item.skuId, quantity: item.quantity, unitPrice: item.unitPrice, lineTotal: item.unitPrice * item.quantity })); const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0); return ok(res, { items, subtotal, shippingFee: 10000, taxAmount: 0, discountAmount: 0, total: subtotal + 10000, issues: [] }); }
   if (path === "/v1/orders" && req.method === "POST") { if (!has("BUYER")) return problem(res, 403, "Buyer required"); const cart = getCart(claims.sub), address = bodyOf(req).shippingAddress; const id = randomUUID(), orderId = randomUUID(); const items = cart.items.map((item) => { const sku = findSku(item.skuId), product = products.find((p) => p.id === item.productId); return { orderItemId: randomUUID(), productId: product.id, skuId: sku.id, productName: product.name, skuCode: sku.skuCode, imageUrl: product.images[0]?.imageUrl || null, quantity: item.quantity, unitPrice: sku.price, totalPrice: sku.price * item.quantity }; }); const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 10000); const order = { orderId, orderNumber: "NX-BACKOFFICE-DEMO", userId: claims.sub, sellerId: seller, orderType: "STANDARD", status: "PENDING", createdAt: new Date().toISOString(), totalAmount, items, recipientName: address.recipientName, phoneNumber: address.phoneNumber, orderGroupId: id }; orders.push(order); groups[id] = { orderGroupId: id, status: "PENDING", totalAmount, currency: "VND", dueAt: new Date(Date.now() + 3600000).toISOString(), orders: [order] }; cart.items = []; return ok(res, groups[id], 201); }
-  if (path === "/v1/orders/sales") { if (!has("SELLER")) return problem(res, 403, "Seller required"); return list(res, orders.filter((order) => order.sellerId === claims.sub && (!url.searchParams.has("status") || order.status === url.searchParams.get("status"))), url); }
+  if (path === "/v1/orders/sales") { if (!has("SELLER")) return problem(res, 403, "Seller required"); return list(res, orders.filter((order) => order.sellerId === claims.sub && (!url.searchParams.has("status") || order.status === url.searchParams.get("status")) && (!url.searchParams.has("from") || Date.parse(order.createdAt) >= Date.parse(url.searchParams.get("from"))) && (!url.searchParams.has("to") || Date.parse(order.createdAt) <= Date.parse(url.searchParams.get("to")))), url); }
   if (path.startsWith("/v1/orders/groups/")) return ok(res, groups[path.split("/").at(-1)]);
   if (path === "/v1/orders") return list(res, orders.filter((order) => order.userId === claims.sub), url);
   if (path === "/v1/payments") { const group = groups[bodyOf(req).orderGroupId]; return ok(res, { sessionId: randomUUID(), qrImageUrl: `${origin}/api/test/image.svg`, bankAccount: "SIMULATION ONLY", amount: group.totalAmount, memoCode: "SIMULATION", transferContent: "SIMULATION ONLY - no bank transfer", expiresAt: group.dueAt, serverNow: new Date().toISOString() }, 201); }

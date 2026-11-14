@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: Proposed seller second-chance offers
+  version: 0.1.0-draft
+  description: >-
+    FE proposal for #225/#268, pending the backend owner of #208. These routes,
+    permissions, version precondition and DTOs are not delivered by develop.
+    This document does not change the endpoint catalogue, gateway policy or
+    generated delivered DTOs. Production calls fail visibly when unavailable.
+    The explicit local Postman simulation models this proposal only.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auctions/{id}/second-chance-offers:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getSellerSecondChanceOffers
+      summary: Inspect the next eligible bidder and offer history
+      description: >-
+        Proposed role SELLER plus AUCTION.UPDATE and owner-only service enforcement.
+        Read-only; sends no email or notification and creates no offer. Only
+        PAYMENT_TIMEOUT auctions may offer. The server selects the next eligible
+        bidder at that bidder's own highest valid bid, excluding the timed-out
+        original winner and all previously offered bidders. It never reuses the
+        original winning price. One OPEN offer at most. canOffer is true exactly
+        when candidate is non-null; an OPEN or ACCEPTED offer makes candidate null.
+        Offers are newest first. version changes for any candidate/offer transition.
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      operationId: sendSellerSecondChanceOffer
+      summary: Explicitly offer to the reviewed next bidder
+      description: >-
+        Bodyless POST, with the same proposed role/ownership rule as GET. Never
+        accepts a bidder ID, price or email from the caller. If-Match is the quoted
+        version from GET. Within one transaction, recheck PAYMENT_TIMEOUT,
+        candidate/version and absence of an OPEN/ACCEPTED offer; create one OPEN
+        offer at that bidder's own highest bid with expiresAt=offeredAt+24 hours;
+        write exactly one notification intent only for that bidder. Return the
+        updated complete state with a higher version. Reusing the old version
+        returns 412, so a lost response requires GET reconciliation before another
+        explicit confirmation. No automatic POST retry.
+        Decline/expiry closes the offer and lets the seller explicitly choose to
+        offer to the following eligible bidder; neither transition sends another
+        email. Accept creates one order at the offered amount with a fresh payment
+        deadline, and the auction becomes SETTLED only after that order is paid.
+        The timed-out original winner cannot reclaim the auction. Buyer responses,
+        order creation, scheduling, settlement and notifications belong to #208
+        and its related backend issues; this seller UI implements no such writes.
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Quoted nonnegative state version reviewed by the seller, for example '"0"'.
+          schema: {type: string, pattern: '^"[0-9]+"$'}
+      responses:
+        '201': {$ref: '#/components/responses/State'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Auction not eligible, open offer exists, accepted offer exists or no next bidder. No offer/notification is created.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '412':
+          description: The reviewed version/candidate is stale. Refetch and require fresh confirmation; no write or notification.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    State:
+      description: Complete owner-scoped state; numeric wire amounts in VND.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message, data]
+            properties:
+              code: {type: integer, example: 0}
+              message: {type: string, example: response success}
+              data: {$ref: '#/components/schemas/OfferState'}
+    BadRequest:
+      description: Invalid ID, version header or unexpected request body.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Unauthorized:
+      description: Bearer missing or invalid.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Forbidden:
+      description: Role, proposed AUCTION.UPDATE privilege or auction ownership missing.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    NotFound:
+      description: Auction missing, or this proposed capability has not been delivered.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Unavailable:
+      description: Service unavailable; no successful outcome may be inferred.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Candidate:
+      type: object
+      required: [bidderId, displayName, amount]
+      properties:
+        bidderId: {type: string, format: uuid}
+        displayName: {type: string, minLength: 1, description: Server-provided safe buyer label; not an email address.}
+        amount: {type: number, minimum: 0.01, maximum: 9999999999999.99, multipleOf: 0.01, description: This bidder's own highest valid bid in VND.}
+    Offer:
+      allOf:
+        - {$ref: '#/components/schemas/Candidate'}
+        - type: object
+          required: [id, status, offeredAt, expiresAt, respondedAt, orderId, paymentDueAt]
+          properties:
+            id: {type: string, format: uuid}
+            status: {type: string, enum: [OPEN, ACCEPTED, DECLINED, EXPIRED]}
+            offeredAt: {type: string, format: date-time}
+            expiresAt: {type: string, format: date-time, description: Exactly 24 hours after offeredAt.}
+            respondedAt: {type: string, format: date-time, nullable: true, description: Non-null for ACCEPTED/DECLINED only.}
+            orderId: {type: string, format: uuid, nullable: true, description: Non-null for ACCEPTED only.}
+            paymentDueAt: {type: string, format: date-time, nullable: true, description: Fresh deadline later than accepted respondedAt; ACCEPTED only.}
+    OfferState:
+      type: object
+      required: [auctionId, version, canOffer, candidate, offers]
+      properties:
+        auctionId: {type: string, format: uuid}
+        version: {type: integer, minimum: 0, maximum: 9007199254740991}
+        canOffer: {type: boolean}
+        candidate:
+          nullable: true
+          allOf:
+            - {$ref: '#/components/schemas/Candidate'}
+        offers:
+          type: array
+          description: Unique offer IDs and bidder IDs; at most one OPEN or ACCEPTED offer across the list.
+          items: {$ref: '#/components/schemas/Offer'}
+    Problem:
+      type: object
+      required: [title, status, detail]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        code: {type: string}

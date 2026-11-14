@@ -22,7 +22,14 @@ export const hasBackofficeAccess = (roles: readonly BackofficeRole[]) =>
 
 export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenuItem[] {
   const items: BackofficeMenuItem[] = [];
-  if (roles.includes("SELLER")) items.push({ label: "Products", href: "/backoffice/products" }, { label: "Sales", href: "/backoffice/sales" });
+  if (roles.includes("SELLER")) items.push(
+    { label: "Products", href: "/backoffice/products" },
+    { label: "Auctions", href: "/backoffice/auctions" },
+    { label: "Sales", href: "/backoffice/sales" },
+    { label: "Bank accounts", href: "/backoffice/bank-accounts" },
+    { label: "Payout history", href: "/backoffice/payouts" },
+  );
+  if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/admin-payouts" });
   if (roles.includes("ADMIN")) items.push({ label: "Stock", href: "/backoffice/stock" }, { label: "Categories", href: "/backoffice/categories", placeholder: true });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users", placeholder: true },
@@ -39,7 +46,8 @@ export function canAccessBackofficePath(path: string, roles: readonly Backoffice
   try { pathname = decodeURIComponent(new URL(path, "https://nexus.invalid").pathname).replace(/\/+$/, "") || "/"; }
   catch { return false; }
   if (pathname === "/backoffice" || pathname === "/backoffice/forbidden") return hasBackofficeAccess(roles);
-  return backofficeMenu(roles).some((item) => pathname === item.href || item.href === "/backoffice/products" && pathname.startsWith(`${item.href}/`));
+  return backofficeMenu(roles).some((item) => pathname === item.href ||
+    ["/backoffice/products", "/backoffice/auctions"].includes(item.href) && pathname.startsWith(`${item.href}/`));
 }
 
 export function resolveRoleLanding(returnTo: string | null | undefined, roles: readonly BackofficeRole[]): string {

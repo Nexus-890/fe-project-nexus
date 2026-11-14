@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSellerSales } from "../service/sellerService";
 import { isApiError } from "../configs/api";
+import { sellerSalesDates } from "../features/sellerSalesFilters";
 
 const id = "a2000000-0000-4000-8000-000000000001";
 const itemId = "a2000000-0000-4000-8000-000000000002";
@@ -30,4 +31,22 @@ test("historical missing contacts stay unavailable; malformed contact, SKU and q
   for (const bad of [{ ...order, recipientName: 10 }, { ...order, phoneNumber: {} },
     { ...order, items: [{ ...order.items[0], skuCode: null }] }, { ...order, items: [{ ...order.items[0], quantity: 0 }] }])
     await assert.rejects(getSellerSales(0, undefined, { context: { fetch: async () => result(bad) } }), invalid);
+});
+
+test("sales dates include entire Vietnam calendar days and serialize positive timezone offsets", async () => {
+  const dates = sellerSalesDates("2026-11-01", "2026-11-14");
+  assert.deepEqual(dates, { from: "2026-11-01T00:00:00.000+07:00", to: "2026-11-14T23:59:59.999+07:00" });
+  for (const [from, to] of [["2026-11-15", "2026-11-14"], ["2026-02-30", ""], ["bad", ""]]) assert.equal(sellerSalesDates(from, to), null);
+  assert.deepEqual(sellerSalesDates("", ""), {});
+  await getSellerSales(0, "PAID", { context: { fetch: async (input) => {
+    const url = new URL(String(input), "http://fixture.test");
+    assert.equal(url.searchParams.get("from"), dates!.from);
+    assert.equal(url.searchParams.get("to"), dates!.to);
+    assert.match(url.search, /%2B07(?::|%3A)00/);
+    assert.equal(url.searchParams.has("sellerId"), false);
+    return result(order);
+  } } }, dates!);
+  let called = false;
+  await assert.rejects(getSellerSales(0, undefined, { context: { fetch: async () => { called = true; return result(order); } } }, { from: "2026-11-15T00:00:00Z", to: "2026-11-14T00:00:00Z" }), invalid);
+  assert.equal(called, false);
 });

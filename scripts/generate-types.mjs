@@ -9,6 +9,7 @@ for (const [name, output] of [
   ["user-service", "userGeneratedType.ts"],
   ["catalog-service", "catalogGeneratedType.ts"],
   ["inventory-service", "inventoryGeneratedType.ts"],
+  ["auction-service", "auctionGeneratedType.ts"],
   ["commerce-service", "commerceGeneratedType.ts"],
   ["notification-service", "notificationGeneratedType.ts"],
   // refresh-token cookie endpoints of the gateway (#252)

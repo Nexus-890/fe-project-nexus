@@ -8,8 +8,31 @@ purpose:
   unblocks: >-
     Browser verification of JWT role landing/access, seller product/SKU/image publication,
     administrator stock intake and a Buyer checkout whose explicit test-only callback
-    makes the simulated sale PAID. The frontend under test is never a simulation member.
+    makes the simulated sale PAID. Seller #225 extends this with delivered auction/sales
+    interactions and explicitly proposed #208/#261 offer/bank/payout stand-ins.
+    The frontend under test is never a simulation member.
 assumptions:
+  - id: seller-225-caller-against-explicit-http
+    status: supported
+    claim: The real frontend can manage auctions, combine sales filters, explicitly send an offer and display masked bank accounts and payouts against these local HTTP stand-ins.
+    reason: Browser cases use the actual Next frontend and shared HTTP boundary; fixtures keep related state and expose test-only transitions separately from production UI.
+    verification: On 2026-11-14 the four new browser scenarios passed, including create/edit/schedule/cancel, accelerated three-minute lifecycle, full Vietnam calendar-day filters, no notification intent before explicit offer confirmation, own-bid pricing/decline progression/accepted order/settled history, masked account creation and administrator payout appearing in seller history. Desktop1440/mobile375 screenshots were reviewed without document overflow. These are caller observations against stand-ins, not real service guarantees.
+    source: tests/seller-operations.spec.ts; postman/mocks/backoffice-gateway/auctions.js; postman/mocks/backoffice-gateway/offers.js; postman/mocks/backoffice-gateway/payouts.js; docs/features/seller-operations.md
+    updated_at: '2026-11-14'
+  - id: seller-225-live-proposed-contracts
+    status: unknown
+    claim: Backend second-chance offers and bank/payout services implement the paths, schemas, transactional behavior and authorization in the frontend proposals.
+    reason: Origin/develop 09b3cf6f contains no delivered #208/#261 controller or OpenAPI. The local mocks were built from the issue criteria and explicit frontend proposals; they cannot establish backend behavior.
+    verification: On 2026-11-14 inspected delivered specs/controllers and implemented production API calls with visible unavailable errors and no fixture fallback. Actual notification timing, expiry/stock return, acceptance/payment/settlement, bank verification, payout uniqueness/idempotency and cross-seller authorization still require delivered backend/live integration checks. Owner mock search was skipped because the installed Postman CLI has no status command; nothing was published.
+    source: docs/api/seller-offers.openapi.yaml; docs/api/seller-payouts.openapi.yaml; service/sellerOfferService.ts; service/payoutService.ts
+    updated_at: '2026-11-14'
+  - id: oidc-fixture-concurrent-rotation-20261114
+    status: supported
+    claim: Independent local fixture sessions survive concurrent refresh rotation while used refresh tokens remain invalid.
+    reason: Serializing fixture requests prevents non-atomic pm.state snapshot updates from overwriting another session's rotated token. This changes only the local provider stand-in.
+    verification: On 2026-11-14 regression testing found a pre-existing race during the multi-account demo. The exact-source concurrent-session unit test reproduces lost rotation without the queue and passes with it: both sessions refresh twice with original role/subject and all consumed tokens return invalid_grant. Production authentication and token reuse policy are unchanged.
+    source: postman/mocks/oidc-keycloak/default.js; tests/oidc-provider-concurrency.test.ts
+    updated_at: '2026-11-14'
   - id: flat-jwt-roles-determine-workspace
     status: supported
     claim: Back-office menus and access read the access token's flat roles claim and ignore privileges or conflicting profile roles.
@@ -66,6 +89,10 @@ assumptions:
       postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts
     updated_at: '2026-11-11'
 fingerprints:
+  - id: seller-225-20261114
+    date: '2026-11-14'
+    commit: origin/develop 09b3cf6f with uncommitted seller225 frontend and explicit simulation changes
+    cli: Postman 1.73.0
   - id: review158-live-acceptance-20261111
     date: '2026-11-11'
     commit: develop fa659a90 merged with the reduced back-office task
