@@ -20,7 +20,8 @@
     "test:account": "node scripts/test-browser.mjs --config playwright.account.config.ts",
     "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts",
     "test:checkout": "node scripts/test-browser.mjs --config playwright.checkout.config.ts",
-    "test:payment": "node scripts/test-browser.mjs --config playwright.payment.config.ts"
+    "test:payment": "node scripts/test-browser.mjs --config playwright.payment.config.ts",
+    "test:auction": "node scripts/test-browser.mjs --config playwright.auction.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

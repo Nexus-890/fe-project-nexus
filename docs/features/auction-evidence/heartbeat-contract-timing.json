@@ -1,0 +1,13 @@
+{
+  "observedMs": 32041,
+  "connectionId": 9,
+  "heartbeatAt": [
+    1794659708736,
+    1794659723748
+  ],
+  "reconciliationReadAt": [
+    1794659708903,
+    1794659723910
+  ],
+  "evidence": "Actual local Postman HTTP SSE emissions; no live backend"
+}

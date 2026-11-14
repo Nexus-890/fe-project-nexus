@@ -21,6 +21,7 @@ for (const [name, output] of [
   ["shipment-service", "shipmentGeneratedType.ts"],
   ["account-210-snapshot", "account210GeneratedType.ts"],
   ["seller-application-210-proposal", "sellerApplication210GeneratedType.ts"],
+  ["auction-service", "auctionGeneratedType.ts"],
 ]) {
   const integration = integrationSpecs[name];
   const spec = new URL(
