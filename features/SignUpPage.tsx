@@ -19,6 +19,7 @@ import { Label } from "@/components/label";
 import { Separator } from "@/components/separator";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 import type { ApiError } from "@/types/commonResponseType";
 import type { SignUpRequest } from "@/types/authRequestType";
 import { signUpSchema, type SignUpFormValues } from "./signUpSchema";
@@ -179,10 +180,14 @@ function SignUpPage() {
     };
     const result = await registerAccount(payload);
     if (!result.ok) {
+      if (result.error.code === "USER_VERIFICATION_EMAIL_FAILED") {
+        router.push(`/check-email?email=${encodeURIComponent(payload.email)}&delivery=failed`);
+        return;
+      }
       setFormError(mapServerError(result.error, setError));
       return;
     }
-    router.push(`/check-email?email=${encodeURIComponent(payload.email)}`);
+    router.push(ACCOUNT_EXTENSIONS_ENABLED ? `/check-email?email=${encodeURIComponent(payload.email)}` : "/sign-in");
   }
 
   return (

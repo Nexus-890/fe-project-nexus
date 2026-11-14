@@ -69,9 +69,69 @@ safe profile referrer and mobile layout. Its account-console navigation is
 intercepted by the test; it does not exercise the provider's actual pages.
 The first browser attempt ended when Next stopped its dev server for its
 one-time dependency advisory; rerunning the same command passed.
-The Docker daemon was unavailable, so
-the real account-console return, email delivery, policy page rendering and
-expired/single-use reset links remain live verification requirements.
+At that baseline the Docker daemon was unavailable, so the provider's live
+behavior had not been exercised. The native checks below now cover email
+delivery, policy errors, reset-link use/expiry and the provider's return referrer;
+frontend/gateway restoration still requires its own live check.
+
+## Native live verification on 2026-11-14
+
+`be-project-nexus/infra/local-dev/keycloak/test-account-password.py` passed with
+exit code 0 against official standalone **Keycloak 26.7.5**, **Mailpit 1.31.0**
+and Java 21 on Windows. Docker Desktop could not start because its inference
+manager could not remove a stale `dockerInference` socket; no Docker settings or
+existing database were changed. The native test avoids that dependency.
+
+The runner copies an unpacked Keycloak distribution into a private temporary
+directory, imports a disposable copy of the committed realm and Nexus theme,
+replaces demo users with a randomly generated test user, and starts both services
+on random loopback ports. Only the disposable copy's SMTP host/port changes.
+Keycloak uses its embedded development database, so this does not test
+PostgreSQL or any Spring service. Administrator credentials, user passwords,
+action tokens, mailbox and realm data stay in the temporary test environment;
+the runner stops only its own process trees and removes that environment even
+on failure. It does not read `.env` or use existing Keycloak accounts.
+
+The six live result groups passed:
+
+- Isolated Keycloak and Mailpit started on loopback.
+- The real **Forgot password?** form delivered a password-reset email through
+  SMTP into Mailpit. Login/reset pages served the Nexus stylesheet, logo and font.
+- The reset form rejected a short password with the existing minimum-length
+  policy message on the themed page. A valid reset authenticated through real
+  Authorization Code + PKCE; the original password then failed. Reopening the
+  consumed email link did not present a reusable password-reset form.
+- The real authenticated account console accepted `referrer=nexus-web` and
+  retained its validated `http://localhost:3000/profile` return destination.
+- An actual expired `UPDATE_PASSWORD` action token displayed the Nexus message
+  telling the user to choose **Forgot password?** to request a new email. The
+  Admin API issued this single test token with a two-second lifespan; the
+  committed realm's normal lifespan was not shortened.
+- A real verification email arrived in Mailpit. Opening it and following
+  Keycloak's required confirmation for a fresh browser changed the disposable
+  user's `emailVerified` flag from false to true.
+
+The test uses real Keycloak/Mailpit HTTP and SMTP, without stand-ins. It does
+**not** exercise frontend/gateway restoration after returning from the account
+console, browser execution of its **Update** control, #210 registration/resend,
+or #210's verification policy. Those remain separate integration acceptance
+requirements. The frontend password-button destination is covered by the
+profile browser test described above.
+
+To repeat, unpack the official
+[Keycloak 26.7.5 distribution](https://github.com/keycloak/keycloak/releases/tag/26.7.5)
+and [Mailpit 1.31.0 executable](https://github.com/axllent/mailpit/releases/tag/v1.31.0),
+then run from the repository root with Java 21 on PATH:
+
+```powershell
+python be-project-nexus/infra/local-dev/keycloak/test-account-password.py `
+  --keycloak-home 'C:\path\to\keycloak-26.7.5' `
+  --mailpit 'C:\path\to\mailpit.exe'
+```
+
+Use the bundled Python executable if the Windows `python` alias is unavailable.
+The script requires no third-party Python packages. Its `--help`, Python syntax
+check and `git diff --check` also passed after the live run.
 
 Upstream compatibility references: [Keycloak 26.7.5 login theme](https://github.com/keycloak/keycloak/tree/26.7.5/themes/src/main/resources/theme/keycloak.v2/login),
 [account security route](https://github.com/keycloak/keycloak/blob/26.7.5/js/apps/account-ui/src/routes.tsx)

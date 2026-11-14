@@ -237,7 +237,7 @@ test("a persistently rejected profile is renewed and retried once before clearin
   expect(await evidence(request, "keycloak")).toMatchObject({ refreshRequests: 5, logouts: 0 });
 });
 
-test("registration accepts the backend 201 user envelope and asks the user to check email", async ({ page, request }) => {
+test("develop registration accepts the backend 201 user envelope and continues to sign in", async ({ page, request }) => {
   await page.goto("/sign-up");
   await page.getByLabel("Full Name", { exact: true }).fill("New Buyer");
   await page.getByLabel("Email", { exact: true }).fill("new-buyer@nexus.local");
@@ -254,10 +254,30 @@ test("registration accepts the backend 201 user envelope and asks the user to ch
   const registration = await registrationResponse;
   expect(registration.status()).toBe(201);
   expect(await registration.json()).toMatchObject({ code: 0, message: "response success", data: { email: "new-buyer@nexus.local", fullName: "New Buyer" } });
-  await expect(page).toHaveURL(`${app}/check-email?email=new-buyer%40nexus.local`);
-  await expect(page.getByRole("heading", { name: "Check your email", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue("new-buyer@nexus.local");
-  await expect(page.getByRole("link", { name: "Continue to sign in", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(`${app}/sign-in`);
+  await expect(page.getByRole("button", { name: "Continue to sign in", exact: true })).toBeVisible();
   expect(await evidence(request, "api")).toMatchObject({ registrations: 1, loginRequests: 0, meRequests: 0, passwordLeaks: 0 });
   expect(await evidence(request, "keycloak")).toMatchObject({ authorizations: 0, codeExchanges: 0 });
+});
+
+test("develop disables undelivered account operations and leaves a sign-in path", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (/\/phone\/verification|\/verification-email|\/users\/me\/addresses|\/sellers\/applications/.test(request.url())) requests.push(request.url());
+  });
+  await page.goto("/check-email?email=buyer%40nexus.local");
+  await expect(page.getByRole("link", { name: "Continue to sign in", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Resend/ })).toHaveCount(0);
+  await beginSignIn(page, "/profile");
+  await submitProvider(page);
+  await expect(page).toHaveURL(`${app}/profile`);
+  await expect(page.getByRole("heading", { name: "Personal Information", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send verification code", exact: true })).toHaveCount(0);
+  await page.goto("/addresses");
+  await expect(page.getByText("Saved addresses are not available yet.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Hi Fixture Buyer", exact: true })).toBeVisible();
+  await page.goto("/become-a-seller");
+  await expect(page.getByRole("link", { name: "Hi Fixture Buyer", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit application", exact: true })).toHaveCount(0);
+  expect(requests).toEqual([]);
 });

@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 export const sellerApplicationSchema = z.object({
-  shopName: z.string().trim().min(2, "Shop name must have at least 2 characters.").max(150, "Shop name must have at most 150 characters."),
-  description: z.string().trim().min(10, "Tell us about your shop in at least 10 characters.").max(1000, "Shop description must have at most 1,000 characters."),
+  companyName: z.string().trim().min(2, "Company name must have at least 2 characters.").max(150, "Company name must have at most 150 characters."),
+  phone: z.string().trim().transform((value) => value.replace(/[\s()-]/g, "")).pipe(z.string().regex(/^\+?\d{7,15}$/, "Enter a valid contact phone number.")),
+  note: z.string().trim().min(10, "Tell us about your business in at least 10 characters.").max(1000, "Application note must have at most 1,000 characters."),
 });
 
 export type SellerApplicationFormValues = z.infer<typeof sellerApplicationSchema>;

@@ -1,12 +1,11 @@
-import type { CheckoutAddress } from "./checkoutType";
+import type { components } from "./account210GeneratedType";
 
-/** Provisional #210 application contract until user-service delivers its OpenAPI. */
-export type AddressBookInput = CheckoutAddress & {
-  provinceName: string;
-  wardName: string;
+/** UI model: user-service uses `phone`; checkout forms use `phoneNumber`. */
+export type AddressBookInput = Omit<components["schemas"]["AddressRequest"], "phone" | "isDefault"> & {
+  phoneNumber: string;
   isDefault: boolean;
 };
 
-export type SavedAddress = AddressBookInput & { id: string };
+export type SavedAddress = Omit<components["schemas"]["Address"], "phone"> & { phoneNumber: string };
 
 export const ADDRESS_BOOK_LIMIT = 10;

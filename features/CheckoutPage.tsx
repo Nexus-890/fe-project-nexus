@@ -11,6 +11,7 @@ import CheckoutOrderFeedback from "./CheckoutOrderFeedback";
 import { formatVND } from "../components/formatPrice";
 import { createCanceledError, createInvalidResponseError } from "../configs/api";
 import { queryKeys } from "../configs/queryKeys";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "../configs/account";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { getCheckoutPreview, getProvinces, getWards } from "../service/checkoutService";
@@ -23,6 +24,8 @@ import type { UserResponse } from "../types/authResponseType";
 import { getCheckoutDestination, getCheckoutFieldErrors, previewMatchesCart, validateCheckoutAddress } from "./checkoutSchema";
 import { useCart } from "./useCart";
 import { useCheckout } from "./useCheckout";
+import { getAddressBookInput, validateAddressBookAddress } from "./addressBookSchema";
+import type { CheckoutErrors } from "./checkoutSchema";
 
 const retryClass = "mt-4 min-h-11 min-w-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary";
 const addressFields = ["recipientName", "phoneNumber", "addressLine", "provinceCode", "wardCode"] as const;
@@ -76,7 +79,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   const addresses = useApiQuery({
     queryKey: queryKeys.account.addresses(sessionId), meta: { requiresAuth: true },
     service: (signal) => getAddresses({ context: requestContext, signal }),
-  }, { retry: false });
+  }, { retry: false, enabled: ACCOUNT_EXTENSIONS_ENABLED });
   const defaultAddress = addresses.data?.find((address) => address.isDefault);
   const values: CheckoutAddress = editedValues ?? defaultAddress ?? {
     recipientName: user.fullName, phoneNumber: user.phone, addressLine: user.address ?? "",
@@ -86,6 +89,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   const selectedAddress = addresses.data?.find((address) => address.id === selectedId);
   const savedMatches = selectedAddress && addressFields.every((field) => values[field] === selectedAddress[field]);
   const [submitted, setSubmitted] = useState(false);
+  const [addressSaveErrors, setAddressSaveErrors] = useState<CheckoutErrors>({});
   const [reviewedAddress, setReviewedAddress] = useState<string | null>(null);
   const meta = { requiresAuth: true };
   const provinces = useApiQuery({
@@ -140,7 +144,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     ...getCheckoutFieldErrors(destination ? preview.error : null),
     ...getCheckoutFieldErrors(order.error),
   };
-  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...serverErrors };
+  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...addressSaveErrors, ...serverErrors };
   const issue = quote?.issues[0];
   const quoteError = destination ? preview.error?.detail || preview.error?.title : undefined;
 
@@ -149,6 +153,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     order.resetAfterEdit();
     setReviewedAddress(null);
     setSelectedAddressId("");
+    setAddressSaveErrors({});
     saveMutation.reset();
     setValues({
       ...values, [field]: value,
@@ -159,18 +164,16 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     if (order.addressLocked || saveMutation.isPending) return;
     const address = addresses.data?.find((item) => item.id === id);
     setSelectedAddressId(id);
+    setAddressSaveErrors({});
     setValues(address ?? { recipientName: user.fullName, phoneNumber: user.phone, addressLine: "", provinceCode: "", wardCode: "" });
     setReviewedAddress(null); setSubmitted(false); saveMutation.reset(); order.resetAfterEdit();
   };
   const saveCurrentAddress = () => {
     setSubmitted(true);
     if (!destination || order.addressLocked || saving.current || savedMatches || !addresses.isSuccess || addresses.data.length >= ADDRESS_BOOK_LIMIT || !isSessionCurrent(sessionId)) return;
-    const input: AddressBookInput = {
-      recipientName: destination.recipientName, phoneNumber: destination.phoneNumber,
-      addressLine: destination.addressLine, provinceCode: destination.provinceCode,
-      provinceName: destination.city, wardCode: destination.wardCode, wardName: destination.ward,
-      isDefault: addresses.data.length === 0,
-    };
+    const input = getAddressBookInput(values, provinces.data ?? [], wards.data ?? [], addresses.data.length === 0);
+    if (!input) { setAddressSaveErrors(validateAddressBookAddress(values)); return; }
+    setAddressSaveErrors({});
     const operation = { sessionId, controller: new AbortController(), input };
     saving.current = operation; saveMutation.mutate(operation);
   };
@@ -195,7 +198,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
       </ol>
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
         <div className="min-w-0 space-y-6">
-          <SavedAddressPicker addresses={addresses.data ?? []} selectedId={selectedId} loading={addresses.isPending} error={addresses.error?.detail || addresses.error?.title} disabled={order.addressLocked || saveMutation.isPending} onSelect={chooseAddress} onRetry={() => void addresses.refetch()} />
+          {ACCOUNT_EXTENSIONS_ENABLED && <SavedAddressPicker addresses={addresses.data ?? []} selectedId={selectedId} loading={addresses.isPending} error={addresses.error?.detail || addresses.error?.title} disabled={order.addressLocked || saveMutation.isPending} onSelect={chooseAddress} onRetry={() => void addresses.refetch()} />}
           <AddressForm
             busy={order.addressLocked || saveMutation.isPending}
             values={values} errors={errors}
@@ -205,12 +208,12 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
             onChange={changeAddress} onSubmit={reviewAddress}
             onRetry={(level) => { void (level === "province" ? provinces : wards).refetch(); }}
           />
-          <div className="rounded-sm border border-border bg-card p-4 text-sm">
+          {ACCOUNT_EXTENSIONS_ENABLED && <div className="rounded-sm border border-border bg-card p-4 text-sm">
             <button type="button" onClick={saveCurrentAddress} disabled={order.addressLocked || saveMutation.isPending || Boolean(savedMatches) || !addresses.isSuccess || (addresses.data?.length ?? 0) >= ADDRESS_BOOK_LIMIT} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border px-4 font-medium hover:bg-secondary disabled:opacity-60">{saveMutation.isPending ? "Saving address…" : savedMatches ? "Address saved" : "Save this address"}</button>
             {addresses.isSuccess && addresses.data.length >= ADDRESS_BOOK_LIMIT && <p className="mt-2 text-muted-foreground">Your address book is full. Manage your saved addresses to add another.</p>}
             {saveMutation.isSuccess && <p role="status" className="mt-2 text-success">Address saved to your account.</p>}
             {saveMutation.error && saveMutation.error.kind !== "aborted" && <p role="alert" className="mt-2 break-words text-danger">{saveMutation.error.detail || saveMutation.error.title}</p>}
-          </div>
+          </div>}
           {ready && <p role="status" className="rounded-sm border border-border bg-muted p-4 text-sm">Address ready. Review the delivery fee and order total below.</p>}
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="delivery-title">
             <h2 id="delivery-title" className="text-sm font-semibold">2. Delivery</h2>

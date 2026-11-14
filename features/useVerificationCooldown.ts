@@ -10,5 +10,6 @@ export function useVerificationCooldown(initialSeconds = 0) {
     return () => clearInterval(timer);
   }, [deadline]);
   const start = (seconds: number) => { setRemaining(seconds); setDeadline(Date.now() + seconds * 1000); };
-  return { remaining, start };
+  const startUntil = (expiresAt: string) => start(Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000)));
+  return { remaining, start, startUntil };
 }

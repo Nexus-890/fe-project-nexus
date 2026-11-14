@@ -99,8 +99,9 @@ profile page does not provide a separate session protocol.
 ## Backend dependencies
 
 The current profile PUT intentionally ignores `phone`; it has no phone field.
-The separate [phone verification card](features/account-verification.md) proposes
-the #210 OTP operation for changing/verifying the phone. The personal information
+The separate [phone verification card](features/account-verification.md) uses
+the pinned #210 OTP contract when its integration flag is enabled; it is hidden
+on the default develop backend. The personal information
 form retains its read-only phone until the authoritative profile is refreshed.
 
 `PENDING_ACCOUNT_ENDPOINTS` in `service/accountService.ts` records the remaining

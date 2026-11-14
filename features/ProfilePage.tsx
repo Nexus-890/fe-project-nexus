@@ -14,6 +14,7 @@ import ReputationCard from "@/components/ReputationCard";
 import ChangePasswordCard from "@/components/ChangePasswordCard";
 import PenaltyHistoryCard from "@/components/PenaltyHistoryCard";
 import PhoneVerificationCard from "@/features/PhoneVerificationCard";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 
 function ProfilePage() {
   const router = useRouter();
@@ -69,7 +70,7 @@ function ProfilePage() {
       <h1 className="text-heading-32">Profile</h1>
       <ReputationCard />
       <PersonalInformationCard key={`${sessionId}:${user.id}`} user={user} onSave={updateProfile} />
-      <PhoneVerificationCard key={`phone:${sessionId}:${user.phone}`} initialPhone={user.phone} />
+      {ACCOUNT_EXTENSIONS_ENABLED && <PhoneVerificationCard key={`phone:${sessionId}:${user.phone}`} initialPhone={user.phone} />}
       <ChangePasswordCard />
       <PenaltyHistoryCard />
     </div>

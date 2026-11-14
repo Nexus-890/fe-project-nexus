@@ -2,12 +2,14 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 const simulation = `http://127.0.0.1:${process.env.NEXUS_ACCOUNT_API_PORT || "3921"}`;
 const defaultAddress = {
-  id: "address-home", recipientName: "Home Buyer", phoneNumber: "0901234567", addressLine: "12 Nguyen Hue",
+  id: "68000000-0000-4000-8000-000000000101", recipientName: "Home Buyer", phone: "0901234567", addressLine: "12 Nguyen Hue",
   provinceCode: "202", provinceName: "Ho Chi Minh City", wardCode: "20309", wardName: "Ward 5", isDefault: true,
+  createdAt: "2026-11-13T12:00:00Z", updatedAt: "2026-11-13T12:00:00Z",
 };
 const secondAddress = {
-  id: "address-office", recipientName: "Office Buyer", phoneNumber: "0909876543", addressLine: "24 Tran Phu",
+  id: "68000000-0000-4000-8000-000000000102", recipientName: "Office Buyer", phone: "0909876543", addressLine: "24 Tran Phu",
   provinceCode: "201", provinceName: "Ha Noi", wardCode: "20701", wardName: "Phuc Xa", isDefault: false,
+  createdAt: "2026-11-13T13:00:00Z", updatedAt: "2026-11-13T13:00:00Z",
 };
 
 async function control(request: APIRequestContext, body: Record<string, unknown>) {
@@ -42,7 +44,9 @@ test("buyer saves, edits, sets default and removes saved addresses in the accoun
   await expect(page.getByRole("heading", { name: "No saved addresses yet" })).toBeVisible();
   await page.getByRole("button", { name: "Add address", exact: true }).click();
   await fillAddress(page);
+  const firstSave = page.waitForRequest((request) => request.url().endsWith("/api/v1/users/me/addresses") && request.method() === "POST");
   await page.getByRole("button", { name: "Save address", exact: true }).click();
+  expect((await firstSave).postDataJSON()).toEqual({ recipientName: "Home Buyer", phone: "0901234567", addressLine: "12 Nguyen Hue", provinceCode: "202", provinceName: "Ho Chi Minh City", wardCode: "20309", wardName: "Ward 5", isDefault: true });
   await expect(page.getByText("Address saved.", { exact: true })).toBeVisible();
   await expect(page.getByText("1 of 10 addresses saved", { exact: true })).toBeVisible();
   await expect(page.getByText("Default", { exact: true })).toHaveCount(1);
@@ -55,7 +59,9 @@ test("buyer saves, edits, sets default and removes saved addresses in the accoun
   await page.getByLabel("Recipient name", { exact: true }).fill("Office Buyer");
   await page.getByRole("button", { name: "Save address", exact: true }).click();
   await expect(page.getByText("2 of 10 addresses saved", { exact: true })).toBeVisible();
+  const defaultRequest = page.waitForRequest((request) => /\/api\/v1\/users\/me\/addresses\/[^/]+\/default$/.test(request.url()) && request.method() === "POST");
   await page.getByRole("button", { name: "Set default address for Office Buyer", exact: true }).click();
+  expect((await defaultRequest).postData()).toBeNull();
   await expect(page.getByText("Default address updated.", { exact: true })).toBeVisible();
   const office = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "Office Buyer", exact: true }) });
   await expect(office.getByText("Default", { exact: true })).toBeVisible();
@@ -114,7 +120,7 @@ test("checkout saves a newly entered address and it appears in the account addre
 });
 
 test("ten-address capacity disables add until a saved address is removed", async ({ page, request }) => {
-  await control(request, { addresses: Array.from({ length: 10 }, (_, index) => ({ ...defaultAddress, id: `address-${index}`, recipientName: `Buyer ${index}`, isDefault: index === 0 })) });
+  await control(request, { addresses: Array.from({ length: 10 }, (_, index) => ({ ...defaultAddress, id: `68000000-0000-4000-8000-${String(index).padStart(12, "0")}`, recipientName: `Buyer ${index}`, isDefault: index === 0 })) });
   await signIn(page, "/addresses");
   await expect(page.getByText("10 of 10 addresses saved", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add address", exact: true })).toBeDisabled();

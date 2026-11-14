@@ -17,6 +17,7 @@ type AddressFormProps = {
   busy?: boolean;
   title?: string;
   submitLabel?: string;
+  addressLineMaxLength?: number;
 };
 
 const controlClass =
@@ -35,6 +36,7 @@ function AddressForm({
   busy = false,
   title = "1. Shipping Address",
   submitLabel = "Review address",
+  addressLineMaxLength = 500,
 }: AddressFormProps) {
   const textFields = [
     {
@@ -56,7 +58,7 @@ function AddressForm({
       label: "House number and street",
       autoComplete: "shipping address-line1",
       placeholder: "e.g. 12 Nguyen Hue",
-      maxLength: 500,
+      maxLength: addressLineMaxLength,
     },
   ] as const;
   const deliveryAddress = [

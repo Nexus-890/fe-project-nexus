@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MapPin, Plus } from "lucide-react";
 import AddressForm from "../components/AddressForm";
 import { queryKeys } from "../configs/queryKeys";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "../configs/account";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { deleteAddress, getAddresses, saveAddress, setDefaultAddress, updateAddress } from "../service/addressBookService";
@@ -13,7 +14,7 @@ import { ADDRESS_BOOK_LIMIT } from "../types/addressBookType";
 import type { AddressBookInput, SavedAddress } from "../types/addressBookType";
 import type { CheckoutAddress } from "../types/checkoutType";
 import type { ApiError } from "../types/commonResponseType";
-import { getCheckoutDestination, getCheckoutFieldErrors, validateCheckoutAddress } from "./checkoutSchema";
+import { getAddressBookInput, getAddressBookFieldErrors, validateAddressBookAddress } from "./addressBookSchema";
 
 const actionClass = "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary disabled:opacity-60";
 type AddressCommand =
@@ -31,7 +32,7 @@ function AddressesPage() {
   return (
     <div className="min-w-0 space-y-6 pb-12">
       <div><h1 className="text-heading-32">Addresses</h1><p className="mt-2 text-sm text-muted-foreground">Manage your delivery addresses and choose a default for checkout.</p></div>
-      {status === "authenticated" && user ? <AddressBook key={sessionId} /> : status === "error" ? (
+      {!ACCOUNT_EXTENSIONS_ENABLED ? <p role="status" className="rounded-sm border border-border bg-card p-6 text-muted-foreground">Saved addresses are not available yet. You can enter your delivery address at checkout.</p> : status === "authenticated" && user ? <AddressBook key={sessionId} /> : status === "error" ? (
         <div className="rounded-sm border border-border bg-card p-6"><p role="alert">{error?.detail || "Unable to load your account."}</p><button type="button" onClick={() => void retryProfile()} className={`${actionClass} mt-4`}>Retry account</button></div>
       ) : <p role="status" className="py-8 text-muted-foreground">Loading your account…</p>}
     </div>
@@ -122,18 +123,18 @@ function AddressEditor({ address, first, busy, serverError, onSave, onCancel }: 
   const [submitted, setSubmitted] = useState(false);
   const provinces = useApiQuery({ queryKey: queryKeys.checkout.provinces(sessionId), meta: { requiresAuth: true }, service: (signal) => getProvinces({ context: requestContext, signal }) }, { retry: false });
   const wards = useApiQuery({ queryKey: queryKeys.checkout.wards(sessionId, values.provinceCode), meta: { requiresAuth: true }, service: (signal) => getWards(values.provinceCode, { context: requestContext, signal }) }, { enabled: Boolean(values.provinceCode), retry: false });
-  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...getCheckoutFieldErrors(serverError) };
+  const errors = { ...(submitted ? validateAddressBookAddress(values) : {}), ...getAddressBookFieldErrors(serverError) };
   const save = () => {
     setSubmitted(true);
-    const destination = getCheckoutDestination(values, provinces.isError ? [] : provinces.data ?? [], wards.isError ? [] : wards.data ?? []);
-    const firstError = Object.keys(validateCheckoutAddress(values))[0];
+    const input = getAddressBookInput(values, provinces.isError ? [] : provinces.data ?? [], wards.isError ? [] : wards.data ?? [], isDefault);
+    const firstError = Object.keys(validateAddressBookAddress(values))[0];
     if (firstError) requestAnimationFrame(() => document.getElementById(`checkout-${firstError}`)?.focus());
-    if (!destination || busy) return;
-    onSave({ recipientName: destination.recipientName, phoneNumber: destination.phoneNumber, addressLine: destination.addressLine, provinceCode: destination.provinceCode, provinceName: destination.city, wardCode: destination.wardCode, wardName: destination.ward, isDefault });
+    if (!input || busy) return;
+    onSave(input);
   };
   return (
     <section className="space-y-3" aria-label={address ? "Edit saved address" : "New saved address"}>
-      <AddressForm title={address ? "Edit address" : "Add address"} submitLabel={busy ? "Saving…" : "Save address"} busy={busy} values={values} errors={errors} provinces={provinces.data ?? []} wards={wards.data ?? []} provinceState={{ loading: provinces.isFetching, error: provinces.error?.detail || provinces.error?.title }} wardState={{ loading: wards.isFetching, error: wards.error?.detail || wards.error?.title }} onRetry={(level) => void (level === "province" ? provinces : wards).refetch()} onChange={(field, value) => setValues((previous) => ({ ...previous, [field]: value, ...(field === "provinceCode" ? { wardCode: "" } : {}) }))} onSubmit={save} />
+      <AddressForm addressLineMaxLength={255} title={address ? "Edit address" : "Add address"} submitLabel={busy ? "Saving…" : "Save address"} busy={busy} values={values} errors={errors} provinces={provinces.data ?? []} wards={wards.data ?? []} provinceState={{ loading: provinces.isFetching, error: provinces.error?.detail || provinces.error?.title }} wardState={{ loading: wards.isFetching, error: wards.error?.detail || wards.error?.title }} onRetry={(level) => void (level === "province" ? provinces : wards).refetch()} onChange={(field, value) => setValues((previous) => ({ ...previous, [field]: value, ...(field === "provinceCode" ? { wardCode: "" } : {}) }))} onSubmit={save} />
       <div className="flex flex-wrap items-center justify-between gap-3"><label className="inline-flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={isDefault} disabled={busy || first || Boolean(address?.isDefault)} onChange={(event) => setIsDefault(event.target.checked)} className="size-4 accent-primary" />Use as my default address</label><button type="button" disabled={busy} onClick={onCancel} className={actionClass}>Cancel</button></div>
     </section>
   );

@@ -1,5 +1,6 @@
 import { createInvalidResponseError, requestApi } from "../configs/api";
 import { isUserResponse, ME_PATH } from "./authService";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "../configs/account";
 import type { UpdateProfileRequest } from "../types/accountType";
 import type { UserResponse } from "../types/authResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
@@ -22,7 +23,7 @@ export const updateProfile = async (
   const response = await requestApi<unknown>(
     "PUT",
     PROFILE_PATH,
-    { fullName, email, dateOfBirth, gender, address },
+    { fullName, email, dateOfBirth, gender, address, ...(ACCOUNT_EXTENSIONS_ENABLED && input.phone !== undefined ? { phone: input.phone } : {}) },
     { ...options, auth: true },
   );
   if (!isUserResponse(response.data))

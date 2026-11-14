@@ -117,7 +117,9 @@ export const isUserResponse = (value: unknown): value is UserResponse =>
   (value.status === "ACTIVE" ||
     value.status === "LOCKED" ||
     value.status === "DELETED") &&
-  typeof value.createdAt === "string";
+  typeof value.createdAt === "string" &&
+  (value.phoneVerifiedAt === undefined || value.phoneVerifiedAt === null ||
+    (typeof value.phoneVerifiedAt === "string" && Number.isFinite(Date.parse(value.phoneVerifiedAt))));
 
 export const isSessionResponse = (value: unknown): value is SessionResponse =>
   isRecord(value) &&

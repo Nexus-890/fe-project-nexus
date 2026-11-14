@@ -15,13 +15,14 @@ for (const [name, output] of [
   ["api-gateway", "gatewayGeneratedType.ts"],
   ["payment-service", "paymentGeneratedType.ts"],
   ["shipment-service", "shipmentGeneratedType.ts"],
+  ["account-210-snapshot", "account210GeneratedType.ts"],
 ]) {
   const spec = new URL(
-    `../../be-project-nexus/docs/api/openapi/${name}.yaml`,
+    name === "account-210-snapshot" ? "../docs/api/account-210.openapi.json" : `../../be-project-nexus/docs/api/openapi/${name}.yaml`,
     import.meta.url,
   );
   const source =
-    "/** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */\n" +
+    (name === "account-210-snapshot" ? "/** Generated from the unmerged #210 snapshot, not develop. Run npm run generate:types; do not edit. */\n" : "/** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */\n") +
     astToString(await openapiTS(spec));
   const target = path.join(root, "types", output);
   if (process.argv.includes("--check")) {

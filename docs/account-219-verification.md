@@ -1,5 +1,10 @@
 # Account UI #219 verification
 
+**Historical pre-review report.** The original fixture contract was incompatible
+with backend #210. See [review corrections](account-219-review.md) for current
+paths, feature availability and verification. The results below describe the
+original implementation and do not establish #210 compatibility.
+
 Implementation starts from `origin/develop` at `09b3cf6f`, in an isolated
 worktree. Existing unrelated backend changes in the original checkout were
 preserved. Scope follows the merged frontend subtasks in #219: password pages,

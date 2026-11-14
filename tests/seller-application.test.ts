@@ -1,78 +1,77 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isApiError } from "../configs/api";
-import { getSellerApplication, parseSellerApplication, SELLER_APPLICATION_PATH, submitSellerApplication } from "../service/sellerApplicationService";
+import { parseSellerApplication, SELLER_APPLICATION_PATH, submitSellerApplication } from "../service/sellerApplicationService";
 import { sellerApplicationSchema } from "../features/sellerApplicationSchema";
-import type { SellerApplication } from "../types/sellerApplicationType";
+import type { SellerApplicationInput } from "../types/sellerApplicationType";
 
-const pending: SellerApplication = {
-  id: "application-1", shopName: "Nexus Books", description: "Pre-loved books for everyone.",
-  status: "PENDING", rejectionReason: null, submittedAt: "2026-11-13T01:00:00Z",
-};
+const input: SellerApplicationInput = { companyName: "Nexus Books", phone: "0901234567", note: "Pre-loved books for everyone." };
+const acknowledgement = { id: "seller-1", status: "PENDING" };
 const envelope = (data: unknown) => new Response(JSON.stringify({ code: 0, message: "response success", data }));
 
-test("seller application reads explicit empty state and validates pending, approval and rejected reason", async () => {
-  assert.equal(await getSellerApplication({ context: { fetch: async () => envelope(null) } }), null);
-  for (const application of [pending, { ...pending, status: "APPROVED" }, { ...pending, status: "REJECTED", rejectionReason: "Please describe your products." }]) {
-    assert.deepEqual(await getSellerApplication({ context: { fetch: async () => envelope(application) } }), application);
+test("seller issue model accepts PENDING, ACTIVE and REJECTED without invented timestamps", () => {
+  for (const status of ["PENDING", "ACTIVE", "REJECTED"]) {
+    assert.deepEqual(parseSellerApplication({ ...acknowledgement, status, reason: status === "REJECTED" ? "Please clarify your business." : null }, input), {
+      ...input, id: acknowledgement.id, status, rejectionReason: status === "REJECTED" ? "Please clarify your business." : null,
+    });
   }
-  for (const invalid of [{}, [], { ...pending, status: "UNKNOWN" }, { ...pending, status: "REJECTED" }, { ...pending, submittedAt: "invalid" }, { ...pending, shopName: " " }]) {
-    assert.throws(() => parseSellerApplication(invalid), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+  for (const invalid of [null, {}, [], { ...acknowledgement, status: "APPROVED" }, { ...acknowledgement, status: "UNKNOWN" }, { ...acknowledgement, reason: 123 }]) {
+    assert.throws(() => parseSellerApplication(invalid, input), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
   }
 });
 
-test("seller application services preserve current Bearer, path, method and allowlisted normalized body", async () => {
+test("seller buyer submits exactly the issue POST body with current Bearer and never reads the admin list", async () => {
   let token = "first-token";
   const calls: { method?: string; body: unknown; bearer: string | null }[] = [];
   const context = {
     getAccessToken: () => token,
-    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-      assert.equal(String(input), SELLER_APPLICATION_PATH);
+    fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+      assert.equal(String(url), "/api/v1/sellers/applications");
+      assert.equal(SELLER_APPLICATION_PATH, "/api/v1/sellers/applications");
+      assert.equal(init?.method, "POST", "buyers must not request the admin-only GET list");
       calls.push({ method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined, bearer: new Headers(init?.headers).get("Authorization") });
-      return envelope(pending);
+      return envelope(acknowledgement);
     },
   };
-  await getSellerApplication({ context });
+  await submitSellerApplication(input, { context });
   token = "rotated-token";
-  await submitSellerApplication({ shopName: " Nexus Books ", description: " Pre-loved books for everyone. ", ...{ status: "APPROVED", roles: ["SELLER"] } }, { context });
+  const updated = await submitSellerApplication({ companyName: " Nexus Books ", phone: "(090) 123-4567", note: " Pre-loved books for everyone. ", ...{ status: "ACTIVE", roles: ["SELLER"], shopName: "ignored" } }, { context });
   assert.deepEqual(calls, [
-    { method: "GET", body: undefined, bearer: "Bearer first-token" },
-    { method: "POST", body: { shopName: pending.shopName, description: pending.description }, bearer: "Bearer rotated-token" },
+    { method: "POST", body: input, bearer: "Bearer first-token" },
+    { method: "POST", body: input, bearer: "Bearer rotated-token" },
   ]);
+  assert.deepEqual(updated, { ...input, ...acknowledgement, rejectionReason: null });
 });
 
-test("missing seller endpoint, authorization denial and duplicate application remain errors", async () => {
-  for (const status of [403, 404, 409]) {
-    const context = { fetch: async () => new Response(JSON.stringify({ title: "Rejected", status, code: "SELLER_APPLICATION_CONFLICT" }), { status }) };
-    for (const call of [() => getSellerApplication({ context }), () => submitSellerApplication(pending, { context })]) {
-      await assert.rejects(call(), (error: unknown) => isApiError(error) && error.status === status);
-    }
+test("seller missing endpoint, authorization denial and defined duplicate codes remain errors", async () => {
+  for (const [status, code] of [[403, "FORBIDDEN"], [404, "NOT_FOUND"], [409, "SELLER_APPLICATION_EXISTS"], [409, "SELLER_APPLICATION_NOT_PENDING"]] as const) {
+    await assert.rejects(submitSellerApplication(input, { context: { fetch: async () => new Response(JSON.stringify({ title: "Rejected", status, code }), { status }) } }),
+      (error: unknown) => isApiError(error) && error.status === status && error.code === code);
   }
 });
 
-test("seller submission forwards cancellation and rejects missing envelopes", async () => {
+test("seller submission forwards cancellation and rejects missing or malformed acknowledgements", async () => {
   const controller = new AbortController();
-  await assert.rejects(submitSellerApplication(pending, {
+  await assert.rejects(submitSellerApplication(input, {
     signal: controller.signal,
-    context: { fetch: async (_input, init) => {
+    context: { fetch: async (_url, init) => {
       assert.equal(init?.signal?.aborted, false);
       controller.abort();
       assert.equal(init?.signal?.aborted, true);
-      return envelope(pending);
+      return envelope(acknowledgement);
     } },
   }), { name: "AbortError" });
-  await assert.rejects(getSellerApplication({ context: { fetch: async () => new Response(JSON.stringify(pending)) } }),
-    (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+  for (const data of [acknowledgement, { code: 0, message: "response success", data: null }, { code: 0, message: "response success", data: { id: "seller-1" } }]) {
+    await assert.rejects(submitSellerApplication(input, { context: { fetch: async () => new Response(JSON.stringify(data)) } }),
+      (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+  }
 });
 
-test("seller application form rejects blank/oversized data and trims valid input", () => {
-  for (const input of [
-    { shopName: " ", description: pending.description },
-    { shopName: pending.shopName, description: "too short" },
-    { shopName: "A".repeat(151), description: pending.description },
-    { shopName: pending.shopName, description: "A".repeat(1001) },
-  ]) assert.equal(sellerApplicationSchema.safeParse(input).success, false);
-  assert.deepEqual(sellerApplicationSchema.parse({ shopName: " Nexus Books ", description: " Pre-loved books for everyone. " }), {
-    shopName: pending.shopName, description: pending.description,
-  });
+test("seller form requires a valid contact phone and normalizes submitted fields", () => {
+  for (const invalid of [
+    { ...input, companyName: " " }, { ...input, phone: "" }, { ...input, phone: "letters" },
+    { ...input, phone: "123456" }, { ...input, phone: "1".repeat(16) },
+    { ...input, note: "A".repeat(1001) },
+  ]) assert.equal(sellerApplicationSchema.safeParse(invalid).success, false);
+  assert.deepEqual(sellerApplicationSchema.parse({ companyName: " Nexus Books ", phone: "(090) 123-4567", note: " Pre-loved books for everyone. " }), input);
 });

@@ -89,8 +89,13 @@ Signed-in users can open `/profile` from the header or My Nexus, edit supported
 personal information and save to the shared profile/header query. The profile
 links password management to Keycloak and includes a phone verification card.
 The account menu also exposes seller applications and saved addresses for checkout.
-Verification, seller application and address APIs remain provisional under #210;
-see [account verification](docs/features/account-verification.md),
+The #210 email/phone/address APIs are pinned to backend commit `1e480dda` and
+disabled by default (`NEXT_PUBLIC_ACCOUNT_EXTENSIONS_ENABLED=false`). Seller
+applications use the issue's POST contract and remain disabled by default
+(`NEXT_PUBLIC_SELLER_APPLICATION_ENABLED=false`) until its implementation and
+response contract are agreed. Default registration continues to sign-in;
+see [review corrections](docs/account-219-review.md). Also see
+[account verification](docs/features/account-verification.md),
 [seller applications](docs/features/seller-application.md) and
 [address book](docs/features/address-book.md). Avatar, reputation and penalties
 await backend support. See the

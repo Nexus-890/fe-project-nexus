@@ -1,12 +1,12 @@
-/** Application models for the provisional #210 seller contract; no wire DTO is delivered yet. */
+/** Planned seller UI model. No controller/DTO or agreed response contract is delivered yet. */
 export type SellerApplicationInput = {
-  shopName: string;
-  description: string;
+  companyName: string;
+  phone: string;
+  note: string;
 };
 
 export type SellerApplication = SellerApplicationInput & {
   id: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "ACTIVE" | "REJECTED";
   rejectionReason: string | null;
-  submittedAt: string;
 };
