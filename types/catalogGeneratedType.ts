@@ -7,7 +7,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List categories as a flat page
+         * @description Filter nondeleted categories by case-insensitive name or slug, direct parent and exact level.
+         */
+        get: operations["listFlatCategories"];
         put?: never;
         /**
          * Create a category
@@ -115,6 +119,26 @@ export interface paths {
          * @description Sets deletedAt. Product order references cause409 unless allow-product-delete-with-order is enabled. A second delete returns404. Access: requires PRODUCT.DELETE. Additional role requirement: SELLER OR ADMIN. Ownership/business restriction: Owner required, including ADMIN; ADMIN does not bypass ownership for delete.
          */
         delete: operations["deleteProduct"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search public products
+         * @description Find a phrase in the name or description of nondeleted ACTIVE products, ignoring accents and case. An empty q browses the filtered catalog. Price filters and price sort use the lowest ACTIVE SKU price, with unpriced products last. Relevance weights name matches above description matches. Remaining ties use newest and ID.
+         */
+        get: operations["searchProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -577,6 +601,16 @@ export interface components {
             data: components["schemas"]["Product"][];
             page: components["schemas"]["PageInfo"];
         };
+        FlatCategoryPage: {
+            code: number;
+            message: string;
+            data: components["schemas"]["Category"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        OwnerProduct: components["schemas"]["Product"] & {
+            description: string | null;
+            auctionEnable: boolean;
+        };
         ListOwnProductsResponse: {
             /**
              * @description Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved.
@@ -588,7 +622,7 @@ export interface components {
              * @default response success
              */
             message: string;
-            data: components["schemas"]["Product"][];
+            data: components["schemas"]["OwnerProduct"][];
             page: components["schemas"]["PageInfo"];
         };
         ChangeProductStatusResponse: {
@@ -679,13 +713,51 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        CatalogSearchPage: number;
+        CatalogSearchSize: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listFlatCategories: {
+        parameters: {
+            query?: {
+                q?: string;
+                parentId?: string;
+                level?: number;
+                page?: components["parameters"]["CatalogSearchPage"];
+                size?: components["parameters"]["CatalogSearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category page ordered by name and ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlatCategoryPage"];
+                };
+            };
+            /** @description Invalid query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     createCategory: {
         parameters: {
             query?: never;
@@ -2460,6 +2532,43 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    searchProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+                categoryId?: string;
+                minPrice?: number;
+                maxPrice?: number;
+                sort?: "relevance" | "price_asc" | "price_desc" | "newest";
+                page?: components["parameters"]["CatalogSearchPage"];
+                size?: components["parameters"]["CatalogSearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product search page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListProductsResponse"];
+                };
+            };
+            /** @description Invalid parameters or minimum price above maximum price */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
