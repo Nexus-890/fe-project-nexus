@@ -1,8 +1,30 @@
-# #205 verification — 2026-11-15
+# #205 verification — 2026-11-16
+
+## Develop synchronization — 2026-11-16
+
+Merged target `origin/develop` `63d0a3a8` into the previously verified #205 head `6259d278`. The only textual conflict was in `service/auctionService.ts`: the resolved code preserves the new public/managed state wrappers and keeps the page parser exported for the offer service. Buyer list/My Bids functions and all upstream managed read/update/cancel functions remain present. SYSTEM cancellation support and the shared safe amount conversion also come from develop. Public calls still omit Bearer; managed calls retain authentication.
+
+The first generated-type check detected upstream drift in `auctionGeneratedType.ts`. Running the existing generator adds the four managed auction paths and their operation types from delivered OpenAPI; the subsequent drift check passed. No schema, endpoint, feature UI or test assertion was changed to resolve this merge.
+
+| Check | Result |
+| --- | --- |
+| Generated types, lint and typecheck | Passed |
+| `npm run test:unit` | 336 passed, including buyer/offer and new admin/SYSTEM cancellation regressions |
+| Buyer auction-list browser regression | 12/12 passed, 1.2 minutes |
+| Targeted admin/support auction browser regression | 4/4 passed, 24.3 seconds |
+| Catalog/navigation regression | 55 passed, 38 existing skips, 2.3 minutes |
+| Isolated production build | Passed at `.next-auction-205-sync-20261116`; all 31 static pages generated |
+| Diff, conflict markers and ancestry | Diff/marker checks passed; no unresolved paths; fetched target and merge parent both `63d0a3a8` |
+
+Browser evidence uses the existing local Postman HTTP dependencies and does not establish live #208 offer or #172 shipping integration. The 2026-11-15 results and screenshots below remain historical; this synchronization does not replace their provider limitations.
+
+Both browser suites passed unchanged retries after the installed Next reminder stopped their initial attempts. Buyer evidence exercised canonical offer reads/actions, shipping confirmation and payment handoff. The four admin/support cases exercised managed list/state/history reads, protected edit/cancel, a changed-state 409 and read-only support access. Neither HTTP log contained an unmodeled 501 response; deliberate buyer 404/503 and admin 409 cases remain expected. Run logs and HTTP evidence are retained only under ignored `node_modules/.cache/auction-conflict-20261116/`. No test, fixture or tracked screenshot was changed for this conflict resolution.
+
+Catalog and build also passed unchanged retries after the same installed Next reminder. Build kept TypeScript checks enabled and ran after browser cleanup. Temporary auth probe routes and tsconfig changes were removed by the runners. Relative to the current target, backend files are unchanged; no environment file, secret, IDE file or runtime log was added. The initial generated DTO drift was resolved by regeneration, not by bypassing its check. Postman still reports `unknown command 'status'`; the existing local simulation was reused without publication.
+
+## Review revision — 2026-11-15
 
 The review merges `origin/develop` `aa238638` into #205 commit `6d5fb0ec`. Develop already contains #178's reviewed room, public state/history and winner-only private order/deadline/final-price fields. Three conflicts affected browser suite exclusion, the shared auction dependency handler and its context YAML. Their resolution preserves list/offer scenarios and the room's heartbeat/private-winner/shipping scenarios.
-
-## Current review revision
 
 | Check | Result |
 | --- | --- |

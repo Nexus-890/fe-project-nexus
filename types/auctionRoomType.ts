@@ -12,7 +12,7 @@ export type AuctionRoom = Omit<
   currentPrice: string;
   imageUrl: string | null;
   currency: string;
-  cancelledBy: "SELLER" | "ADMIN" | null;
+  cancelledBy: NonNullable<components["schemas"]["Auction"]["cancelledBy"]> | null;
   cancelledReason: string | null;
 };
 
@@ -43,3 +43,6 @@ export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount" | "fina
 };
 export type PlacedAuctionBid = Omit<components["schemas"]["BidResponse"], "currentPrice"> & { currentPrice: string };
 export type AuctionBidInput = { amount: string; idempotencyKey: string };
+export type AuctionUpdateRequest = components["schemas"]["UpdateAuctionRequest"];
+export type AuctionUpdateInput = Omit<AuctionUpdateRequest, "startingPrice" | "bidIncrement"> & { startingPrice: string; bidIncrement: string };
+export type AuctionCancelRequest = components["schemas"]["CancelAuctionRequest"];

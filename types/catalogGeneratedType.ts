@@ -129,7 +129,7 @@ export interface paths {
         };
         /**
          * List the current seller products
-         * @description Access: requires PRODUCT.LIST. Additional role requirement: SELLER. Ownership/business restriction: JWT subject products only; includes own nondeleted products regardless of ACTIVE status.
+         * @description Access: requires PRODUCT.LIST. Additional role requirement: SELLER. Ownership/business restriction: JWT subject products only; includes own nondeleted products regardless of ACTIVE status. Omitting status returns every status; status narrows the list and its page totals to that exact status.
          */
         get: operations["listOwnProducts"];
         put?: never;
@@ -2467,6 +2467,8 @@ export interface operations {
     listOwnProducts: {
         parameters: {
             query?: {
+                /** @description Optional exact product status filter; omitted means all statuses. An unknown value is INVALID_PARAMETER. */
+                status?: "DRAFT" | "INACTIVE" | "ACTIVE";
                 /** @description Zero-based page. */
                 page?: number;
                 /** @description Positive page size; no maximum is currently enforced. */
