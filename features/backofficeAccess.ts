@@ -27,6 +27,7 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users", placeholder: true },
     { label: "Orders", href: "/backoffice/orders", placeholder: true },
+    { label: "Auctions", href: "/backoffice/auctions" },
     { label: "Event log", href: "/backoffice/event-log", placeholder: true },
     { label: "Health", href: "/backoffice/health", placeholder: true },
   );
@@ -34,12 +35,14 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
   return items;
 }
 
+const nestedSections = ["/backoffice/products", "/backoffice/auctions"];
+
 export function canAccessBackofficePath(path: string, roles: readonly BackofficeRole[]): boolean {
   let pathname: string;
   try { pathname = decodeURIComponent(new URL(path, "https://nexus.invalid").pathname).replace(/\/+$/, "") || "/"; }
   catch { return false; }
   if (pathname === "/backoffice" || pathname === "/backoffice/forbidden") return hasBackofficeAccess(roles);
-  return backofficeMenu(roles).some((item) => pathname === item.href || item.href === "/backoffice/products" && pathname.startsWith(`${item.href}/`));
+  return backofficeMenu(roles).some((item) => pathname === item.href || nestedSections.includes(item.href) && pathname.startsWith(`${item.href}/`));
 }
 
 export function resolveRoleLanding(returnTo: string | null | undefined, roles: readonly BackofficeRole[]): string {

@@ -2,6 +2,7 @@ import type { ProductFilters } from "../types/catalogRequestType";
 import type { CheckoutDestination } from "../types/checkoutType";
 import type { OrderFilters } from "../types/orderRequestType";
 import type { NotificationFilters } from "../types/notificationRequestType";
+import type { AuctionStatus } from "../types/auctionRoomType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
@@ -26,6 +27,13 @@ export const queryKeys = {
 
   auctions: {
     active: ["auctions", "active"] as const,
+    manage: {
+      lists: (sessionId: number) => ["auctions", "manage", sessionId, "list"] as const,
+      list: (sessionId: number, status: AuctionStatus, page: number) => ["auctions", "manage", sessionId, "list", { status, page }] as const,
+      detail: (sessionId: number, id: string) => ["auctions", "manage", sessionId, id, "detail"] as const,
+      state: (sessionId: number, id: string) => ["auctions", "manage", sessionId, id, "state"] as const,
+      bids: (sessionId: number, id: string, page: number) => ["auctions", "manage", sessionId, id, "bids", page] as const,
+    },
     detail: (id: string) => ["auctions", id, "detail"] as const,
     state: (id: string) => ["auctions", id, "state"] as const,
     bids: (id: string, page: number) => ["auctions", id, "bids", page] as const,

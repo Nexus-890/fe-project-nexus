@@ -267,3 +267,163 @@ test("Seller completes a legacy SKU parcel with browser bounds before publishing
   await publish.click();
   await expect.poll(async () => (await evidence(request)).products[0].status).toBe("ACTIVE");
 });
+
+const auctionPath = (n: number) => `/backoffice/auctions/92000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+type AuctionOperation = { method: string; path: string; role: string; query: Record<string, string>; body?: unknown };
+const auctionRequests = async (request: APIRequestContext) => ((await evidence(request)).requests as AuctionOperation[]).filter((row) => row.path.startsWith("/api/v1/auctions"));
+const auctionWrites = async (request: APIRequestContext) => (await auctionRequests(request)).filter((row) => row.method !== "GET");
+async function auctionScreens(page: Page, name: string) {
+  const output = path.resolve("test-results/backoffice/evidence");
+  await mkdir(output, { recursive: true });
+  for (const width of [1440, 768, 375]) {
+    await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: path.join(output, `mock-${name}-${width}.png`), fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+}
+
+test("Admin filters auctions by status tab and pages them with matching query params", async ({ page, request }) => {
+  await signIn(page, request, "ADMIN", "/backoffice/auctions");
+  await expect(page).toHaveURL("/backoffice/auctions");
+  await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toBeVisible();
+  const table = page.getByRole("table", { name: "Auctions", exact: true });
+  const rolex = table.getByRole("row").filter({ hasText: "Rolex Submariner Watch" });
+  await expect(rolex).toContainText("6.300.000 ₫");
+  await expect(rolex).toContainText("68000000");
+  await expect(page.getByText("Page 1 · 12 auctions", { exact: true })).toBeVisible();
+  const queries = async () => (await auctionRequests(request)).filter((row) => row.method === "GET" && row.path === "/api/v1/auctions/manage").map((row) => row.query);
+  await page.getByRole("navigation", { name: "Auction pagination", exact: true }).getByRole("button", { name: "Next", exact: true }).click();
+  await expect(table.getByRole("link", { name: "Demo auction 12", exact: true })).toBeVisible();
+  await expect(table.getByRole("link", { name: "Rolex Submariner Watch", exact: true })).toHaveCount(0);
+  await expect.poll(queries).toContainEqual({ status: "ACTIVE", page: "1", size: "10" });
+  for (const [label, status, title] of [["Draft", "CREATED", "Demo auction 14"], ["Scheduled", "SCHEDULED", "Leica M6 film camera"], ["Ended", "ENDED", "Demo auction 15"], ["Settled", "SETTLED", "Demo auction 16"], ["Payment timeout", "PAYMENT_TIMEOUT", "Demo auction 17"], ["Cancelled", "CANCELLED", "Demo auction 18"]] as const) {
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.getByRole("button", { name: label, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(queries).toContainEqual({ status, page: "0", size: "10" });
+    await expect(table.getByRole("row")).toHaveCount(2);
+    await expect(table.getByRole("link", { name: title, exact: true })).toBeVisible();
+    await expect(page.getByText("Page 1 · 1 auction", { exact: true })).toBeVisible();
+    if (status === "CREATED" || status === "CANCELLED") await auctionScreens(page, `admin-auctions-${status.toLowerCase()}`);
+  }
+  expect((await auctionRequests(request)).filter((row) => row.path === "/api/v1/auctions")).toEqual([]);
+  await page.getByRole("button", { name: "Active", exact: true }).click();
+  await expect(table.getByRole("link", { name: "Rolex Submariner Watch", exact: true })).toBeVisible();
+  await auctionScreens(page, "admin-auctions");
+  expect(await auctionWrites(request)).toEqual([]);
+});
+
+test("Admin opens an active auction, reads masked bids newest first and force cancels it after confirming", async ({ page, request }) => {
+  await signIn(page, request, "ADMIN", "/backoffice/auctions");
+  await page.getByRole("link", { name: "Rolex Submariner Watch", exact: true }).click();
+  await expect(page).toHaveURL(auctionPath(1));
+  await expect(page.getByRole("heading", { name: "Rolex Submariner Watch", exact: true })).toBeVisible();
+  const bids = page.getByRole("list", { name: "Bids, newest first", exact: true }).getByRole("listitem");
+  await expect(bids).toHaveCount(3);
+  for (const [index, name, amount] of [[0, "m***h", "6.300.000 ₫"], [1, "h***g", "6.200.000 ₫"], [2, "a***n", "6.100.000 ₫"]] as const) {
+    await expect(bids.nth(index)).toContainText(name);
+    await expect(bids.nth(index)).toContainText(amount);
+  }
+  await expect(page.getByRole("main").getByRole("link", { name: /event log/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
+  const reason = page.getByLabel("Cancellation reason", { exact: true });
+  const cancel = page.getByRole("button", { name: "Cancel auction", exact: true });
+  const dialog = page.getByRole("dialog", { name: "Cancel this auction?", exact: true });
+  await cancel.click();
+  await expect(dialog).toBeHidden();
+  await reason.fill("   ");
+  await cancel.click();
+  await expect(page.getByRole("alert").filter({ hasText: "Enter a cancellation reason." })).toBeVisible();
+  await expect(dialog).toBeHidden();
+  expect(await auctionWrites(request)).toEqual([]);
+  await reason.fill("  Counterfeit listing reported by support  ");
+  await cancel.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Every bidder will be told that it was cancelled (3 bids so far).");
+  await expect(dialog).toContainText("Counterfeit listing reported by support");
+  await auctionScreens(page, "admin-auction-cancel-dialog");
+  await dialog.getByRole("button", { name: "Keep auction", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(await auctionWrites(request)).toEqual([]);
+  await cancel.click();
+  await dialog.getByRole("button", { name: "Confirm cancellation", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("status").filter({ hasText: "Auction cancelled. Bidders will be told it was cancelled." })).toBeVisible();
+  const details = page.locator("section", { has: page.getByRole("heading", { name: "Auction details", exact: true }) });
+  await expect(details).toContainText("Cancelled");
+  await expect(details).toContainText("Administrator");
+  await expect(details).toContainText("Counterfeit listing reported by support");
+  await expect(cancel).toHaveCount(0);
+  expect(await auctionWrites(request)).toEqual([expect.objectContaining({ method: "POST", path: "/api/v1/auctions/92000000-0000-4000-8000-000000000001/admin-cancel", role: "ADMIN", body: { reason: "Counterfeit listing reported by support" } })]);
+  expect((await evidence(request)).auctions[0]).toMatchObject({ status: "CANCELLED", cancelledBy: "ADMIN", cancelledReason: "Counterfeit listing reported by support" });
+  const reads = (await auctionRequests(request)).filter((row) => row.method === "GET").map((row) => row.path);
+  for (const suffix of ["", "/state", "/bids"]) expect(reads).toContain(`/api/v1/auctions/manage/92000000-0000-4000-8000-000000000001${suffix}`);
+  expect(reads.filter((path) => path.startsWith("/api/v1/auctions/92000000"))).toEqual([]);
+});
+
+test("Admin edits a scheduled auction, then a 409 after it starts shows the backend detail and reloads it", async ({ page, request }) => {
+  await signIn(page, request, "ADMIN", auctionPath(13));
+  await expect(page.getByRole("heading", { name: "Leica M6 film camera", exact: true })).toBeVisible();
+  await expect(page.getByText("No bids yet.", { exact: true })).toBeVisible();
+  const startingPrice = page.getByLabel("Starting price", { exact: true });
+  const save = page.getByRole("button", { name: "Save changes", exact: true });
+  await startingPrice.fill("0");
+  await save.click();
+  await expect(page.getByText("The starting price must be greater than zero.", { exact: true })).toBeVisible();
+  expect(await auctionWrites(request)).toEqual([]);
+  await startingPrice.fill("7500000");
+  await page.getByLabel("Bid increment", { exact: true }).fill("100000");
+  const start = await page.getByLabel("Start (Vietnam time)", { exact: true }).inputValue();
+  const end = await page.getByLabel("End (Vietnam time)", { exact: true }).inputValue();
+  await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "Auction updated." })).toBeVisible();
+  const details = page.locator("section", { has: page.getByRole("heading", { name: "Auction details", exact: true }) });
+  await expect(details).toContainText("7.500.000 ₫");
+  await expect(details).toContainText("100.000 ₫");
+  await expect(page.locator("section", { has: page.getByRole("heading", { name: "Live state", exact: true }) })).toContainText("7.500.000 ₫");
+  expect(await auctionWrites(request)).toEqual([expect.objectContaining({ method: "PUT", path: "/api/v1/auctions/92000000-0000-4000-8000-000000000013", role: "ADMIN",
+    body: { startingPrice: 7500000, bidIncrement: 100000, startAt: new Date(`${start}:00+07:00`).toISOString(), endAt: new Date(`${end}:00+07:00`).toISOString() } })]);
+  await auctionScreens(page, "admin-auction-edit");
+  expect((await request.post(`${api}/test/auction`, { data: { id: "92000000-0000-4000-8000-000000000013", status: "ACTIVE", startAt: new Date(Date.now() - 60_000).toISOString() } })).ok()).toBe(true);
+  await save.click();
+  await expect(page.getByRole("alert").filter({ hasText: "Only an auction that has not started can be configured" })).toBeVisible();
+  await expect(save).toHaveCount(0);
+  await expect(details).toContainText("Active");
+  await expect(page.getByRole("button", { name: "Cancel auction", exact: true })).toBeVisible();
+  expect((await auctionWrites(request)).map((row) => row.method)).toEqual(["PUT", "PUT"]);
+  expect((await evidence(request)).auctions[12]).toMatchObject({ sellerId: "68000000-0000-4000-8000-000000000002", startingPrice: 7500000 });
+});
+
+test("Support Staff reads auctions without edit or cancel controls and sends no auction writes", async ({ page, request }) => {
+  await signIn(page, request, "SUPPORT_STAFF", "/backoffice/auctions");
+  await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await page.getByRole("link", { name: "Demo auction 14", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Demo auction 14", exact: true })).toBeVisible();
+  await expect(page.getByText("Read-only view. Only administrators can edit or cancel auctions.", { exact: true })).toBeVisible();
+  for (const name of ["Save changes", "Cancel auction"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await page.goto("/backoffice/auctions");
+  await page.getByRole("link", { name: "Rolex Submariner Watch", exact: true }).click();
+  await expect(page.getByText("Read-only view. Only administrators can edit or cancel auctions.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Bids, newest first", exact: true }).getByRole("listitem")).toHaveCount(3);
+  for (const name of ["Save changes", "Cancel auction", "Confirm cancellation"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await page.goto(auctionPath(13));
+  await expect(page.getByRole("heading", { name: "Leica M6 film camera", exact: true })).toBeVisible();
+  for (const name of ["Save changes", "Cancel auction", "Confirm cancellation"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Cancellation reason", { exact: true })).toHaveCount(0);
+  await auctionScreens(page, "support-auction-detail");
+  expect(await auctionWrites(request)).toEqual([]);
+});
+
+for (const role of ["SELLER", "BUYER"]) {
+  test(`${role} gets Access denied on the auction admin pages`, async ({ page, request }) => {
+    await signIn(page, request, role);
+    await expect(page).toHaveURL(role === "SELLER" ? "/backoffice" : "/");
+    if (role === "SELLER") await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toHaveCount(0);
+    for (const destination of ["/backoffice/auctions", auctionPath(1)]) {
+      await page.goto(destination);
+      await expect(page.getByRole("heading", { name: "Access denied", exact: true })).toBeVisible();
+    }
+    expect((await auctionRequests(request)).filter((row) => row.path !== "/api/v1/auctions" || row.query.size === "10")).toEqual([]);
+  });
+}

@@ -43,3 +43,6 @@ export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount" | "fina
 };
 export type PlacedAuctionBid = Omit<components["schemas"]["BidResponse"], "currentPrice"> & { currentPrice: string };
 export type AuctionBidInput = { amount: string; idempotencyKey: string };
+export type AuctionUpdateRequest = components["schemas"]["UpdateAuctionRequest"];
+export type AuctionUpdateInput = Omit<AuctionUpdateRequest, "startingPrice" | "bidIncrement"> & { startingPrice: string; bidIncrement: string };
+export type AuctionCancelRequest = components["schemas"]["CancelAuctionRequest"];
