@@ -27,8 +27,10 @@ const product = (id, categoryId) => ({
   name: `Product ${id}`,
   slug: `product-${id}`,
   categoryId,
-  minPrice: 150000.5,
-  maxPrice: id === 1 ? 175000 : 150000.5,
+  minPrice: 150000.5 + (id >= 100 ? (id - 100) * 100 : 0),
+  maxPrice: id === 1 ? 175000 : 150000.5 + (id >= 100 ? (id - 100) * 100 : 0),
+  auctionEnable: categoryId === "headphones",
+  createdAt: "2026-11-01T00:00:00Z",
 });
 
 const backendProducts = [
@@ -243,12 +245,28 @@ const server = createServer(async (req, res) => {
     const categoryId = url.searchParams.get("categoryId");
     const page = Number(url.searchParams.get("page") || 0);
     const size = Number(url.searchParams.get("size") || 20);
-    const filtered =
+    const keyword = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+    const listingType = url.searchParams.get("listingType") ?? "all";
+    const ceiling = url.searchParams.has("maxPrice") ? Number(url.searchParams.get("maxPrice")) : Infinity;
+    const sort = url.searchParams.get("sort") ?? "relevance";
+    const candidates =
       categoryId === "headphones"
         ? Array.from({ length: 25 }, (_, i) => product(100 + i, categoryId))
         : backendProducts.filter(
             (entry) => !categoryId || entry.categoryId === categoryId,
           );
+    const filtered = candidates.filter((entry) => entry.name.toLowerCase().includes(keyword)
+      && (listingType === "all" || entry.auctionEnable === (listingType === "auction"))
+      && (ceiling === Infinity || (entry.minPrice !== null && entry.minPrice <= ceiling)));
+    filtered.sort((a, b) => {
+      if (sort.startsWith("price,")) {
+        if (a.minPrice === null || b.minPrice === null) return a.minPrice === b.minPrice ? a.id.localeCompare(b.id) : a.minPrice === null ? 1 : -1;
+        return (sort === "price,asc" ? a.minPrice - b.minPrice : b.minPrice - a.minPrice) || a.id.localeCompare(b.id);
+      }
+      const rank = (entry) => entry.name.toLowerCase() === keyword ? 0 : entry.name.toLowerCase().startsWith(keyword) ? 1 : 2;
+      return (sort === "relevance" && keyword ? rank(a) - rank(b) : 0)
+        || Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id);
+    });
     return json(res, {
       code: 0,
       message: "response success",

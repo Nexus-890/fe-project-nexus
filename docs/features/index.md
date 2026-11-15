@@ -5,6 +5,10 @@
 | [Authentication](authentication.md) | Sign-up, Keycloak OIDC sign-in, in-memory session, profile retry, logout and account isolation |
 | [Session restore and silent renewal](session-restore.md) | Restore the provider SSO session on reload, renew in-memory tokens and replay a protected request once after 401 |
 | [Profile](../profile-page.md) | Authenticated profile, supported partial updates, shared header data, validation and retry |
+| [Password pages](password-pages.md) | Keycloak account-console password change and inherited Nexus login/reset theme |
+| [Account verification](account-verification.md) | Check-email/resend and profile OTP UI; provisional #210 integration |
+| [Seller application](seller-application.md) | Buyer application, pending/rejected/approved feedback and seller portal handoff |
+| [Address book](address-book.md) | Saved address management, default selection and checkout reuse |
 | [Catalog](catalog.md) | Home/category navigation, listings, URL filters/paging, product/SKU/image presentation |
 | [Product image gallery](product-image-gallery.md) | Ordered detail images, thumbnails, card image fallback and the pending list-image backend dependency |
 | [Cart](cart.md) | Shared header count, snapshot prices, optimistic edit/remove and rollback with session isolation; [implementation report](cart-page-implementation.md) separates dated evidence from pending live acceptance |
@@ -15,7 +19,7 @@
 | [Order detail](order-detail.md) | Purchased items, current status/history, backend-controlled cancellation, refund status and visible authorization errors |
 | [Shipment tracking](shipment-tracking.md) | Carrier, copyable tracking code and persisted shipment history on the order detail page; successful empty shipment lookup hides the card |
 
-These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Payment execution, carrier booking, auction bidding and forgotten-password recovery are outside the current frontend implementation scope. Authentication tokens stay in memory; reload restoration uses the provider's SSO session.
+These pages document the frontend behavior that exists in source. They identify development fixtures and backend gaps explicitly. A backend service or a requirement reference does not mean its frontend feature is implemented. Password recovery runs on Keycloak; live delivery and reset-link acceptance remain environment checks. Authentication tokens stay in memory; reload restoration uses the gateway cookie session.
 
 Use [functional requirements](../requirement/functional.md) to assess coverage, [API contract](../api/api-contract.md) to check request/response behavior, and the owning feature/component source to confirm current details.
 

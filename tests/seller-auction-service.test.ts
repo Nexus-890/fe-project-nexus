@@ -28,6 +28,23 @@ test("own auction list keeps exact status/page filters, authentication and norma
   assert.equal(result.content[0].cancelledReason, "Item unavailable");
 });
 
+test("system stock cancellation remains readable alongside seller cancellations and in private detail", async () => {
+  // AuctionStockRejected now produces this delivered audit snapshot, including the zero system actor UUID.
+  const cancelled = { ...auction, status: "CANCELLED", cancelledBy: "SYSTEM", cancelledReason: "STOCK_UNAVAILABLE",
+    cancelledActorId: "00000000-0000-0000-0000-000000000000", cancelledAt: "2027-01-01T02:00:00Z" };
+  const rows = await getSellerAuctions({ status: "CANCELLED" }, { context: { fetch: async () => page([
+    cancelled, { ...cancelled, id: skuId, cancelledBy: "SELLER", cancelledReason: "Item unavailable", cancelledActorId: sellerId },
+  ]) } });
+  assert.equal(rows.content.length, 2);
+  assert.equal(rows.content[0].cancelledBy, "SYSTEM");
+  assert.equal(rows.content[0].cancelledReason, "STOCK_UNAVAILABLE");
+  assert.equal(rows.content[0].cancelledActorId, "00000000-0000-0000-0000-000000000000");
+  assert.equal(rows.content[1].cancelledBy, "SELLER");
+  const detail = await getSellerAuction(id, { context: { fetch: async () => page([cancelled], 0, 100) } });
+  assert.equal(detail.cancelledBy, "SYSTEM");
+  assert.equal(detail.status, "CANCELLED");
+});
+
 test("invalid pagination and lifecycle filters never send a request", async () => {
   let calls = 0;
   const context: ApiContext = { fetch: async () => { calls++; return page([]); } };
@@ -96,4 +113,16 @@ test("unsafe input stops before transport and a stale lifecycle conflict is retu
   await assert.rejects(cancelSellerAuction(id, "No stock", { context }), (error: unknown) => isApiError(error) && error.status === 409 && error.code === "AUCTION_HAS_BIDS");
   assert.equal(calls, 1);
   await assert.rejects(scheduleSellerAuction(id, { context: { fetch: async () => envelope({ ...auction, id: productId, status: "SCHEDULED" }) } }), invalid);
+});
+
+test("new image and inventory creation rejections retain backend status and code without a retry", async () => {
+  for (const [status, code] of [[409, "AUCTION_IMAGE_REQUIRED"], [409, "AUCTION_STOCK_UNAVAILABLE"], [503, "AUCTION_INVENTORY_UNAVAILABLE"]] as const) {
+    let calls = 0;
+    const context: ApiContext = { fetch: async () => {
+      calls++;
+      return Response.json({ type: "urn:problem:domain-error", title: "Auction rejected", status, detail: "The auction cannot secure its image or stock", code }, { status });
+    } };
+    await assert.rejects(createSellerAuction(body, { context }), (error: unknown) => isApiError(error) && error.status === status && error.code === code);
+    assert.equal(calls, 1, code);
+  }
 });

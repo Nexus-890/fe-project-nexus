@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Check, CircleAlert, CircleCheck, Package, ReceiptText, RotateCcw, Truck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatVND } from "../components/formatPrice";
@@ -9,10 +9,13 @@ import { OrderPriceRows } from "../components/OrderPriceBreakdown";
 import OrderStatusBadge, { ORDER_STATUS_LABELS } from "../components/OrderStatusBadge";
 import ProductImage from "../components/ProductImage";
 import ShipmentTracking from "../components/ShipmentTracking";
+import ConfirmReceiptDialog from "../components/ConfirmReceiptDialog";
+import ReceiptIssueDialog from "../components/ReceiptIssueDialog";
+import OrderRating from "./OrderRating";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
-import { cancelOrder, getOrder, getOrderHistory } from "../service/orderService";
+import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, reportReceiptIssue } from "../service/orderService";
 import { getOrderShipment, getShipmentTracking } from "../service/shipmentService";
 import type { OrderDetail, OrderGroup, OrderStatus } from "../types/orderResponseType";
 import type { ShipmentTracking as ShipmentTrackingData } from "../types/shipmentResponseType";
@@ -22,32 +25,32 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", ti
 const paidStatuses: OrderStatus[] = ["PAID", "SHIPPED", "DELIVERED", "COMPLETED"];
 
 function OrderProgress({ status }: { status: OrderStatus }) {
-  const steps: OrderStatus[] = ["PENDING", "PAID", "SHIPPED", "DELIVERED"];
-  const active = status === "COMPLETED" ? 3 : steps.indexOf(status);
+  const steps: OrderStatus[] = ["PENDING", "PAID", "SHIPPED", "DELIVERED", "COMPLETED"];
+  const active = steps.indexOf(status);
   if (active < 0) return null;
   return <ol aria-label="Order progress" className="mt-5 flex items-start justify-between gap-2 border-t border-border pt-5">
-    {steps.map((step, index) => <li key={step} aria-current={active === index ? "step" : undefined} className={`flex flex-1 flex-col items-center gap-2 text-center text-xs ${index <= active ? "text-primary" : "text-muted-foreground"}`}>
+    {steps.map((step, index) => <li key={step} aria-current={active === index ? "step" : undefined} className={`flex min-w-0 flex-1 flex-col items-center gap-2 break-words text-center text-[10px] ${index <= active ? "text-primary" : "text-muted-foreground"}`}>
       <span className={`flex size-6 items-center justify-center rounded-full border ${index <= active ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{index < active ? <Check size={13} aria-hidden="true" /> : index + 1}</span>
-      {index === 0 ? "Placed" : step === "PAID" ? "Paid" : step === "SHIPPED" ? "Shipped" : "Delivered"}
+      <span className="w-full min-w-0 [overflow-wrap:anywhere]">{index === 0 ? "Placed" : step === "PAID" ? "Paid" : step === "SHIPPED" ? "Shipped" : step === "DELIVERED" ? "Delivered" : "Completed"}</span>
     </li>)}
   </ol>;
 }
 
-function OrderReceipt({ order }: { order: OrderDetail }) {
+function OrderReceipt({ order, showProgress }: { order: OrderDetail; showProgress: boolean }) {
   return <aside className="min-w-0 rounded-sm border border-border bg-card p-5 sm:p-6" aria-label="Order receipt">
-    <h2 className="text-base font-semibold">Order summary</h2>
+    <h2 className="text-base font-semibold">Payment</h2>
     <dl className="mt-5 space-y-3 text-sm">
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Order</dt><dd className="break-all text-right font-mono">{order.orderNumber}</dd></div>
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Placed</dt><dd className="text-right"><time dateTime={order.createdAt}>{dateFormatter.format(new Date(order.createdAt))}</time></dd></div>
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Items</dt><dd>{order.items.reduce((sum, item) => sum + item.quantity, 0)}</dd></div>
       <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Order type</dt><dd>{order.orderType === "AUCTION" ? "Auction" : "Shop purchase"}</dd></div>
-      <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Status</dt><dd><OrderStatusBadge status={order.status} /></dd></div>
+      <div className="flex justify-between gap-5"><dt className="text-muted-foreground">Status</dt><dd data-testid="order-receipt-status"><OrderStatusBadge status={order.status} /></dd></div>
     </dl>
     <dl className="mt-4 border-t border-border pt-4 text-sm">
       <div data-testid="order-receipt-total" className="flex justify-between gap-5 font-semibold"><dt>Total</dt><dd className="font-mono tabular-nums text-primary">{formatVND(order.totalAmount)}</dd></div>
       {order.breakdown && <OrderPriceRows breakdown={order.breakdown} muted />}
     </dl>
-    <OrderProgress status={order.status} />
+    {showProgress && <OrderProgress status={order.status} />}
   </aside>;
 }
 
@@ -57,10 +60,17 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
   const [reason, setReason] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reasonError, setReasonError] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
   const order = useApiQuery({
     queryKey: queryKeys.orders.detail(auth.sessionId, orderId), meta: { requiresAuth: true },
     service: (signal) => getOrder(orderId, { context: auth.requestContext, signal }),
-  }, { retry: false });
+  }, {
+    retry: false,
+    refetchInterval: (query) => !result && query.state.data?.status === "DELIVERED" ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   const history = useApiQuery({
     queryKey: queryKeys.orders.history(auth.sessionId, orderId), meta: { requiresAuth: true },
     service: (signal) => getOrderHistory(orderId, { context: auth.requestContext, signal }),
@@ -97,6 +107,43 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
       await client.invalidateQueries({ queryKey: ["orders", variables.sessionId], refetchType: "active" });
     }
   } });
+  const receipt = useApiMutation<OrderDetail, { sessionId: number }>({
+    mutationKey: ["orders", auth.sessionId, "confirm-receipt", orderId],
+    isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId),
+    execute: () => confirmReceipt(orderId, { context: auth.requestContext }),
+    invalidateKey: [["orders", auth.sessionId]],
+  }, {
+    onSuccess: (completed) => {
+      client.setQueryData(queryKeys.orders.detail(auth.sessionId, orderId), completed);
+      setReceiptOpen(false);
+    },
+    onError: async (error, variables) => {
+      if (error.status === 409 && auth.isSessionCurrent(variables.sessionId))
+        await client.invalidateQueries({ queryKey: ["orders", variables.sessionId], refetchType: "active" });
+    },
+  });
+  const receiptIssue = useApiMutation<OrderDetail, { reason: string; sessionId: number }>({
+    mutationKey: ["orders", auth.sessionId, "receipt-issue", orderId],
+    isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId),
+    execute: (variables) => reportReceiptIssue(orderId, variables.reason, { context: auth.requestContext }),
+    invalidateKey: [["orders", auth.sessionId]],
+  }, {
+    onSuccess: (held) => { client.setQueryData(queryKeys.orders.detail(auth.sessionId, orderId), held); setIssueOpen(false); },
+    onError: async (error, variables) => {
+      if (error.status === 409 && auth.isSessionCurrent(variables.sessionId))
+        await client.invalidateQueries({ queryKey: ["orders", variables.sessionId], refetchType: "active" });
+    },
+  });
+
+  useEffect(() => {
+    if (!result && order.data?.status === "COMPLETED")
+      void Promise.all([
+        queryKeys.orders.history(auth.sessionId, orderId),
+        ["orders", auth.sessionId, "list"],
+        ["orders", auth.sessionId, "own"],
+        ["orders", auth.sessionId, "group"],
+      ].map((queryKey) => client.invalidateQueries({ queryKey, refetchType: "active" })));
+  }, [auth.sessionId, client, order.data?.status, orderId, result]);
 
   if (order.isPending) return <p role="status" className="py-12 text-muted-foreground">Loading your order…</p>;
   if (!order.data || order.isError) {
@@ -122,14 +169,37 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
     current.status === "CANCELED" && history.data?.some((entry) => entry.previousStatus === "PAID" || entry.newStatus === "PAID") ? "Awaiting refund" : null;
 
   return <>
-    <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-14">
-      <div className="min-w-0">
-        <p className={`flex items-center gap-2 text-sm ${paid ? "text-success" : pending ? "text-warning-foreground" : "text-muted-foreground"}`}>
+    {!result && <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap gap-2 text-xs text-muted-foreground"><Link href="/orders" className="hover:text-primary">Orders</Link><span aria-hidden="true">›</span><span className="font-mono [overflow-wrap:anywhere]">{current.orderNumber}</span></nav>}
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <h1 id="order-detail-title" className="text-heading-32 [overflow-wrap:anywhere]">Order {current.orderNumber}{result && pending ? " isn’t paid yet" : ""}</h1>
+      <OrderStatusBadge status={current.status} />
+    </div>
+    <div className={`grid min-w-0 items-start gap-6 ${result ? "lg:grid-cols-[minmax(0,1fr)_380px]" : "xl:grid-cols-[minmax(0,1fr)_280px]"}`}>
+      <div className="min-w-0 space-y-6">
+        {result && <p className={`flex items-center gap-2 text-sm ${paid ? "text-success" : pending ? "text-warning-foreground" : "text-muted-foreground"}`}>
           {paid ? <CircleCheck size={18} aria-hidden="true" /> : <CircleAlert size={18} aria-hidden="true" />}
           {paid ? "Payment received" : pending ? "Awaiting payment" : ORDER_STATUS_LABELS[current.status]}
-        </p>
-        <h1 id="order-detail-title" className="mt-3 text-heading-32 [overflow-wrap:anywhere]">Order {current.orderNumber}{result && pending ? " isn’t paid yet" : ""}</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{paid ? "Thank you for your purchase. Follow your order’s progress here and keep your order reference for support." : pending ? "Your order has been placed and is waiting for payment. Complete your bank transfer using the payment instructions for your order group." : "Check your order details and its latest status below."}</p>
+        </p>}
+        {result && <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{paid ? "Thank you for your purchase. Follow your order’s progress here and keep your order reference for support." : pending ? "Your order has been placed and is waiting for payment. Complete your bank transfer using the payment instructions for your order group." : "Check your order details and its latest status below."}</p>}
+        {!result && current.status === "DELIVERED" && <section aria-label="Confirm order receipt" className="rounded-sm border border-border bg-card p-5 sm:p-6">
+          <h2 className="text-heading-20">Your order has been delivered</h2>
+          {current.receiptIssueReportedAt ? <div role="status" className="mt-3 rounded-sm border border-warning bg-warning/5 p-4 text-sm">
+            <p className="font-medium">Problem reported. Order completion is paused.</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{current.receiptIssueReason}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Reported <time dateTime={current.receiptIssueReportedAt}>{dateFormatter.format(new Date(current.receiptIssueReportedAt))}</time>. The order stays open until the issue is resolved.</p>
+          </div> : <>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Check your items before confirming that you received them. Your order stays open until you confirm or the confirmation period ends.</p>
+          {current.deliveredAt && <p className="mt-3 text-sm text-muted-foreground">Delivered <time dateTime={current.deliveredAt}>{dateFormatter.format(new Date(current.deliveredAt))}</time></p>}
+          {current.autoCompleteAt ? <p className="mt-2 text-sm text-muted-foreground">Automatically completes on <time dateTime={current.autoCompleteAt}>{dateFormatter.format(new Date(current.autoCompleteAt))}</time> if no issue is reported.</p> : <p className="mt-2 text-sm text-muted-foreground">The automatic completion date is not available yet.</p>}
+          {auth.user?.id === current.userId && <div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={receipt.isPending || receiptIssue.isPending} onClick={() => { receipt.reset(); setReceiptOpen(true); }} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Order received</button><button type="button" disabled={receipt.isPending || receiptIssue.isPending} onClick={() => { receiptIssue.reset(); setIssueOpen(true); }} className={buttonClass}>Report a problem</button></div>}
+          </>}
+        </section>}
+        {!result && receiptOpen && current.status === "DELIVERED" && !current.receiptIssueReportedAt && <ConfirmReceiptDialog orderNumber={current.orderNumber} pending={receipt.isPending} error={receipt.error?.detail || receipt.error?.title} onClose={() => { if (!receipt.isPending) setReceiptOpen(false); }} onConfirm={() => { if (!receipt.isPending) receipt.mutate({ sessionId: auth.sessionId }); }} />}
+        {!result && issueOpen && current.status === "DELIVERED" && !current.receiptIssueReportedAt && <ReceiptIssueDialog pending={receiptIssue.isPending} error={receiptIssue.error?.detail || receiptIssue.error?.title} onClose={() => { if (!receiptIssue.isPending) setIssueOpen(false); }} onReport={(reason) => { if (!receiptIssue.isPending) receiptIssue.mutate({ reason, sessionId: auth.sessionId }); }} />}
+        {!result && receiptIssue.error && current.status !== "DELIVERED" && <p role="alert" className="text-sm text-danger">{receiptIssue.error.detail || receiptIssue.error.title}</p>}
+        {!result && receipt.isSuccess && <p role="status" className="text-sm text-success">Receipt confirmed. Your order is completed.</p>}
+        {!result && receipt.error && (!receiptOpen || current.status !== "DELIVERED") && <p role="alert" className="text-sm text-danger">{receipt.error.detail || receipt.error.title}</p>}
+        {!result && <OrderRating key={current.orderId} order={current} />}
         <div className="mt-6 flex flex-wrap gap-3">
           {current.orderGroupId && pending && <Link href={`/checkout/payment/${encodeURIComponent(current.orderGroupId)}`} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">Pay now</Link>}
           {result && <Link href={`/order/${encodeURIComponent(current.orderId)}`} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">View Order</Link>}
@@ -164,11 +234,12 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{refund === "Refunded" ? "Your refund has been completed." : refund === "Refund requested" ? "Your refund request is being processed. Check back here for updates." : "Your paid order has been cancelled. We are waiting for the refund process to start."}</p>
           {refund !== "Refunded" && <button type="button" className={`${buttonClass} mt-4`} disabled={order.isFetching || history.isFetching} onClick={() => void Promise.all([order.refetch(), history.refetch()])}>{order.isFetching || history.isFetching ? "Refreshing…" : "Refresh refund status"}</button>}
         </section>}
-      </div>
-      <OrderReceipt order={current} />
-    </div>
     {!result && (shipment.isPending ? <p role="status" className="mt-10 text-sm text-muted-foreground">Checking shipping updates…</p> : shipment.isError ? <div className="mt-10 rounded-sm border border-border p-5"><p role="alert" className="text-sm text-danger">{shipment.error.detail || "Unable to load shipping updates."}</p><button type="button" className={`${buttonClass} mt-3`} onClick={() => void shipment.refetch()}>Retry shipping updates</button></div> : shipment.data ? <ShipmentTracking shipment={shipment.data} /> : null)}
-    {!result && <div className="mt-10 grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+    {!result && <div className="grid min-w-0 items-start gap-6">
+      <section className="rounded-sm border border-border p-5 sm:p-6" aria-label="Order history"><h2 className="flex items-center gap-2 text-base font-semibold"><Truck size={18} aria-hidden="true" />Order timeline</h2>
+        {history.isPending ? <p role="status" className="mt-4 text-sm text-muted-foreground">Loading updates…</p> : history.isError ? <div className="mt-4 text-sm"><p role="alert">{history.error.detail || "Unable to load updates."}</p><button type="button" onClick={() => void history.refetch()} className={`${buttonClass} mt-3`}>Retry updates</button></div> : <ol className="mt-5 space-y-6">{history.data?.map((entry) => <li key={entry.id} className="border-l-2 border-primary pl-4"><p className="text-sm font-medium">{ORDER_STATUS_LABELS[entry.newStatus]}</p><time dateTime={entry.createdAt} className="mt-1 block text-xs text-muted-foreground">{dateFormatter.format(new Date(entry.createdAt))}</time>{entry.reason && <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">{entry.reason}</p>}</li>)}</ol>}
+        {history.isSuccess && !history.data.length && <p className="mt-4 text-sm text-muted-foreground">No updates yet.</p>}
+      </section>
       <section className="min-w-0 rounded-sm border border-border p-5 sm:p-6" aria-label="Order items">
         <h2 className="flex items-center gap-2 text-heading-20"><Package size={20} aria-hidden="true" />Your items</h2>
         <ul className="mt-5 divide-y divide-border">{current.items.map((item) => <li key={item.orderItemId} className="flex min-w-0 gap-4 py-5 first:pt-0">
@@ -176,11 +247,10 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
           <div className="min-w-0 flex-1"><Link href={`/products/${encodeURIComponent(item.productId)}`} className="text-sm font-medium hover:text-primary [overflow-wrap:anywhere]">{item.productName}</Link><p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">{item.skuCode}</p><p className="mt-2 text-xs text-muted-foreground">Qty {item.quantity} · {formatVND(item.unitPrice)} each</p><p className="mt-2 font-mono text-sm font-semibold text-primary [overflow-wrap:anywhere]">{formatVND(item.totalPrice)}</p></div>
         </li>)}</ul>
       </section>
-      <section className="rounded-sm border border-border p-5 sm:p-6" aria-label="Order history"><h2 className="flex items-center gap-2 text-base font-semibold"><Truck size={18} aria-hidden="true" />Order timeline</h2>
-        {history.isPending ? <p role="status" className="mt-4 text-sm text-muted-foreground">Loading updates…</p> : history.isError ? <div className="mt-4 text-sm"><p role="alert">{history.error.detail || "Unable to load updates."}</p><button type="button" onClick={() => void history.refetch()} className={`${buttonClass} mt-3`}>Retry updates</button></div> : <ol className="mt-5 space-y-6">{history.data?.map((entry) => <li key={entry.id} className="border-l-2 border-primary pl-4"><p className="text-sm font-medium">{ORDER_STATUS_LABELS[entry.newStatus]}</p><time dateTime={entry.createdAt} className="mt-1 block text-xs text-muted-foreground">{dateFormatter.format(new Date(entry.createdAt))}</time>{entry.reason && <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">{entry.reason}</p>}</li>)}</ol>}
-        {history.isSuccess && !history.data.length && <p className="mt-4 text-sm text-muted-foreground">No updates yet.</p>}
-      </section>
     </div>}
+      </div>
+      <OrderReceipt order={current} showProgress={result} />
+    </div>
     <Link href="/orders" className="mt-8 inline-flex min-h-11 items-center gap-2 text-sm hover:text-primary"><ArrowLeft size={16} aria-hidden="true" />All orders</Link>
   </>;
 }
@@ -188,7 +258,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
 function OrderDetailPage({ orderId, result = false }: { orderId: string; result?: boolean }) {
   const auth = useAuth();
   const returnTo = result ? `/checkout/result/${orderId}` : `/order/${orderId}`;
-  return <section className="mx-auto w-full max-w-[1248px] px-4 py-10 sm:px-6 lg:py-14" aria-labelledby="order-detail-title">
+  return <section className={result ? "mx-auto w-full max-w-[1248px] px-4 py-10 sm:px-6 lg:py-14" : "min-w-0 pb-8"} aria-labelledby="order-detail-title">
     {auth.status === "authenticated" ? <OrderContents key={`${auth.sessionId}:${orderId}`} orderId={orderId} result={result} /> : auth.status === "anonymous" ? <div className="rounded-sm border border-border p-8"><ReceiptText size={30} className="text-primary" aria-hidden="true" /><h1 id="order-detail-title" className="mt-4 text-heading-24">Sign in to view your order</h1><Link href={`/sign-in?returnTo=${encodeURIComponent(returnTo)}`} className={`${buttonClass} mt-5`}>Sign in</Link></div> : auth.status === "error" ? <div className="rounded-sm border border-border p-6"><p role="alert">{auth.error?.detail || "Unable to load your account."}</p><button type="button" onClick={() => void auth.retryProfile()} className={`${buttonClass} mt-4`}>Retry account</button></div> : <p role="status" className="py-12 text-muted-foreground">Loading your account…</p>}
   </section>;
 }

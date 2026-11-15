@@ -6,6 +6,16 @@ import type { SellerAuctionFilters } from "../types/sellerAuctionType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  reputation: {
+    seller: (sessionId: number, sellerId: string) => ["reputation", sessionId, "seller", sellerId] as const,
+    orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>
+      ["rating", sessionId, "order", sellerId, buyerId, orderId] as const,
+  },
+  account: {
+    addresses: (sessionId: number) => ["account", sessionId, "addresses"] as const,
+    sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
+    phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
+  },
   backoffice: {
     products: (sessionId: number, page: number) => ["backoffice", sessionId, "products", page] as const,
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
@@ -30,7 +40,14 @@ export const queryKeys = {
   },
 
   auctions: {
+    list: (status: string, page: number) => ["auctions", "list", status, page] as const,
+    own: (sessionId: number, page: number) => ["auction-bids", sessionId, "list", page] as const,
+    offers: (sessionId: number, page: number) => ["auction-offers", sessionId, page] as const,
     active: ["auctions", "active"] as const,
+    detail: (id: string) => ["auctions", id, "detail"] as const,
+    state: (id: string) => ["auctions", id, "state"] as const,
+    bids: (id: string, page: number) => ["auctions", id, "bids", page] as const,
+    mine: (sessionId: number, id: string) => ["auction-bids", sessionId, id] as const,
   },
   catalog: {
     stock: (skuId: string) => ["inventory", "available", skuId] as const,

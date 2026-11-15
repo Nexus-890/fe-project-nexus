@@ -118,6 +118,12 @@ async function handleRequest(req, res) {
       if (!roles.every((role) => ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"].includes(role))) return json(res, { error: "invalid_roles" }, 400);
       fixtureIdentity = { roles, subject: url.searchParams.get("subject") || subject, email: url.searchParams.get("email") || "buyer@nexus.local", privileges: ["PROFILE.VIEW", "ORDER.LIST"] };
     }
+    // Opt-in signed permissions for the live buyer suite; ordinary fixtures keep their existing defaults.
+    if (url.searchParams.has("privileges")) {
+      const privileges = url.searchParams.get("privileges").split(",");
+      if (!privileges.every((privilege) => ["PROFILE.VIEW", "ORDER.LIST", "ORDER.VIEW", "REPUTATION.VIEW", "REPUTATION.RATE"].includes(privilege))) return json(res, { error: "invalid_privileges" }, 400);
+      fixtureIdentity = { ...fixtureIdentity, privileges };
+    }
     if (url.searchParams.has("mode")) mode = url.searchParams.get("mode");
     if (url.searchParams.has("ttl")) {
       const value = Number(url.searchParams.get("ttl"));

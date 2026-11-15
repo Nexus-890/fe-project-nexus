@@ -31,7 +31,7 @@ export type OrderDetailItem = Omit<components["schemas"]["OrderItem"], "unitPric
 };
 
 export type OrderDetail = OrderSummary & Pick<
-  OrderWireResponse, "userId" | "sellerId" | "orderType"
+  OrderWireResponse, "userId" | "sellerId" | "orderType" | "deliveredAt" | "autoCompleteAt" | "receiptIssueReason" | "receiptIssueReportedAt"
 > & {
   items: OrderDetailItem[];
   canCancel: boolean;

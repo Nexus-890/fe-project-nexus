@@ -1,0 +1,324 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Proposed #210 seller application integration contract",
+    "version": "0.2.0-proposed",
+    "description": "Frontend proposal requested in the #219 review. The own-application GET and full DTO are not delivered backend endpoints. Backend #210 must implement/agree this contract before NEXT_PUBLIC_SELLER_APPLICATION_ENABLED is enabled."
+  },
+  "x-contract-status": "proposed, not delivered",
+  "x-backend-owner": "#210",
+  "paths": {
+    "/api/v1/sellers/applications/me": {
+      "get": {
+        "operationId": "getOwnSellerApplication",
+        "summary": "Read the authenticated buyer’s own application",
+        "description": "Select solely by validated JWT subject. No userId/id query or path parameter. Return 200 data:null when the caller never applied, otherwise the full persisted current record including reason. Do not return 404 for the empty state; missing endpoint errors remain errors. Requires no Admin list permission.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Own record or explicit null; Cache-Control: no-store",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnSellerApplicationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVICE_UNAVAILABLE",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/applications": {
+      "post": {
+        "operationId": "submitSellerApplication",
+        "summary": "Submit or resubmit the buyer’s seller application",
+        "description": "Issue-defined BUYER operation. Persist by JWT subject; if current record is REJECTED, update that record with the supplied values, set PENDING, clear reason and retain id. PENDING or ACTIVE returns SELLER_APPLICATION_EXISTS (409). Successful response uses the same full DTO as the own read. Admin list/approve/reject remain defined by issue #210 and #227.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerApplicationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Persisted current application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerApplicationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SELLER_APPLICATION_EXISTS",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVICE_UNAVAILABLE",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "SellerApplicationInput": {
+        "type": "object",
+        "required": [
+          "companyName",
+          "phone",
+          "note"
+        ],
+        "properties": {
+          "companyName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 150
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9]{7,15}$"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1000
+          }
+        },
+        "additionalProperties": false
+      },
+      "SellerApplication": {
+        "type": "object",
+        "required": [
+          "id",
+          "companyName",
+          "phone",
+          "note",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "companyName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9]{7,15}$"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "REJECTED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Required nonblank text when REJECTED. Null when PENDING/ACTIVE; clear it on resubmission."
+          }
+        },
+        "additionalProperties": false
+      },
+      "OwnSellerApplicationResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "response success"
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SellerApplication"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SellerApplicationResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "response success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SellerApplication"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "status",
+          "code",
+          "title"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

@@ -1,0 +1,327 @@
+purpose:
+  stands_in_for: >-
+    Local auction-service HTTP dependencies, catalog media/detail, gateway cookie session
+    and Keycloak protocol. The auction detail, numeric POST bid and own bid list use
+    delivered DTOs. At merged develop aa238638, state and public history are also
+    delivered; older assumptions below retain their dated pre-delivery evidence.
+    The shared #220 room additionally reads protected seller reputation and shows
+    returned score/trust alongside its bidding controls. SSE /stream with
+    named state follows the 2026-11-14 reviewer clarification for #253; runtime delivery
+    remains unverified. Winner shipping follows the exact controller/OpenAPI contract on
+    unmerged #172 branch b17f3275. No published owner mock was identified: installed CLI
+    1.73.0 has no postman status command, and postman mock list --json lists only local
+    mocks with null IDs.
+  unblocks: >-
+    Real Next.js browser acceptance of the Auction room with state polling, server-derived
+    countdown, idempotent bid retry, masked history, end states, SSE silence fallback,
+    two-browser updates, conditional winner address review and payment handoff, and
+    responsive layout, plus buyer auction discovery, My Bids, reviewer-agreed offer
+    routes and accepted-offer address/payment handoff. The browser has no HTTP proxy setting, so dedicated one-port
+    dependency routing uses 3928 and the app uses 3118.
+assumptions:
+  - id: draft-read-and-sse-delivery
+    status: conflicting
+    claim: >-
+      The backend supplies GET auction state and public bid history, an SSE stream, and
+      winner settlement/order fields for the complete room flow.
+    reason: >-
+      The supplied task requires these capabilities and draft auction OpenAPI documents
+      state/history, but origin/develop 09b3cf6f controllers do not implement state,
+      public history or SSE. AuctionResponse omits finalPrice, paymentDueAt and orderId. A
+      local fixture cannot establish their delivery.
+    verification: >-
+      On 2026-11-13 compared delivered and draft OpenAPI and auction/bid controllers.
+      Rechecked on 2026-11-14: develop remains 09b3cf6f. #172 branch b17f3275 now
+      implements shipping confirmation but AuctionResponse still omits
+      orderId/finalPrice/paymentDueAt, and OrderResponse exposes no auction reference.
+      Reviewer selected /stream and named state for #253; no backend implementation was
+      found in inspected refs. Local fixture behavior does not settle these runtime
+      dependencies.
+    source: >-
+      ../be-project-nexus/docs/api/auction-service.yaml;
+      ../be-project-nexus/docs/api/openapi/auction-service.yaml;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionController.java;
+      postman/mocks/auction-api/default.js; tests/auction.spec.ts
+    updated_at: '2026-11-14'
+  - id: auction-browser-behavior
+    status: supported
+    claim: >-
+      The prior frontend revision aebc78e3 passed fourteen local Auction scenarios:
+      two-second public updates, server-clock countdown, authenticated numeric bidding,
+      server minimum correction, safe same-key replay, winner order link, draft-read
+      failure feedback, SSE disconnect fallback, mobile bounds, zero-countdown closure
+      with late extension reopening, stale-history leading protection, 429 recovery, SSE
+      burst coalescing and unsafe-money validation.
+    reason: >-
+      The suite runs Next and its actual API boundary against Postman HTTP dependency
+      servers. This is retained historical evidence for the initial room, not validation
+      of the changed stream protocol, settlement UI or winner shipping flow. Assertions
+      inspect UI and fixture request/write evidence; they do not establish real backend
+      delivery.
+    verification: >-
+      On 2026-11-13 ran npm run test:browser -- --config playwright.auction.config.ts:
+      fourteen passed in 1.1 minutes after an unchanged retry when the Next security
+      reminder stopped the first startup. The run covered successful, deliberate
+      404/429/503 and terminal responses, 30-event SSE burst coalescing, one safe same-key
+      replay write, and no unmodeled 501 calls. Inspected and preserved desktop, mobile,
+      leading and winner PNGs in docs/features/auction-evidence/; mobile controls remain
+      within 375px and the leading button hover keeps readable contrast. Initial attempts
+      before the final unchanged retry stopped on the cross-drive dependency junction or
+      security reminder; copying installed dependencies into this worktree resolved the
+      environment issue. No production bundler or backend source was changed. Ports
+      3118/3928 stopped after runner cleanup. On 2026-11-14 reviewer fixes superseded this
+      behavior; expanded suite results must be recorded separately before claiming current
+      browser coverage.
+    source: >-
+      tests/auction.spec.ts; playwright.auction.config.ts; tests/auction-fixture.mjs;
+      postman/mocks/auction-api/default.js; test-results/auction-simulation.ndjson
+      (ignored local evidence); test-results/auction/ (ignored local traces);
+      docs/features/auction-evidence/{desktop,leading,mobile,won}.png
+    updated_at: '2026-11-14'
+  - id: buyer-list-and-offer-provider-contract
+    status: unknown
+    claim: >-
+      At the initial 2026-11-13 checkpoint, backend #208 provides the proposed private buyer offer list and accept/decline
+      paths, selects the recipient's own highest amount, enforces eligibility,
+      a single open offer and expiry, and creates/settles one order after acceptance.
+    reason: >-
+      No offer schema, controller, DTO or OpenAPI exists at this baseline. The
+      isolated frontend service and local mock describe an explicit proposal;
+      successful simulation cannot establish backend database or payment guarantees.
+    verification: >-
+      On 2026-11-13 compared delivered auction OpenAPI/controllers/migrations and
+      #205/#268 issue screenshots. Read-only list/mine routes are delivered; offers
+      are not. Address confirmation/payment handoff also awaits #172/#208.
+    source: >-
+      service/auctionOfferService.ts; docs/features/auction-list-my-bids.md;
+      ../be-project-nexus/docs/api/openapi/auction-service.yaml;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice
+    updated_at: '2026-11-13'
+  - id: buyer-list-my-bids-offer-browser-behavior
+    status: supported
+    claim: >-
+      Historical 2026-11-13 checkpoint at 6d5fb0ec: in nine modeled scenarios, real Next preserves public list pagination and
+      ticking countdowns, collects private bid pages for final-state filters,
+      displays only returned seller offers at their recipient amount, guards
+      accept writes, handles decline/expiry/outages and reconciles an interrupted
+      acceptance from a read without repeating the write; controls fit 375px.
+    reason: >-
+      Tests exercise the actual frontend HTTP/auth boundary against local Postman
+      dependencies and assert resulting UI plus dependency request/order evidence.
+      No production mock fallback or provider implementation is substituted into Next.
+    verification: >-
+      On 2026-11-13 ran npm run test:auction-list: nine passed in 31.6 seconds;
+      final complete image captures rerun passed nine in 37.6 seconds.
+      Inspected modeled list ACTIVE page0/page1/SCHEDULED, private mine page0/page1
+      and offer reads, accept/decline POSTs, injected 404/503 outcomes, screenshot
+      captures and no unmodeled 501 calls. Existing room regression passed 14
+      cases after an unchanged retry following the installed Next reminder.
+      These results establish caller behavior against stand-ins, not #208 delivery.
+      The 2026-11-15 review replaces the old offer paths and adds accepted-offer
+      address/payment handoff; the nine-case run is not evidence for those changes.
+    source: >-
+      tests/auction-list.spec.ts; tests/auction-list-service.test.ts;
+      postman/mocks/auction-api/default.js; playwright.auction-list.config.ts;
+      test-results/auction-list-simulation.ndjson (ignored local evidence);
+      docs/features/auction-list-evidence/; docs/features/auction-list-verification.md
+    updated_at: '2026-11-13'
+  - id: reviewer-stream-and-terminal-behavior
+    status: supported
+    claim: >-
+      Against the local HTTP fixtures, the revised room applies matching named state
+      immediately, restores polling after silence, rejects stale snapshots and waits for
+      final settlement before a verified winner/loser result.
+    reason: >-
+      Historical checkpoint at 6550d254 only. Its five-second state-only liveness rule and
+      public optional checkout references were superseded by the latest
+      heartbeat/private-projection revision.
+    verification: >-
+      On 2026-11-14 the complete auction browser suite passed 25/25 in 2.1 minutes;
+      unit/auth/service tests passed 283. Two independent contexts measured 78.5974ms from
+      bid click to observer update. After 5.6 seconds of stream silence two fallback polls
+      occurred. Invalid/foreign state, delayed loss and stale private win cases passed.
+      Evidence counts 1192 HTTP calls: API 1044, Keycloak 102, session 46, no unmodeled
+      501, ten /stream 200 and 26 deliberate /stream 503 responses, no /events. Live #267
+      T4 and 1000 connections remain unverified. The earlier address-preservation failure
+      was fixed before this final full run; initial Next security reminders interrupted
+      startup and unchanged retries succeeded. Final generated-type drift, lint and fresh
+      typecheck pass. The isolated production build at .next-auction-review-build passed
+      after an unchanged security-advisory retry. Full catalog passed 55 with 38 existing
+      configuration skips and zero failures in 2.2 minutes after an unchanged
+      advisory/startup-shutdown retry. No production changes followed the 25-browser run.
+    source: >-
+      features/useAuctionState.ts; features/auctionStateReconciliation.ts;
+      tests/auction-state-reconciliation.test.ts; tests/auction.spec.ts;
+      docs/features/auction-verification.md;
+      docs/features/auction-evidence/two-context-push-timing.json;
+      test-results/auction-simulation.ndjson (ignored local HTTP evidence)
+    updated_at: '2026-11-14'
+  - id: winner-shipping-contract-and-replay
+    status: supported
+    claim: >-
+      On #172 branch b17f3275, shipping confirmation accepts a direct ShippingAddress body
+      and returns group id, numeric shipping/total and the original deadline; an identical
+      normalized address replays its saved confirmation.
+    reason: >-
+      The integration branch controller, service and OpenAPI agree on this contract. It is
+      not merged into develop and has not been exercised here against a real service. The
+      room requires a genuine order id that current read DTOs do not expose, so complete
+      live winner checkout remains open. The latest revision now supplies the missing
+      owner-only order reference through the existing /bids/mine backend read; current
+      integration tests prove recorded-value privacy with real PostgreSQL, while
+      settlement workers remain an integration dependency.
+    verification: >-
+      On 2026-11-14 inspected b17f3275 AuctionShippingController, AuctionShippingService
+      and commerce OpenAPI. Four service tests cover direct HTTP serialization/current
+      Bearer, numeric validation, preflight address validation and preserved 409/abort
+      outcomes; the 283-unit run passed. The final 25/25 browser run also passed address
+      review before POST, identical-address recovery with one fixture confirmation,
+      typed-input preservation through WON-to-SETTLED and private 503, and private timeout
+      CTA closure. Navigation loaded the existing payment page and its fixture QR. This
+      proves caller handoff against stand-ins, not a real payment session, transfer or
+      delivered order-reference read API.
+    source: >-
+      b17f3275:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/AuctionShippingController.java;
+      b17f3275:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/AuctionShippingService.java;
+      b17f3275:be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      service/auctionCheckoutService.ts; tests/auction-checkout-service.test.ts;
+      features/AuctionWinnerCheckout.tsx; tests/auction.spec.ts
+    updated_at: '2026-11-14'
+  - id: heartbeat-and-private-winner-projection-20261114
+    status: supported
+    claim: >-
+      Named heartbeat every 15 seconds keeps the stream healthy; 30 seconds of silence
+      restores polling. The existing private own-bids API exposes only the recorded
+      winner's stored orderId/paymentDueAt/finalPrice, and the room consumes this private
+      handoff.
+    reason: >-
+      The real PostgreSQL/JWT-scoped MVC read and its privacy boundary passed integration
+      tests. The real Next frontend passed HTTP stand-in tests using opaque named
+      heartbeats, delayed private order projection, address confirmation and the payment
+      page. These results do not establish STAGING, Kafka settlement, bank integration or
+      load acceptance.
+    verification: >-
+      2026-11-14: 289 FE unit tests and 26/26 auction browser scenarios passed (3.2
+      minutes). Actual per-connection heartbeat spacing 15012ms during a 32041ms
+      observation; silence exceeded 30s before two-second fallback. Local two-context
+      update 116.6478ms. HTTP log: 1233 requests (API1083, Keycloak103, session47), zero
+      unmodeled501 and zero /events. Backend selected verify passed268Surefire+10Failsafe
+      with two Docker-only fixtures excluded; focused MyBid integration23passed on
+      disposable PostgreSQL18.6. OpenAPI lint/inventory100 passed. Final FE
+      lint/typecheck/generated drift passed; production build at
+      .next-auction-heartbeat-build passed after unchanged security-reminder retry; full
+      catalog passed55 with38existing configuration skips, zero failures,2.8minutes after
+      unchanged security-reminder retry. Develop advanced during packaging to a686c099 and
+      was merged without conflicts at c4edf7ac. No auction/frontend runtime source changed
+      in that merge; commerce/inventory/payment DTOs were regenerated. Post-merge
+      drift/lint/typecheck/289units and productionbuild passed, with an unchanged Next
+      security-reminder retry. Updated contract inventory101passed. The browser evidence
+      predates that upstream-only merge.
+    source: >-
+      features/useAuctionState.ts; service/auctionService.ts; tests/auction.spec.ts;
+      docs/features/auction-evidence/heartbeat-contract-timing.json;
+      docs/features/auction-evidence/two-context-push-timing.json;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/bidding/MyBidQuery.java;
+      ../be-project-nexus/docs/testing/auction-mine.md
+    updated_at: '2026-11-14'
+  - id: buyer-offer-review-contract-20261115
+    status: unknown
+    claim: >-
+      Reviewer-agreed buyer offer paths are GET /api/v1/auctions/offers/me and POST
+      /api/v1/auctions/offers/{offerId}/accept or /decline. Accepted offers expose
+      their real order/deadline for direct-address shipping confirmation and the
+      existing payment page, using only returned group/fee/total/deadline values.
+    reason: >-
+      No #208 provider DTO/controller/OpenAPI/table is delivered at merged develop
+      aa238638. The canonical paths come from MR !170 review; response parsing remains
+      an explicit integration seam. #172 shipping is implemented on its separate
+      branch, not merged here. Local caller tests cannot prove database, notification,
+      inventory or payment guarantees.
+    verification: >-
+      On 2026-11-15 inspected current develop controllers/OpenAPI and #172 sources at
+      b17f3275 and 9fc3e5e6. Both shipping revisions accept direct ShippingAddress,
+      return orderGroupId/shippingFee/totalAmount/dueAt and replay the same normalized
+      address without a fresh payment deadline. Provider behavior itself remains
+      unverified; current caller evidence is recorded separately below.
+      MyBid exposes no payment status: SETTLED winners remain Won and Awaiting order
+      counts missing winner order references rather than asserting unpaid orders.
+    source: >-
+      service/auctionOfferService.ts; features/AuctionSecondChanceOffers.tsx;
+      features/AuctionWinnerCheckout.tsx; service/auctionCheckoutService.ts;
+      tests/auction-list.spec.ts; docs/features/auction-list-verification.md;
+      9fc3e5e6:be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/AuctionShippingController.java
+    updated_at: '2026-11-15'
+  - id: buyer-offer-review-browser-behavior-20261115
+    status: supported
+    claim: >-
+      The canonical buyer offer paths and complete local accepted-offer address/payment
+      handoff pass against real HTTP dependencies. Background offer-read errors preserve
+      the immutable shipping attempt, an interrupted confirmation replays the same
+      address, expired payment closes checkout and multiple cards have independent labels.
+    reason: >-
+      Real Next and the normal HTTP/auth boundary exercise the Postman stand-in.
+      A separate local HTTP service test checks GET offers/me and POST offerId actions,
+      current Bearer and empty action bodies. These are caller guarantees and do not
+      establish the undelivered #208 provider or a live #172/payment stack.
+    verification: >-
+      On 2026-11-15 all 318 FE unit tests passed, including the new canonical-route
+      real-HTTP test. The complete auction-list suite passed 12/12 in 1.4 minutes.
+      T5 reached the existing payment page and fixture QR after address review/editing,
+      direct-body submission and duplicate-click guards. Initial Next security reminder
+      required an unchanged startup retry. An earlier 10/12 attempt used two incorrect
+      synthetic-focus timing assumptions; the final tests wait for actual 15-second
+      polling and all pass. The inherited room suite passed 26/26 in 3.1 minutes
+      after an unchanged Next-reminder startup retry. Final targeted My Bids/T5/mobile
+      capture and semantic assertions passed 3/3 in 26.8 seconds, including SETTLED
+      winner as Won and Awaiting order summary. Seven refreshed PNGs are preserved.
+      Full12/room26/targeted3 HTTP evidence is backed up under ignored
+      node_modules/.cache/auction-review-evidence because test-results is overwritten
+      by later browser runs. Full12 has deliberate404/503 and no unmodeled501;
+      targeted3 has only200/201/204/302 and no errors. Full catalog/navigation passed
+      55 cases with38existing configuration skips, zero failures,2.8minutes and no
+      retry. Final serial typecheck passed after removing an unreachable old Settled
+      styling comparison. Production build at .next-auction-205-review-build passed
+      after an unchanged installed-Next-reminder retry; all30static pages generated.
+      Final target stayed aa238638, all three conflicts were resolved and marker/diff
+      checks passed. No new backend source or runtime logs relative to develop.
+    source: >-
+      tests/auction-list.spec.ts; tests/auction-list-service.test.ts;
+      features/AuctionSecondChanceOffers.tsx; features/AuctionWinnerCheckout.tsx;
+      docs/features/auction-list-verification.md; docs/features/auction-list-evidence/;
+      node_modules/.cache/auction-review-evidence/ (ignored local HTTP evidence)
+    updated_at: '2026-11-15'
+fingerprints:
+  - id: auction-list-review-20261115
+    date: '2026-11-15'
+    commit: >-
+      #205 implementation 6d5fb0ec with reviewer fixes and develop aa238638 merge;
+      #172 shipping source inspected at 9fc3e5e6; verified precommit merge working tree
+    cli: 1.73.0
+  - id: auction-list-205-20261113
+    date: '2026-11-13'
+    commit: 'aebc78e3 plus uncommitted #205 frontend additions on fsa_ChungTQ/chore/205-fe-auction-list-my-bids-and-second-chance-offer-card'
+    cli: '1.73.0'
+  - id: auction-room-20261113
+    date: '2026-11-13'
+    commit: >-
+      origin/develop 09b3cf6f; implementation prepared on
+      fsa_ChungTQ/chore/178-fe-auction-room-state-and-countdown-bid-panel-bid-history-and-end-state-live-updates
+    cli: 1.73.0
+  - id: auction-reviewer-revision-20261114
+    date: '2026-11-14'
+    commit: >-
+      aebc78e3 with uncommitted reviewer fixes; develop 09b3cf6f; #172 contract inspected
+      at b17f3275 only
+    cli: 1.73.0
+  - id: heartbeat-private-projection-latest
+    date: '2026-11-14'
+    commit: >-
+      6550d254 plus review follow-up; develop09b3cf6f; #172integration sourceb17f3275;
+      #168sourceec75d5c0
+    cli: 1.73.0
+  - id: final-develop-synchronization
+    date: '2026-11-14'
+    commit: >-
+      implementation b2cb4d03; develop a686c099 merged at c4edf7ac; generated DTO
+      compatibility recorded in follow-up commit
+    cli: 1.73.0

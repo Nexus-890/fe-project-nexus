@@ -5,6 +5,7 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { SellerAuction, SellerAuctionFilters, SellerAuctionInput, SellerAuctionStatus, SellerAuctionUpdate } from "../types/sellerAuctionType";
 
 export const SELLER_AUCTION_STATUSES = ["CREATED", "SCHEDULED", "ACTIVE", "ENDED", "WON", "SETTLED", "FAILED", "PAYMENT_TIMEOUT", "CANCELLED"] as const satisfies readonly SellerAuctionStatus[];
+const cancellationSources = ["SELLER", "ADMIN", "SYSTEM"] as const satisfies readonly NonNullable<SellerAuction["cancelledBy"]>[];
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const instant = (value: unknown): value is string => typeof value === "string" && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const validMoney = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0 && value <= Number.MAX_SAFE_INTEGER / 100 && Number(value.toFixed(2)) === value;
@@ -17,7 +18,7 @@ export const parseSellerAuction = (value: unknown): SellerAuction => {
     !Number.isSafeInteger(value.bidCount) || Number(value.bidCount) < 0 || !Number.isSafeInteger(value.extensionCount) || Number(value.extensionCount) < 0 ||
     value.currency !== "VND" || !isSellerAuctionStatus(value.status) || ![value.startAt, value.endAt, value.originalEndAt].every(instant) ||
     Date.parse(String(value.endAt)) <= Date.parse(String(value.startAt)) ||
-    (value.cancelledBy != null && value.cancelledBy !== "SELLER" && value.cancelledBy !== "ADMIN") ||
+    (value.cancelledBy != null && !cancellationSources.some((source) => source === value.cancelledBy)) ||
     (value.cancelledReason != null && typeof value.cancelledReason !== "string") ||
     (value.cancelledActorId != null && !uuid(value.cancelledActorId)) || (value.cancelledAt != null && !instant(value.cancelledAt)))
     throw createInvalidResponseError("Invalid seller auction");
@@ -31,7 +32,7 @@ export const parseSellerAuction = (value: unknown): SellerAuction => {
     startingPrice, currentPrice, bidIncrement,
     bidCount: Number(value.bidCount), currency: "VND", startAt: String(value.startAt), endAt: String(value.endAt), originalEndAt: String(value.originalEndAt),
     extensionCount: Number(value.extensionCount), status: value.status,
-    cancelledBy: value.cancelledBy == null ? null : value.cancelledBy as "SELLER" | "ADMIN",
+    cancelledBy: value.cancelledBy == null ? null : value.cancelledBy as SellerAuction["cancelledBy"],
     cancelledReason: value.cancelledReason == null ? null : value.cancelledReason as string,
     cancelledActorId: value.cancelledActorId == null ? null : value.cancelledActorId as string,
     cancelledAt: value.cancelledAt == null ? null : value.cancelledAt as string,

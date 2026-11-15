@@ -289,3 +289,27 @@ test("profile fits 375x812 without clipped text and has desktop and mobile scree
   await page.setViewportSize({ width: 1440, height: 1634 });
   await page.screenshot({ path: info.outputPath("profile-desktop-1440.png"), fullPage: true, style: screenshotStyle });
 });
+
+test("profile password action opens Keycloak credential settings with a safe profile referrer", async ({ page }) => {
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  const profileOrigin = new URL(page.url()).origin;
+  // The fixture only acknowledges navigation. Keycloak's actual forms, reset
+  // tokens and email delivery require the documented live acceptance checks.
+  await page.route("**/realms/nexus/account/**", (route) => route.fulfill({
+    contentType: "text/html",
+    body: "<!doctype html><html><body><h1>Account console fixture</h1></body></html>",
+  }));
+  const accountRequest = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/realms/nexus/account/"));
+  await page.getByRole("button", { name: "Change password", exact: true }).click();
+  const destination = new URL((await accountRequest).url());
+  expect(destination.origin).toBe(simulation);
+  expect(destination.pathname).toBe("/keycloak/realms/nexus/account/");
+  expect([...destination.searchParams]).toEqual([
+    ["referrer", "nexus-web"],
+    ["referrer_uri", `${profileOrigin}/profile`],
+  ]);
+  await expect(page).toHaveURL(/#\/account-security\/signing-in$/);
+});

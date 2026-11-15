@@ -1,6 +1,8 @@
 import type { CategoryNode } from "../types/catalogResponseType";
+import type { ProductFilters } from "../types/catalogRequestType";
 
 export const CATALOG_PAGE_SIZE = 12;
+export const SEARCH_MAX_PRICE = 50000000;
 
 export const parsePage = (value: string | string[] | undefined): number => {
   if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return 1;
@@ -42,21 +44,33 @@ export const readQueryValue = (value: string | string[] | undefined): string =>
 export const categoryHref = (slug: string): string =>
   `/categories/${encodeURIComponent(slug)}`;
 
+export interface SearchState {
+  q?: string;
+  category?: string;
+  sort?: ProductFilters["sort"];
+  page?: number;
+  listingType?: ProductFilters["listingType"];
+  trust?: string[];
+  condition?: string[];
+  maxPrice?: number;
+  minRating?: number;
+}
+
 export const searchHref = ({
   q,
   category,
   sort,
   page,
-}: {
-  q?: string;
-  category?: string;
-  sort?: string;
-  page?: number;
-}): string => {
+  listingType,
+  maxPrice,
+}: SearchState): string => {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (category) params.set("category", category);
-  if (sort) params.set("sort", sort);
+  if (sort && sort !== "relevance") params.set("sort", sort);
+  if (listingType && listingType !== "all") params.set("listingType", listingType);
+  // Trust/condition/rating have no catalog search data and remain disabled controls.
+  if (maxPrice !== undefined && maxPrice < SEARCH_MAX_PRICE) params.set("maxPrice", String(maxPrice));
   if (page && page > 1) params.set("page", String(page));
   const query = params.toString();
   return query ? `/search?${query}` : "/search";
