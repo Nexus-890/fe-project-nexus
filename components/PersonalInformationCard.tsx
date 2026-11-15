@@ -14,6 +14,7 @@ import type { UserResponse } from "@/types/authResponseType";
 import type { UpdateProfileRequest } from "@/types/accountType";
 import type { ApiResult } from "@/types/commonResponseType";
 import { profileFormValues, profileSchema, profileUpdate, todayLocal, type ProfileFormValues } from "@/features/profileSchema";
+import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 
 interface PersonalInformationCardProps {
   user: UserResponse;
@@ -96,7 +97,7 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
                     aria-invalid={Boolean(errors[field.name])}
                     aria-describedby={[help, errors[field.name] ? `profile-${field.name}-error` : undefined].filter(Boolean).join(" ") || undefined}
                     {...register(field.name)} className={`h-11 rounded-md px-3 text-sm ${readOnly ? "bg-muted text-muted-foreground" : ""}`} />
-                  {readOnly && <p id={help} className="text-xs leading-5 text-muted-foreground">Phone number updates are coming soon.</p>}
+                  {readOnly && <p id={help} className="text-xs leading-5 text-muted-foreground">{ACCOUNT_EXTENSIONS_ENABLED ? "Update and verify your phone in Phone verification below." : "Phone number updates are not available yet."}</p>}
                   <FieldError name={field.name} errors={errors} />
                 </div>
               );

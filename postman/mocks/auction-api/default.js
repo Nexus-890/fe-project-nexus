@@ -16,6 +16,8 @@ const imageUrl = `${origin}/api/test/watch.svg`;
 const page = (number, size, totalElements) => ({ number, size, totalElements, totalPages: Math.ceil(totalElements / size) });
 const success = (data, metadata) => ({ code: 0, message: "response success", data, ...(metadata ? { page: metadata } : {}) });
 const streams = new Set();
+const streamIds = new WeakMap();
+let streamSequence = 0;
 const initialEvidence = () => ({ requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0, streamEvents: [], shippingRequests: [], shippingWrites: 0, paymentRequests: [], qrRequests: 0 });
 let evidence = initialEvidence();
 let mode = "normal";
@@ -42,7 +44,7 @@ function reset() {
     amount, bidderName: ["j***n", "m***h", "j***n", "t***a", "m***h", "k***2"][index],
     placedAt: new Date(now - [12000, 41000, 120000, 360000, 840000, 3600000][index]).toISOString(),
   }));
-  own = { auctionId, title, amount: 9850, placedAt: bids[0].placedAt, auctionStatus: "ACTIVE", leading: true, won: false };
+  own = { auctionId, title, amount: 9850, placedAt: bids[0].placedAt, auctionStatus: "ACTIVE", leading: true, won: false, orderId: null, paymentDueAt: null, finalPrice: null };
   attempts = {};
   frozenBids = null;
   frozenState = null;
@@ -81,11 +83,19 @@ function publish(overrides) {
   for (const response of streams) {
     if (!response.destroyed) {
       response.write(payload); evidence.sseEvents += 1;
-      evidence.streamEvents.push({ event: "state", id: eventId, at: Date.now(), currentPrice: snapshot.currentPrice, status: snapshot.status });
+      evidence.streamEvents.push({ event: "state", id: eventId, connectionId: streamIds.get(response), at: Date.now(), currentPrice: snapshot.currentPrice, status: snapshot.status });
     }
   }
 }
-setInterval(() => { if (mode === "stream") publish(); }, 1000).unref();
+function sendHeartbeat(response) {
+  if (mode !== "stream" || response.destroyed) return;
+  const eventId = `heartbeat-${++pushSequence}`;
+  // #253 specifies transport liveness, not a heartbeat JSON body. Opaque data
+  // ensures the caller does not depend on the old full-state fixture shortcut.
+  response.write(`id: ${eventId}\nevent: heartbeat\ndata: heartbeat\n\n`);
+  evidence.sseEvents += 1;
+  evidence.streamEvents.push({ event: "heartbeat", id: eventId, connectionId: streamIds.get(response), at: Date.now() });
+}
 function qrSvg() {
   const finder = (x, y) => `<path d="M${x} ${y}h7v7h-7z"/><path fill="white" d="M${x + 1} ${y + 1}h5v5h-5z"/><path d="M${x + 2} ${y + 2}h3v3h-3z"/>`;
   let cells = "";
@@ -141,17 +151,18 @@ http.createServer(async (req, res) => {
     if (changes.status) {
       detail.status = changes.status;
       own.auctionStatus = changes.status;
-      if (changes.status === "WON") {
+      if (["WON", "SETTLED"].includes(changes.status)) {
         own.won = changes.winner !== false;
         own.leading = changes.winner !== false;
         detail.finalPrice = detail.currentPrice;
         detail.paymentDueAt = own.won ? new Date(Date.now() + 86400000).toISOString() : null;
-        detail.orderId = own.won ? orderId : null;
+        detail.orderId = own.won && changes.status === "SETTLED" ? orderId : null;
       }
     }
     if (Object.hasOwn(changes, "orderId")) detail.orderId = changes.orderId;
     if (Object.hasOwn(changes, "paymentDueAt")) detail.paymentDueAt = changes.paymentDueAt;
     if (changes.publish) publish(changes.stateOverrides);
+    if (changes.heartbeat) for (const stream of streams) sendHeartbeat(stream);
     if (Number.isInteger(changes.publishCount)) {
       for (let index = 0; index < Math.min(100, changes.publishCount); index += 1) publish();
     }
@@ -196,7 +207,9 @@ http.createServer(async (req, res) => {
   }));
   if (path === "/v1/bids/mine") {
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your bids.");
-    return json(res, success([mineOverride ?? own], page(0, Number(url.searchParams.get("size")) || 100, 1)));
+    const mine = mineOverride ?? own;
+    const winner = mine.won && ["WON", "SETTLED", "PAYMENT_TIMEOUT"].includes(mine.auctionStatus);
+    return json(res, success([{ ...mine, orderId: winner ? detail.orderId : null, paymentDueAt: winner ? detail.paymentDueAt : null, finalPrice: winner ? detail.finalPrice : null }], page(0, Number(url.searchParams.get("size")) || 100, 1)));
   }
   if (path === "/v1/shipping/provinces") return json(res, success([{ code: "202", name: "Ho Chi Minh City" }], page(0, 1, 1)));
   if (path === "/v1/shipping/wards") return json(res, success(url.searchParams.get("provinceCode") === "202" ? [{ code: "20308", name: "Ben Nghe Ward" }] : [], page(0, 1, url.searchParams.get("provinceCode") === "202" ? 1 : 0)));
@@ -242,7 +255,11 @@ http.createServer(async (req, res) => {
         userId: buyerId, sellerId, totalAmount: confirmedShipping.result.totalAmount, subtotal: detail.finalPrice, shippingFee: confirmedShipping.result.shippingFee, discountAmount: 0, taxAmount: 0, items: [] }],
     }));
   }
-  if (path === `/v1/auctions/${auctionId}` && req.method === "GET") return json(res, success(detail));
+  if (path === `/v1/auctions/${auctionId}` && req.method === "GET") {
+    const { orderId: privateOrderId, paymentDueAt: privateDueAt, finalPrice: privatePrice, ...publicDetail } = detail;
+    void privateOrderId; void privateDueAt; void privatePrice;
+    return json(res, success(publicDetail));
+  }
   if (path === `/v1/auctions/${auctionId}/state`) {
     if (mode === "missing-read") return problem(res, 404, "NOT_FOUND", "Auction state endpoint is not available.");
     if (mode === "unavailable") return problem(res, 503, "AUCTION_UNAVAILABLE", "Auction updates are temporarily unavailable.");
@@ -254,8 +271,12 @@ http.createServer(async (req, res) => {
     if (!["stream", "silent-stream"].includes(mode)) return problem(res, 503, "SSE_UNAVAILABLE", "Live updates unavailable; polling remains available.");
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.write(": connected\n\n");
+    streamIds.set(res, ++streamSequence);
     streams.add(res);
-    res.once("close", () => streams.delete(res));
+    if (mode === "stream") publish();
+    const heartbeatTimer = setInterval(() => sendHeartbeat(res), 15_000);
+    heartbeatTimer.unref();
+    res.once("close", () => { streams.delete(res); clearInterval(heartbeatTimer); });
     return;
   }
   if (path === `/v1/auctions/${auctionId}/bids` && req.method === "GET") {
@@ -281,7 +302,7 @@ http.createServer(async (req, res) => {
     detail.currentPrice = amount; detail.bidCount += 1;
     if (Date.parse(detail.endAt) - Date.now() <= 300000) { detail.endAt = new Date(Date.parse(detail.endAt) + 300000).toISOString(); detail.extensionCount += 1; }
     bids.unshift({ amount, bidderName: "j***n", placedAt: new Date().toISOString() });
-    own = { auctionId, title, amount, placedAt: bids[0].placedAt, auctionStatus: detail.status, leading: true, won: false };
+    own = { auctionId, title, amount, placedAt: bids[0].placedAt, auctionStatus: detail.status, leading: true, won: false, orderId: null, paymentDueAt: null, finalPrice: null };
     const result = { bidId: randomUUID(), currentPrice: amount, leaderBidderId: buyerId };
     attempts[key] = result;
     await pm.state.set("auction-api:attempts", attempts);

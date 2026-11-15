@@ -15,6 +15,9 @@ type AddressFormProps = {
   onRetry: (level: "province" | "ward") => void;
   onSubmit: () => void;
   busy?: boolean;
+  title?: string;
+  submitLabel?: string;
+  addressLineMaxLength?: number;
 };
 
 const controlClass =
@@ -31,6 +34,9 @@ function AddressForm({
   onRetry,
   onSubmit,
   busy = false,
+  title = "1. Shipping Address",
+  submitLabel = "Review address",
+  addressLineMaxLength = 500,
 }: AddressFormProps) {
   const textFields = [
     {
@@ -52,7 +58,7 @@ function AddressForm({
       label: "House number and street",
       autoComplete: "shipping address-line1",
       placeholder: "e.g. 12 Nguyen Hue",
-      maxLength: 500,
+      maxLength: addressLineMaxLength,
     },
   ] as const;
   const deliveryAddress = [
@@ -86,7 +92,7 @@ function AddressForm({
   return (
     <form
       noValidate
-      aria-label="Shipping address"
+      aria-label={title === "1. Shipping Address" ? "Shipping address" : title}
       aria-busy={busy}
       className="min-w-0 rounded-sm border border-border bg-card p-5 text-card-foreground sm:p-6"
       onSubmit={(event) => {
@@ -96,7 +102,7 @@ function AddressForm({
     >
       <h2 className="flex items-center gap-2 text-base font-semibold">
         <MapPin size={18} className="shrink-0 text-primary" aria-hidden="true" />
-        1. Shipping Address
+        {title}
       </h2>
       <p className="mt-2 text-sm leading-5 text-muted-foreground">
         Where should we deliver your order? All fields are required.
@@ -213,7 +219,7 @@ function AddressForm({
           disabled={busy}
           className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-sm bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-wait disabled:opacity-60 sm:w-auto"
         >
-          Review address
+          {submitLabel}
         </button>
       </div>
     </form>

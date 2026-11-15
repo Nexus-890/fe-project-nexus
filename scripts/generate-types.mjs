@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 import openapiTS, { astToString } from "openapi-typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const integrationSpecs = {
+  "account-210-snapshot": { path: "../docs/api/account-210.openapi.json", status: "the unmerged #210 snapshot, not develop" },
+  "seller-application-210-proposal": { path: "../docs/api/seller-application-210.openapi.json", status: "the proposed #210 seller contract, not a delivered API" },
+};
 let drift = false;
 for (const [name, output] of [
   ["user-service", "userGeneratedType.ts"],
@@ -16,14 +20,17 @@ for (const [name, output] of [
   ["payment-service", "paymentGeneratedType.ts"],
   ["shipment-service", "shipmentGeneratedType.ts"],
   ["rating-service", "ratingGeneratedType.ts"],
+  ["account-210-snapshot", "account210GeneratedType.ts"],
+  ["seller-application-210-proposal", "sellerApplication210GeneratedType.ts"],
   ["auction-service", "auctionGeneratedType.ts"],
 ]) {
+  const integration = integrationSpecs[name];
   const spec = new URL(
-    `../../be-project-nexus/docs/api/openapi/${name}.yaml`,
+    integration?.path ?? `../../be-project-nexus/docs/api/openapi/${name}.yaml`,
     import.meta.url,
   );
   const source =
-    "/** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */\n" +
+    `/** Generated from ${integration?.status ?? "delivered OpenAPI"}. Run npm run generate:types; do not edit. */\n` +
     astToString(await openapiTS(spec));
   const target = path.join(root, "types", output);
   if (process.argv.includes("--check")) {

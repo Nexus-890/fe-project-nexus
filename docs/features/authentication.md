@@ -10,7 +10,7 @@ The session calls in service/authService.ts (session, refresh, logout) send cred
 
 ## Registration
 
-Sign-up retains React Hook Form/Zod validation, password confirmation and terms checks. It submits fullName/email/phone/password/identityNumber/gender/address/dateOfBirth without assigning a role. Symbolic duplicate codes and Problem Details errors {field,code,detail} map to inputs, with form-level fallback. Successful registration navigates to sign-in and leaves the user anonymous. Backend provisioning of the new Keycloak account belongs to #238.
+Sign-up retains React Hook Form/Zod validation, password confirmation and terms checks. It submits fullName/email/phone/password/identityNumber/gender/address/dateOfBirth without assigning a role. Symbolic duplicate codes and Problem Details errors {field,code,detail} map to inputs, with form-level fallback. On the default develop backend, registration201 continues to sign-in. With `NEXT_PUBLIC_ACCOUNT_EXTENSIONS_ENABLED=true` and the compatible #210 backend, it opens `/check-email`. `USER_VERIFICATION_EMAIL_FAILED` also opens recovery there because the account was kept; resend never repeats registration. The user remains anonymous. See [account verification](account-verification.md) for the pinned #210 request/response contract and pending live backend acceptance.
 
 ## Session lifecycle
 

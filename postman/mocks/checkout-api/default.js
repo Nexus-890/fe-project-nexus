@@ -4,6 +4,9 @@
  */
 const http = require("node:http");
 const { createHash } = require("node:crypto");
+// Account #219 extends this existing HTTP fixture only in its dedicated run.
+const accountHandler = process.env.NEXUS_ACCOUNT_SIMULATION === "true"
+  ? require("../account-api/handler.js") : null;
 
 const user = {
   id: "68000000-0000-4000-8000-000000000003", email: "buyer@nexus.local",
@@ -171,6 +174,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
   const url = new URL(req.url, "http://127.0.0.1:3913");
+  if (accountHandler && await accountHandler(req, res, url, { state: pm.state, json, problem, bodyOf, envelope, user })) return;
   if (url.pathname.startsWith('/v1/auth/')) return forwardSession(req, res, url);
   if (url.pathname === "/health") return json(res, { ready: true });
   if (url.pathname === '/test/qr.svg') {

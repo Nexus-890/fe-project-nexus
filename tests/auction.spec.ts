@@ -8,7 +8,7 @@ type Evidence = {
   requests: { method: string; path: string; query: string; authorized: boolean; bearer: boolean; at: number }[];
   bidRequests: { key: string; amount: number; authorized: boolean }[];
   bidWrites: number; sseConnections: number; sseEvents: number;
-  streamEvents: { event: string; id: string; at: number; currentPrice: number; status: string }[];
+  streamEvents: { event: string; id: string; connectionId: number; at: number; currentPrice?: number; status?: string }[];
   shippingRequests: { body: Record<string, string>; authorized: boolean }[];
   shippingWrites: number;
   paymentRequests: { body: { orderGroupId: string }; authorized: boolean }[];
@@ -152,7 +152,7 @@ test("retry after a lost success response keeps its key and creates one bid", as
 
 test("end states disable bidding and a verified winner can open the order", async ({ page, request }, info) => {
   await signIn(page);
-  await control(request, { status: "WON" });
+  await control(request, { status: "SETTLED" });
   await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 3500 });
   await expect(page.getByRole("button", { name: "Place Bid", exact: true })).toHaveCount(0);
   await expect(page.locator('a[href="/order/00000081-1111-4111-8111-111111111111"]')).toBeVisible();
@@ -178,7 +178,7 @@ test("named state events use the stream route and disconnects resume two-second 
   const streamEvidence = await evidence(request);
   expect(streamEvidence.requests.filter((call) => call.path.endsWith("/stream")).every((call) => !call.bearer)).toBe(true);
   expect(streamEvidence.requests.filter((call) => call.path.endsWith("/events"))).toHaveLength(0);
-  expect(streamEvidence.streamEvents.every((event) => event.event === "state")).toBe(true);
+  expect(streamEvidence.streamEvents.every((event) => ["state", "heartbeat"].includes(event.event))).toBe(true);
   await control(request, { mode: "normal", disconnect: true });
   const calls = stateCalls(await evidence(request)).length;
   await expect.poll(async () => stateCalls(await evidence(request)).length).toBeGreaterThanOrEqual(calls + 2);
@@ -315,23 +315,57 @@ test("a real bid reaches a second browser context over SSE in under one second",
   }
 });
 
-test("an open stream that goes silent falls back to two-second polling after its heartbeat deadline", async ({ page, request }) => {
+test("an open stream that goes silent falls back after the thirty-second heartbeat deadline", async ({ page, request }) => {
   await control(request, { mode: "stream" });
   await page.goto(roomPath);
   await ready(page);
   await expect(page.getByRole("status").filter({ hasText: "Live updates connected" })).toBeVisible();
   const quietAt = Date.now();
   await control(request, { mode: "silent-stream", price: 10000 });
-  // A short three-second observation cannot exercise a five-second watchdog.
-  await page.waitForTimeout(5600);
+  // Keep actual network timing: the server's 15-second heartbeat contract must
+  // tolerate one missing heartbeat before the 30-second watchdog expires.
+  await page.waitForTimeout(20_000);
+  await expect(page.getByRole("status").filter({ hasText: "Live updates connected" })).toBeVisible();
+  await page.waitForTimeout(11_000);
   await expect(page.getByRole("status").filter({ hasText: "Refreshing every 2 seconds" })).toBeVisible({ timeout: 3000 });
   await expect(page.getByText("$10,000.00", { exact: true }).first()).toBeVisible({ timeout: 3500 });
   const fallbackAt = stateCalls(await evidence(request)).length;
   await expect.poll(async () => stateCalls(await evidence(request)).length).toBeGreaterThanOrEqual(fallbackAt + 2);
-  const resumed = stateCalls(await evidence(request)).filter((call) => call.at >= quietAt + 5000).slice(-2);
+  const resumed = stateCalls(await evidence(request)).filter((call) => call.at >= quietAt + 30_000).slice(-2);
   expect(resumed).toHaveLength(2);
   expect(resumed[1].at - resumed[0].at).toBeGreaterThanOrEqual(1700);
   expect(resumed[1].at - resumed[0].at).toBeLessThan(2900);
+  expect((await evidence(request)).streamEvents.filter((event) => event.event === "heartbeat" && event.at >= quietAt)).toHaveLength(0);
+});
+
+test("fifteen-second named heartbeats keep an unchanged stream healthy beyond thirty seconds", async ({ page, request }, info) => {
+  await control(request, { mode: "stream" });
+  await page.goto(roomPath);
+  await ready(page);
+  await expect(page.getByRole("status").filter({ hasText: "Live updates connected" })).toBeVisible();
+  const startedAt = Date.now();
+  const baseline = await evidence(request);
+  const statePushes = baseline.streamEvents.filter((event) => event.event === "state").length;
+  // Observe two real server heartbeats. Advancing the browser clock alone
+  // would not exercise the dependency's actual 15-second emission cadence.
+  await page.waitForTimeout(32_000);
+  await expect(page.getByRole("status").filter({ hasText: "Live updates connected" })).toBeVisible();
+  const result = await evidence(request);
+  const heartbeats = result.streamEvents.filter((event) => event.event === "heartbeat" && event.at >= startedAt);
+  // Development StrictMode can leave a proxy-held, canceled connection in
+  // the mock until its next write. Compare emissions on the same connection.
+  const connectionIds = [...new Set(heartbeats.map((event) => event.connectionId))];
+  const sameConnection = connectionIds.map((id) => heartbeats.filter((event) => event.connectionId === id)).find((events) => events.length >= 2);
+  expect(sameConnection).toBeDefined();
+  expect(sameConnection![1].at - sameConnection![0].at).toBeGreaterThanOrEqual(14_000);
+  expect(sameConnection![1].at - sameConnection![0].at).toBeLessThan(16_000);
+  expect(result.streamEvents.filter((event) => event.event === "state")).toHaveLength(statePushes);
+  const reads = stateCalls(result).filter((call) => call.at >= startedAt);
+  expect(reads.length).toBeLessThanOrEqual(3);
+  for (let index = 1; index < reads.length; index += 1) expect(reads[index].at - reads[index - 1].at).toBeGreaterThan(12_000);
+  const timingPath = info.outputPath("heartbeat-contract-timing.json");
+  await writeFile(timingPath, JSON.stringify({ observedMs: Date.now() - startedAt, connectionId: sameConnection![0].connectionId, heartbeatAt: sameConnection!.map((event) => event.at), reconciliationReadAt: reads.map((call) => call.at), evidence: "Actual local Postman HTTP SSE emissions; no live backend" }, null, 2));
+  await info.attach("local-heartbeat-contract-timing", { path: timingPath, contentType: "application/json" });
 });
 
 test("malformed and other-auction stream payloads never replace the room state", async ({ page, request }) => {
@@ -395,6 +429,17 @@ test("winner reviews the shipping address before POST and continues with the ret
   await signIn(page);
   await control(request, { status: "WON" });
   await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 3500 });
+  await expect(page.getByText(/Waiting for your order reference/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirm address and pay", exact: true })).toHaveCount(0);
+  const beforeSettlement = await evidence(request);
+  expect(beforeSettlement.shippingRequests).toHaveLength(0);
+  expect(beforeSettlement.paymentRequests).toHaveLength(0);
+  const publicDetail = (await (await request.get(`${simulation}/api/v1/auctions/${auctionId}`)).json()).data;
+  expect(publicDetail).not.toHaveProperty("orderId");
+  expect(publicDetail).not.toHaveProperty("paymentDueAt");
+  expect(publicDetail).not.toHaveProperty("finalPrice");
+  await control(request, { status: "SETTLED" });
+  await expect(page.getByRole("button", { name: "Confirm address and pay", exact: true })).toBeVisible({ timeout: 5000 });
   const checkout = await fillWinnerAddress(page);
   expect((await evidence(request)).shippingRequests).toHaveLength(0);
   await checkout.getByRole("button", { name: "Review address", exact: true }).click();
@@ -431,7 +476,7 @@ test("winner reviews the shipping address before POST and continues with the ret
 
 test("lost shipping response retries the unchanged address and preserves one confirmation", async ({ page, request }) => {
   await signIn(page);
-  await control(request, { status: "WON", mode: "shipping-lost-response" });
+  await control(request, { status: "SETTLED", mode: "shipping-lost-response" });
   await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 3500 });
   const checkout = await fillWinnerAddress(page);
   await checkout.getByRole("button", { name: "Review address", exact: true }).click();
@@ -448,7 +493,7 @@ test("lost shipping response retries the unchanged address and preserves one con
 
 test("expired winner deadline prevents shipping submission and payment navigation", async ({ page, request }) => {
   await signIn(page);
-  await control(request, { status: "WON", paymentDueAt: new Date(Date.now() - 1000).toISOString() });
+  await control(request, { status: "SETTLED", paymentDueAt: new Date(Date.now() - 1000).toISOString() });
   await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 3500 });
   await page.getByRole("button", { name: "Confirm address and pay", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /payment deadline has passed/ })).toBeVisible();
@@ -456,13 +501,13 @@ test("expired winner deadline prevents shipping submission and payment navigatio
   expect((await evidence(request)).shippingRequests).toHaveLength(0);
 });
 
-test("winner address draft survives settlement and a transient private-read failure", async ({ page, request }) => {
+test("settled winner address draft survives a transient private-read failure", async ({ page, request }) => {
   await signIn(page);
-  await control(request, { status: "WON" });
+  await control(request, { status: "SETTLED" });
   await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 3500 });
   const checkout = await fillWinnerAddress(page);
   await checkout.getByLabel("House number and street", { exact: true }).fill("22 Le Loi");
-  await control(request, { status: "SETTLED", failures: { mine: 503 } });
+  await control(request, { failures: { mine: 503 } });
   // Terminal timers have stopped. Model returning to this tab to revalidate
   // the result, while keeping the mounted form and all HTTP requests real.
   for (const hidden of [true, false]) await page.evaluate((value) => {

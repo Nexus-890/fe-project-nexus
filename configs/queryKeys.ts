@@ -10,6 +10,11 @@ export const queryKeys = {
     orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>
       ["rating", sessionId, "order", sellerId, buyerId, orderId] as const,
   },
+  account: {
+    addresses: (sessionId: number) => ["account", sessionId, "addresses"] as const,
+    sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
+    phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
+  },
   backoffice: {
     products: (sessionId: number, page: number) => ["backoffice", sessionId, "products", page] as const,
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,

@@ -79,7 +79,6 @@ export const openPublicAuctionStream = (auctionId: string): EventSource => {
     throw createInvalidResponseError("Invalid auction id");
   return new EventSource(`${normalizeBaseUrl(API_BASE_URL)}/api/v1/auctions/${encodeURIComponent(auctionId)}/stream`, { withCredentials: false });
 };
-
 const isPageInfo = (value: unknown): value is PageInfo =>
   isRecord(value) &&
   Number.isSafeInteger(value.number) &&

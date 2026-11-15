@@ -87,9 +87,9 @@ test("auction public detail, state and masked history use exact routes without B
   try {
     const detail = await getAuction(auctionId, { context, auth: true, params: { ignored: true } });
     assert.equal(detail.currentPrice, "9850.00");
-    assert.equal(detail.finalPrice, null);
-    assert.equal(detail.paymentDueAt, null);
-    assert.equal(detail.orderId, null);
+    assert.equal("finalPrice" in detail, false);
+    assert.equal("paymentDueAt" in detail, false);
+    assert.equal("orderId" in detail, false);
     const current = await getAuctionState(auctionId, { context, auth: true });
     assert.ok(current.remainingMs >= 0 && current.remainingMs <= 5000);
     assert.equal(current.currentPrice, "9850.00");
@@ -111,13 +111,33 @@ test("auction countdown uses server time and monotonic request duration, includi
   assert.throws(() => parseAuctionState(state, 800, 100));
 });
 
-test("auction detail validates settlement references and rejects unsafe money or malformed resource data", () => {
+test("public detail does not supply private checkout references and rejects malformed public fields", () => {
   const settled = parseAuctionRoom({ ...room, status: "WON", finalPrice: 9850, paymentDueAt: "2026-11-14T11:00:05Z", orderId: otherId });
-  assert.equal(settled.finalPrice, "9850.00");
-  assert.equal(settled.orderId, otherId);
-  for (const changed of [{ startingPrice: -1 }, { currentPrice: 1.001 }, { bidIncrement: 0 }, { currentPrice: Number.MAX_SAFE_INTEGER }, { id: "not-a-uuid" }, { imageUrl: 1 }, { extensionCount: -1 }, { orderId: "made-up-order" }, { paymentDueAt: "invalid" }, { finalPrice: "9850" }]) {
+  assert.equal("finalPrice" in settled, false);
+  assert.equal("orderId" in settled, false);
+  for (const changed of [{ startingPrice: -1 }, { currentPrice: 1.001 }, { bidIncrement: 0 }, { currentPrice: Number.MAX_SAFE_INTEGER }, { id: "not-a-uuid" }, { imageUrl: 1 }, { extensionCount: -1 }]) {
     assert.throws(() => parseAuctionRoom({ ...room, ...changed }));
   }
+});
+
+test("private own-bid projection supplies the real winner order and never exposes a loser's checkout", async () => {
+  const winner = { ...ownBid, auctionStatus: "SETTLED", won: true, orderId: otherId, finalPrice: 9900, paymentDueAt: "2031-01-02T00:00:00Z" };
+  const read = (bid: unknown) => getMyAuctionBid(auctionId, { context: { getAccessToken: () => "winner-token", fetch: async (_url, init) => {
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer winner-token");
+    return new Response(JSON.stringify(json([bid], { number: 0, size: 100, totalElements: 1, totalPages: 1 })), { headers: { "Content-Type": "application/json" } });
+  } } });
+  const parsed = await read(winner);
+  assert.equal(parsed?.orderId, otherId);
+  assert.equal(parsed?.finalPrice, "9900.00");
+  assert.equal(parsed?.paymentDueAt, winner.paymentDueAt);
+  const loser = await read({ ...winner, won: false });
+  assert.equal(loser?.orderId, null);
+  assert.equal(loser?.paymentDueAt, null);
+  assert.equal(loser?.finalPrice, null);
+  const legacy = await read({ ...ownBid, won: true, auctionStatus: "WON" });
+  assert.equal(legacy?.orderId, null);
+  for (const changed of [{ orderId: "wrong" }, { finalPrice: "9900" }, { paymentDueAt: "wrong" }, { auctionStatus: "ACTIVE" }])
+    await assert.rejects(read({ ...winner, ...changed }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
 });
 
 test("auction services reject mismatched resources and malformed history before publishing state", async () => {

@@ -53,6 +53,31 @@ export interface OidcClientOptions {
 const INVALID_RESPONSE = "The identity provider returned an invalid sign-in response.";
 const NO_STATE = "No matching state found in storage";
 
+const keycloakAuthority = (): string => {
+  const base = new URL(process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:18080");
+  const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
+  if ((base.protocol !== "https:" && !(base.protocol === "http:" && localHost))
+    || base.username || base.password || base.search || base.hash) {
+    throw new Error("Invalid Keycloak URL configuration.");
+  }
+  const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "nexus";
+  return `${base.href.replace(/\/$/, "")}/realms/${encodeURIComponent(realm)}`;
+};
+
+/** Keycloak validates this referrer against nexus-web's allowed redirect URIs. */
+export function createPasswordAccountUrl(origin: string): string {
+  const application = new URL(origin);
+  const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(application.hostname);
+  if ((application.protocol !== "https:" && !(application.protocol === "http:" && localHost))
+    || application.username || application.password || application.pathname !== "/"
+    || application.search || application.hash) throw new Error("Invalid application origin.");
+  const account = new URL(`${keycloakAuthority()}/account/`);
+  account.searchParams.set("referrer", process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "nexus-web");
+  account.searchParams.set("referrer_uri", `${application.origin}/profile`);
+  account.hash = "/account-security/signing-in";
+  return account.href;
+}
+
 /** Only application paths may be restored after the external sign-in redirect. */
 export function safeReturnTo(value: unknown): string {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return "/";
@@ -116,15 +141,8 @@ export function createOidcClient(options: OidcClientOptions = {}): OidcClient {
       sessionStorage: window.sessionStorage,
       randomUUID: () => window.crypto.randomUUID(),
     };
-    const base = new URL(process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:18080");
-    const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
-    if ((base.protocol !== "https:" && !(base.protocol === "http:" && localHost))
-      || base.username || base.password || base.search || base.hash) {
-      throw new Error("Invalid Keycloak URL configuration.");
-    }
-    const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "nexus";
     settings = {
-      authority: `${base.href.replace(/\/$/, "")}/realms/${encodeURIComponent(realm)}`,
+      authority: keycloakAuthority(),
       client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "nexus-web",
       redirect_uri: `${browser.origin}/auth/callback`,
       post_logout_redirect_uri: `${browser.origin}/`,

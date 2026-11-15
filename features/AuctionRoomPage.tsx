@@ -16,7 +16,7 @@ import { useAuctionBid } from "./useAuctionBid";
 import { useAuctionState } from "./useAuctionState";
 import AuctionWinnerCheckout from "./AuctionWinnerCheckout";
 import { hasCurrentAuctionResult } from "./auctionStateReconciliation";
-import type { AuctionRoom } from "../types/auctionRoomType";
+import type { AuctionRoom, MyAuctionBid } from "../types/auctionRoomType";
 import SellerReputation from "./SellerReputation";
 
 const buttonClass = "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-sm border border-border px-4 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -77,14 +77,14 @@ function AuctionRoomContents({ auctionId }: { auctionId: string }) {
           <div className="mt-5 flex items-center gap-2 text-[11px] text-muted-foreground" role="status">{room.connected ? <Wifi size={13} aria-hidden="true" /> : <WifiOff size={13} aria-hidden="true" />}{room.terminal ? "Final auction result" : room.connected ? "Live updates connected" : "Refreshing every 2 seconds"}</div>
           {room.state.isError ? <p className="mt-2 text-xs text-warning" role="status">Live state is unavailable. Showing the latest auction snapshot.</p> : null}
           {room.detail.isError ? <p role="alert" className="mt-2 text-xs text-danger">Updates are delayed. <button className="min-h-11 min-w-11 underline" type="button" onClick={() => void room.refresh()}>Refresh auction</button></p> : null}
-          <div className="mb-5 mt-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="mb-1 text-xs text-muted-foreground">{room.terminal ? "Final bid" : "Current bid"}</h2><PriceDisplay amount={auction.finalPrice ?? currentPrice} currency={auction.currency} /></div><div className="pb-1 text-right text-xs"><p>{room.bidCount ?? auction.bidCount} bids</p><p className="mt-1.5 text-muted-foreground">Started at {formatAuctionMoney(auction.startingPrice, auction.currency)} · Increment {formatAuctionMoney(bidIncrement, auction.currency)}</p></div></div>
+          <div className="mb-5 mt-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="mb-1 text-xs text-muted-foreground">{room.terminal ? "Final bid" : "Current bid"}</h2><PriceDisplay amount={won ? room.mine.data?.finalPrice ?? currentPrice : currentPrice} currency={auction.currency} /></div><div className="pb-1 text-right text-xs"><p>{room.bidCount ?? auction.bidCount} bids</p><p className="mt-1.5 text-muted-foreground">Started at {formatAuctionMoney(auction.startingPrice, auction.currency)} · Increment {formatAuctionMoney(bidIncrement, auction.currency)}</p></div></div>
           {active ? <>
             {leading && authStatus === "authenticated" ? <p className="mb-4 flex items-center gap-2 text-xs"><ShieldCheck size={16} className="text-info" aria-hidden="true" /><span><strong>You’re the highest bidder</strong><span className="text-muted-foreground"> · we’ll update this page if you’re outbid</span></span></p> : room.mine.data && authStatus === "authenticated" ? <p className="mb-4 text-xs text-warning" role="status">You’ve been outbid. Place a higher bid to lead again.</p> : null}
             {authStatus === "authenticated" && user?.id !== auction.sellerId ? <AuctionBidForm key={auctionId} auctionId={auctionId} minimum={minimum} increment={bidIncrement} currency={auction.currency} refresh={room.refresh} stale={room.detail.isError && room.state.isError} />
               : user?.id === auction.sellerId ? <p className="rounded-sm bg-muted p-4 text-sm">You cannot bid on your own auction.</p>
                 : authStatus === "restoring" || authStatus === "authenticating" ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading your account…</p>
                   : <div className="space-y-3"><Link href={`/sign-in?returnTo=${encodeURIComponent(`/auctions/${auctionId}`)}`} className={`${buttonClass} w-full border-primary bg-primary text-primary-foreground hover:bg-primary/90`}>Sign in to bid</Link><p className="text-xs text-muted-foreground">Bids are binding — winners pay within 24 hours.</p></div>}
-          </> : <AuctionEndState auction={auction} status={status} won={won} paymentClosed={room.mine.data?.auctionStatus === "PAYMENT_TIMEOUT"} checking={authStatus === "authenticated" && !finalIdentityReady} authenticated={authStatus === "authenticated"} serverNow={room.serverNow} />}
+          </> : <AuctionEndState auction={auction} winner={won ? room.mine.data ?? null : null} status={status} won={won} paymentClosed={room.mine.data?.auctionStatus === "PAYMENT_TIMEOUT"} checking={authStatus === "authenticated" && !finalIdentityReady} authenticated={authStatus === "authenticated"} serverNow={room.serverNow} />}
           {room.mine.isError && authStatus === "authenticated" ? <p className="mt-4 text-xs text-muted-foreground">Your bidding status is unavailable. <button type="button" className="min-h-11 min-w-11 underline" onClick={() => void room.mine.refetch()}>Retry your status</button></p> : null}
         </div>
         <AuctionBidHistory bids={room.history.data?.content ?? []} currency={auction.currency} currentPrice={currentPrice} now={room.serverNow} page={room.page} totalPages={room.history.data?.totalPages ?? 0} loading={room.history.isPending} error={room.history.isError} leading={leading} onPage={room.setPage} onRetry={() => void room.history.refetch()} />
@@ -106,18 +106,20 @@ function AuctionBidForm({ auctionId, minimum, increment, currency, refresh, stal
   </form>;
 }
 
-function AuctionEndState({ auction, status, won, paymentClosed, checking, authenticated, serverNow }: { auction: AuctionRoom; status: string; won: boolean; paymentClosed: boolean; checking: boolean; authenticated: boolean; serverNow: number }) {
+function AuctionEndState({ auction, winner, status, won, paymentClosed, checking, authenticated, serverNow }: { auction: AuctionRoom; winner: MyAuctionBid | null; status: string; won: boolean; paymentClosed: boolean; checking: boolean; authenticated: boolean; serverNow: number }) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const scheduled = status === "CREATED" || status === "SCHEDULED";
   const cancelled = status === "CANCELLED";
   const timeout = status === "PAYMENT_TIMEOUT" || paymentClosed;
   const pending = status === "ENDED" || status === "ACTIVE";
   const lost = authenticated && !checking && !won && ["WON", "SETTLED", "PAYMENT_TIMEOUT"].includes(status);
+  const orderId = winner?.orderId;
+  const paymentDueAt = winner?.paymentDueAt ?? null;
   return <div className="border-t border-border pt-5">
     <div role="status"><h2 className={`text-xl font-semibold ${won && !timeout ? "text-info" : ""}`}>{scheduled ? "This auction hasn’t started yet" : cancelled ? "Auction cancelled" : status === "FAILED" ? "Auction ended without a winner" : pending || checking ? "Confirming auction result" : timeout && won ? "Payment deadline passed" : won ? "You won this auction" : lost ? "You didn’t win this auction" : "Auction ended"}</h2>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">{scheduled ? "Come back when bidding opens." : cancelled ? auction.cancelledReason || "This auction was cancelled. No more bids can be placed." : status === "FAILED" ? "No winning bid was confirmed. Bidding is closed." : pending || checking ? "Bidding has closed. We’re waiting for the final result; being the last leading bidder does not confirm a win." : timeout ? "The payment window has closed." : won ? auction.orderId ? "Your winning bid is confirmed. Confirm your address to continue to payment." : "Your winning bid is confirmed. Waiting for your order reference before address confirmation and payment can open." : lost ? "Another bidder won this auction. Thank you for taking part." : "Bidding is closed for this item. Sign in to check your result."}</p></div>
-    {won && auction.paymentDueAt && !timeout ? <p className="mt-3 text-sm font-medium">Pay by {new Date(auction.paymentDueAt).toLocaleString()}</p> : null}
-    {won && !timeout && auction.orderId ? <><button type="button" onClick={() => setCheckoutOpen(true)} className={`${buttonClass} mt-4 border-primary bg-primary text-primary-foreground hover:bg-primary/90`}>Confirm address and pay</button><Link className={`${buttonClass} mt-3 sm:ml-3`} href={`/order/${auction.orderId}`}>View winning order</Link>{checkoutOpen ? <AuctionWinnerCheckout key={auction.orderId} orderId={auction.orderId} currency={auction.currency} paymentDueAt={auction.paymentDueAt} serverNow={serverNow} /> : null}</> : null}
+    <p className="mt-2 text-sm leading-6 text-muted-foreground">{scheduled ? "Come back when bidding opens." : cancelled ? auction.cancelledReason || "This auction was cancelled. No more bids can be placed." : status === "FAILED" ? "No winning bid was confirmed. Bidding is closed." : pending || checking ? "Bidding has closed. We’re waiting for the final result; being the last leading bidder does not confirm a win." : timeout ? "The payment window has closed." : won ? orderId ? "Your winning bid is confirmed. Confirm your address to continue to payment." : "Your winning bid is confirmed. Waiting for your order reference before address confirmation and payment can open." : lost ? "Another bidder won this auction. Thank you for taking part." : "Bidding is closed for this item. Sign in to check your result."}</p></div>
+    {won && paymentDueAt && !timeout ? <p className="mt-3 text-sm font-medium">Pay by {new Date(paymentDueAt).toLocaleString()}</p> : null}
+    {won && !timeout && orderId ? <><button type="button" onClick={() => setCheckoutOpen(true)} className={`${buttonClass} mt-4 border-primary bg-primary text-primary-foreground hover:bg-primary/90`}>Confirm address and pay</button><Link className={`${buttonClass} mt-3 sm:ml-3`} href={`/order/${orderId}`}>View winning order</Link>{checkoutOpen ? <AuctionWinnerCheckout key={orderId} orderId={orderId} currency={auction.currency} paymentDueAt={paymentDueAt} serverNow={serverNow} /> : null}</> : null}
   </div>;
 }
 
