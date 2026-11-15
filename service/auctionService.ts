@@ -5,8 +5,8 @@ import type { AuctionListing } from "../types/auctionListingType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { ApiResponse, Page } from "../types/commonResponseType";
 import type {
-  AuctionBid, AuctionBidInput, AuctionRoom, AuctionState, AuctionStatus,
-  MyAuctionBid, PlacedAuctionBid,
+  AuctionBid, AuctionBidInput, AuctionCancelRequest, AuctionRoom, AuctionState, AuctionStatus,
+  AuctionUpdateInput, AuctionUpdateRequest, MyAuctionBid, PlacedAuctionBid,
 } from "../types/auctionRoomType";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +27,15 @@ const parseAuctionMoney = (value: unknown): string => {
     throw createInvalidResponseError("Invalid auction amount");
   return normalized;
 };
+const toAuctionAmount = (value: string, detail: string): number => {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw createInvalidResponseError(detail);
+  const amount = Number(value);
+  const [whole, fraction = ""] = value.split(".");
+  if (amount <= 0 || BigInt(parseAuctionMoney(amount).replace(".", "")) !== BigInt(whole) * BigInt(100) + BigInt(fraction.padEnd(2, "0")))
+    throw createInvalidResponseError(detail);
+  return amount;
+};
+export const AUCTION_CANCEL_REASON_LIMIT = 255;
 
 export const parseAuctionRoom = (value: unknown): AuctionRoom => {
   if (!isRecord(value) || !isUuid(value.id) || !isUuid(value.productId) ||
@@ -52,13 +61,56 @@ export const parseAuctionRoom = (value: unknown): AuctionRoom => {
   };
 };
 
-export const getAuction = async (id: string, options: ServiceRequestOptions = {}): Promise<AuctionRoom> => {
-  requireAuctionId(id);
-  const { data } = await requestApi<unknown>("GET", `/api/v1/auctions/${id}`, undefined, {
-    ...options, auth: false, params: undefined,
-  });
-  const auction = parseAuctionRoom(data);
+const parseAuctionFor = (id: string, value: unknown): AuctionRoom => {
+  const auction = parseAuctionRoom(value);
   if (auction.id !== id) throw createInvalidResponseError("Auction reference does not match");
+  return auction;
+};
+
+const auctionPath = (id: string, managed: boolean) => managed ? `/api/v1/auctions/manage/${id}` : `/api/v1/auctions/${id}`;
+
+const readAuction = async (id: string, managed: boolean, options: ServiceRequestOptions): Promise<AuctionRoom> => {
+  requireAuctionId(id);
+  const { data } = await requestApi<unknown>("GET", auctionPath(id, managed), undefined, {
+    ...options, auth: managed, params: undefined,
+  });
+  return parseAuctionFor(id, data);
+};
+
+export const getAuction = (id: string, options: ServiceRequestOptions = {}) => readAuction(id, false, options);
+
+export const getManagedAuction = (id: string, options: ServiceRequestOptions = {}) => readAuction(id, true, options);
+
+export const updateAuction = async (
+  id: string, input: AuctionUpdateInput, options: ServiceRequestOptions = {},
+): Promise<AuctionRoom> => {
+  requireAuctionId(id);
+  if (!isInstant(input.startAt) || !isInstant(input.endAt) || Date.parse(input.endAt) <= Date.parse(input.startAt))
+    throw createInvalidResponseError("Choose an end time after the start time");
+  const body: AuctionUpdateRequest = {
+    startingPrice: toAuctionAmount(input.startingPrice, "Enter a positive starting price with up to two decimals"),
+    bidIncrement: toAuctionAmount(input.bidIncrement, "Enter a positive bid increment with up to two decimals"),
+    startAt: input.startAt, endAt: input.endAt,
+  };
+  const { data } = await requestApi<unknown>("PUT", `/api/v1/auctions/${id}`, body, {
+    ...options, auth: true, params: undefined,
+  });
+  return parseAuctionFor(id, data);
+};
+
+export const adminCancelAuction = async (
+  id: string, reason: string, options: ServiceRequestOptions = {},
+): Promise<AuctionRoom> => {
+  requireAuctionId(id);
+  const body: AuctionCancelRequest = { reason: reason.trim() };
+  if (!body.reason || [...body.reason].length > AUCTION_CANCEL_REASON_LIMIT)
+    throw createInvalidResponseError(`Enter a cancellation reason of up to ${AUCTION_CANCEL_REASON_LIMIT} characters`);
+  const { data } = await requestApi<unknown>("POST", `/api/v1/auctions/${id}/admin-cancel`, body, {
+    ...options, auth: true, params: undefined,
+  });
+  const auction = parseAuctionFor(id, data);
+  if (auction.status !== "CANCELLED" || auction.cancelledBy !== "ADMIN")
+    throw createInvalidResponseError("The auction was not cancelled by an administrator");
   return auction;
 };
 
@@ -82,16 +134,20 @@ export const parseAuctionState = (
   };
 };
 
-export const getAuctionState = async (id: string, options: ServiceRequestOptions = {}): Promise<AuctionState> => {
+const readAuctionState = async (id: string, managed: boolean, options: ServiceRequestOptions): Promise<AuctionState> => {
   requireAuctionId(id);
   const startedAt = performance.now();
-  const { data } = await requestApi<unknown>("GET", `/api/v1/auctions/${id}/state`, undefined, {
-    ...options, auth: false, params: undefined,
+  const { data } = await requestApi<unknown>("GET", `${auctionPath(id, managed)}/state`, undefined, {
+    ...options, auth: managed, params: undefined,
   });
   const state = parseAuctionState(data, startedAt, performance.now());
   if (state.auctionId !== id) throw createInvalidResponseError("Auction state reference does not match");
   return state;
 };
+
+export const getAuctionState = (id: string, options: ServiceRequestOptions = {}) => readAuctionState(id, false, options);
+
+export const getManagedAuctionState = (id: string, options: ServiceRequestOptions = {}) => readAuctionState(id, true, options);
 
 const parseAuctionPage = <T>(response: ApiResponse<unknown>, page: number, parse: (value: unknown) => T): Page<T> => {
   if (!Array.isArray(response.data) || !response.page || response.page.number !== page)
@@ -107,13 +163,27 @@ const requirePage = (page: number) => {
   if (!isCount(page)) throw createInvalidResponseError("Invalid auction page number");
 };
 
-export const getAuctionBids = async (
-  id: string, page = 0, options: ServiceRequestOptions = {},
+export const getManagedAuctions = async (
+  status: AuctionStatus, page = 0, options: ServiceRequestOptions = {},
+): Promise<Page<AuctionRoom>> => {
+  if (!isStatus(status)) throw createInvalidResponseError("Invalid auction status filter");
+  requirePage(page);
+  const response = await requestApi<unknown>("GET", "/api/v1/auctions/manage", undefined, {
+    ...options, auth: true, params: { status, page, size: 10 },
+  });
+  const result = parseAuctionPage(response, page, parseAuctionRoom);
+  if (result.content.some((auction) => auction.status !== status))
+    throw createInvalidResponseError("Auction list returned another status");
+  return result;
+};
+
+const readAuctionBids = async (
+  id: string, page: number, managed: boolean, options: ServiceRequestOptions,
 ): Promise<Page<AuctionBid>> => {
   requireAuctionId(id);
   requirePage(page);
-  const response = await requestApi<unknown>("GET", `/api/v1/auctions/${id}/bids`, undefined, {
-    ...options, auth: false, params: { page, size: 10 },
+  const response = await requestApi<unknown>("GET", `${auctionPath(id, managed)}/bids`, undefined, {
+    ...options, auth: managed, params: { page, size: 10 },
   });
   return parseAuctionPage(response, page, (value) => {
     if (!isRecord(value) || typeof value.bidderName !== "string" || !value.bidderName.trim() || !isInstant(value.placedAt))
@@ -121,6 +191,10 @@ export const getAuctionBids = async (
     return { amount: parseAuctionMoney(value.amount), bidderName: value.bidderName, placedAt: value.placedAt };
   });
 };
+
+export const getAuctionBids = (id: string, page = 0, options: ServiceRequestOptions = {}) => readAuctionBids(id, page, false, options);
+
+export const getManagedAuctionBids = (id: string, page = 0, options: ServiceRequestOptions = {}) => readAuctionBids(id, page, true, options);
 
 const parseMyAuctionBid = (value: unknown): MyAuctionBid => {
   if (!isRecord(value) || !isUuid(value.auctionId) || typeof value.title !== "string" ||
@@ -164,12 +238,9 @@ export const placeAuctionBid = async (
   id: string, input: AuctionBidInput, options: ServiceRequestOptions = {},
 ): Promise<PlacedAuctionBid> => {
   requireAuctionId(id);
-  if (!isUuid(input.idempotencyKey) || !/^\d+(?:\.\d{1,2})?$/.test(input.amount))
-    throw createInvalidResponseError("A valid bid amount and Idempotency-Key are required");
-  const amount = Number(input.amount);
-  const normalized = parseAuctionMoney(amount);
-  if (amount <= 0 || BigInt(normalized.replace(".", "")) !== BigInt(input.amount.split(".")[0]) * BigInt(100) + BigInt((input.amount.split(".")[1] ?? "").padEnd(2, "0")))
-    throw createInvalidResponseError("Invalid bid amount or precision");
+  if (!isUuid(input.idempotencyKey))
+    throw createInvalidResponseError("A valid Idempotency-Key is required");
+  const amount = toAuctionAmount(input.amount, "Invalid bid amount or precision");
   const headers = new AxiosHeaders(options.config?.headers);
   headers.set("Idempotency-Key", input.idempotencyKey, true);
   const { data } = await requestApi<unknown>("POST", `/api/v1/auctions/${id}/bids`, { amount }, {
