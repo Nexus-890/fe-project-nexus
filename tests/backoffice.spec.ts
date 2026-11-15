@@ -472,6 +472,22 @@ test("Seller edits a draft that survives reload and sees the backend's status 40
   await expectFields("Edited desk lamp", "Dimmable warm light.", false);
   await checkLayouts(page, "seller-product-editor");
 
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/v1/products/${productId}`, async (route) => { if (route.request().method() === "PUT") await held; await route.continue(); });
+  const saved = page.waitForResponse((response) => response.request().method() === "PUT" && response.url().endsWith(`/v1/products/${productId}`));
+  await name.fill("Lamp A");
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Saving…", exact: true })).toBeVisible();
+  await name.fill("Lamp B");
+  release();
+  await saved;
+  await expect(page.getByRole("button", { name: "Save Changes", exact: true })).toBeEnabled();
+  await expect(name).toHaveValue("Lamp B");
+  await page.unroute(`**/v1/products/${productId}`);
+  await page.reload();
+  await expect(name).toHaveValue("Lamp A");
+
   await request.post(`${api}/test/control`, { data: { orderedProductId: productId } });
   await page.getByRole("button", { name: "Delete product", exact: true }).click();
   await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
@@ -493,7 +509,7 @@ test("Seller edits a draft that survives reload and sees the backend's status 40
   await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
   await expect(page).toHaveURL("/backoffice/products");
   const table = page.getByRole("table", { name: "Seller products", exact: true });
-  await expect(table).toContainText("Edited desk lamp");
+  await expect(table).toContainText("Lamp A");
   await expect(table).not.toContainText("Legacy parcel product");
   expect((await evidence(request)).products.map((product: { id: string }) => product.id)).toEqual([productId]);
 
@@ -521,7 +537,7 @@ test("Seller edits a draft that survives reload and sees the backend's status 40
   await filter("Draft", "DRAFT");
   await expect(summary).toHaveText("Page 1 · 10 products");
   await expect(table.getByRole("rowheader")).toHaveCount(10);
-  await expect(table).toContainText("Edited desk lamp");
+  await expect(table).toContainText("Lamp A");
   await expect(table).not.toContainText("ACTIVE");
   await filter("Inactive", "INACTIVE");
   await expect(page.getByRole("main").getByRole("status").filter({ hasText: "No products with this status." })).toBeVisible();

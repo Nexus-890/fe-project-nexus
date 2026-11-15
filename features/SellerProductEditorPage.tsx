@@ -15,7 +15,7 @@ import ProductImage from "../components/ProductImage";
 import { formatVND } from "../components/formatPrice";
 import { SellerError, SellerHeading, SellerPanel, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import type { ProductDetail, ProductImage as ProductImageModel, ProductSku } from "../types/catalogResponseType";
-import type { SellerProductStatus, SellerSkuInput } from "../types/sellerType";
+import type { SellerProductStatus, SellerProductUpdate, SellerSkuInput } from "../types/sellerType";
 
 const parcelFields = [
   { key: "weightGrams", label: "Weight (g)", max: 50000 },
@@ -159,8 +159,8 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
       router.replace(`/backoffice/products/${encodeURIComponent(product.id)}`);
     },
   });
-  const update = useApiMutation({ execute: () => updateSellerProduct(initial.id, { name: name.trim(), description, categoryId: category, auctionEnable }, requestOptions()), isCurrent, invalidateKey }, {
-    onSuccess: (product) => { setName(product.name); setNotice("Product saved."); },
+  const update = useApiMutation({ execute: (input: SellerProductUpdate) => updateSellerProduct(initial.id, input, requestOptions()), isCurrent, invalidateKey }, {
+    onSuccess: (product, input) => { setName((current) => current.trim() === input.name ? product.name : current); setNotice("Product saved."); },
   });
   const remove = useApiMutation({
     execute: () => deleteSellerProduct(initial.id, requestOptions()), isCurrent,
@@ -189,7 +189,7 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}{error && <p role="alert" className="text-sm text-danger">{error.detail || error.title}</p>}
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-6">
-        <SellerPanel title="Basic Information"><form id="seller-product-form" onSubmit={(event) => { event.preventDefault(); if (busy) return; if (newProduct) save.mutate(); else update.mutate(); }} className="space-y-5">
+        <SellerPanel title="Basic Information"><form id="seller-product-form" onSubmit={(event) => { event.preventDefault(); if (busy) return; if (newProduct) save.mutate(); else update.mutate({ name: name.trim(), description, categoryId: category, auctionEnable }); }} className="space-y-5">
           <label className="block text-sm">Product Name<input required maxLength={255} value={name} onChange={(event) => setName(event.target.value)} className={`${sellerInput} mt-2`} /></label>
           <label className="block text-sm">Category<select aria-label="Category" required disabled={categories.isPending || busy} value={category} onChange={(event) => setCategory(event.target.value)} className={`${sellerInput} mt-2`}><option value="">Select category</option>{categories.data?.flatMap((root) => [root, ...root.children, ...root.children.flatMap((child) => child.children)]).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
           {categories.isPending && <p role="status" className="text-sm text-muted-foreground">Loading categories…</p>}
