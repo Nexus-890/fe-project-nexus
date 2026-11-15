@@ -20,7 +20,7 @@ export const queryKeys = {
   seller: {
     all: (sessionId: number) => ["seller", sessionId] as const,
     products: (sessionId: number, page: number) => ["seller", sessionId, "products", page] as const,
-    listings: (sessionId: number, page: number) => ["seller", sessionId, "listings", page] as const,
+    listings: (sessionId: number, page: number, status?: string) => ["seller", sessionId, "listings", { page, status }] as const,
     productBalances: (sessionId: number, productId: string, skuIds: readonly string[]) => ["seller", sessionId, "balances", productId, skuIds] as const,
     sales: (sessionId: number, page: number, status?: string) => ["seller", sessionId, "sales", { page, status }] as const,
   },

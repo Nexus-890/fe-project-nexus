@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, Upload } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { queryKeys } from "../configs/queryKeys";
 import { getCategoryTree, isValidShippingParcel } from "../service/catalogService";
 import { getProductAvailability, intakeStock } from "../service/backofficeService";
-import { canPublishSellerProduct, changeSellerProductStatus, createSellerProduct, getSellerProduct, removeSellerImage, saveSellerSku, uploadSellerImage } from "../service/sellerService";
+import { canPublishSellerProduct, changeSellerProductStatus, createSellerProduct, deleteSellerProduct, getSellerProduct, removeSellerImage, reorderSellerImages, saveSellerSku, updateSellerProduct, uploadSellerImage } from "../service/sellerService";
 import ProductImage from "../components/ProductImage";
 import { formatVND } from "../components/formatPrice";
 import { SellerError, SellerHeading, SellerPanel, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
@@ -142,6 +142,7 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
   const [images, setImages] = useState(initial.images);
   const [skuForms, setSkuForms] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
@@ -158,6 +159,14 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
       router.replace(`/backoffice/products/${encodeURIComponent(product.id)}`);
     },
   });
+  const update = useApiMutation({ execute: () => updateSellerProduct(initial.id, { name: name.trim(), description, categoryId: category, auctionEnable }, requestOptions()), isCurrent, invalidateKey }, {
+    onSuccess: (product) => { setName(product.name); setNotice("Product saved."); },
+  });
+  const remove = useApiMutation({
+    execute: () => deleteSellerProduct(initial.id, requestOptions()), isCurrent,
+    invalidateKey: [[...queryKeys.seller.all(auth.sessionId), "listings"], [...queryKeys.seller.all(auth.sessionId), "products"], ["catalog", "products"]],
+    removeKey: [[...queryKeys.seller.all(auth.sessionId), "product", initial.id], queryKeys.catalog.product(initial.id)],
+  }, { onSuccess: () => router.replace("/backoffice/products") });
   const publishReady = canPublishSellerProduct({ skus, images });
   const statusSave = useApiMutation({ execute: (target: SellerProductStatus) => {
     if (target === "ACTIVE" && !publishReady) throw { kind: "invalid-response", status: 0, title: "Save a SKU and an image, and complete every SKU’s shipping measurements before publishing." };
@@ -165,31 +174,39 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
   }, isCurrent, invalidateKey }, { onSuccess: (product) => { setStatus(product.status as SellerProductStatus); setNotice("Product status updated."); } });
   const imageSave = useApiMutation({ execute: (file: File) => uploadSellerImage(initial.id, file, requestOptions()), isCurrent, invalidateKey }, { onSuccess: (image) => { setImages((current) => [...current, image]); setNotice("Image uploaded through the backend."); } });
   const imageRemove = useApiMutation({ execute: (image: ProductImageModel) => removeSellerImage(initial.id, image.id, requestOptions()), isCurrent, invalidateKey }, { onSuccess: (_, image) => { setImages((current) => current.filter((row) => row.id !== image.id)); setNotice("Image removed."); } });
-  const busy = save.isPending || statusSave.isPending || imageSave.isPending || imageRemove.isPending;
-  const error = save.error || statusSave.error || imageSave.error || imageRemove.error;
+  const imageOrder = useApiMutation({ execute: (imageIds: string[]) => reorderSellerImages(initial.id, imageIds, requestOptions()), isCurrent, invalidateKey }, { onSuccess: (ordered) => { setImages(ordered); setNotice("Image order saved."); } });
+  const moveImage = (index: number, offset: number) => {
+    const ids = images.map((image) => image.id);
+    [ids[index], ids[index + offset]] = [ids[index + offset], ids[index]];
+    imageOrder.mutate(ids);
+  };
+  const busy = save.isPending || update.isPending || remove.isPending || statusSave.isPending || imageSave.isPending || imageRemove.isPending || imageOrder.isPending;
+  const error = save.error || update.error || statusSave.error || imageSave.error || imageRemove.error || imageOrder.error;
 
   return <>
     <Link href="/backoffice/products" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-primary">Products / {name || "New product"}</Link>
-    <SellerHeading title={newProduct ? "New Product" : "Edit Product"} description={newProduct ? "Create a draft before adding SKUs and images." : "Manage this product’s SKUs, images and publication."}>{newProduct && <button type="submit" form="seller-product-form" className={sellerPrimary} disabled={busy}>{save.isPending ? "Saving…" : "Save Changes"}</button>}</SellerHeading>
+    <SellerHeading title={newProduct ? "New Product" : "Edit Product"} description={newProduct ? "Create a draft before adding SKUs and images." : "Manage this product’s SKUs, images and publication."}><button type="submit" form="seller-product-form" className={sellerPrimary} disabled={busy}>{save.isPending || update.isPending ? "Saving…" : "Save Changes"}</button></SellerHeading>
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}{error && <p role="alert" className="text-sm text-danger">{error.detail || error.title}</p>}
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-6">
-        <SellerPanel title="Basic Information"><form id="seller-product-form" onSubmit={(event) => { event.preventDefault(); if (newProduct && !busy) save.mutate(); }} className="space-y-5">
-          <label className="block text-sm">Product Name<input required readOnly={!newProduct} maxLength={255} value={name} onChange={(event) => setName(event.target.value)} className={`${sellerInput} mt-2`} /></label>
-          <label className="block text-sm">Category<select aria-label="Category" required disabled={!newProduct || categories.isPending || busy} value={category} onChange={(event) => setCategory(event.target.value)} className={`${sellerInput} mt-2`}><option value="">Select category</option>{categories.data?.flatMap((root) => [root, ...root.children, ...root.children.flatMap((child) => child.children)]).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <SellerPanel title="Basic Information"><form id="seller-product-form" onSubmit={(event) => { event.preventDefault(); if (busy) return; if (newProduct) save.mutate(); else update.mutate(); }} className="space-y-5">
+          <label className="block text-sm">Product Name<input required maxLength={255} value={name} onChange={(event) => setName(event.target.value)} className={`${sellerInput} mt-2`} /></label>
+          <label className="block text-sm">Category<select aria-label="Category" required disabled={categories.isPending || busy} value={category} onChange={(event) => setCategory(event.target.value)} className={`${sellerInput} mt-2`}><option value="">Select category</option>{categories.data?.flatMap((root) => [root, ...root.children, ...root.children.flatMap((child) => child.children)]).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
           {categories.isPending && <p role="status" className="text-sm text-muted-foreground">Loading categories…</p>}
           {categories.error && <p role="alert" className="text-sm text-danger">Categories could not be loaded. <button type="button" onClick={() => void categories.refetch()} className="underline">Retry categories</button></p>}
-          <label className="block text-sm">Description<textarea rows={5} readOnly={!newProduct} value={description} onChange={(event) => setDescription(event.target.value)} className={`${sellerInput} mt-2`} /></label>
-          {newProduct && <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={auctionEnable} onChange={(event) => setAuctionEnable(event.target.checked)} />Allow auction listings</label>}
+          <label className="block text-sm">Description<textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} className={`${sellerInput} mt-2`} /></label>
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={auctionEnable} onChange={(event) => setAuctionEnable(event.target.checked)} />Allow auction listings</label>
         </form></SellerPanel>
         {!newProduct && <>
-          <SellerPanel title="Media"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{images.map((image, index) => <div key={image.id} className="min-w-0"><div className="aspect-square overflow-hidden rounded-sm bg-muted"><ProductImage src={image.imageUrl} alt={`${name} ${index + 1}`} productName={name} /></div><button type="button" className={`${sellerButton} mt-2 w-full`} disabled={busy} onClick={() => imageRemove.mutate(image)}>Remove</button></div>)}<button type="button" className="flex aspect-square min-h-24 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-input p-3 text-sm disabled:opacity-50" disabled={images.length >= 5 || busy} onClick={() => fileInput.current?.click()}><Upload size={20} aria-hidden="true" />{imageSave.isPending ? "Uploading…" : "Add Image"}</button></div>
+          <SellerPanel title="Media"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{images.map((image, index) => <div key={image.id} className="min-w-0"><div className="aspect-square overflow-hidden rounded-sm bg-muted"><ProductImage src={image.imageUrl} alt={`${name} ${index + 1}`} productName={name} /></div><div className="mt-2 flex gap-2"><button type="button" aria-label={`Move image ${index + 1} earlier`} className={`${sellerButton} flex-1 px-0`} disabled={busy || index === 0} onClick={() => moveImage(index, -1)}><ArrowLeft size={16} aria-hidden="true" /></button><button type="button" aria-label={`Move image ${index + 1} later`} className={`${sellerButton} flex-1 px-0`} disabled={busy || index === images.length - 1} onClick={() => moveImage(index, 1)}><ArrowRight size={16} aria-hidden="true" /></button></div><button type="button" className={`${sellerButton} mt-2 w-full`} disabled={busy} onClick={() => imageRemove.mutate(image)}>Remove</button></div>)}<button type="button" className="flex aspect-square min-h-24 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-input p-3 text-sm disabled:opacity-50" disabled={images.length >= 5 || busy} onClick={() => fileInput.current?.click()}><Upload size={20} aria-hidden="true" />{imageSave.isPending ? "Uploading…" : "Add Image"}</button></div>
             <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Product image file" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { setNotice("Choose a JPEG, PNG or WebP image up to 5 MiB."); return; } imageSave.mutate(file); }} /><p className="mt-3 text-xs text-muted-foreground">Up to 5 images, JPEG/PNG/WebP, 5 MiB each.</p>
           </SellerPanel>
           <SellerPanel title="Pricing & SKUs">{skus.map((sku) => <SavedSku key={sku.id} productId={initial.id} sku={sku} active={status === "ACTIVE"} onSaved={(saved) => { setSkus((current) => current.map((row) => row.id === saved.id ? saved : row)); setNotice("SKU saved."); }} />)}{skuForms.map((key) => <SkuEditor key={key} productId={initial.id} onSaved={(sku) => { setSkus((current) => [...current, sku]); setSkuForms((current) => current.filter((row) => row !== key)); setNotice("SKU saved."); }} onRemove={() => setSkuForms((current) => current.filter((row) => row !== key))} />)}<button type="button" className={`${sellerButton} mt-4`} onClick={() => setSkuForms((current) => [...current, crypto.randomUUID()])}><Plus size={16} aria-hidden="true" />Add SKU</button></SellerPanel>
         </>}
       </div>
-      <aside><SellerPanel title="Status"><p className="font-medium">{status}</p>{!newProduct && <button type="button" className={`${sellerPrimary} mt-4 w-full`} disabled={busy || status !== "ACTIVE" && !publishReady} onClick={() => statusSave.mutate(status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{statusSave.isPending ? "Updating…" : status === "ACTIVE" ? "Unpublish" : "Publish"}</button>}{!newProduct && !publishReady && <p className="mt-3 text-xs leading-5 text-muted-foreground">Save at least one SKU and upload an image before publishing. Every saved SKU needs weight, length, width and height. Unsaved SKU rows do not count.</p>}</SellerPanel></aside>
+      <aside><SellerPanel title="Status"><p className="font-medium">{status}</p>{!newProduct && <button type="button" className={`${sellerPrimary} mt-4 w-full`} disabled={busy || status !== "ACTIVE" && !publishReady} onClick={() => statusSave.mutate(status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{statusSave.isPending ? "Updating…" : status === "ACTIVE" ? "Unpublish" : "Publish"}</button>}{!newProduct && !publishReady && <p className="mt-3 text-xs leading-5 text-muted-foreground">Save at least one SKU and upload an image before publishing. Every saved SKU needs weight, length, width and height. Unsaved SKU rows do not count.</p>}
+        {!newProduct && <div className="mt-5 border-t border-border pt-5">{confirmDelete ? <><p className="text-sm">Delete this product? It disappears from your products and the shop.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className={`${sellerButton} text-danger`} disabled={busy} onClick={() => remove.mutate()}>{remove.isPending ? "Deleting…" : "Confirm delete"}</button><button type="button" className={sellerButton} disabled={busy} onClick={() => { setConfirmDelete(false); remove.reset(); }}>Keep product</button></div></> : <button type="button" className={`${sellerButton} w-full text-danger`} disabled={busy} onClick={() => setConfirmDelete(true)}>Delete product</button>}{remove.error && <p role="alert" className="mt-3 break-words text-sm text-danger">{remove.error.detail || remove.error.title}</p>}</div>}
+      </SellerPanel></aside>
     </div>
   </>;
 }

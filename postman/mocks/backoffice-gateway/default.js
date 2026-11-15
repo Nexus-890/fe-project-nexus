@@ -3,11 +3,13 @@
  */
 const http = require("node:http");
 const { randomUUID, createHash } = require("node:crypto");
-const origin = "http://127.0.0.1:3920";
+const origin = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || 3920}`;
+const appOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || 3110}`;
 const seller = "68000000-0000-4000-8000-000000000002";
 const category = "69000000-0000-4000-8000-000000000103";
 const warehouse = "69000000-0000-4000-8000-000000000001";
-let products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {};
+let products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {}, orderedProducts = new Set();
+const transitions = { DRAFT: ["ACTIVE"], ACTIVE: ["INACTIVE"], INACTIVE: ["ACTIVE"] };
 const envelope = (data) => ({ code: 0, message: "response success", data });
 function json(res, body, status = 200) { res.writeHead(status, { "Content-Type": status >= 400 ? "application/problem+json" : "application/json", "Cache-Control": "no-store" }); res.end(status === 204 ? undefined : JSON.stringify(body)); }
 const ok = (res, data, status = 200) => json(res, envelope(data), status);
@@ -15,6 +17,8 @@ const problem = (res, status, detail, code) => json(res, { type: "urn:problem:ba
 function list(res, data, url) { const page = Number(url.searchParams.get("page") || 0), size = Number(url.searchParams.get("size") || 10); return json(res, { ...envelope(data.slice(page * size, (page + 1) * size)), page: { number: page, size, totalElements: data.length, totalPages: Math.ceil(data.length / size) } }); }
 const bodyOf = (req) => typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 const findSku = (id) => products.flatMap((product) => product.skus).find((sku) => sku.id === id);
+const duplicateVariant = (product, body, skuId = null) => product.skus.some((sku) => sku.id !== skuId && sku.color === body.color && sku.size === body.size);
+const duplicateSku = (res) => problem(res, 409, "Duplicate SKU code or variant", "CATALOG_SKU_DUPLICATE");
 const validParcel = (parcel) => parcel !== null && typeof parcel === "object" &&
   [["weightGrams", 50000], ["lengthCm", 200], ["widthCm", 200], ["heightCm", 200]]
     .every(([field, max]) => Number.isInteger(parcel[field]) && parcel[field] >= 1 && parcel[field] <= max);
@@ -103,22 +107,22 @@ function auctionRoute(req, res, url, id, suffix, claims, has) {
   return problem(res, 501, "Auction operation is not modelled by this back-office demo", "NOT_MODELLED");
 }
 async function session(req, res, url) {
-  const upstream = await fetch(`${origin}/session${url.pathname}`, { method: req.method, headers: { "Content-Type": "application/json", Origin: req.headers.origin || "http://127.0.0.1:3110", "X-Requested-With": req.headers["x-requested-with"] || "", ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}) }, ...(req.method === "POST" ? { body: typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}) } : {}) });
+  const upstream = await fetch(`${origin}/session${url.pathname}`, { method: req.method, headers: { "Content-Type": "application/json", Origin: req.headers.origin || appOrigin, "X-Requested-With": req.headers["x-requested-with"] || "", ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}) }, ...(req.method === "POST" ? { body: typeof req.body === "string" ? req.body : JSON.stringify(req.body || {}) } : {}) });
   res.statusCode = upstream.status;
   for (const [name, value] of upstream.headers) if (!["content-length", "transfer-encoding", "content-encoding", "set-cookie"].includes(name)) res.setHeader(name, value);
   const cookies = upstream.headers.getSetCookie(); if (cookies.length) res.setHeader("Set-Cookie", cookies);
   res.end(Buffer.from(await upstream.arrayBuffer()));
 }
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3110"); res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", appOrigin); res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Idempotency-Key"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
-  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; resetAuctions(); return json(res, {}); }
+  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); return json(res, {}); }
   if (path === "/test/auction" && req.method === "POST") { const { id, ...changes } = bodyOf(req); const auction = auctions.find((item) => item.id === id); if (!auction) return problem(res, 404, "No simulated auction"); Object.assign(auction, changes); return ok(res, auction); }
-  if (path === "/test/control") { const body = bodyOf(req); rejectPublish = body.rejectPublish ?? rejectPublish; profileRole = body.profileRole ?? null; return json(res, {}); }
+  if (path === "/test/control") { const body = bodyOf(req); rejectPublish = body.rejectPublish ?? rejectPublish; profileRole = body.profileRole ?? null; if (body.orderedProductId) orderedProducts.add(body.orderedProductId); if (body.productStatus) products.find((product) => product.id === body.productStatus.id).status = body.productStatus.status; return json(res, {}); }
   // Explicit test setup for a legacy persisted SKU that predates parcel metadata.
   if (path === "/test/legacy-product" && req.method === "POST") {
     const id = randomUUID(), skuId = randomUUID();
@@ -140,11 +144,11 @@ const server = http.createServer(async (req, res) => {
   if (token) { try { const hash = createHash("sha256").update(token).digest("hex"); const allowed = await pm.state.get("oidc-keycloak:access-tokens") || {}; if (allowed[hash]) claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url")); } catch {} }
   const roles = claims?.roles || [], has = (role) => roles.includes(role);
   const operation = { method: req.method, path: `/api${path}`, role: roles.join(","), query: Object.fromEntries(url.searchParams) };
-  if (req.method === "POST" && /^\/v1\/products\/[^/]+\/skus$/.test(path) || req.method === "PUT" && /^\/v1\/skus\/[^/]+$/.test(path) || req.method === "POST" && path === "/v1/inventory/intake" || req.method === "PUT" && /^\/v1\/auctions\/[^/]+$/.test(path) || req.method === "POST" && /^\/v1\/auctions\/[^/]+\/admin-cancel$/.test(path)) operation.body = bodyOf(req);
+  if (req.method === "POST" && /^\/v1\/products\/[^/]+\/skus$/.test(path) || req.method === "PUT" && /^\/v1\/(?:skus\/[^/]+|products\/[^/]+(?:\/images\/order)?)$/.test(path) || req.method === "POST" && path === "/v1/inventory/intake" || req.method === "PUT" && /^\/v1\/auctions\/[^/]+$/.test(path) || req.method === "POST" && /^\/v1\/auctions\/[^/]+\/admin-cancel$/.test(path)) operation.body = bodyOf(req);
   evidence.push(operation);
   if (path === "/v1/users/me") { if (!claims) return problem(res, 401, "Sign in first"); const actualRole = roles.includes("SELLER") ? "Seller" : has("ADMIN") ? "Admin" : has("SUPPORT_STAFF") ? "Support" : "Buyer"; return ok(res, { id: claims.sub, email: `${actualRole.toLowerCase()}@nexus.local`, phone: "0901234567", fullName: `Demo ${actualRole}`, gender: "OTHER", address: "1 Demo Street", dateOfBirth: "2000-01-01", roles: profileRole || roles, status: "ACTIVE", createdAt: "2026-11-01T00:00:00Z" }); }
   if (path === "/v1/categories/tree") return list(res, [{ id: category, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }], url);
-  if (path === "/v1/products/mine") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); return list(res, products.filter((product) => product.sellerId === claims.sub).map(withPrice), url); }
+  if (path === "/v1/products/mine") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); const status = url.searchParams.get("status"); if (status !== null && !["DRAFT", "INACTIVE", "ACTIVE"].includes(status)) return problem(res, 400, "A valid value is required", "INVALID_PARAMETER"); return list(res, products.filter((product) => product.sellerId === claims.sub && (status === null || product.status === status)).map(withPrice), url); }
   if (/^\/v1\/products\/mine\//.test(path)) { const product = products.find((item) => item.id === path.split("/").at(-1)); if (!has("SELLER") || product?.sellerId !== claims.sub) return problem(res, 403, "Product owner required"); return product ? ok(res, withPrice(product)) : problem(res, 404, "Product missing"); }
   if (path === "/v1/products" && req.method === "GET") return list(res, products.filter((product) => product.status === "ACTIVE").map(publicProduct), url);
   if (path === "/v1/products" && req.method === "POST") { if (!has("SELLER")) return problem(res, 403, "Seller role required"); const body = bodyOf(req), id = randomUUID(); const product = { ...body, id, sellerId: claims.sub, slug: `demo-${id}`, status: "DRAFT", images: [], skus: [] }; products.push(product); return ok(res, withPrice(product), 201); }
@@ -157,13 +161,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && suffix === "/skus") {
       const body = bodyOf(req);
       if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
+      if (duplicateVariant(product, body)) return duplicateSku(res);
       const skuCode = `SKU-${product.id.replaceAll("-", "")}-${String(product.skus.length + 1).padStart(2, "0")}`;
       const sku = { color: body.color, size: body.size, price: body.price, ...(body.costPrice == null ? {} : { costPrice: body.costPrice }), shippingParcel: body.shippingParcel == null ? null : { ...body.shippingParcel }, skuCode, id: randomUUID(), productId: product.id, status: "ACTIVE" };
       product.skus.push(sku); return ok(res, sku, 201);
     }
-    if (req.method === "POST" && suffix === "/images") { if (!String(req.headers["content-type"]).startsWith("multipart/form-data; boundary=")) return problem(res, 400, "Multipart boundary missing"); const image = { id: randomUUID(), imageUrl: `${origin}/api/test/image.svg`, sortOrder: product.images.length }; product.images.push(image); return ok(res, image, 201); }
-    if (req.method === "PATCH" && suffix === "/status") { if (rejectPublish) return problem(res, 409, "Fixture: rejected status change"); product.status = bodyOf(req).status; return ok(res, withPrice(product)); }
+    if (req.method === "POST" && suffix === "/images") { if (!String(req.headers["content-type"]).startsWith("multipart/form-data; boundary=")) return problem(res, 400, "Multipart boundary missing"); const imageId = randomUUID(); const image = { id: imageId, imageUrl: `${origin}/api/test/image.svg?image=${imageId}`, sortOrder: product.images.length }; product.images.push(image); return ok(res, image, 201); }
+    if (req.method === "PATCH" && suffix === "/status") { if (rejectPublish) return problem(res, 409, "Fixture: rejected status change"); const target = bodyOf(req).status; if (!transitions[product.status]?.includes(target)) return problem(res, 400, "Product status transition is not allowed", "CATALOG_INVALID_PRODUCT_STATUS_TRANSITION"); product.status = target; return ok(res, withPrice(product)); }
     if (req.method === "PUT" && !suffix) { Object.assign(product, bodyOf(req)); return ok(res, withPrice(product)); }
+    if (req.method === "DELETE" && !suffix) { if (orderedProducts.has(product.id) || orders.some((order) => order.items.some((item) => item.productId === product.id))) return problem(res, 409, "Cannot delete a product that has orders", "CATALOG_PRODUCT_HAS_ORDERS"); products = products.filter((item) => item.id !== product.id); return json(res, null, 204); }
+    if (req.method === "PUT" && suffix === "/images/order") {
+      const ids = bodyOf(req).imageIds;
+      if (!Array.isArray(ids) || ids.length !== product.images.length || new Set(ids).size !== ids.length || ids.some((id) => !product.images.some((image) => image.id === id))) return problem(res, 400, "imageIds must contain exactly the product's image IDs without duplicates", "CATALOG_IMAGE_ORDER_INVALID");
+      product.images = ids.map((id, sortOrder) => ({ ...product.images.find((image) => image.id === id), sortOrder }));
+      return json(res, { ...envelope(product.images), page: { number: 0, size: product.images.length, totalElements: product.images.length, totalPages: 1 } });
+    }
     if (req.method === "DELETE" && suffix.startsWith("/images/")) { product.images = product.images.filter((image) => image.id !== suffix.split("/").at(-1)); return json(res, null, 204); }
   }
   if (/^\/v1\/skus\/[^/]+$/.test(path) && req.method === "PUT") {
@@ -172,6 +184,7 @@ const server = http.createServer(async (req, res) => {
     if (!has("SELLER") || products.find((product) => product.id === sku.productId)?.sellerId !== claims.sub) return problem(res, 403, "Product owner required");
     const body = bodyOf(req);
     if (body.shippingParcel != null && !validParcel(body.shippingParcel)) return problem(res, 400, "Invalid parcel measurements");
+    if (duplicateVariant(products.find((product) => product.id === sku.productId), body, sku.id)) return duplicateSku(res);
     Object.assign(sku, { color: body.color, size: body.size, price: body.price });
     if (body.costPrice != null) sku.costPrice = body.costPrice;
     // Catalog preserves existing metadata when an older client omits/nulls the parcel.

@@ -4,6 +4,7 @@ import type { ProductDetail } from "./catalogResponseType";
 import type { OrderSummary } from "./orderResponseType";
 
 export type SellerProductInput = catalog["schemas"]["CreateProduct"];
+export type SellerProductUpdate = catalog["schemas"]["UpdateProduct"];
 export type SellerSkuInput = catalog["schemas"]["WriteSku"];
 export type SellerProductStatus = catalog["schemas"]["ChangeProductStatus"]["status"];
 export type SellerBalance = inventory["schemas"]["Balance"];

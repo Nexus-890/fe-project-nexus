@@ -3,8 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 test.skip(!process.env.NEXUS_BACKOFFICE_TEST, "Run with playwright.backoffice.config.ts for the explicit back-office HTTP simulation.");
-const api = "http://127.0.0.1:3920/api";
-const provider = "http://127.0.0.1:3920/keycloak";
+const apiOrigin = `http://127.0.0.1:${process.env.NEXUS_BACKOFFICE_API_PORT || "3920"}`;
+const api = `${apiOrigin}/api`;
+const provider = `${apiOrigin}/keycloak`;
 const identities: Record<string, string> = { BUYER: "68000000-0000-4000-8000-000000000003", SELLER: "68000000-0000-4000-8000-000000000002", ADMIN: "68000000-0000-4000-8000-000000000001", SUPPORT_STAFF: "68000000-0000-4000-8000-000000000004" };
 const evidence = async (request: APIRequestContext) => (await request.get(`${api}/test/evidence`)).json();
 async function signIn(page: Page, request: APIRequestContext, role: string, destination?: string) {
@@ -18,6 +19,17 @@ async function signIn(page: Page, request: APIRequestContext, role: string, dest
   await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
 }
 const backofficeNav = (page: Page) => page.getByRole("navigation", { name: "Back-office navigation", exact: true });
+const category = "69000000-0000-4000-8000-000000000103";
+const png = { name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") };
+const evidenceDir = path.resolve("test-results/backoffice/evidence");
+async function checkLayouts(page: Page, name: string) {
+  await mkdir(evidenceDir, { recursive: true });
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: path.join(evidenceDir, `mock-${name}-${width}.png`), fullPage: true, caret: "initial", style: "nextjs-portal { visibility: hidden !important; }" });
+  }
+}
 
 test.beforeEach(async ({ request }) => {
   expect((await request.get(`${provider}/test/reset`)).ok()).toBe(true);
@@ -75,7 +87,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await signIn(seller, request, "SELLER", "/backoffice/products/new");
   await expect(seller.getByRole("heading", { name: "New Product", exact: true })).toBeVisible();
   await seller.getByLabel("Product Name", { exact: true }).fill("Back-office end-to-end demo headphones");
-  await seller.getByLabel("Category", { exact: true }).selectOption("69000000-0000-4000-8000-000000000103");
+  await seller.getByLabel("Category", { exact: true }).selectOption(category);
   await seller.getByRole("button", { name: "Save Changes", exact: true }).click();
   await expect(seller).toHaveURL(/\/backoffice\/products\/[0-9a-f-]{36}$/);
   let state = await evidence(request);
@@ -119,7 +131,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
   await expect(seller.getByTestId(`selling-price-${state.products[0].skus[0].id}`)).toHaveText("150.000,00 ₫");
   await expect(seller.getByText("Publish the product to add stock for this SKU.", { exact: true })).toBeVisible();
   await expect(publish).toBeDisabled();
-  await seller.getByLabel("Product image file", { exact: true }).setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") });
+  await seller.getByLabel("Product image file", { exact: true }).setInputFiles(png);
   await expect(publish).toBeEnabled();
   await request.post(`${api}/test/control`, { data: { rejectPublish: true } });
   await publish.click();
@@ -427,3 +439,149 @@ for (const role of ["SELLER", "BUYER"]) {
     expect((await auctionRequests(request)).filter((row) => row.path !== "/api/v1/auctions" || row.query.size === "10")).toEqual([]);
   });
 }
+
+test("Seller edits a draft that survives reload and sees the backend's status 400 and delete 409", async ({ page, request }) => {
+  await signIn(page, request, "SELLER", "/backoffice/products/new");
+  const name = page.getByLabel("Product Name", { exact: true });
+  const description = page.getByRole("textbox", { name: /^Description/ });
+  const auction = page.getByLabel("Allow auction listings", { exact: true });
+  await name.fill("Draft desk lamp");
+  await page.getByLabel("Category", { exact: true }).selectOption(category);
+  await description.fill("Warm light for a study desk.");
+  await auction.check();
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(page).toHaveURL(/\/backoffice\/products\/[0-9a-f-]{36}$/);
+  const productId = (await evidence(request)).products[0].id;
+  const expectFields = async (title: string, text: string, auctionEnable: boolean) => {
+    await expect(name).toHaveValue(title);
+    await expect(page.getByLabel("Category", { exact: true })).toHaveValue(category);
+    await expect(description).toHaveValue(text);
+    await expect(auction).toBeChecked({ checked: auctionEnable });
+    await expect(page.getByText("DRAFT", { exact: true })).toBeVisible();
+  };
+  await page.reload();
+  await expectFields("Draft desk lamp", "Warm light for a study desk.", true);
+  await name.fill("Edited desk lamp");
+  await description.fill("Dimmable warm light.");
+  await auction.uncheck();
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Product saved." })).toBeVisible();
+  expect((await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/products/${productId}`).map((row: { body: unknown }) => row.body))
+    .toEqual([{ name: "Edited desk lamp", description: "Dimmable warm light.", categoryId: category, auctionEnable: false }]);
+  await page.reload();
+  await expectFields("Edited desk lamp", "Dimmable warm light.", false);
+  await checkLayouts(page, "seller-product-editor");
+
+  await request.post(`${api}/test/control`, { data: { orderedProductId: productId } });
+  await page.getByRole("button", { name: "Delete product", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Cannot delete a product that has orders");
+  await expect(page).toHaveURL(`/backoffice/products/${productId}`);
+  expect((await evidence(request)).products.map((product: { id: string }) => product.id)).toContain(productId);
+
+  const { data: legacy } = await (await request.post(`${api}/test/legacy-product`)).json();
+  await request.post(`${api}/test/control`, { data: { productStatus: { id: legacy.id, status: "ACTIVE" } } });
+  await page.goto(`/backoffice/products/${legacy.id}`);
+  await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
+  await request.post(`${api}/test/control`, { data: { productStatus: { id: legacy.id, status: "INACTIVE" } } });
+  await page.getByRole("button", { name: "Unpublish", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Product status transition is not allowed");
+  await page.getByRole("button", { name: "Delete product", exact: true }).click();
+  await page.getByRole("button", { name: "Keep product", exact: true }).click();
+  expect((await evidence(request)).requests.some((row: { method: string; path: string }) => row.method === "DELETE" && row.path === `/api/v1/products/${legacy.id}`)).toBe(false);
+  await page.getByRole("button", { name: "Delete product", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
+  await expect(page).toHaveURL("/backoffice/products");
+  const table = page.getByRole("table", { name: "Seller products", exact: true });
+  await expect(table).toContainText("Edited desk lamp");
+  await expect(table).not.toContainText("Legacy parcel product");
+  expect((await evidence(request)).products.map((product: { id: string }) => product.id)).toEqual([productId]);
+
+  const seeded: string[] = [];
+  for (let index = 0; index < 10; index++) seeded.push((await (await request.post(`${api}/test/legacy-product`)).json()).data.id);
+  await request.post(`${api}/test/control`, { data: { productStatus: { id: seeded[0], status: "ACTIVE" } } });
+  await page.reload();
+  const summary = page.getByText(/^Page \d+ · \d+ products$/);
+  await expect(summary).toHaveText("Page 1 · 11 products");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(summary).toHaveText("Page 2 · 11 products");
+  const filter = async (label: string, status: string) => {
+    const listed = page.waitForRequest((sent) => {
+      const url = new URL(sent.url());
+      return url.pathname === "/api/v1/products/mine" && url.searchParams.get("status") === status;
+    });
+    await page.getByRole("button", { name: label, exact: true }).click();
+    expect(new URL((await listed).url()).searchParams.get("page")).toBe("0");
+    await expect(page.getByRole("button", { name: label, exact: true })).toHaveAttribute("aria-pressed", "true");
+  };
+  await filter("Active", "ACTIVE");
+  await expect(summary).toHaveText("Page 1 · 1 products");
+  await expect(table.getByRole("rowheader")).toHaveText(["Legacy parcel product"]);
+  await expect(table).not.toContainText("DRAFT");
+  await filter("Draft", "DRAFT");
+  await expect(summary).toHaveText("Page 1 · 10 products");
+  await expect(table.getByRole("rowheader")).toHaveCount(10);
+  await expect(table).toContainText("Edited desk lamp");
+  await expect(table).not.toContainText("ACTIVE");
+  await filter("Inactive", "INACTIVE");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "No products with this status." })).toBeVisible();
+  await checkLayouts(page, "seller-products-filtered");
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(summary).toHaveText("Page 1 · 11 products");
+  await checkLayouts(page, "seller-products");
+});
+
+test("Seller adds and edits SKUs with the backend's duplicate 409 and reorders images that survive reload", async ({ page, request }) => {
+  const { data: product } = await (await request.post(`${api}/test/legacy-product`)).json();
+  await signIn(page, request, "SELLER", `/backoffice/products/${product.id}`);
+  await expect(page.getByRole("heading", { name: "Edit Product", exact: true })).toBeVisible();
+  const productState = async () => (await evidence(request)).products.find((row: { id: string }) => row.id === product.id);
+  await page.getByRole("button", { name: "Add SKU", exact: true }).click();
+  await page.getByRole("textbox", { name: "color new SKU", exact: true }).fill("Black");
+  await page.getByRole("textbox", { name: "cost price new SKU", exact: true }).fill("80000");
+  await page.getByRole("textbox", { name: "price new SKU", exact: true }).fill("120000");
+  for (const [label, value] of [["Weight (g)", "900"], ["Length (cm)", "25"], ["Width (cm)", "15"], ["Height (cm)", "10"]])
+    await page.getByLabel(`${label} new SKU`, { exact: true }).fill(value);
+  await page.getByRole("button", { name: "Save SKU", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Duplicate SKU code or variant");
+  expect((await productState()).skus).toHaveLength(1);
+  await page.getByRole("textbox", { name: "size new SKU", exact: true }).fill("Large");
+  await page.getByRole("button", { name: "Save SKU", exact: true }).click();
+  await expect.poll(async () => (await productState()).skus.length).toBe(2);
+  const created = (await productState()).skus[1];
+  await expect(page.getByRole("textbox", { name: `SKU code ${created.skuCode}`, exact: true })).toHaveValue(created.skuCode);
+  await page.getByRole("button", { name: `Edit SKU ${created.skuCode}`, exact: true }).click();
+  const size = page.getByRole("textbox", { name: `size ${created.skuCode}`, exact: true });
+  await size.fill("Standard");
+  await page.getByRole("button", { name: "Save SKU", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Duplicate SKU code or variant");
+  expect((await productState()).skus[1].size).toBe("Large");
+  await size.fill("XL");
+  await page.getByRole("button", { name: "Save SKU", exact: true }).click();
+  await expect.poll(async () => (await productState()).skus[1].size).toBe("XL");
+  await expect(page.getByRole("button", { name: "Save SKU", exact: true })).toHaveCount(0);
+  await expect(page.getByText("XL", { exact: true })).toBeVisible();
+
+  const first = product.images[0].id;
+  await page.getByLabel("Product image file", { exact: true }).setInputFiles(png);
+  await expect.poll(async () => (await productState()).images.length).toBe(2);
+  const second = (await productState()).images[1].id;
+  const media = page.locator("section", { has: page.getByRole("heading", { name: "Media", exact: true }) });
+  const sources = () => media.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).src));
+  await expect.poll(sources).toEqual([expect.not.stringContaining("image="), expect.stringContaining(`image=${second}`)]);
+  await expect(page.getByRole("button", { name: "Move image 1 earlier", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Move image 2 later", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Move image 2 earlier", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Image order saved." })).toBeVisible();
+  expect((await evidence(request)).requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path === `/api/v1/products/${product.id}/images/order`).map((row: { body: unknown }) => row.body))
+    .toEqual([{ imageIds: [second, first] }]);
+  await expect.poll(sources).toEqual([expect.stringContaining(`image=${second}`), expect.not.stringContaining("image=")]);
+  await page.reload();
+  await expect.poll(sources).toEqual([expect.stringContaining(`image=${second}`), expect.not.stringContaining("image=")]);
+  await checkLayouts(page, "seller-product-skus-images");
+  await page.getByRole("button", { name: "Remove", exact: true }).first().click();
+  await expect.poll(async () => (await productState()).images.map((image: { id: string }) => image.id)).toEqual([first]);
+  await page.reload();
+  await expect.poll(sources).toEqual([expect.not.stringContaining("image=")]);
+});
