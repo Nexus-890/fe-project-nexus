@@ -398,7 +398,7 @@ export interface components {
             extensionCount: number;
             status: components["schemas"]["AuctionStatus"];
             /** @enum {string|null} */
-            cancelledBy?: "SELLER" | "ADMIN" | null;
+            cancelledBy?: "SELLER" | "ADMIN" | "SYSTEM" | null;
             cancelledReason?: string | null;
             /** Format: uuid */
             cancelledActorId?: string | null;
@@ -744,7 +744,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description The SKU already has a live auction or the seller has reached the live auction limit. */
+            /** @description The product lacks a valid image, the SKU is out of stock or has a live auction, or the seller has reached the live auction limit. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -754,7 +754,7 @@ export interface operations {
                         /** @enum {unknown} */
                         status?: 409;
                         /** @enum {unknown} */
-                        code?: "AUCTION_SKU_ALREADY_LIVE" | "AUCTION_SELLER_LIMIT_REACHED";
+                        code?: "AUCTION_IMAGE_REQUIRED" | "AUCTION_SKU_ALREADY_LIVE" | "AUCTION_SELLER_LIMIT_REACHED" | "AUCTION_STOCK_UNAVAILABLE";
                     };
                 };
             };
@@ -778,7 +778,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The catalog is unavailable or the gateway cannot reach auction-service. */
+            /** @description Catalog or inventory is unavailable, or the gateway cannot reach auction-service. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -796,7 +796,7 @@ export interface operations {
                      */
                     "application/problem+json": components["schemas"]["Problem"] & {
                         /** @enum {unknown} */
-                        code?: "AUCTION_CATALOG_UNAVAILABLE" | "SERVICE_UNAVAILABLE";
+                        code?: "AUCTION_CATALOG_UNAVAILABLE" | "AUCTION_INVENTORY_UNAVAILABLE" | "SERVICE_UNAVAILABLE";
                     };
                 };
             };

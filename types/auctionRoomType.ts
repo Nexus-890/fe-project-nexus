@@ -12,7 +12,7 @@ export type AuctionRoom = Omit<
   currentPrice: string;
   imageUrl: string | null;
   currency: string;
-  cancelledBy: "SELLER" | "ADMIN" | null;
+  cancelledBy: NonNullable<components["schemas"]["Auction"]["cancelledBy"]> | null;
   cancelledReason: string | null;
 };
 
