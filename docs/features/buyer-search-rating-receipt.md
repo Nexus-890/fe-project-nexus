@@ -176,3 +176,27 @@ acceptance scenarios passed again against the rebuilt service artifacts.
 Migration compatibility covers V12, develop V13 and consolidated V14 through
 V16. Regenerated DTOs, all 300 frontend unit tests, lint, typecheck and production
 build also passed. The !169 room and buyer browser checks remain 25/25 and 48/48.
+
+## Conflict reconciliation — 2026-11-15
+
+Merged `develop` at `aa238638`, #205 at `6259d278`, then the newer develop
+checkpoint `dc9a0207`. The shared auction room retains bidding, current
+state/history/heartbeat handling and private winner-only checkout data together
+with #220 seller reputation. #205 contributes `/auctions`, `/my-bids`, paginated
+personal bids and explicit second-chance offer accept/decline/address/payment
+flows. One `/auctions/[id]` route serves all room links; duplicate dynamic route
+names were removed. Shared query keys retain account, reputation and all auction
+features. The generator retains delivered rating/commerce types and the labeled
+account integration snapshots.
+
+Verification after reconciliation: generated-type drift, ESLint, typecheck and
+all 336 frontend unit tests passed; production build passed with TypeScript
+enabled. The browser suites passed 26 auction-room, 12 auction-list/My Bids/offer,
+48 order/rating and 58 catalog/navigation cases against their explicit local HTTP
+dependencies. These remain frontend fixture evidence, not live offer/broker or
+bank integration. The final develop update adds a unit check for system stock
+rejection and preserves the new `SYSTEM` cancellation actor. API-gateway verify
+passed 85 tests; commerce, payment, auction and inventory packages compiled with
+tests skipped after installing the merged shared libraries. Existing Next
+security reminders required unchanged command retries. No receipt/payout business
+logic or migrations were changed while resolving these frontend conflicts.

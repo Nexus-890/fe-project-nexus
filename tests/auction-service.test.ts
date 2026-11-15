@@ -120,6 +120,15 @@ test("public detail does not supply private checkout references and rejects malf
   }
 });
 
+test("public detail accepts an auction cancelled by stock rejection", () => {
+  const cancelled = parseAuctionRoom({
+    ...room, status: "CANCELLED", cancelledBy: "SYSTEM", cancelledReason: "STOCK_UNAVAILABLE",
+  });
+  assert.equal(cancelled.status, "CANCELLED");
+  assert.equal(cancelled.cancelledBy, "SYSTEM");
+  assert.equal(cancelled.cancelledReason, "STOCK_UNAVAILABLE");
+});
+
 test("private own-bid projection supplies the real winner order and never exposes a loser's checkout", async () => {
   const winner = { ...ownBid, auctionStatus: "SETTLED", won: true, orderId: otherId, finalPrice: 9900, paymentDueAt: "2031-01-02T00:00:00Z" };
   const read = (bid: unknown) => getMyAuctionBid(auctionId, { context: { getAccessToken: () => "winner-token", fetch: async (_url, init) => {
