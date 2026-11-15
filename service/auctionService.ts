@@ -35,7 +35,8 @@ export const parseAuctionRoom = (value: unknown): AuctionRoom => {
     (value.imageUrl != null && typeof value.imageUrl !== "string") ||
     !isInstant(value.startAt) || !isInstant(value.endAt) || !isInstant(value.originalEndAt) ||
     !isCount(value.bidCount) || !isCount(value.extensionCount) || !isStatus(value.status) ||
-    (value.cancelledBy != null && value.cancelledBy !== "SELLER" && value.cancelledBy !== "ADMIN") ||
+    (value.cancelledBy != null && value.cancelledBy !== "SELLER" &&
+      value.cancelledBy !== "ADMIN" && value.cancelledBy !== "SYSTEM") ||
     (value.cancelledReason != null && typeof value.cancelledReason !== "string"))
     throw createInvalidResponseError("Invalid auction detail");
   const bidIncrement = parseAuctionMoney(value.bidIncrement);
