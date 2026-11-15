@@ -1,4 +1,4 @@
-/** Provisional #208 buyer contract. No delivered offer OpenAPI exists yet. */
+/** Normalized #208 offer model. Routes follow review; the DTO awaits delivered OpenAPI. */
 export type AuctionOffer = {
   id: string;
   auctionId: string;

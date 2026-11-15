@@ -38,10 +38,10 @@ function MyBidRow({ bid, now }: { bid: MyAuctionBid; now: number }) {
   const status = checking ? "Result pending" : bid.auctionStatus === "ENDED" ? "Result pending"
     : bid.auctionStatus === "CANCELLED" ? "Cancelled"
       : bid.auctionStatus === "PAYMENT_TIMEOUT" && bid.won ? "Payment deadline passed"
-        : bid.won ? bid.auctionStatus === "SETTLED" ? "Settled" : "Won"
+        : bid.won ? "Won"
           : active ? leading ? "Leading" : "Outbid"
             : ["CREATED", "SCHEDULED"].includes(bid.auctionStatus) ? "Scheduled" : "Lost";
-  const statusClass = status === "Leading" || status === "Won" || status === "Settled" ? "bg-success"
+  const statusClass = status === "Leading" || status === "Won" ? "bg-success"
     : status === "Outbid" ? "bg-warning" : status === "Payment deadline passed" ? "bg-danger" : "bg-muted-foreground";
   const amount = auction ? formatAuctionMoney(bid.amount, auction.currency) : bid.amount;
   const canBid = active && !checking && !closed;
@@ -55,7 +55,7 @@ function MyBidRow({ bid, now }: { bid: MyAuctionBid; now: number }) {
         </div>
       </td>
       <td className="min-w-0 lg:px-3 lg:py-4"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">Your bid</span><span className="font-mono text-xs tabular-nums [overflow-wrap:anywhere]">{amount}</span>{!auction ? <span className="mt-1 block text-[10px] text-muted-foreground">Currency unavailable</span> : null}</td>
-      <td className="min-w-0 lg:px-3 lg:py-4"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">Current bid</span><span className="font-mono text-xs tabular-nums [overflow-wrap:anywhere]">{auction ? formatAuctionMoney(auction.finalPrice ?? auction.currentPrice, auction.currency) : "Unavailable"}</span></td>
+      <td className="min-w-0 lg:px-3 lg:py-4"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">Current bid</span><span className="font-mono text-xs tabular-nums [overflow-wrap:anywhere]">{auction ? formatAuctionMoney(bid.finalPrice ?? auction.currentPrice, auction.currency) : "Unavailable"}</span></td>
       <td className="min-w-0 lg:px-3 lg:py-4"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">Status</span><span className="inline-flex items-center gap-1.5 text-xs"><span className={`size-1.5 shrink-0 rounded-full ${statusClass}`} aria-hidden="true" />{status}</span></td>
       <td className="min-w-0 lg:px-3 lg:py-4"><span className="mb-1 block text-xs text-muted-foreground lg:hidden">Ends in</span>{auction ? <AuctionTimeBadge startAt={auction.startAt} endAt={auction.endAt} status={auction.status} now={now} /> : <span className="text-xs text-muted-foreground">Unavailable</span>}</td>
       <td className="col-span-2 lg:px-4 lg:py-4 lg:text-right"><Link href={`/auctions/${bid.auctionId}`} prefetch={false} className={`${buttonClass} w-full whitespace-nowrap px-3 text-xs lg:min-h-9 lg:w-auto ${canBid && !leading ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}>{canBid ? leading ? "Increase Bid" : "Bid Again" : "View Auction"}</Link></td>
@@ -109,7 +109,8 @@ function MyBidsContents({ query }: { query: Record<string, string | string[] | u
   const stats = [
     { label: "Active bids", value: bids.filter((bid) => bid.auctionStatus === "ACTIVE").length, note: `${bids.filter((bid) => bid.auctionStatus === "ACTIVE" && bid.leading).length} leading` },
     { label: "Won auctions", value: bids.filter((bid) => bid.won).length },
-    { label: "Awaiting payment", value: bids.filter((bid) => bid.auctionStatus === "WON" && bid.won).length },
+    // SETTLED records order creation. Payment status is not part of MyBid.
+    { label: "Awaiting order", value: bids.filter((bid) => bid.won && !bid.orderId && ["WON", "SETTLED"].includes(bid.auctionStatus)).length },
     { label: "Auctions joined", value: bids.length },
   ];
 

@@ -29,10 +29,10 @@ export const parseAuctionOffer = (value: unknown): AuctionOffer => {
   };
 };
 
-/** FE integration seam for #208; never derives or creates an offer on a read. */
+/** Reviewer-specified #208 route; never derives or creates an offer on a read. */
 export const getMyAuctionOffers = async (page = 0, options: ServiceRequestOptions = {}): Promise<Page<AuctionOffer>> => {
   if (!Number.isSafeInteger(page) || page < 0) throw createInvalidResponseError("Invalid offer page");
-  const response = await requestApi<unknown>("GET", "/api/v1/auctions/offers/mine", undefined, {
+  const response = await requestApi<unknown>("GET", "/api/v1/auctions/offers/me", undefined, {
     ...options, auth: true, params: { page, size: 10 },
   });
   return parseAuctionPage(response, page, parseAuctionOffer);
@@ -43,7 +43,7 @@ export const respondToAuctionOffer = async (
 ): Promise<AuctionOffer> => {
   if (!isUuid(auctionId) || !isUuid(offerId) || !["accept", "decline"].includes(action))
     throw createInvalidResponseError("Invalid offer response");
-  const { data } = await requestApi<unknown>("POST", `/api/v1/auctions/${auctionId}/offers/${offerId}/${action}`, undefined, {
+  const { data } = await requestApi<unknown>("POST", `/api/v1/auctions/offers/${offerId}/${action}`, undefined, {
     ...options, auth: true, params: undefined,
   });
   const offer = parseAuctionOffer(data);

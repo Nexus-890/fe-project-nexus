@@ -36,9 +36,7 @@ export const parseAuctionRoom = (value: unknown): AuctionRoom => {
     !isInstant(value.startAt) || !isInstant(value.endAt) || !isInstant(value.originalEndAt) ||
     !isCount(value.bidCount) || !isCount(value.extensionCount) || !isStatus(value.status) ||
     (value.cancelledBy != null && value.cancelledBy !== "SELLER" && value.cancelledBy !== "ADMIN") ||
-    (value.cancelledReason != null && typeof value.cancelledReason !== "string") ||
-    (value.orderId != null && !isUuid(value.orderId)) ||
-    (value.paymentDueAt != null && !isInstant(value.paymentDueAt)))
+    (value.cancelledReason != null && typeof value.cancelledReason !== "string"))
     throw createInvalidResponseError("Invalid auction detail");
   const bidIncrement = parseAuctionMoney(value.bidIncrement);
   if (Number(bidIncrement) <= 0) throw createInvalidResponseError("Invalid auction increment");
@@ -50,8 +48,6 @@ export const parseAuctionRoom = (value: unknown): AuctionRoom => {
     startAt: value.startAt, endAt: value.endAt, originalEndAt: value.originalEndAt,
     extensionCount: value.extensionCount, status: value.status,
     cancelledBy: value.cancelledBy ?? null, cancelledReason: value.cancelledReason ?? null,
-    finalPrice: value.finalPrice == null ? null : parseAuctionMoney(value.finalPrice),
-    paymentDueAt: value.paymentDueAt ?? null, orderId: value.orderId ?? null,
   };
 };
 
@@ -128,10 +124,19 @@ export const getAuctionBids = async (
 const parseMyAuctionBid = (value: unknown): MyAuctionBid => {
   if (!isRecord(value) || !isUuid(value.auctionId) || typeof value.title !== "string" ||
     !isInstant(value.placedAt) || !isStatus(value.auctionStatus) ||
-    typeof value.leading !== "boolean" || typeof value.won !== "boolean")
+    typeof value.leading !== "boolean" || typeof value.won !== "boolean" ||
+    (value.won && !["WON", "SETTLED", "PAYMENT_TIMEOUT"].includes(value.auctionStatus)) ||
+    (value.won && value.orderId != null && !isUuid(value.orderId)) ||
+    (value.won && value.paymentDueAt != null && !isInstant(value.paymentDueAt)))
     throw createInvalidResponseError("Invalid personal auction bid");
   return { auctionId: value.auctionId, title: value.title, amount: parseAuctionMoney(value.amount),
-    placedAt: value.placedAt, auctionStatus: value.auctionStatus, leading: value.leading, won: value.won };
+    placedAt: value.placedAt, auctionStatus: value.auctionStatus, leading: value.leading, won: value.won,
+    // Older responses remain readable; a loser can never authorize a checkout
+    // even if an incompatible response accidentally includes private fields.
+    orderId: value.won && isUuid(value.orderId) ? value.orderId : null,
+    paymentDueAt: value.won && isInstant(value.paymentDueAt) ? value.paymentDueAt : null,
+    finalPrice: value.won && value.finalPrice != null ? parseAuctionMoney(value.finalPrice) : null,
+  };
 };
 
 export const getAuctions = async (

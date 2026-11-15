@@ -15,6 +15,10 @@ type AddressFormProps = {
   onRetry: (level: "province" | "ward") => void;
   onSubmit: () => void;
   busy?: boolean;
+  title?: string;
+  submitLabel?: string;
+  addressLineMaxLength?: number;
+  idPrefix?: string;
 };
 
 const controlClass =
@@ -31,6 +35,10 @@ function AddressForm({
   onRetry,
   onSubmit,
   busy = false,
+  title = "1. Shipping Address",
+  submitLabel = "Review address",
+  addressLineMaxLength = 500,
+  idPrefix = "checkout",
 }: AddressFormProps) {
   const textFields = [
     {
@@ -52,7 +60,7 @@ function AddressForm({
       label: "House number and street",
       autoComplete: "shipping address-line1",
       placeholder: "e.g. 12 Nguyen Hue",
-      maxLength: 500,
+      maxLength: addressLineMaxLength,
     },
   ] as const;
   const deliveryAddress = [
@@ -86,7 +94,7 @@ function AddressForm({
   return (
     <form
       noValidate
-      aria-label="Shipping address"
+      aria-label={title === "1. Shipping Address" ? "Shipping address" : title}
       aria-busy={busy}
       className="min-w-0 rounded-sm border border-border bg-card p-5 text-card-foreground sm:p-6"
       onSubmit={(event) => {
@@ -96,7 +104,7 @@ function AddressForm({
     >
       <h2 className="flex items-center gap-2 text-base font-semibold">
         <MapPin size={18} className="shrink-0 text-primary" aria-hidden="true" />
-        1. Shipping Address
+        {title}
       </h2>
       <p className="mt-2 text-sm leading-5 text-muted-foreground">
         Where should we deliver your order? All fields are required.
@@ -105,16 +113,16 @@ function AddressForm({
       <div className="mt-6 grid min-w-0 gap-4 sm:grid-cols-2">
         {textFields.map(({ field, label, autoComplete, placeholder, maxLength }) => {
           const describedBy = [
-            field === "addressLine" && "checkout-addressLine-hint",
-            errors[field] && `checkout-${field}-error`,
+            field === "addressLine" && `${idPrefix}-addressLine-hint`,
+            errors[field] && `${idPrefix}-${field}-error`,
           ].filter(Boolean).join(" ") || undefined;
           return (
             <div key={field} className={`min-w-0 ${field === "addressLine" ? "sm:col-span-2" : ""}`}>
-              <label htmlFor={`checkout-${field}`} className="mb-2 block text-sm font-medium">
+              <label htmlFor={`${idPrefix}-${field}`} className="mb-2 block text-sm font-medium">
                 {label}
               </label>
               <input
-                id={`checkout-${field}`}
+                id={`${idPrefix}-${field}`}
                 name={field}
                 type={field === "phoneNumber" ? "tel" : "text"}
                 autoComplete={autoComplete}
@@ -129,12 +137,12 @@ function AddressForm({
                 onChange={(event) => onChange(field, event.target.value)}
               />
               {field === "addressLine" ? (
-                <p id="checkout-addressLine-hint" className="mt-2 text-xs leading-5 text-muted-foreground">
+                <p id={`${idPrefix}-addressLine-hint`} className="mt-2 text-xs leading-5 text-muted-foreground">
                   Ward and province are chosen below.
                 </p>
               ) : null}
               {errors[field] ? (
-                <p id={`checkout-${field}-error`} className="mt-2 break-words text-sm text-danger">
+                <p id={`${idPrefix}-${field}-error`} className="mt-2 break-words text-sm text-danger">
                   {errors[field]}
                 </p>
               ) : null}
@@ -143,16 +151,16 @@ function AddressForm({
         })}
         {localityFields.map(({ field, level, label, plural, options, state, enabled, placeholder }) => {
           const describedBy = [
-            errors[field] && `checkout-${field}-error`,
-            state.error && `checkout-${field}-load-error`,
+            errors[field] && `${idPrefix}-${field}-error`,
+            state.error && `${idPrefix}-${field}-load-error`,
           ].filter(Boolean).join(" ") || undefined;
           return (
             <div key={field} className="min-w-0">
-              <label htmlFor={`checkout-${field}`} className="mb-2 block text-sm font-medium">
+              <label htmlFor={`${idPrefix}-${field}`} className="mb-2 block text-sm font-medium">
                 {label}
               </label>
               <select
-                id={`checkout-${field}`}
+                id={`${idPrefix}-${field}`}
                 name={field}
                 value={values[field]}
                 required
@@ -170,13 +178,13 @@ function AddressForm({
                 ))}
               </select>
               {errors[field] ? (
-                <p id={`checkout-${field}-error`} className="mt-2 break-words text-sm text-danger">
+                <p id={`${idPrefix}-${field}-error`} className="mt-2 break-words text-sm text-danger">
                   {errors[field]}
                 </p>
               ) : null}
               {state.error ? (
                 <div className="mt-2 text-sm">
-                  <p id={`checkout-${field}-load-error`} role="alert" className="break-words text-danger">
+                  <p id={`${idPrefix}-${field}-load-error`} role="alert" className="break-words text-danger">
                     {state.error}
                   </p>
                   <button
@@ -213,7 +221,7 @@ function AddressForm({
           disabled={busy}
           className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-sm bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-wait disabled:opacity-60 sm:w-auto"
         >
-          Review address
+          {submitLabel}
         </button>
       </div>
     </form>

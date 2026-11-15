@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createServer } from "node:http";
 import { isApiError } from "../configs/api";
 import { getAuctions, getMyAuctionBids } from "../service/auctionService";
 import { getMyAuctionOffers, parseAuctionOffer, respondToAuctionOffer } from "../service/auctionOfferService";
@@ -77,7 +78,7 @@ const offer = { id: offerId, auctionId, title: "Collector watch", imageUrl: null
 
 test("offer reads preserve the recipient price, server status and authenticated pagination", async () => {
   const context = { baseUrl: "https://auction.test", getAccessToken: () => "recipient-token", fetch: (async (input, init) => {
-    assert.equal(String(input), "https://auction.test/api/v1/auctions/offers/mine?page=1&size=10");
+    assert.equal(String(input), "https://auction.test/api/v1/auctions/offers/me?page=1&size=10");
     assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer recipient-token");
     return response([offer], 1, 10);
   }) satisfies typeof fetch };
@@ -103,7 +104,41 @@ test("offer response sends only the named action and accepts matching server-cre
   assert.equal(result.amount, "4800000.00");
   assert.equal(result.orderId, otherId);
   assert.equal(result.paymentDueAt, accepted.paymentDueAt);
-  assert.deepEqual(calls, [`https://auction.test/api/v1/auctions/${auctionId}/offers/${offerId}/accept`, `https://auction.test/api/v1/auctions/${auctionId}/offers/${offerId}/decline`]);
+  assert.deepEqual(calls, [`https://auction.test/api/v1/auctions/offers/${offerId}/accept`, `https://auction.test/api/v1/auctions/offers/${offerId}/decline`]);
+});
+
+test("F2 offers use only the canonical authenticated me and offer action routes over HTTP", async () => {
+  const calls: { path: string; method: string; bearer: string | undefined; body: string }[] = [];
+  const server = createServer(async (request, reply) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    calls.push({ path: request.url ?? "", method: request.method ?? "", bearer: request.headers.authorization, body: Buffer.concat(chunks).toString("utf8") });
+    const data = request.method === "GET" ? [offer] : request.url?.endsWith("/accept")
+      ? { ...offer, status: "ACCEPTED", orderId: otherId, paymentDueAt: "2031-11-15T11:00:00Z" }
+      : { ...offer, status: "DECLINED" };
+    reply.writeHead(200, { "Content-Type": "application/json" });
+    reply.end(JSON.stringify({ code: 0, message: "response success", data,
+      ...(request.method === "GET" ? { page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } } : {}) }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const endpoint = server.address();
+  assert.ok(endpoint && typeof endpoint !== "string");
+  let token = "recipient-one";
+  const context = { baseUrl: `http://127.0.0.1:${endpoint.port}`, getAccessToken: () => token };
+  try {
+    await getMyAuctionOffers(0, { context, auth: false });
+    await respondToAuctionOffer(auctionId, offerId, "accept", { context, params: { amount: 5000000 } });
+    token = "recipient-two";
+    await respondToAuctionOffer(auctionId, offerId, "decline", { context });
+    assert.deepEqual(calls, [
+      { path: "/api/v1/auctions/offers/me?page=0&size=10", method: "GET", bearer: "Bearer recipient-one", body: "" },
+      { path: `/api/v1/auctions/offers/${offerId}/accept`, method: "POST", bearer: "Bearer recipient-one", body: "" },
+      { path: `/api/v1/auctions/offers/${offerId}/decline`, method: "POST", bearer: "Bearer recipient-two", body: "" },
+    ]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test("offer parser rejects incomplete accepted orders and invalid price/window data", () => {

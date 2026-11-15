@@ -1,33 +1,56 @@
 # Buyer auction room
 
-Scope: the merged frontend Auction room task (#178, #179, #180 and the frontend portion of #267), based on `origin/develop` at `09b3cf6f`. `/auctions/[id]` renders the detail room from `03 · Buyer · Auction.png`; homepage auction cards enter that room. The auction listing and My Bids screens in the same design export are separate tasks.
+Scope: the combined Auction room frontend work (#178, #179, #180 and the frontend portion of #267), based on `origin/develop` at `09b3cf6f`. `/auctions/[id]` follows the room frame in `03 · Buyer · Auction.png`; homepage auction cards enter that room. Auction listing and My Bids are separate tasks. The latest review also adds the minimal private winner read fields needed to connect the room to the recorded order. Live #180/#267 integration remains open.
+
+Before push, develop advanced to `a686c099` and was merged without conflicts.
+Its unrelated commerce/inventory/payment DTO additions were regenerated; the
+auction implementation and frontend runtime source did not change in that merge.
 
 ## UI and behavior
 
-The existing shop header/footer wrap a two-column desktop layout and a stacked mobile layout: product gallery and item details, title/status, countdown, bid panel, masked paginated history and item link. Product and auction responses supply the content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Monetary values are normalized decimal strings; arithmetic uses exact cents. The actual V2 database migration uses `numeric(19,2)`, superseding the attached V1 diagram's `bigint` price columns.
+The shop header/footer wrap the desktop columns and mobile stack: product gallery, item details, title/status, countdown, bid panel and masked paginated history. Product and auction responses supply content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Money uses decimal strings and exact-cent arithmetic; V2's `numeric(19,2)` supersedes the attached V1 diagram's `bigint` columns.
 
-`useAuctionState` polls state/history at two-second intervals, pauses interval reads while hidden, and uses server time plus a monotonic clock for countdowns when the draft state read is available. The detail snapshot and private own-bid lookup reconcile every 15 seconds; end-time/status changes and accepted bids refresh the relevant reads immediately. If the state route is missing the detail snapshot takes over two-second polling and explicitly reports that live state is unavailable. Temporary 408/429 responses can recover on subsequent intervals.
+`useAuctionState` uses server time plus a monotonic browser clock. Without a healthy stream, state/history poll every two seconds. Richer detail and the active private own-bid lookup reconcile every 15 seconds. Missing state enables two-second detail fallback. Hidden tabs pause interval reads; transient 408/429 responses can recover on subsequent intervals. End-time extensions update the timer while detail catches up.
 
-Native public `EventSource` has no Bearer or query-string token. Events refetch validated state/history, coalesced at two seconds to limit burst traffic, and connection errors resume two-second polling. An open stream keeps 15-second reconciliation reads. Native reconnect retains `Last-Event-ID`. The stream closes on unmount, hidden tabs and terminal results. End-time extensions keep the server clock offset even while the richer detail read catches up. A stale public history row cannot receive a leading/You badge unless its amount matches the current market price.
+The reviewer-specified #253 target is public native `EventSource` at `GET /api/v1/auctions/{id}/stream`, with named `state` and `heartbeat` events. A validated matching `state` payload updates price/countdown immediately; only supporting history/private/detail REST refreshes are coalesced at two seconds. The connection's `open` event starts a 30-second grace window. Named transport heartbeats arrive every 15 seconds and renew connection health without changing auction data or the countdown's server-clock anchor. No heartbeat data shape was supplied or found in inspected backend refs, so its payload is treated as opaque. Thirty seconds without accepted transport activity, or a connection error, restores two-second polling. Native reconnect preserves `Last-Event-ID`; the source remains open through silence/errors and closes on unmount, hidden tabs and final results. Late REST completions and stale/regressing or foreign push snapshots cannot replace accepted state or renew its liveness. Backend replay and runtime latency are still unverified.
 
-The form starts at `currentPrice + bidIncrement`, which is the delivered backend minimum even before the first bid. A rejected bid shows the validated `AUCTION_BID_TOO_LOW.minimum`; new attempts receive new UUID keys. An uncertain network/5xx or malformed success keeps the same amount/key and locks amount editing until an explicit safe retry resolves it. A replay's accepted price is never used as the latest market price. Authentication and session generation guards apply to private requests; sign-out/remount clears attempt UI. Own leading/won flags come from the authenticated paginated `/bids/mine` read rather than comparing masked public names. Terminal changes trigger a final history and own-bid refresh before showing a loss.
+The bid form starts at `currentPrice + bidIncrement`, matching the delivered backend even before the first bid. A rejected bid uses validated `AUCTION_BID_TOO_LOW.minimum`; a corrected/new bid gets a new UUID key. An uncertain network/5xx or malformed success locks amount editing and preserves amount/key for explicit retry. POST replay data never replaces current market price. Private requests use the current auth session; remounting on sign-out/account changes clears attempt UI. Authenticated `/bids/mine` supplies leading/won flags rather than identity guesses from masked names. A stale public history row cannot receive a leading/You badge unless its amount matches current price.
 
-## Delivered integration and explicit dependencies
+`ENDED` means settlement is pending. Bidding closes, the page says it is confirming the result, and state reconciliation continues. The last leading bidder is not declared the winner. A current private result controls explicit winner/loser states; FAILED/CANCELLED remain distinct. `SETTLED` means the order exists, not that it was paid, and the actual state machine permits `SETTLED → PAYMENT_TIMEOUT`.
 
-Confirmed against Java controllers/DTOs and `be-project-nexus/docs/api/openapi/auction-service.yaml`:
+## Private winner handoff
 
-- Public `GET /api/v1/auctions/{id}`.
-- Private `POST /api/v1/auctions/{id}/bids`, numeric `{amount}`, UUID `Idempotency-Key`, creation 201/replay 200.
-- Private paginated `GET /api/v1/bids/mine?page=...&size=100`. The room searches successive pages for its auction.
+The original frontend scope exposed a missing handoff: public AuctionResponse has no order reference, and a client must not infer an order from a product, SKU, title or masked bidder name. This review closes that read-contract gap with an additive change to the existing authenticated `GET /api/v1/bids/mine` response. `MyBidQuery`, `MyBidResponse` and delivered auction OpenAPI now expose nullable `orderId`, `paymentDueAt` and `finalPrice` from the existing auction columns only when the current caller is the recorded winner in WON/SETTLED/PAYMENT_TIMEOUT. Other bidders and other statuses receive null. No new endpoint, gateway privilege, migration, settlement write or event is added; public detail remains unchanged.
 
-The following remain integration dependencies on this develop baseline:
+The frontend consumes those private fields only for a verified winner and rejects malformed references, dates and money. It does not use public settlement fields. A winner with no stored order id sees an explicit waiting state; the private lookup continues every two seconds until the real reference arrives, the deadline closes, the tab is hidden, or a permanent access/response error occurs. A stale personal final status also keeps that reconciliation active. Polling stops for a verified final result with an order id, a confirmed loss/absence or timeout. This is one query interval, not a second manual retry timer.
 
-- `GET /auctions/{id}/state` and public `GET /auctions/{id}/bids` appear in the **draft** `docs/api/auction-service.yaml`, but have no implementation/public gateway policies. Their models are explicitly marked provisional; generated detail/bid/mine DTOs use the delivered OpenAPI.
-- #253 has not supplied an SSE contract or implementation. `/auctions/{id}/events` and named events `auction-state`, `bid-placed`, `auction-extended`, `auction-ended` are an explicit frontend integration proposal, exercised by the local fixture; default message events are also supported. Event payloads only trigger validated REST reads.
-- Detail Java DTO currently omits `finalPrice`, `paymentDueAt` and `orderId`; these optional draft fields are parsed when delivered. Winner identity comes from the real own-bids contract. A winner sees an order link only when the server supplies an order id; otherwise the page reports preparation.
-- `/orders/{id}/shipping-confirmation` has neither a delivered body/response contract nor an implementation. No shipping fee, payment total, order group id, address POST or payment request is fabricated. The existing payment route requires a real confirmed order group. Completing the winner shipping/payment UI requires that owning backend contract.
-- Settlement is not implemented: the scheduler currently reaches `ENDED`, while `WON`/`FAILED` and payment transitions cannot be demonstrated against live develop. No artificial trust-score threshold is enforced by this frontend.
+On #172 integration branch `b17f3275`, commerce creates the auction order and publishes OrderCreated; the auction settlement projection stores its real order id and advances WON to SETTLED. That worker/integration branch remains separate from this minimal read addition. The local PostgreSQL integration tests seed the stored settlement fields to verify the read and privacy contract; they do not execute that Kafka workflow.
+
+## Winner address and payment
+
+A verified winner with the private server-supplied `orderId` can open the address form, review it in a native confirmation dialog, then submit shipping confirmation. The application service follows #172's implementation on integration branch `b17f3275`:
+
+```text
+POST /api/v1/orders/{id}/shipping-confirmation
+body: {recipientName, phoneNumber, addressLine, wardCode, provinceCode, countryCode: "VN"}
+200 data: {orderGroupId, shippingFee, totalAmount, dueAt}
+```
+
+The endpoint requires BUYER, `CHECKOUT.START` and winner ownership. The direct address body has no `shippingAddress` wrapper or `paymentMethod`. The service validates Vietnamese carrier phone/locality formats, trims fields and maps numeric money into exact decimal strings. The UI displays returned shipping/total/deadline before linking to the existing `/checkout/payment/{orderGroupId}` route. It never invents fees, a payment group or a fresh deadline. An uncertain response retries the same immutable address; #172 returns the saved result for an identical normalized address. The earlier of the original auction deadline and the confirmation deadline closes shipping/payment controls. A private PAYMENT_TIMEOUT also closes checkout while the public projection catches up.
+
+Typed address and uncertain-confirmation state survive WON→SETTLED and transient private-read failures for the same order/session. Account/order changes reset them. Shipping confirmation remains an unmerged #172 integration dependency on this develop baseline; the read-contract closure does not deliver that endpoint or a real payment lifecycle.
+
+## Delivered integration and dependencies
+
+The room consumes public `GET /api/v1/auctions/{id}`, private numeric bid POST with UUID `Idempotency-Key` (201 creation / 200 replay), and private paginated `GET /api/v1/bids/mine?page=...&size=100`. The lookup searches successive pages. This revision adds the winner-only nullable fields to that existing private response.
+
+Still pending for live integration:
+
+- #168 state and #169 public history exist in draft `docs/api/auction-service.yaml`, without implementation/public gateway policy on this baseline.
+- #253 `/stream`, named `state`, 15-second named transport `heartbeat` and 30-second silence fallback are the reviewer-specified target. No SSE implementation was found in inspected develop/integration refs. Real reconnect/replay, two real users seeing changes in under one second, and 1,000 concurrent connections remain unverified.
+- Real #170/#171 settlement and #172 order/shipping/payment integration must be delivered together. The private read now exposes actual stored order data, but it does not create it.
+- No hardcoded trust threshold is enforced by this frontend.
 
 ## Verification
 
-`npm run test:auction` runs the real Next app against the dedicated local HTTP/Postman and OIDC fixtures. These scenarios establish frontend behavior against the declared fixture contracts, not live availability of the missing services. See the auction simulation/context, test spec and [verification record](auction-verification.md) for executed results.
+Current frontend unit/auth/service tests pass 289, and the auction browser suite passes 26/26 in 3.2 minutes. Actual local heartbeat spacing on one connection was 15,012ms; the unchanged stream stayed healthy for 32,041ms and silence beyond 30 seconds restored two-second polling. The additive private projection passed 23 focused PostgreSQL integration tests; expanded selected Maven verify passed 268 Surefire + 10 Failsafe tests with exactly two Docker-only fixtures excluded. Delivered inventory (100 operations), OpenAPI lint, frontend lint/typecheck/generated drift and production build passed. Catalog regression passed 55 with 38 existing skips. See [auction-verification.md](auction-verification.md) for timing evidence and limits. The prior 25-browser/283-unit checkpoint is historical. Fixtures establish caller behavior against local HTTP dependencies, not live #180/#267 acceptance.

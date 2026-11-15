@@ -455,7 +455,7 @@ export interface components {
             page: components["schemas"]["PageInfo"];
         };
         /** @enum {string} */
-        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT";
+        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT" | "RETURN";
         Movement: {
             /** Format: uuid */
             id: string;

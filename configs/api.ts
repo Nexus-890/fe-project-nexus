@@ -78,7 +78,7 @@ const normalizeBaseUrl = (baseUrl: string): string => {
 export const openPublicAuctionStream = (auctionId: string): EventSource => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auctionId))
     throw createInvalidResponseError("Invalid auction id");
-  return new EventSource(`${normalizeBaseUrl(API_BASE_URL)}/api/v1/auctions/${encodeURIComponent(auctionId)}/events`, { withCredentials: false });
+  return new EventSource(`${normalizeBaseUrl(API_BASE_URL)}/api/v1/auctions/${encodeURIComponent(auctionId)}/stream`, { withCredentials: false });
 };
 const isPageInfo = (value: unknown): value is PageInfo =>
   isRecord(value) &&

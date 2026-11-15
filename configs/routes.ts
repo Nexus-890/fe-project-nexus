@@ -1,10 +1,12 @@
-import { Bell, Gavel, LockKeyhole, ReceiptText, Star, UserRound, type LucideIcon } from "lucide-react";
+import { Bell, Gavel, LockKeyhole, MapPin, ReceiptText, Star, Store, UserRound, type LucideIcon } from "lucide-react";
 
 export const ROUTES = {
   home: "/",
   signIn: "/sign-in",
   signUp: "/sign-up",
   profile: "/profile",
+  addresses: "/addresses",
+  becomeSeller: "/become-a-seller",
   cart: "/cart",
   orders: "/orders",
   auctions: "/auctions",
@@ -41,5 +43,7 @@ export const ACCOUNT_NAVIGATION: AccountNavigationItem[] = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "reputation", label: "Reputation", icon: Star, href: ROUTES.reputation },
   { id: "profile", label: "Profile", icon: UserRound, href: ROUTES.profile },
+  { id: "addresses", label: "Addresses", icon: MapPin, href: ROUTES.addresses },
+  { id: "become-seller", label: "Become a seller", icon: Store, href: ROUTES.becomeSeller },
   { id: "security", label: "Security", icon: LockKeyhole, href: ROUTES.security },
 ];

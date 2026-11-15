@@ -2,7 +2,7 @@ import type { components } from "./auctionGeneratedType";
 
 export type AuctionStatus = components["schemas"]["AuctionStatus"];
 
-/** Delivered detail with normalized money and optional draft settlement references. */
+/** Public detail has no buyer-specific settlement references. */
 export type AuctionRoom = Omit<
   components["schemas"]["Auction"],
   "startingPrice" | "bidIncrement" | "currentPrice" | "imageUrl" | "currency" | "cancelledBy" | "cancelledReason"
@@ -14,9 +14,6 @@ export type AuctionRoom = Omit<
   currency: string;
   cancelledBy: "SELLER" | "ADMIN" | null;
   cancelledReason: string | null;
-  finalPrice: string | null;
-  paymentDueAt: string | null;
-  orderId: string | null;
 };
 
 /** UI model for #178's provisional state endpoint in docs/api/auction-service.yaml. */
@@ -37,6 +34,12 @@ export type AuctionState = {
 /** UI model for #168's provisional masked public history endpoint. */
 export type AuctionBid = { amount: string; bidderName: string; placedAt: string };
 
-export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount"> & { amount: string };
+export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount" | "finalPrice" | "orderId" | "paymentDueAt"> & {
+  amount: string;
+  /** Only the authenticated recorded winner receives these fields. */
+  finalPrice: string | null;
+  paymentDueAt: string | null;
+  orderId: string | null;
+};
 export type PlacedAuctionBid = Omit<components["schemas"]["BidResponse"], "currentPrice"> & { currentPrice: string };
 export type AuctionBidInput = { amount: string; idempotencyKey: string };
