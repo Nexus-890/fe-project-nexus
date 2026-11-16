@@ -200,3 +200,27 @@ passed 85 tests; commerce, payment, auction and inventory packages compiled with
 tests skipped after installing the merged shared libraries. Existing Next
 security reminders required unchanged command retries. No receipt/payout business
 logic or migrations were changed while resolving these frontend conflicts.
+
+## Conflict reconciliation — 2026-11-16
+
+Merged develop `0a92effe`, which already contains the canonical !169 room and
+#205 auction list/My Bids work. Kept that room's independent heartbeat and private
+winner checkout handling, and retained #220 seller score/trust. Home auction
+cards still navigate to the same `/auctions/[id]` route. Resolved the shared
+auction service by preserving upstream admin/list functions and #220 homepage
+seller mapping; resolved the catalog contract test by retaining public search
+and the new private seller status-filter signature. DTOs were regenerated from
+the merged specifications.
+
+All 353 frontend unit tests, generated-type drift, ESLint, typecheck and the
+production build passed.
+Browser suites passed 26 room, 12 list/offer, 48 order/rating, 58 catalog/navigation
+and 17 admin/seller scenarios. The order/rating suite includes Home → room,
+score/trust and bid controls together. The merged admin page now labels valid
+SYSTEM cancellations as System, covered alongside Administrator/Seller labels.
+Catalog verify passed 140 tests against PostgreSQL 18.6 with Flyway and Hibernate
+validation; only the Docker/Kafka `CategoryOutboxIntegrationTest` was excluded.
+API-gateway verify passed 85 tests and the merged auction package compiled.
+Existing Next security reminders required unchanged command retries. These
+browser results use explicit HTTP fixtures; they do not claim new live broker
+or payout execution evidence.

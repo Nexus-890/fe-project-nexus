@@ -4,6 +4,7 @@ import type { ApiError } from "../types/commonResponseType";
 const sellerControl = "inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50";
 export const sellerButton = `${sellerControl} border-border hover:bg-secondary`;
 export const sellerPrimary = `${sellerControl} border-primary bg-primary text-primary-foreground hover:bg-primary-hover`;
+export const sellerDanger = `${sellerControl} border-danger bg-danger text-danger-foreground hover:bg-danger/90`;
 export const sellerInput = "min-h-11 w-full min-w-0 rounded-sm border border-input bg-background px-3 py-2 text-sm disabled:opacity-50";
 export function SellerHeading({ title, description, children }: { title: string; description?: string; children?: ReactNode }) {
   return <div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-heading-32">{title}</h1>{description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}</div><div className="flex flex-wrap gap-3">{children}</div></div>;

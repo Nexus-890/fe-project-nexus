@@ -65,6 +65,38 @@ assumptions:
       ../be-project-nexus/catalog-service/src/main/java/com/group5/catalogservice/product/service/SkuService.java;
       postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts
     updated_at: '2026-11-11'
+  - id: admin-auctions-260-20261115
+    status: supported
+    claim: >-
+      The back-office auction pages list every auction by status, Draft and
+      Cancelled included, show detail, live state and masked bids for any
+      visibility, let Admin edit any not-started auction and force cancel with a
+      reason, and keep Support Staff read only.
+    reason: >-
+      The handler models the #260 back-office reads GET /v1/auctions/manage
+      (optional status, createdAt then id descending), /manage/{id}, /state and
+      /bids for ADMIN or SUPPORT_STAFF only (401 without a token, 403 for other
+      roles), keeps the public GET /v1/auctions empty for CREATED and CANCELLED,
+      and models PUT like AuctionService.update (an ADMIN skips the owner check,
+      a SELLER who does not own the auction gets AUCTION_FORBIDDEN, then
+      AUCTION_NOT_EDITABLE, AUCTION_HAS_BIDS and the 60 minute to 168 hour
+      window) and admin-cancel limited to ADMIN with a 1..255 code point
+      reason. Privileges such as AUCTION.LIST or AUCTION.ADMIN_CANCEL are not
+      modelled; only roles are checked, which matches the seeded ADMIN and
+      SUPPORT_STAFF privileges.
+    verification: >-
+      On 2026-11-15 the auction-service suite covered admin edit of another
+      seller's auction, seller non-owner 403, admin 409 after start and the four
+      manage reads for RESTRICTED, CREATED and CANCELLED auctions; the
+      back-office Chrome suite covered the manage query params for every tab,
+      Draft and Cancelled rows, masked bids, confirm-dialog cancel, the edit PUT
+      body, a simulated 409 after start, Support without controls and
+      Seller/Buyer Access denied.
+    source: >-
+      postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionController.java;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionService.java
+    updated_at: '2026-11-15'
 fingerprints:
   - id: review158-live-acceptance-20261111
     date: '2026-11-11'

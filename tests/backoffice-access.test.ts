@@ -13,7 +13,9 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
   assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Products", "Sales"]);
-  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Event log", "Health"]);
+  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Auctions", "Event log", "Health"]);
+  assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/auctions"));
+  assert.equal(backofficeMenu(["SELLER"]).some((item) => item.href === "/backoffice/auctions"), false);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products/new", ["ADMIN"]), false);
@@ -21,6 +23,9 @@ test("role menu and direct-route guards agree for seller, admin, support and mix
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER", "ADMIN"]), true);
   assert.equal(canAccessBackofficePath("/backoffice/users", ["SUPPORT_STAFF"]), true);
   assert.equal(canAccessBackofficePath("/backoffice/configuration", ["SUPPORT_STAFF"]), false);
+  for (const roles of [["ADMIN"], ["SUPPORT_STAFF"]] as const) for (const pathname of ["/backoffice/auctions", "/backoffice/auctions/92000000-0000-4000-8000-000000000001"]) assert.equal(canAccessBackofficePath(pathname, roles), true);
+  for (const roles of [["SELLER"], ["BUYER"]] as const) assert.equal(canAccessBackofficePath("/backoffice/auctions/92000000-0000-4000-8000-000000000001", roles), false);
+  assert.equal(canAccessBackofficePath("/backoffice/auctions-elsewhere", ["ADMIN"]), false);
   assert.equal(canAccessBackofficePath("/backoffice", ["BUYER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products-elsewhere", ["SELLER"]), false);
 });

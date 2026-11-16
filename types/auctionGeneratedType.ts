@@ -20,6 +20,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auctions/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every auction for the back office
+         * @description Back-office list for ADMIN and SUPPORT_STAFF including CREATED, CANCELLED and RESTRICTED auctions of every seller. Soft-deleted rows are excluded. Omitting status returns every status. Sorts by createdAt descending then id descending. The public list is unchanged.
+         */
+        get: operations["listManagedAuctions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/manage/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read any auction for the back office
+         * @description Reads the stored snapshot regardless of status or visibility. Soft-deleted or unknown auctions return 404.
+         */
+        get: operations["getManagedAuction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/manage/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the live state of any auction for the back office
+         * @description Same shape as the public state read, regardless of visibility. Not cached.
+         */
+        get: operations["getManagedAuctionState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/manage/{id}/bids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the bid history of any auction for the back office
+         * @description Same order and masked names as the public history, regardless of visibility. Bidder identities are never returned.
+         */
+        get: operations["listManagedAuctionBids"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bids/mine": {
         parameters: {
             query?: never;
@@ -78,7 +158,7 @@ export interface paths {
         get: operations["getAuction"];
         /**
          * Configure an auction before it starts
-         * @description The authenticated actor must own the auction. Only CREATED/SCHEDULED before the stored startAt; updates startingPrice/currentPrice, bidIncrement, startAt, endAt and the originalEndAt baseline atomically.
+         * @description A SELLER must own the auction; an ADMIN may edit any auction and the sellerId is kept. For both, only CREATED/SCHEDULED before the stored startAt and without valid bids; updates startingPrice/currentPrice, bidIncrement, startAt, endAt and the originalEndAt baseline atomically.
          */
         put: operations["updateAuction"];
         post?: never;
@@ -422,6 +502,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description AUCTION_NOT_FOUND. The auction is missing or soft-deleted. */
+        ManagedAuctionNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description AUCTION_NOT_FOUND. The auction is missing, deleted or restricted. */
         PublicAuctionNotFound: {
             headers: {
@@ -541,6 +630,131 @@ export interface operations {
             400: components["responses"]["MineInvalidQuery"];
             401: components["responses"]["MineUnauthorized"];
             403: components["responses"]["MineForbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listManagedAuctions: {
+        parameters: {
+            query?: {
+                /** @description Optional exact status filter; omitted means all statuses. */
+                status?: components["schemas"]["AuctionStatus"];
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["MinePage"];
+                /** @description Number of distinct result rows per page. */
+                size?: components["parameters"]["MineSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Auction snapshots with page metadata; empty/out-of-range pages retain the actual totals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAuctionsResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["MineUnauthorized"];
+            403: components["responses"]["MineForbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getManagedAuction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored auction snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetAuctionResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["MineUnauthorized"];
+            403: components["responses"]["MineForbidden"];
+            404: components["responses"]["ManagedAuctionNotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getManagedAuctionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current auction state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetAuctionStateResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["MineUnauthorized"];
+            403: components["responses"]["MineForbidden"];
+            404: components["responses"]["ManagedAuctionNotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listManagedAuctionBids: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["MinePage"];
+                /** @description Number of distinct result rows per page. */
+                size?: components["parameters"]["MineSize"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bid history page, empty when the auction has no bids */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAuctionBidsResponse"];
+                };
+            };
+            400: components["responses"]["MineInvalidQuery"];
+            401: components["responses"]["MineUnauthorized"];
+            403: components["responses"]["MineForbidden"];
+            404: components["responses"]["ManagedAuctionNotFound"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["UnexpectedError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -892,7 +1106,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["InvalidBearer"];
-            /** @description FORBIDDEN for missing role or privilege; AUCTION_FORBIDDEN for ownership failure. */
+            /** @description FORBIDDEN for missing role or privilege; AUCTION_FORBIDDEN when a SELLER does not own the auction. */
             403: {
                 headers: {
                     [name: string]: unknown;
