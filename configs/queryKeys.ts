@@ -9,6 +9,19 @@ import type { SellerBankFilters } from "../types/sellerBankType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  admin: {
+    root: (sessionId: number) => ["admin", sessionId] as const,
+    users: (sessionId: number, filters: object) => ["admin", sessionId, "users", filters] as const,
+    user: (sessionId: number, id: string) => ["admin", sessionId, "user", id] as const,
+    roles: (sessionId: number) => ["admin", sessionId, "roles"] as const,
+    events: (sessionId: number, filters: object) => ["admin", sessionId, "events", filters] as const,
+    event: (sessionId: number, id: string) => ["admin", sessionId, "event", id] as const,
+    audit: (sessionId: number, filters: object) => ["admin", sessionId, "audit", filters] as const,
+    health: (sessionId: number) => ["admin", sessionId, "health"] as const,
+    brokers: (sessionId: number) => ["admin", sessionId, "brokers"] as const,
+    sellerApplications: (sessionId: number, filters: object) => ["admin", sessionId, "seller-applications", filters] as const,
+    sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
+  },
   reputation: {
     seller: (sessionId: number, sellerId: string) => ["reputation", sessionId, "seller", sellerId] as const,
     orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>

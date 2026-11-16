@@ -14,6 +14,20 @@ purpose:
     payout and OPEN-offer fixture assumptions recorded historically below.
     The frontend under test is never a simulation member.
 assumptions:
+  - id: admin-227-frontend-http-20261116
+    status: supported
+    claim: The actual frontend performs Admin user operations, seller review, event/audit reads and 10-second health polling against the local HTTP stand-ins; Support can only search and edit users and cannot open audit or seller review.
+    reason: The existing Keycloak/gateway simulation runs independently of the Next application. Browser assertions inspect role-based UI, exact request paths and allowlisted bodies, authoritative state changes, errors, and responsive screenshots.
+    verification: On 2026-11-16 all 7 Admin Chrome scenarios passed on ports 3156/4956. This includes create/edit/delete/roles/password/unlock, Support search/edit and direct-route denial, full event payload/envelope/original JSON, read-only audit, all 13 reported services and broker, a real 10-second polling interval, 503 stale-state feedback, seller approval and mandatory-reason rejection. Desktop 1440 and mobile 375 screenshots were reviewed. The local user-list caption overflow was fixed and its complete operation case passed again. All 407 unit tests passed, including new role matrices and service/error checks. These results establish caller behavior only.
+    source: tests/admin.spec.ts; tests/admin-users.test.ts; tests/admin-observability.test.ts; tests/backoffice-access.test.ts; tests/seller-application.test.ts; postman/mocks/backoffice-gateway/admin.js; docs/features/admin.md
+    updated_at: '2026-11-16'
+  - id: admin-227-backend-dependencies
+    status: unknown
+    claim: The live backend implements user management and seller application lifecycle, authorization, identity-provider effects and database persistence required by #227.
+    reason: develop c502e351 delivers user reads and notification observability APIs but no #211 user writes or #210 seller application implementation. User write DTOs are pinned to unmerged #211 SHA 4d54e30851b8d922861e90055f5aa41e174284dc; seller Admin DTOs extend the existing explicit #210 proposal. Mock role rules and state cannot prove real enforcement.
+    verification: On 2026-11-16 compared delivered specs/controllers and the pinned #211 branch. Production requests retain errors and never fall back to mock data. Live Keycloak password/unlock, role provisioning after seller approval, PostgreSQL persistence, concurrent one-open enforcement, gateway privileges and Admin-only decisions remain to be verified after #210/#211 delivery. The existing seller feature flag stays false by default. Owner mock search was skipped because installed Postman 1.73.0 has no postman status command; no resource was published.
+    source: docs/api/admin-user-211.openapi.yaml; docs/api/seller-application-210.md; be-project-nexus/user-service/src/main/java/com/group5/userservice/iam/UserController.java; be-project-nexus/docs/api/openapi/notification-service.yaml; service/adminUserService.ts; service/adminSellerApplicationService.ts
+    updated_at: '2026-11-16'
   - id: seller-review-automatic-payout-and-offer-progression-20261116
     status: supported
     claim: The frontend follows the supplied updated issues for automatic payout reads, shop profile/bank management and second-chance progression after an accepted order times out.
@@ -151,6 +165,10 @@ assumptions:
       ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionService.java
     updated_at: '2026-11-15'
 fingerprints:
+  - id: admin-227-20261116
+    date: '2026-11-16'
+    commit: develop c502e351 with uncommitted frontend issue 227 and explicit local simulation changes
+    cli: Postman 1.73.0
   - id: review225-contract-correction-20261116
     date: '2026-11-16'
     commit: seller225 f9ec7096 integrating develop 5fc0244d with updated issue 208/257/261 frontend and HTTP stand-ins

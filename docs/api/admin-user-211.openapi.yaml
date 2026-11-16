@@ -1,0 +1,5005 @@
+# Unmerged #211 API snapshot for the frontend #227 user-management dependency.
+# Pinned from origin/fsa_KhangTD_02/feature/211-be-admin-user-management-and-system-configuration
+# commit 4d54e30851b8d922861e90055f5aa41e174284dc, user-service OpenAPI.
+# This snapshot is an unmerged dependency; it does not change the delivered develop contract.
+openapi: "3.0.3"
+info:
+  title: "Nexus user-service unmerged #211 frontend snapshot"
+  version: "1.0.0"
+  description: "Issue #248 response-envelope and Problem Details contract. Covers delivered operations only. All 2xx JSON has top-level data, numeric code (default 0), and message (default response success); paginated lists also have page. 204 has no body. Bearer permissions are exact JWT privileges; ownership is enforced downstream. ADR/style-guide approval and coordinated FE merge date are pending human agreement. Legacy docs/api/*.yaml are separate #88 drafts, not this contract."
+servers:
+  -
+    url: "http://localhost:8080"
+    description: "Local API gateway; preserve gateway and downstream authorization."
+tags:
+  -
+    name: "Authentication"
+    description: "Public registration. Sign-in goes through Keycloak."
+  -
+    name: "Users"
+    description: "Own profile and privileged user reads."
+  - name: Roles
+    description: Read-only fixed Keycloak roles and client permissions.
+security:
+  -
+    bearerAuth: []
+paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+        - "Authentication"
+      operationId: "register"
+      summary: "Register with the configured default role"
+      description: "Requires self-registration to be enabled. Identity values are normalized before uniqueness checks. Creates the Keycloak account with the password and the configured realm role, then stores the profile under the Keycloak user id; the Keycloak account is removed when the profile cannot be stored. Sign-in goes through Keycloak; user-service issues no tokens. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None."
+      security: []
+      x-required-privileges: []
+      x-required-roles: []
+      x-ownership: "None."
+      x-error-codes:
+        "400":
+          - "INVALID_PARAMETER"
+          - "VALIDATION_FAILED"
+          - "INVALID_REQUEST_BODY"
+          - "USER_IDENTITY_REJECTED"
+        "401":
+          - "UNAUTHENTICATED"
+        "403":
+          - "USER_REGISTRATION_DISABLED"
+        "405":
+          - "METHOD_NOT_ALLOWED"
+        "406":
+          - "NOT_ACCEPTABLE"
+        "409":
+          - "USER_EMAIL_ALREADY_USED"
+          - "USER_PHONE_ALREADY_USED"
+          - "USER_IDENTITY_NUMBER_ALREADY_USED"
+        "415":
+          - "UNSUPPORTED_MEDIA_TYPE"
+        "429":
+          - "RATE_LIMITED"
+        "500":
+          - "INTERNAL_ERROR"
+        "503":
+          - "SERVICE_UNAVAILABLE"
+          - "USER_REGISTRATION_ROLE_UNAVAILABLE"
+          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          - "GATEWAY_TIMEOUT"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/Register"
+            example:
+              email: "new-buyer@example.com"
+              phone: "+84901234567"
+              password: "example-password"
+              fullName: "New Buyer"
+              identityNumber: "012345678901"
+              gender: "OTHER"
+              address: "Ho Chi Minh City"
+              dateOfBirth: "1995-01-01"
+      responses:
+        "201":
+          description: "Created."
+          headers:
+            Cache-Control:
+              description: "Profile data must not be cached."
+              schema:
+                type: "string"
+                enum:
+                  - "no-store"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+              examples:
+                success:
+                  summary: "Success"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data:
+                      id: "68000000-0000-4000-8000-000000000002"
+                      email: "seller@example.com"
+                      phone: "+84901234567"
+                      fullName: "Demo Seller"
+                      gender: "OTHER"
+                      address: "Ho Chi Minh City"
+                      dateOfBirth: "1995-01-01"
+                      roles:
+                        - "BUYER"
+                      status: "ACTIVE"
+                      createdAt: "2026-10-23T00:00:00Z"
+        "400":
+          description: "Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_IDENTITY_REJECTED`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 400
+                      code:
+                        type: "string"
+                        enum:
+                          - "INVALID_PARAMETER"
+                          - "VALIDATION_FAILED"
+                          - "INVALID_REQUEST_BODY"
+                          - "USER_IDENTITY_REJECTED"
+              examples:
+                INVALID_PARAMETER:
+                  summary: "INVALID_PARAMETER"
+                  value:
+                    type: "urn:problem:invalid-parameter"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "A request parameter is invalid"
+                    instance: "/api/v1/auth/register"
+                    code: "INVALID_PARAMETER"
+                VALIDATION_FAILED:
+                  summary: "VALIDATION_FAILED"
+                  value:
+                    type: "urn:problem:validation-error"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The request data is invalid"
+                    instance: "/api/v1/auth/register"
+                    code: "VALIDATION_FAILED"
+                    errors:
+                      -
+                        field: "email"
+                        code: "VALIDATION_NOT_BLANK"
+                        detail: "Invalid value for email"
+                      -
+                        field: "phone"
+                        code: "VALIDATION_NOT_BLANK"
+                        detail: "Invalid value for phone"
+                INVALID_REQUEST_BODY:
+                  summary: "INVALID_REQUEST_BODY"
+                  value:
+                    type: "urn:problem:invalid-request-body"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The request body is invalid or malformed"
+                    instance: "/api/v1/auth/register"
+                    code: "INVALID_REQUEST_BODY"
+                USER_IDENTITY_REJECTED:
+                  summary: "USER_IDENTITY_REJECTED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The identity provider rejected the account details"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_IDENTITY_REJECTED"
+        "401":
+          description: "Unauthorized. Codes: `UNAUTHENTICATED`."
+          headers:
+            WWW-Authenticate:
+              description: "Bearer challenge is present for security-layer authentication failure."
+              schema:
+                type: "string"
+                example: "Bearer"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 401
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNAUTHENTICATED"
+              examples:
+                UNAUTHENTICATED:
+                  summary: "UNAUTHENTICATED"
+                  value:
+                    type: "urn:problem:unauthorized"
+                    title: "Unauthorized"
+                    status: 401
+                    detail: "A valid access token is required to access this resource"
+                    instance: "/api/v1/auth/register"
+                    code: "UNAUTHENTICATED"
+        "403":
+          description: "Forbidden. Codes: `USER_REGISTRATION_DISABLED`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 403
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_REGISTRATION_DISABLED"
+              examples:
+                USER_REGISTRATION_DISABLED:
+                  summary: "USER_REGISTRATION_DISABLED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Forbidden"
+                    status: 403
+                    detail: "Self-registration is disabled"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_REGISTRATION_DISABLED"
+        "405":
+          description: "Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`."
+          headers:
+            Allow:
+              description: "Methods supported by this resource when known."
+              schema:
+                type: "string"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 405
+                      code:
+                        type: "string"
+                        enum:
+                          - "METHOD_NOT_ALLOWED"
+              examples:
+                METHOD_NOT_ALLOWED:
+                  summary: "METHOD_NOT_ALLOWED"
+                  value:
+                    type: "urn:problem:method-not-allowed"
+                    title: "Method Not Allowed"
+                    status: 405
+                    detail: "The HTTP method is not supported for this endpoint"
+                    instance: "/api/v1/auth/register"
+                    code: "METHOD_NOT_ALLOWED"
+        "406":
+          description: "Not Acceptable. Codes: `NOT_ACCEPTABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 406
+                      code:
+                        type: "string"
+                        enum:
+                          - "NOT_ACCEPTABLE"
+              examples:
+                NOT_ACCEPTABLE:
+                  summary: "NOT_ACCEPTABLE"
+                  value:
+                    type: "urn:problem:not-acceptable"
+                    title: "Not Acceptable"
+                    status: 406
+                    detail: "The requested response format is not supported"
+                    instance: "/api/v1/auth/register"
+                    code: "NOT_ACCEPTABLE"
+        "409":
+          description: "Conflict. Codes: `USER_EMAIL_ALREADY_USED`, `USER_PHONE_ALREADY_USED`, `USER_IDENTITY_NUMBER_ALREADY_USED`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 409
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_EMAIL_ALREADY_USED"
+                          - "USER_PHONE_ALREADY_USED"
+                          - "USER_IDENTITY_NUMBER_ALREADY_USED"
+              examples:
+                USER_EMAIL_ALREADY_USED:
+                  summary: "USER_EMAIL_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "email is already used"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_EMAIL_ALREADY_USED"
+                USER_PHONE_ALREADY_USED:
+                  summary: "USER_PHONE_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "phone is already used"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_PHONE_ALREADY_USED"
+                USER_IDENTITY_NUMBER_ALREADY_USED:
+                  summary: "USER_IDENTITY_NUMBER_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "identityNumber is already used"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_IDENTITY_NUMBER_ALREADY_USED"
+        "415":
+          description: "Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 415
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNSUPPORTED_MEDIA_TYPE"
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  summary: "UNSUPPORTED_MEDIA_TYPE"
+                  value:
+                    type: "urn:problem:unsupported-media-type"
+                    title: "Unsupported Media Type"
+                    status: 415
+                    detail: "The request content type is not supported"
+                    instance: "/api/v1/auth/register"
+                    code: "UNSUPPORTED_MEDIA_TYPE"
+        "429":
+          description: "Too Many Requests. Codes: `RATE_LIMITED`."
+          headers:
+            Retry-After:
+              description: "When provided by the gateway limiter, delay in seconds before retrying."
+              schema:
+                type: "string"
+                pattern: "^[0-9]+$"
+                example: "30"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 429
+                      code:
+                        type: "string"
+                        enum:
+                          - "RATE_LIMITED"
+              examples:
+                RATE_LIMITED:
+                  summary: "RATE_LIMITED"
+                  value:
+                    type: "https://nexus/errors/too-many-requests"
+                    title: "Too Many Requests"
+                    status: 429
+                    detail: "Too many requests; retry after the indicated delay"
+                    instance: "/api/v1/auth/register"
+                    code: "RATE_LIMITED"
+        "500":
+          description: "Internal Server Error. Codes: `INTERNAL_ERROR`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 500
+                      code:
+                        type: "string"
+                        enum:
+                          - "INTERNAL_ERROR"
+              examples:
+                INTERNAL_ERROR:
+                  summary: "INTERNAL_ERROR"
+                  value:
+                    type: "urn:problem:internal-server-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "An unexpected error occurred"
+                    instance: "/api/v1/auth/register"
+                    code: "INTERNAL_ERROR"
+        "503":
+          description: "Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_REGISTRATION_ROLE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 503
+                      code:
+                        type: "string"
+                        enum:
+                          - "SERVICE_UNAVAILABLE"
+                          - "USER_REGISTRATION_ROLE_UNAVAILABLE"
+                          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+              examples:
+                SERVICE_UNAVAILABLE:
+                  summary: "SERVICE_UNAVAILABLE"
+                  value:
+                    type: "https://nexus/errors/service-unavailable"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "A required service is unavailable"
+                    instance: "/api/v1/auth/register"
+                    code: "SERVICE_UNAVAILABLE"
+                USER_REGISTRATION_ROLE_UNAVAILABLE:
+                  summary: "USER_REGISTRATION_ROLE_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "Default registration role is unavailable"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_REGISTRATION_ROLE_UNAVAILABLE"
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  summary: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "The identity provider is unavailable"
+                    instance: "/api/v1/auth/register"
+                    code: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          description: "Gateway Timeout. Codes: `GATEWAY_TIMEOUT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 504
+                      code:
+                        type: "string"
+                        enum:
+                          - "GATEWAY_TIMEOUT"
+              examples:
+                GATEWAY_TIMEOUT:
+                  summary: "GATEWAY_TIMEOUT"
+                  value:
+                    type: "https://nexus/errors/gateway-timeout"
+                    title: "Gateway Timeout"
+                    status: 504
+                    detail: "The service did not answer in time"
+                    instance: "/api/v1/auth/register"
+                    code: "GATEWAY_TIMEOUT"
+  /api/v1/users/me:
+    get:
+      tags:
+        - "Users"
+      operationId: "getOwnProfile"
+      summary: "Read the current user profile"
+      description: " Access: requires PROFILE.VIEW. Ownership/business restriction: JWT subject only."
+      security:
+        -
+          bearerAuth: []
+      x-required-privileges:
+        - "PROFILE.VIEW"
+      x-gateway-privilege: "PROFILE.VIEW"
+      x-required-roles: []
+      x-ownership: "JWT subject only."
+      x-error-codes:
+        "400":
+          - "INVALID_PARAMETER"
+        "401":
+          - "UNAUTHENTICATED"
+        "403":
+          - "FORBIDDEN"
+        "404":
+          - "USER_NOT_FOUND"
+        "405":
+          - "METHOD_NOT_ALLOWED"
+        "406":
+          - "NOT_ACCEPTABLE"
+        "429":
+          - "RATE_LIMITED"
+        "500":
+          - "INTERNAL_ERROR"
+        "503":
+          - "SERVICE_UNAVAILABLE"
+          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          - "GATEWAY_TIMEOUT"
+      responses:
+        "200":
+          description: "Successful response."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetOwnProfileResponse"
+              examples:
+                success:
+                  summary: "Success"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data:
+                      id: "68000000-0000-4000-8000-000000000002"
+                      email: "seller@example.com"
+                      phone: "+84901234567"
+                      fullName: "Demo Seller"
+                      gender: "OTHER"
+                      address: "Ho Chi Minh City"
+                      dateOfBirth: "1995-01-01"
+                      roles:
+                        - "SELLER"
+                      status: "ACTIVE"
+                      createdAt: "2026-10-23T00:00:00Z"
+        "400":
+          description: "Bad Request. Codes: `INVALID_PARAMETER`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 400
+                      code:
+                        type: "string"
+                        enum:
+                          - "INVALID_PARAMETER"
+              examples:
+                INVALID_PARAMETER:
+                  summary: "INVALID_PARAMETER"
+                  value:
+                    type: "urn:problem:invalid-parameter"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "A request parameter is invalid"
+                    instance: "/api/v1/users/me"
+                    code: "INVALID_PARAMETER"
+        "401":
+          description: "Unauthorized. Codes: `UNAUTHENTICATED`."
+          headers:
+            WWW-Authenticate:
+              description: "Bearer challenge is present for security-layer authentication failure."
+              schema:
+                type: "string"
+                example: "Bearer"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 401
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNAUTHENTICATED"
+              examples:
+                UNAUTHENTICATED:
+                  summary: "UNAUTHENTICATED"
+                  value:
+                    type: "urn:problem:unauthorized"
+                    title: "Unauthorized"
+                    status: 401
+                    detail: "A valid access token is required to access this resource"
+                    instance: "/api/v1/users/me"
+                    code: "UNAUTHENTICATED"
+        "403":
+          description: "Forbidden. Codes: `FORBIDDEN`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 403
+                      code:
+                        type: "string"
+                        enum:
+                          - "FORBIDDEN"
+              examples:
+                FORBIDDEN:
+                  summary: "FORBIDDEN"
+                  value:
+                    type: "urn:problem:forbidden"
+                    title: "Forbidden"
+                    status: 403
+                    detail: "You do not have permission to access this resource"
+                    instance: "/api/v1/users/me"
+                    code: "FORBIDDEN"
+        "404":
+          description: "Not Found. Codes: `USER_NOT_FOUND`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 404
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_NOT_FOUND"
+              examples:
+                USER_NOT_FOUND:
+                  summary: "USER_NOT_FOUND"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Not Found"
+                    status: 404
+                    detail: "User not found"
+                    instance: "/api/v1/users/me"
+                    code: "USER_NOT_FOUND"
+        "405":
+          description: "Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`."
+          headers:
+            Allow:
+              description: "Methods supported by this resource when known."
+              schema:
+                type: "string"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 405
+                      code:
+                        type: "string"
+                        enum:
+                          - "METHOD_NOT_ALLOWED"
+              examples:
+                METHOD_NOT_ALLOWED:
+                  summary: "METHOD_NOT_ALLOWED"
+                  value:
+                    type: "urn:problem:method-not-allowed"
+                    title: "Method Not Allowed"
+                    status: 405
+                    detail: "The HTTP method is not supported for this endpoint"
+                    instance: "/api/v1/users/me"
+                    code: "METHOD_NOT_ALLOWED"
+        "406":
+          description: "Not Acceptable. Codes: `NOT_ACCEPTABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 406
+                      code:
+                        type: "string"
+                        enum:
+                          - "NOT_ACCEPTABLE"
+              examples:
+                NOT_ACCEPTABLE:
+                  summary: "NOT_ACCEPTABLE"
+                  value:
+                    type: "urn:problem:not-acceptable"
+                    title: "Not Acceptable"
+                    status: 406
+                    detail: "The requested response format is not supported"
+                    instance: "/api/v1/users/me"
+                    code: "NOT_ACCEPTABLE"
+        "429":
+          description: "Too Many Requests. Codes: `RATE_LIMITED`."
+          headers:
+            Retry-After:
+              description: "When provided by the gateway limiter, delay in seconds before retrying."
+              schema:
+                type: "string"
+                pattern: "^[0-9]+$"
+                example: "30"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 429
+                      code:
+                        type: "string"
+                        enum:
+                          - "RATE_LIMITED"
+              examples:
+                RATE_LIMITED:
+                  summary: "RATE_LIMITED"
+                  value:
+                    type: "https://nexus/errors/too-many-requests"
+                    title: "Too Many Requests"
+                    status: 429
+                    detail: "Too many requests; retry after the indicated delay"
+                    instance: "/api/v1/users/me"
+                    code: "RATE_LIMITED"
+        "500":
+          description: "Internal Server Error. Codes: `INTERNAL_ERROR`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 500
+                      code:
+                        type: "string"
+                        enum:
+                          - "INTERNAL_ERROR"
+              examples:
+                INTERNAL_ERROR:
+                  summary: "INTERNAL_ERROR"
+                  value:
+                    type: "urn:problem:internal-server-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "An unexpected error occurred"
+                    instance: "/api/v1/users/me"
+                    code: "INTERNAL_ERROR"
+        "503":
+          description: "Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 503
+                      code:
+                        type: "string"
+                        enum:
+                          - "SERVICE_UNAVAILABLE"
+                          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+              examples:
+                SERVICE_UNAVAILABLE:
+                  summary: "SERVICE_UNAVAILABLE"
+                  value:
+                    type: "https://nexus/errors/service-unavailable"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "A required service is unavailable"
+                    instance: "/api/v1/users/me"
+                    code: "SERVICE_UNAVAILABLE"
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  summary: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "The identity provider is unavailable"
+                    instance: "/api/v1/users/me"
+                    code: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          description: "Gateway Timeout. Codes: `GATEWAY_TIMEOUT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 504
+                      code:
+                        type: "string"
+                        enum:
+                          - "GATEWAY_TIMEOUT"
+              examples:
+                GATEWAY_TIMEOUT:
+                  summary: "GATEWAY_TIMEOUT"
+                  value:
+                    type: "https://nexus/errors/gateway-timeout"
+                    title: "Gateway Timeout"
+                    status: 504
+                    detail: "The service did not answer in time"
+                    instance: "/api/v1/users/me"
+                    code: "GATEWAY_TIMEOUT"
+    put:
+      tags:
+        - "Users"
+      operationId: "updateOwnProfile"
+      summary: "Update editable fields of the current profile"
+      description: "Preserves existing partial-update behavior even though the delivered method is PUT: omitted/null properties retain stored values. A changed email is also set on the Keycloak account; an email another Keycloak account holds returns 409. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only."
+      security:
+        -
+          bearerAuth: []
+      x-required-privileges:
+        - "PROFILE.UPDATE"
+      x-gateway-privilege: "PROFILE.UPDATE"
+      x-required-roles: []
+      x-ownership: "JWT subject only."
+      x-error-codes:
+        "400":
+          - "INVALID_PARAMETER"
+          - "VALIDATION_FAILED"
+          - "INVALID_REQUEST_BODY"
+          - "USER_IDENTITY_REJECTED"
+        "401":
+          - "UNAUTHENTICATED"
+        "403":
+          - "FORBIDDEN"
+        "404":
+          - "USER_NOT_FOUND"
+        "405":
+          - "METHOD_NOT_ALLOWED"
+        "406":
+          - "NOT_ACCEPTABLE"
+        "409":
+          - "USER_EMAIL_ALREADY_USED"
+          - "USER_PHONE_ALREADY_USED"
+          - "USER_IDENTITY_NUMBER_ALREADY_USED"
+          - "USER_PROFILE_CONFLICT"
+        "415":
+          - "UNSUPPORTED_MEDIA_TYPE"
+        "429":
+          - "RATE_LIMITED"
+        "500":
+          - "INTERNAL_ERROR"
+        "503":
+          - "SERVICE_UNAVAILABLE"
+          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          - "GATEWAY_TIMEOUT"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/UpdateProfile"
+            example:
+              fullName: "Updated Seller"
+      responses:
+        "200":
+          description: "Successful response."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UpdateOwnProfileResponse"
+              examples:
+                success:
+                  summary: "Success"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data:
+                      id: "68000000-0000-4000-8000-000000000002"
+                      email: "seller@example.com"
+                      phone: "+84901234567"
+                      fullName: "Updated Seller"
+                      gender: "OTHER"
+                      address: "Ho Chi Minh City"
+                      dateOfBirth: "1995-01-01"
+                      roles:
+                        - "SELLER"
+                      status: "ACTIVE"
+                      createdAt: "2026-10-23T00:00:00Z"
+        "400":
+          description: "Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_IDENTITY_REJECTED`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 400
+                      code:
+                        type: "string"
+                        enum:
+                          - "INVALID_PARAMETER"
+                          - "VALIDATION_FAILED"
+                          - "INVALID_REQUEST_BODY"
+                          - "USER_IDENTITY_REJECTED"
+              examples:
+                INVALID_PARAMETER:
+                  summary: "INVALID_PARAMETER"
+                  value:
+                    type: "urn:problem:invalid-parameter"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "A request parameter is invalid"
+                    instance: "/api/v1/users/me"
+                    code: "INVALID_PARAMETER"
+                VALIDATION_FAILED:
+                  summary: "VALIDATION_FAILED"
+                  value:
+                    type: "urn:problem:validation-error"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The request data is invalid"
+                    instance: "/api/v1/users/me"
+                    code: "VALIDATION_FAILED"
+                    errors:
+                      -
+                        field: "fullName"
+                        code: "VALIDATION_NOT_BLANK"
+                        detail: "Invalid value for fullName"
+                      -
+                        field: "email"
+                        code: "VALIDATION_NOT_BLANK"
+                        detail: "Invalid value for email"
+                INVALID_REQUEST_BODY:
+                  summary: "INVALID_REQUEST_BODY"
+                  value:
+                    type: "urn:problem:invalid-request-body"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The request body is invalid or malformed"
+                    instance: "/api/v1/users/me"
+                    code: "INVALID_REQUEST_BODY"
+                USER_IDENTITY_REJECTED:
+                  summary: "USER_IDENTITY_REJECTED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The identity provider rejected the account details"
+                    instance: "/api/v1/users/me"
+                    code: "USER_IDENTITY_REJECTED"
+        "401":
+          description: "Unauthorized. Codes: `UNAUTHENTICATED`."
+          headers:
+            WWW-Authenticate:
+              description: "Bearer challenge is present for security-layer authentication failure."
+              schema:
+                type: "string"
+                example: "Bearer"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 401
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNAUTHENTICATED"
+              examples:
+                UNAUTHENTICATED:
+                  summary: "UNAUTHENTICATED"
+                  value:
+                    type: "urn:problem:unauthorized"
+                    title: "Unauthorized"
+                    status: 401
+                    detail: "A valid access token is required to access this resource"
+                    instance: "/api/v1/users/me"
+                    code: "UNAUTHENTICATED"
+        "403":
+          description: "Forbidden. Codes: `FORBIDDEN`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 403
+                      code:
+                        type: "string"
+                        enum:
+                          - "FORBIDDEN"
+              examples:
+                FORBIDDEN:
+                  summary: "FORBIDDEN"
+                  value:
+                    type: "urn:problem:forbidden"
+                    title: "Forbidden"
+                    status: 403
+                    detail: "You do not have permission to access this resource"
+                    instance: "/api/v1/users/me"
+                    code: "FORBIDDEN"
+        "404":
+          description: "Not Found. Codes: `USER_NOT_FOUND`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 404
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_NOT_FOUND"
+              examples:
+                USER_NOT_FOUND:
+                  summary: "USER_NOT_FOUND"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Not Found"
+                    status: 404
+                    detail: "User not found"
+                    instance: "/api/v1/users/me"
+                    code: "USER_NOT_FOUND"
+        "405":
+          description: "Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`."
+          headers:
+            Allow:
+              description: "Methods supported by this resource when known."
+              schema:
+                type: "string"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 405
+                      code:
+                        type: "string"
+                        enum:
+                          - "METHOD_NOT_ALLOWED"
+              examples:
+                METHOD_NOT_ALLOWED:
+                  summary: "METHOD_NOT_ALLOWED"
+                  value:
+                    type: "urn:problem:method-not-allowed"
+                    title: "Method Not Allowed"
+                    status: 405
+                    detail: "The HTTP method is not supported for this endpoint"
+                    instance: "/api/v1/users/me"
+                    code: "METHOD_NOT_ALLOWED"
+        "406":
+          description: "Not Acceptable. Codes: `NOT_ACCEPTABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 406
+                      code:
+                        type: "string"
+                        enum:
+                          - "NOT_ACCEPTABLE"
+              examples:
+                NOT_ACCEPTABLE:
+                  summary: "NOT_ACCEPTABLE"
+                  value:
+                    type: "urn:problem:not-acceptable"
+                    title: "Not Acceptable"
+                    status: 406
+                    detail: "The requested response format is not supported"
+                    instance: "/api/v1/users/me"
+                    code: "NOT_ACCEPTABLE"
+        "409":
+          description: "Conflict. Codes: `USER_EMAIL_ALREADY_USED`, `USER_PHONE_ALREADY_USED`, `USER_IDENTITY_NUMBER_ALREADY_USED`, `USER_PROFILE_CONFLICT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 409
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_EMAIL_ALREADY_USED"
+                          - "USER_PHONE_ALREADY_USED"
+                          - "USER_IDENTITY_NUMBER_ALREADY_USED"
+                          - "USER_PROFILE_CONFLICT"
+              examples:
+                USER_EMAIL_ALREADY_USED:
+                  summary: "USER_EMAIL_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "email is already used"
+                    instance: "/api/v1/users/me"
+                    code: "USER_EMAIL_ALREADY_USED"
+                USER_PHONE_ALREADY_USED:
+                  summary: "USER_PHONE_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "phone is already used"
+                    instance: "/api/v1/users/me"
+                    code: "USER_PHONE_ALREADY_USED"
+                USER_IDENTITY_NUMBER_ALREADY_USED:
+                  summary: "USER_IDENTITY_NUMBER_ALREADY_USED"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "identityNumber is already used"
+                    instance: "/api/v1/users/me"
+                    code: "USER_IDENTITY_NUMBER_ALREADY_USED"
+                USER_PROFILE_CONFLICT:
+                  summary: "USER_PROFILE_CONFLICT"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Conflict"
+                    status: 409
+                    detail: "Email or phone is already used"
+                    instance: "/api/v1/users/me"
+                    code: "USER_PROFILE_CONFLICT"
+        "415":
+          description: "Unsupported Media Type. Codes: `UNSUPPORTED_MEDIA_TYPE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 415
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNSUPPORTED_MEDIA_TYPE"
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  summary: "UNSUPPORTED_MEDIA_TYPE"
+                  value:
+                    type: "urn:problem:unsupported-media-type"
+                    title: "Unsupported Media Type"
+                    status: 415
+                    detail: "The request content type is not supported"
+                    instance: "/api/v1/users/me"
+                    code: "UNSUPPORTED_MEDIA_TYPE"
+        "429":
+          description: "Too Many Requests. Codes: `RATE_LIMITED`."
+          headers:
+            Retry-After:
+              description: "When provided by the gateway limiter, delay in seconds before retrying."
+              schema:
+                type: "string"
+                pattern: "^[0-9]+$"
+                example: "30"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 429
+                      code:
+                        type: "string"
+                        enum:
+                          - "RATE_LIMITED"
+              examples:
+                RATE_LIMITED:
+                  summary: "RATE_LIMITED"
+                  value:
+                    type: "https://nexus/errors/too-many-requests"
+                    title: "Too Many Requests"
+                    status: 429
+                    detail: "Too many requests; retry after the indicated delay"
+                    instance: "/api/v1/users/me"
+                    code: "RATE_LIMITED"
+        "500":
+          description: "Internal Server Error. Codes: `INTERNAL_ERROR`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 500
+                      code:
+                        type: "string"
+                        enum:
+                          - "INTERNAL_ERROR"
+              examples:
+                INTERNAL_ERROR:
+                  summary: "INTERNAL_ERROR"
+                  value:
+                    type: "urn:problem:internal-server-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "An unexpected error occurred"
+                    instance: "/api/v1/users/me"
+                    code: "INTERNAL_ERROR"
+        "503":
+          description: "Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 503
+                      code:
+                        type: "string"
+                        enum:
+                          - "SERVICE_UNAVAILABLE"
+                          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+              examples:
+                SERVICE_UNAVAILABLE:
+                  summary: "SERVICE_UNAVAILABLE"
+                  value:
+                    type: "https://nexus/errors/service-unavailable"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "A required service is unavailable"
+                    instance: "/api/v1/users/me"
+                    code: "SERVICE_UNAVAILABLE"
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  summary: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "The identity provider is unavailable"
+                    instance: "/api/v1/users/me"
+                    code: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          description: "Gateway Timeout. Codes: `GATEWAY_TIMEOUT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 504
+                      code:
+                        type: "string"
+                        enum:
+                          - "GATEWAY_TIMEOUT"
+              examples:
+                GATEWAY_TIMEOUT:
+                  summary: "GATEWAY_TIMEOUT"
+                  value:
+                    type: "https://nexus/errors/gateway-timeout"
+                    title: "Gateway Timeout"
+                    status: 504
+                    detail: "The service did not answer in time"
+                    instance: "/api/v1/users/me"
+                    code: "GATEWAY_TIMEOUT"
+  /api/v1/users/{id}:
+    get:
+      tags:
+        - "Users"
+      operationId: "getUser"
+      summary: "Read a user by id"
+      description: "Allows USER.VIEW OR a path id equal to the authenticated subject. Gateway requires a token, because it cannot decide subject equality. Access: authenticated bearer token. Ownership/business restriction: Own id OR USER.VIEW; other caller receives 403."
+      security:
+        -
+          bearerAuth: []
+      x-required-privileges: []
+      x-gateway-privilege: "authenticated-token"
+      x-required-roles: []
+      x-ownership: "Own id OR USER.VIEW; other caller receives 403."
+      x-error-codes:
+        "400":
+          - "INVALID_PARAMETER"
+        "401":
+          - "UNAUTHENTICATED"
+        "403":
+          - "FORBIDDEN"
+        "404":
+          - "USER_NOT_FOUND"
+        "405":
+          - "METHOD_NOT_ALLOWED"
+        "406":
+          - "NOT_ACCEPTABLE"
+        "429":
+          - "RATE_LIMITED"
+        "500":
+          - "INTERNAL_ERROR"
+        "503":
+          - "SERVICE_UNAVAILABLE"
+          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          - "GATEWAY_TIMEOUT"
+      parameters:
+        -
+          name: "id"
+          in: "path"
+          required: true
+          description: "Resource UUID."
+          schema:
+            type: "string"
+            format: "uuid"
+      responses:
+        "200":
+          description: "Successful response."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetUserResponse"
+              examples:
+                success:
+                  summary: "Success"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data:
+                      id: "68000000-0000-4000-8000-000000000002"
+                      email: "seller@example.com"
+                      phone: "+84901234567"
+                      fullName: "Demo Seller"
+                      gender: "OTHER"
+                      address: "Ho Chi Minh City"
+                      dateOfBirth: "1995-01-01"
+                      roles:
+                        - "SELLER"
+                      status: "ACTIVE"
+                      createdAt: "2026-10-23T00:00:00Z"
+        "400":
+          description: "Bad Request. Codes: `INVALID_PARAMETER`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 400
+                      code:
+                        type: "string"
+                        enum:
+                          - "INVALID_PARAMETER"
+              examples:
+                INVALID_PARAMETER:
+                  summary: "INVALID_PARAMETER"
+                  value:
+                    type: "urn:problem:invalid-parameter"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "A request parameter is invalid"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "INVALID_PARAMETER"
+        "401":
+          description: "Unauthorized. Codes: `UNAUTHENTICATED`."
+          headers:
+            WWW-Authenticate:
+              description: "Bearer challenge is present for security-layer authentication failure."
+              schema:
+                type: "string"
+                example: "Bearer"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 401
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNAUTHENTICATED"
+              examples:
+                UNAUTHENTICATED:
+                  summary: "UNAUTHENTICATED"
+                  value:
+                    type: "urn:problem:unauthorized"
+                    title: "Unauthorized"
+                    status: 401
+                    detail: "A valid access token is required to access this resource"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "UNAUTHENTICATED"
+        "403":
+          description: "Forbidden. Codes: `FORBIDDEN`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 403
+                      code:
+                        type: "string"
+                        enum:
+                          - "FORBIDDEN"
+              examples:
+                FORBIDDEN:
+                  summary: "FORBIDDEN"
+                  value:
+                    type: "urn:problem:forbidden"
+                    title: "Forbidden"
+                    status: 403
+                    detail: "You do not have permission to access this resource"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "FORBIDDEN"
+        "404":
+          description: "Not Found. Codes: `USER_NOT_FOUND`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 404
+                      code:
+                        type: "string"
+                        enum:
+                          - "USER_NOT_FOUND"
+              examples:
+                USER_NOT_FOUND:
+                  summary: "USER_NOT_FOUND"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Not Found"
+                    status: 404
+                    detail: "User not found"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "USER_NOT_FOUND"
+        "405":
+          description: "Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`."
+          headers:
+            Allow:
+              description: "Methods supported by this resource when known."
+              schema:
+                type: "string"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 405
+                      code:
+                        type: "string"
+                        enum:
+                          - "METHOD_NOT_ALLOWED"
+              examples:
+                METHOD_NOT_ALLOWED:
+                  summary: "METHOD_NOT_ALLOWED"
+                  value:
+                    type: "urn:problem:method-not-allowed"
+                    title: "Method Not Allowed"
+                    status: 405
+                    detail: "The HTTP method is not supported for this endpoint"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "METHOD_NOT_ALLOWED"
+        "406":
+          description: "Not Acceptable. Codes: `NOT_ACCEPTABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 406
+                      code:
+                        type: "string"
+                        enum:
+                          - "NOT_ACCEPTABLE"
+              examples:
+                NOT_ACCEPTABLE:
+                  summary: "NOT_ACCEPTABLE"
+                  value:
+                    type: "urn:problem:not-acceptable"
+                    title: "Not Acceptable"
+                    status: 406
+                    detail: "The requested response format is not supported"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "NOT_ACCEPTABLE"
+        "429":
+          description: "Too Many Requests. Codes: `RATE_LIMITED`."
+          headers:
+            Retry-After:
+              description: "When provided by the gateway limiter, delay in seconds before retrying."
+              schema:
+                type: "string"
+                pattern: "^[0-9]+$"
+                example: "30"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 429
+                      code:
+                        type: "string"
+                        enum:
+                          - "RATE_LIMITED"
+              examples:
+                RATE_LIMITED:
+                  summary: "RATE_LIMITED"
+                  value:
+                    type: "https://nexus/errors/too-many-requests"
+                    title: "Too Many Requests"
+                    status: 429
+                    detail: "Too many requests; retry after the indicated delay"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "RATE_LIMITED"
+        "500":
+          description: "Internal Server Error. Codes: `INTERNAL_ERROR`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 500
+                      code:
+                        type: "string"
+                        enum:
+                          - "INTERNAL_ERROR"
+              examples:
+                INTERNAL_ERROR:
+                  summary: "INTERNAL_ERROR"
+                  value:
+                    type: "urn:problem:internal-server-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "An unexpected error occurred"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "INTERNAL_ERROR"
+        "503":
+          description: "Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 503
+                      code:
+                        type: "string"
+                        enum:
+                          - "SERVICE_UNAVAILABLE"
+                          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+              examples:
+                SERVICE_UNAVAILABLE:
+                  summary: "SERVICE_UNAVAILABLE"
+                  value:
+                    type: "https://nexus/errors/service-unavailable"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "A required service is unavailable"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "SERVICE_UNAVAILABLE"
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  summary: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "The identity provider is unavailable"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          description: "Gateway Timeout. Codes: `GATEWAY_TIMEOUT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 504
+                      code:
+                        type: "string"
+                        enum:
+                          - "GATEWAY_TIMEOUT"
+              examples:
+                GATEWAY_TIMEOUT:
+                  summary: "GATEWAY_TIMEOUT"
+                  value:
+                    type: "https://nexus/errors/gateway-timeout"
+                    title: "Gateway Timeout"
+                    status: 504
+                    detail: "The service did not answer in time"
+                    instance: "/api/v1/users/c8000000-0000-4000-8000-000000000002"
+                    code: "GATEWAY_TIMEOUT"
+      x-access-any-of:
+        -
+          privileges:
+            - "USER.VIEW"
+        -
+          ownership: "JWT sub equals path id"
+    put:
+      tags:
+        - Users
+      operationId: adminUpdateUser
+      summary: Update permitted profile fields
+      description: Update permitted profile fields. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.UPDATE
+      x-required-roles:
+        - ADMIN
+        - SUPPORT_STAFF
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+          - USER_IDENTITY_REJECTED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_NOT_FOUND
+        "409":
+          - USER_EMAIL_ALREADY_USED
+          - USER_PROFILE_CONFLICT
+          - USER_IDENTITY_NOT_FOUND
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetUserResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_IDENTITY_REJECTED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+                          - USER_IDENTITY_REJECTED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: VALIDATION_FAILED
+                USER_IDENTITY_REJECTED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_IDENTITY_REJECTED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_IDENTITY_REJECTED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_NOT_FOUND
+              examples:
+                USER_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_NOT_FOUND
+        "409":
+          description: "Conflict. Codes: USER_EMAIL_ALREADY_USED, USER_PROFILE_CONFLICT, USER_IDENTITY_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_EMAIL_ALREADY_USED
+                          - USER_PROFILE_CONFLICT
+                          - USER_IDENTITY_NOT_FOUND
+              examples:
+                USER_EMAIL_ALREADY_USED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_EMAIL_ALREADY_USED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_EMAIL_ALREADY_USED
+                USER_PROFILE_CONFLICT:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_PROFILE_CONFLICT
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_PROFILE_CONFLICT
+                USER_IDENTITY_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_IDENTITY_NOT_FOUND
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfile"
+    delete:
+      tags:
+        - Users
+      operationId: adminDeleteUser
+      summary: Delete profile according to USER_SOFT_DELETE and disable Keycloak sign-in
+      description: Delete profile according to USER_SOFT_DELETE and disable Keycloak sign-in. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.DELETE
+      x-required-roles:
+        - ADMIN
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_NOT_FOUND
+        "409":
+          - USER_IDENTITY_NOT_FOUND
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "204":
+          description: No content; no response body.
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: VALIDATION_FAILED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_NOT_FOUND
+              examples:
+                USER_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_NOT_FOUND
+        "409":
+          description: "Conflict. Codes: USER_IDENTITY_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_NOT_FOUND
+              examples:
+                USER_IDENTITY_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_IDENTITY_NOT_FOUND
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+  /api/v1/users:
+    get:
+      tags:
+        - "Users"
+      operationId: "listUsers"
+      summary: "List nondeleted users"
+      description: "Search q matches existing name/email/phone filters; status and role filter the result. Stable secondary sort is id. Empty/out-of-range pages are 200. Access: requires USER.LIST. Ownership/business restriction: None."
+      security:
+        -
+          bearerAuth: []
+      x-required-privileges:
+        - "USER.LIST"
+      x-gateway-privilege: "USER.LIST"
+      x-required-roles: []
+      x-ownership: "None."
+      x-error-codes:
+        "400":
+          - "INVALID_PARAMETER"
+          - "VALIDATION_FAILED"
+        "401":
+          - "UNAUTHENTICATED"
+        "403":
+          - "FORBIDDEN"
+        "405":
+          - "METHOD_NOT_ALLOWED"
+        "406":
+          - "NOT_ACCEPTABLE"
+        "429":
+          - "RATE_LIMITED"
+        "500":
+          - "INTERNAL_ERROR"
+        "503":
+          - "SERVICE_UNAVAILABLE"
+          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          - "GATEWAY_TIMEOUT"
+      parameters:
+        -
+          name: "q"
+          in: "query"
+          required: false
+          description: "Optional search text."
+          schema:
+            type: "string"
+        -
+          name: "status"
+          in: "query"
+          required: false
+          description: "Optional user status."
+          schema:
+            type: "string"
+            enum:
+              - "ACTIVE"
+              - "LOCKED"
+              - "DELETED"
+        -
+          name: "role"
+          in: "query"
+          required: false
+          description: "Keycloak realm role name, trimmed and uppercased before filtering."
+          schema:
+            type: "string"
+        -
+          name: "page"
+          in: "query"
+          required: false
+          description: "Zero-based page."
+          schema:
+            type: "integer"
+            minimum: 0
+            default: 0
+        -
+          name: "size"
+          in: "query"
+          required: false
+          description: "Page size."
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 100
+            default: 20
+        -
+          name: "sort"
+          in: "query"
+          required: false
+          description: "Sort property."
+          schema:
+            type: "string"
+            enum:
+              - "fullName"
+              - "email"
+              - "createdAt"
+            default: "fullName"
+        -
+          name: "direction"
+          in: "query"
+          required: false
+          description: "Sort direction."
+          schema:
+            type: "string"
+            enum:
+              - "asc"
+              - "desc"
+            default: "asc"
+      responses:
+        "200":
+          description: "Successful response."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ListUsersResponse"
+              examples:
+                success:
+                  summary: "First result page"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data:
+                      -
+                        id: "68000000-0000-4000-8000-000000000002"
+                        email: "seller@example.com"
+                        phone: "+84901234567"
+                        fullName: "Demo Seller"
+                        gender: "OTHER"
+                        address: "Ho Chi Minh City"
+                        dateOfBirth: "1995-01-01"
+                        roles:
+                          - "SELLER"
+                        status: "ACTIVE"
+                        createdAt: "2026-10-23T00:00:00Z"
+                    page:
+                      number: 0
+                      size: 20
+                      totalElements: 1
+                      totalPages: 1
+                empty:
+                  summary: "Empty collection"
+                  value:
+                    code: 0
+                    message: "response success"
+                    data: []
+                    page:
+                      number: 0
+                      size: 20
+                      totalElements: 0
+                      totalPages: 0
+        "400":
+          description: "Bad Request. Codes: `INVALID_PARAMETER`, `VALIDATION_FAILED`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 400
+                      code:
+                        type: "string"
+                        enum:
+                          - "INVALID_PARAMETER"
+                          - "VALIDATION_FAILED"
+              examples:
+                INVALID_PARAMETER:
+                  summary: "INVALID_PARAMETER"
+                  value:
+                    type: "urn:problem:invalid-parameter"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "A request parameter is invalid"
+                    instance: "/api/v1/users"
+                    code: "INVALID_PARAMETER"
+                VALIDATION_FAILED:
+                  summary: "VALIDATION_FAILED"
+                  value:
+                    type: "urn:problem:validation-error"
+                    title: "Bad Request"
+                    status: 400
+                    detail: "The request data is invalid"
+                    instance: "/api/v1/users"
+                    code: "VALIDATION_FAILED"
+                    errors:
+                      -
+                        field: "page"
+                        code: "VALIDATION_MIN"
+                        detail: "Invalid value for page"
+                      -
+                        field: "size"
+                        code: "VALIDATION_MIN"
+                        detail: "Invalid value for size"
+        "401":
+          description: "Unauthorized. Codes: `UNAUTHENTICATED`."
+          headers:
+            WWW-Authenticate:
+              description: "Bearer challenge is present for security-layer authentication failure."
+              schema:
+                type: "string"
+                example: "Bearer"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 401
+                      code:
+                        type: "string"
+                        enum:
+                          - "UNAUTHENTICATED"
+              examples:
+                UNAUTHENTICATED:
+                  summary: "UNAUTHENTICATED"
+                  value:
+                    type: "urn:problem:unauthorized"
+                    title: "Unauthorized"
+                    status: 401
+                    detail: "A valid access token is required to access this resource"
+                    instance: "/api/v1/users"
+                    code: "UNAUTHENTICATED"
+        "403":
+          description: "Forbidden. Codes: `FORBIDDEN`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 403
+                      code:
+                        type: "string"
+                        enum:
+                          - "FORBIDDEN"
+              examples:
+                FORBIDDEN:
+                  summary: "FORBIDDEN"
+                  value:
+                    type: "urn:problem:forbidden"
+                    title: "Forbidden"
+                    status: 403
+                    detail: "You do not have permission to access this resource"
+                    instance: "/api/v1/users"
+                    code: "FORBIDDEN"
+        "405":
+          description: "Method Not Allowed. Codes: `METHOD_NOT_ALLOWED`."
+          headers:
+            Allow:
+              description: "Methods supported by this resource when known."
+              schema:
+                type: "string"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 405
+                      code:
+                        type: "string"
+                        enum:
+                          - "METHOD_NOT_ALLOWED"
+              examples:
+                METHOD_NOT_ALLOWED:
+                  summary: "METHOD_NOT_ALLOWED"
+                  value:
+                    type: "urn:problem:method-not-allowed"
+                    title: "Method Not Allowed"
+                    status: 405
+                    detail: "The HTTP method is not supported for this endpoint"
+                    instance: "/api/v1/users"
+                    code: "METHOD_NOT_ALLOWED"
+        "406":
+          description: "Not Acceptable. Codes: `NOT_ACCEPTABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 406
+                      code:
+                        type: "string"
+                        enum:
+                          - "NOT_ACCEPTABLE"
+              examples:
+                NOT_ACCEPTABLE:
+                  summary: "NOT_ACCEPTABLE"
+                  value:
+                    type: "urn:problem:not-acceptable"
+                    title: "Not Acceptable"
+                    status: 406
+                    detail: "The requested response format is not supported"
+                    instance: "/api/v1/users"
+                    code: "NOT_ACCEPTABLE"
+        "429":
+          description: "Too Many Requests. Codes: `RATE_LIMITED`."
+          headers:
+            Retry-After:
+              description: "When provided by the gateway limiter, delay in seconds before retrying."
+              schema:
+                type: "string"
+                pattern: "^[0-9]+$"
+                example: "30"
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 429
+                      code:
+                        type: "string"
+                        enum:
+                          - "RATE_LIMITED"
+              examples:
+                RATE_LIMITED:
+                  summary: "RATE_LIMITED"
+                  value:
+                    type: "https://nexus/errors/too-many-requests"
+                    title: "Too Many Requests"
+                    status: 429
+                    detail: "Too many requests; retry after the indicated delay"
+                    instance: "/api/v1/users"
+                    code: "RATE_LIMITED"
+        "500":
+          description: "Internal Server Error. Codes: `INTERNAL_ERROR`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 500
+                      code:
+                        type: "string"
+                        enum:
+                          - "INTERNAL_ERROR"
+              examples:
+                INTERNAL_ERROR:
+                  summary: "INTERNAL_ERROR"
+                  value:
+                    type: "urn:problem:internal-server-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "An unexpected error occurred"
+                    instance: "/api/v1/users"
+                    code: "INTERNAL_ERROR"
+        "503":
+          description: "Service Unavailable. Codes: `SERVICE_UNAVAILABLE`, `USER_IDENTITY_PROVIDER_UNAVAILABLE`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 503
+                      code:
+                        type: "string"
+                        enum:
+                          - "SERVICE_UNAVAILABLE"
+                          - "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+              examples:
+                SERVICE_UNAVAILABLE:
+                  summary: "SERVICE_UNAVAILABLE"
+                  value:
+                    type: "https://nexus/errors/service-unavailable"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "A required service is unavailable"
+                    instance: "/api/v1/users"
+                    code: "SERVICE_UNAVAILABLE"
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  summary: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+                  value:
+                    type: "urn:problem:domain-error"
+                    title: "Service Unavailable"
+                    status: 503
+                    detail: "The identity provider is unavailable"
+                    instance: "/api/v1/users"
+                    code: "USER_IDENTITY_PROVIDER_UNAVAILABLE"
+        "504":
+          description: "Gateway Timeout. Codes: `GATEWAY_TIMEOUT`."
+          content:
+            "application/problem+json":
+              schema:
+                allOf:
+                  -
+                    $ref: "#/components/schemas/Problem"
+                  -
+                    type: "object"
+                    properties:
+                      status:
+                        type: "integer"
+                        enum:
+                          - 504
+                      code:
+                        type: "string"
+                        enum:
+                          - "GATEWAY_TIMEOUT"
+              examples:
+                GATEWAY_TIMEOUT:
+                  summary: "GATEWAY_TIMEOUT"
+                  value:
+                    type: "https://nexus/errors/gateway-timeout"
+                    title: "Gateway Timeout"
+                    status: 504
+                    detail: "The service did not answer in time"
+                    instance: "/api/v1/users"
+                    code: "GATEWAY_TIMEOUT"
+    post:
+      tags:
+        - Users
+      operationId: adminCreateUser
+      summary: Create user with fixed Keycloak roles
+      description: Create user with fixed Keycloak roles. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.CREATE
+      x-required-roles:
+        - ADMIN
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+          - USER_ROLE_INVALID
+          - USER_IDENTITY_REJECTED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "409":
+          - USER_EMAIL_ALREADY_USED
+          - USER_PHONE_ALREADY_USED
+          - USER_IDENTITY_NUMBER_ALREADY_USED
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetUserResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_ROLE_INVALID, USER_IDENTITY_REJECTED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+                          - USER_ROLE_INVALID
+                          - USER_IDENTITY_REJECTED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users
+                    code: VALIDATION_FAILED
+                USER_ROLE_INVALID:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_ROLE_INVALID
+                    instance: /api/v1/users
+                    code: USER_ROLE_INVALID
+                USER_IDENTITY_REJECTED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_IDENTITY_REJECTED
+                    instance: /api/v1/users
+                    code: USER_IDENTITY_REJECTED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users
+                    code: FORBIDDEN
+        "409":
+          description: "Conflict. Codes: USER_EMAIL_ALREADY_USED, USER_PHONE_ALREADY_USED, USER_IDENTITY_NUMBER_ALREADY_USED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_EMAIL_ALREADY_USED
+                          - USER_PHONE_ALREADY_USED
+                          - USER_IDENTITY_NUMBER_ALREADY_USED
+              examples:
+                USER_EMAIL_ALREADY_USED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_EMAIL_ALREADY_USED
+                    instance: /api/v1/users
+                    code: USER_EMAIL_ALREADY_USED
+                USER_PHONE_ALREADY_USED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_PHONE_ALREADY_USED
+                    instance: /api/v1/users
+                    code: USER_PHONE_ALREADY_USED
+                USER_IDENTITY_NUMBER_ALREADY_USED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NUMBER_ALREADY_USED
+                    instance: /api/v1/users
+                    code: USER_IDENTITY_NUMBER_ALREADY_USED
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUser"
+  /api/v1/users/{id}/password:
+    put:
+      tags:
+        - Users
+      operationId: adminChangePassword
+      summary: Change password under Keycloak password policy
+      description: Change password under Keycloak password policy. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.CHANGE_PASSWORD
+      x-required-roles:
+        - ADMIN
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+          - USER_IDENTITY_REJECTED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_NOT_FOUND
+        "409":
+          - USER_IDENTITY_NOT_FOUND
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "204":
+          description: No content; no response body.
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_IDENTITY_REJECTED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+                          - USER_IDENTITY_REJECTED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: VALIDATION_FAILED
+                USER_IDENTITY_REJECTED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_IDENTITY_REJECTED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: USER_IDENTITY_REJECTED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_NOT_FOUND
+              examples:
+                USER_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: USER_NOT_FOUND
+        "409":
+          description: "Conflict. Codes: USER_IDENTITY_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_NOT_FOUND
+              examples:
+                USER_IDENTITY_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: USER_IDENTITY_NOT_FOUND
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/password
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPassword"
+  /api/v1/users/{id}/roles:
+    put:
+      tags:
+        - Roles
+      operationId: adminAssignRoles
+      summary: Replace the fixed application role set
+      description: Replace the fixed application role set. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.UPDATE
+      x-required-roles:
+        - ADMIN
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+          - USER_ROLE_INVALID
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_NOT_FOUND
+        "409":
+          - USER_IDENTITY_NOT_FOUND
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetUserResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_ROLE_INVALID."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+                          - USER_ROLE_INVALID
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: VALIDATION_FAILED
+                USER_ROLE_INVALID:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_ROLE_INVALID
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: USER_ROLE_INVALID
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_NOT_FOUND
+              examples:
+                USER_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: USER_NOT_FOUND
+        "409":
+          description: "Conflict. Codes: USER_IDENTITY_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_NOT_FOUND
+              examples:
+                USER_IDENTITY_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: USER_IDENTITY_NOT_FOUND
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/roles
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignRoles"
+  /api/v1/users/{id}/unlock:
+    post:
+      tags:
+        - Users
+      operationId: adminUnlockUser
+      summary: Clear a current Keycloak brute-force lock
+      description: Clear a current Keycloak brute-force lock. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - USER.UPDATE
+      x-required-roles:
+        - ADMIN
+        - SUPPORT_STAFF
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_NOT_FOUND
+        "409":
+          - USER_IDENTITY_NOT_FOUND
+          - USER_ACCOUNT_NOT_LOCKED
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "204":
+          description: No content; no response body.
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: VALIDATION_FAILED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_NOT_FOUND
+              examples:
+                USER_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: USER_NOT_FOUND
+        "409":
+          description: "Conflict. Codes: USER_IDENTITY_NOT_FOUND, USER_ACCOUNT_NOT_LOCKED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 409
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_NOT_FOUND
+                          - USER_ACCOUNT_NOT_LOCKED
+              examples:
+                USER_IDENTITY_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_IDENTITY_NOT_FOUND
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: USER_IDENTITY_NOT_FOUND
+                USER_ACCOUNT_NOT_LOCKED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Conflict
+                    status: 409
+                    detail: USER_ACCOUNT_NOT_LOCKED
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: USER_ACCOUNT_NOT_LOCKED
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/users/68000000-0000-4000-8000-000000000002/unlock
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+  /api/v1/roles:
+    get:
+      tags:
+        - Roles
+      operationId: listRoles
+      summary: List fixed realm roles and their client permissions
+      description: List fixed realm roles and their client permissions. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - ROLE.LIST
+      x-required-roles:
+        - ADMIN
+        - SUPPORT_STAFF
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - VALIDATION_FAILED
+          - USER_ROLE_INVALID
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleListResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, VALIDATION_FAILED, USER_ROLE_INVALID."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - VALIDATION_FAILED
+                          - USER_ROLE_INVALID
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/roles
+                    code: INVALID_PARAMETER
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/roles
+                    code: VALIDATION_FAILED
+                USER_ROLE_INVALID:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: USER_ROLE_INVALID
+                    instance: /api/v1/roles
+                    code: USER_ROLE_INVALID
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/roles
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/roles
+                    code: FORBIDDEN
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/roles
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/roles
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum:
+              - name,asc
+              - name,desc
+            default: name,asc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+  /api/v1/roles/{id}:
+    get:
+      tags:
+        - Roles
+      operationId: getRole
+      summary: Read a fixed realm role by Keycloak ID
+      description: Read a fixed realm role by Keycloak ID. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - ROLE.VIEW
+      x-required-roles:
+        - ADMIN
+        - SUPPORT_STAFF
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "404":
+          - USER_ROLE_NOT_FOUND
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDetailResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: VALIDATION_FAILED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: FORBIDDEN
+        "404":
+          description: "Not Found. Codes: USER_ROLE_NOT_FOUND."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 404
+                      code:
+                        type: string
+                        enum:
+                          - USER_ROLE_NOT_FOUND
+              examples:
+                USER_ROLE_NOT_FOUND:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Not Found
+                    status: 404
+                    detail: USER_ROLE_NOT_FOUND
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: USER_ROLE_NOT_FOUND
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/roles/68000000-0000-4000-8000-000000000010
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+  /api/v1/permissions:
+    get:
+      tags:
+        - Roles
+      operationId: listPermissions
+      summary: List nexus-web client role permissions
+      description: List nexus-web client role permissions. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+      x-required-privileges:
+        - ROLE.VIEW
+      x-required-roles:
+        - ADMIN
+        - SUPPORT_STAFF
+      x-ownership: Authorized administration of the target user; roles are read-only and selected from the fixed set.
+      x-error-codes:
+        "400":
+          - INVALID_PARAMETER
+          - INVALID_REQUEST_BODY
+          - VALIDATION_FAILED
+        "401":
+          - UNAUTHENTICATED
+        "403":
+          - FORBIDDEN
+        "500":
+          - INTERNAL_ERROR
+        "503":
+          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionListResponse"
+        "400":
+          description: "Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 400
+                      code:
+                        type: string
+                        enum:
+                          - INVALID_PARAMETER
+                          - INVALID_REQUEST_BODY
+                          - VALIDATION_FAILED
+              examples:
+                INVALID_PARAMETER:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_PARAMETER
+                    instance: /api/v1/permissions
+                    code: INVALID_PARAMETER
+                INVALID_REQUEST_BODY:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: INVALID_REQUEST_BODY
+                    instance: /api/v1/permissions
+                    code: INVALID_REQUEST_BODY
+                VALIDATION_FAILED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Bad Request
+                    status: 400
+                    detail: VALIDATION_FAILED
+                    instance: /api/v1/permissions
+                    code: VALIDATION_FAILED
+        "401":
+          description: "Unauthorized. Codes: UNAUTHENTICATED."
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 401
+                      code:
+                        type: string
+                        enum:
+                          - UNAUTHENTICATED
+              examples:
+                UNAUTHENTICATED:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Unauthorized
+                    status: 401
+                    detail: UNAUTHENTICATED
+                    instance: /api/v1/permissions
+                    code: UNAUTHENTICATED
+        "403":
+          description: "Forbidden. Codes: FORBIDDEN."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 403
+                      code:
+                        type: string
+                        enum:
+                          - FORBIDDEN
+              examples:
+                FORBIDDEN:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Forbidden
+                    status: 403
+                    detail: FORBIDDEN
+                    instance: /api/v1/permissions
+                    code: FORBIDDEN
+        "500":
+          description: "Internal Server Error. Codes: INTERNAL_ERROR."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 500
+                      code:
+                        type: string
+                        enum:
+                          - INTERNAL_ERROR
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Internal Server Error
+                    status: 500
+                    detail: INTERNAL_ERROR
+                    instance: /api/v1/permissions
+                    code: INTERNAL_ERROR
+        "503":
+          description: "Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE."
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      status:
+                        type: integer
+                        enum:
+                          - 503
+                      code:
+                        type: string
+                        enum:
+                          - USER_IDENTITY_PROVIDER_UNAVAILABLE
+              examples:
+                USER_IDENTITY_PROVIDER_UNAVAILABLE:
+                  value:
+                    type: urn:problem:domain-error
+                    title: Service Unavailable
+                    status: 503
+                    detail: USER_IDENTITY_PROVIDER_UNAVAILABLE
+                    instance: /api/v1/permissions
+                    code: USER_IDENTITY_PROVIDER_UNAVAILABLE
+components:
+  securitySchemes:
+    bearerAuth:
+      type: "http"
+      scheme: "bearer"
+      bearerFormat: "JWT"
+      description: "RS256 access JWT, issuer user-service, audience nexus-services. privileges are exact SRS strings; roles are mapped as ROLE_<code>."
+  schemas:
+    Problem:
+      type: "object"
+      required:
+        - "type"
+        - "title"
+        - "status"
+        - "detail"
+        - "instance"
+        - "code"
+      properties:
+        type:
+          type: "string"
+          format: "uri-reference"
+        title:
+          type: "string"
+        status:
+          type: "integer"
+          minimum: 400
+          maximum: 599
+        detail:
+          type: "string"
+        instance:
+          type: "string"
+          format: "uri-reference"
+        code:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+          description: "Stable symbolic identifier. Branch on code and status; tolerate future unknown codes."
+        traceId:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+          description: "Active trace/correlation identifier when available; optional without tracing."
+        errors:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ValidationError"
+    ValidationError:
+      type: "object"
+      required:
+        - "field"
+        - "code"
+        - "detail"
+      properties:
+        field:
+          type: "string"
+          description: "Failed request field; an object-level failure uses the object name."
+        code:
+          type: "string"
+          description: "Constraint identifier, for example VALIDATION_NOT_BLANK, VALIDATION_EMAIL, VALIDATION_SIZE or INVALID_PARAMETER."
+        detail:
+          type: "string"
+    PageInfo:
+      type: "object"
+      required:
+        - "number"
+        - "size"
+        - "totalElements"
+        - "totalPages"
+      properties:
+        number:
+          type: "integer"
+          minimum: 0
+        size:
+          type: "integer"
+          minimum: 1
+        totalElements:
+          type: "integer"
+          format: "int64"
+          minimum: 0
+        totalPages:
+          type: "integer"
+          minimum: 0
+    User:
+      type: "object"
+      required:
+        - "id"
+        - "email"
+        - "phone"
+        - "fullName"
+        - "gender"
+        - "address"
+        - "dateOfBirth"
+        - "roles"
+        - "status"
+        - "createdAt"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        email:
+          type: "string"
+          format: "email"
+          maxLength: 255
+        phone:
+          type: "string"
+        fullName:
+          type: "string"
+        gender:
+          type: "string"
+          enum:
+            - "MALE"
+            - "FEMALE"
+            - "OTHER"
+          nullable: true
+        address:
+          type: "string"
+          nullable: true
+        dateOfBirth:
+          type: "string"
+          format: "date"
+          nullable: true
+        roles:
+          type: "array"
+          items:
+            type: "string"
+        status:
+          type: "string"
+          enum:
+            - "ACTIVE"
+            - "LOCKED"
+            - "DELETED"
+        createdAt:
+          type: "string"
+          format: "date-time"
+    Register:
+      type: "object"
+      required:
+        - "email"
+        - "phone"
+        - "password"
+        - "fullName"
+        - "identityNumber"
+        - "gender"
+        - "address"
+        - "dateOfBirth"
+      properties:
+        email:
+          type: "string"
+          pattern: "\\S"
+          format: "email"
+          minLength: 1
+          maxLength: 255
+          description: "Trimmed and normalized to lower case."
+        phone:
+          type: "string"
+          pattern: "^\\+?[0-9]{7,15}$"
+          description: "Whitespace, parentheses and hyphens are removed before validation."
+        password:
+          type: "string"
+          pattern: "\\S"
+          format: "password"
+          minLength: 8
+          description: "At least 8 characters. Sent only to Keycloak, which applies the realm password policy; user-service stores no password."
+        fullName:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+          maxLength: 150
+        identityNumber:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+          maxLength: 255
+        gender:
+          type: "string"
+          enum:
+            - "MALE"
+            - "FEMALE"
+            - "OTHER"
+        address:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+        dateOfBirth:
+          type: "string"
+          format: "date"
+          description: "Valid yyyy-MM-dd date; must not be in the future in the service clock."
+    UpdateProfile:
+      type: "object"
+      required: []
+      properties:
+        fullName:
+          type: "string"
+          pattern: "\\S"
+          minLength: 1
+          maxLength: 150
+          description: "Trimmed. Omitted/null retains current value."
+          nullable: true
+        dateOfBirth:
+          type: "string"
+          format: "date"
+          description: "Not in the future; omitted/null retains current value."
+          nullable: true
+        gender:
+          type: "string"
+          enum:
+            - "MALE"
+            - "FEMALE"
+            - "OTHER"
+          nullable: true
+        address:
+          type: "string"
+          description: "Trimmed. Omitted/null retains current value."
+          nullable: true
+        email:
+          type: "string"
+          pattern: "\\S"
+          format: "email"
+          minLength: 1
+          maxLength: 255
+          description: "Trimmed and lowercased. Omitted/null retains current value."
+          nullable: true
+      description: "Only listed editable fields are consumed. Unknown properties are ignored; callers cannot change roles, status, phone or identity number through this API."
+    RegisterResponse:
+      type: "object"
+      required:
+        - "code"
+        - "message"
+        - "data"
+      properties:
+        code:
+          type: "integer"
+          default: 0
+          description: "Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved."
+        message:
+          type: "string"
+          default: "response success"
+          description: "Omitted or null values default to response success during response construction. Explicit messages are preserved."
+        data:
+          $ref: "#/components/schemas/User"
+      additionalProperties: false
+    GetOwnProfileResponse:
+      type: "object"
+      required:
+        - "code"
+        - "message"
+        - "data"
+      properties:
+        code:
+          type: "integer"
+          default: 0
+          description: "Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved."
+        message:
+          type: "string"
+          default: "response success"
+          description: "Omitted or null values default to response success during response construction. Explicit messages are preserved."
+        data:
+          $ref: "#/components/schemas/User"
+      additionalProperties: false
+    UpdateOwnProfileResponse:
+      type: "object"
+      required:
+        - "code"
+        - "message"
+        - "data"
+      properties:
+        code:
+          type: "integer"
+          default: 0
+          description: "Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved."
+        message:
+          type: "string"
+          default: "response success"
+          description: "Omitted or null values default to response success during response construction. Explicit messages are preserved."
+        data:
+          $ref: "#/components/schemas/User"
+      additionalProperties: false
+    GetUserResponse:
+      type: "object"
+      required:
+        - "code"
+        - "message"
+        - "data"
+      properties:
+        code:
+          type: "integer"
+          default: 0
+          description: "Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved."
+        message:
+          type: "string"
+          default: "response success"
+          description: "Omitted or null values default to response success during response construction. Explicit messages are preserved."
+        data:
+          $ref: "#/components/schemas/User"
+      additionalProperties: false
+    ListUsersResponse:
+      type: "object"
+      required:
+        - "code"
+        - "message"
+        - "data"
+        - "page"
+      properties:
+        code:
+          type: "integer"
+          default: 0
+          description: "Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved."
+        message:
+          type: "string"
+          default: "response success"
+          description: "Omitted or null values default to response success during response construction. Explicit messages are preserved."
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/User"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+      additionalProperties: false
+    AdminCreateUser:
+      type: object
+      required:
+        - email
+        - phone
+        - password
+        - fullName
+        - identityNumber
+        - gender
+        - address
+        - dateOfBirth
+        - roleCodes
+      properties:
+        email:
+          type: string
+          pattern: \S
+          format: email
+          minLength: 1
+          maxLength: 255
+          description: Trimmed and normalized to lower case.
+        phone:
+          type: string
+          pattern: ^\+?[0-9]{7,15}$
+          description: Whitespace, parentheses and hyphens are removed before validation.
+        password:
+          type: string
+          pattern: \S
+          format: password
+          minLength: 8
+          description: At least 8 characters. Sent only to Keycloak, which applies the realm password policy; user-service stores no password.
+        fullName:
+          type: string
+          pattern: \S
+          minLength: 1
+          maxLength: 150
+        identityNumber:
+          type: string
+          pattern: \S
+          minLength: 1
+          maxLength: 255
+        gender:
+          type: string
+          enum:
+            - MALE
+            - FEMALE
+            - OTHER
+        address:
+          type: string
+          pattern: \S
+          minLength: 1
+        dateOfBirth:
+          type: string
+          format: date
+          description: Valid yyyy-MM-dd date; must not be in the future in the service clock.
+        roleCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - ADMIN
+              - SUPPORT_STAFF
+              - BUYER
+              - SELLER
+    AssignRoles:
+      type: object
+      required:
+        - roleCodes
+      properties:
+        roleCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - ADMIN
+              - SUPPORT_STAFF
+              - BUYER
+              - SELLER
+    AdminPassword:
+      type: object
+      required:
+        - newPassword
+      properties:
+        newPassword:
+          type: string
+          minLength: 8
+          writeOnly: true
+    Permission:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+    Role:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - privileges
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        privileges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+    RoleListResponse:
+      type: object
+      required:
+        - code
+        - message
+        - data
+        - page
+      properties:
+        code:
+          type: integer
+          default: 0
+        message:
+          type: string
+          default: response success
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+    RoleDetailResponse:
+      type: object
+      required:
+        - code
+        - message
+        - data
+      properties:
+        code:
+          type: integer
+          default: 0
+        message:
+          type: string
+          default: response success
+        data:
+          $ref: "#/components/schemas/Role"
+    PermissionListResponse:
+      type: object
+      required:
+        - code
+        - message
+        - data
+        - page
+      properties:
+        code:
+          type: integer
+          default: 0
+        message:
+          type: string
+          default: response success
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+        page:
+          $ref: "#/components/schemas/PageInfo"
+
+x-service: "user-service"
+x-business-error-codes:
+  USER_ROLE_INVALID:
+    status: 400
+    detail: Role must belong to the fixed application role set
+  USER_ROLE_NOT_FOUND:
+    status: 404
+    detail: Role not found
+  USER_ACCOUNT_NOT_LOCKED:
+    status: 409
+    detail: Account is not locked by brute-force detection
+  USER_IDENTITY_NOT_FOUND:
+    status: 409
+    detail: Profile has no corresponding identity-provider account
+  USER_REGISTRATION_DISABLED:
+    status: 403
+    detail: "Self-registration is disabled"
+  USER_NOT_FOUND:
+    status: 404
+    detail: "User not found"
+  USER_EMAIL_ALREADY_USED:
+    status: 409
+    detail: "email is already used"
+  USER_PHONE_ALREADY_USED:
+    status: 409
+    detail: "phone is already used"
+  USER_IDENTITY_NUMBER_ALREADY_USED:
+    status: 409
+    detail: "identityNumber is already used"
+  USER_PROFILE_CONFLICT:
+    status: 409
+    detail: "Email or phone is already used"
+  USER_REGISTRATION_ROLE_UNAVAILABLE:
+    status: 503
+    detail: "Default registration role is unavailable"
+  USER_IDENTITY_REJECTED:
+    status: 400
+    detail: "The identity provider rejected the account details"
+  USER_IDENTITY_PROVIDER_UNAVAILABLE:
+    status: 503
+    detail: "The identity provider is unavailable"

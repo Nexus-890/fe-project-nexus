@@ -13,7 +13,7 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
   assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
-  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Auctions", "Event log", "Health"]);
+  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Auctions", "Event Logs", "System Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products/new", ["ADMIN"]), false);
@@ -97,4 +97,38 @@ test("role landing preserves allowed return destinations and replaces forbidden 
   assert.equal(resolveRoleLanding("/orders?status=PAID", ["BUYER", "SELLER"]), "/orders?status=PAID");
   assert.equal(resolveRoleLanding("/orders", ["SELLER"]), "/backoffice");
   assert.equal(resolveRoleLanding("https://outside.example", ["BUYER"]), "/");
+});
+
+test("Admin-only audit and seller review routes reject every role combination without ADMIN", () => {
+  const roles = ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"] as const;
+  for (let mask = 0; mask < 16; mask++) {
+    const selected = roles.filter((_role, index) => mask & 1 << index);
+    const allowed = selected.includes("ADMIN");
+    const fallback = hasBackofficeAccess(selected) ? "/backoffice" : "/";
+    for (const path of ["/backoffice/audit-logs", "/backoffice/seller-applications"]) {
+      assert.equal(canAccessBackofficePath(path, selected), allowed, `${selected.join(",") || "anonymous"}: ${path}`);
+      assert.equal(canAccessBackofficePath(`${path}/?view=admin`, selected), allowed);
+      assert.equal(backofficeMenu(selected).some((item) => item.href === path), allowed);
+      assert.equal(resolveRoleLanding(`${path}?view=admin`, selected), allowed ? `${path}?view=admin` : fallback);
+      assert.equal(canAccessBackofficePath(`${path}-elsewhere`, selected), false);
+    }
+  }
+});
+
+test("event logs, legacy event alias and health share Admin/Support direct-route authorization", () => {
+  const roles = ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"] as const;
+  for (let mask = 0; mask < 16; mask++) {
+    const selected = roles.filter((_role, index) => mask & 1 << index);
+    const allowed = selected.includes("ADMIN") || selected.includes("SUPPORT_STAFF");
+    const fallback = hasBackofficeAccess(selected) ? "/backoffice" : "/";
+    for (const path of ["/backoffice/event-logs", "/backoffice/event-log", "/backoffice/health"]) {
+      assert.equal(canAccessBackofficePath(path, selected), allowed, `${selected.join(",") || "anonymous"}: ${path}`);
+      assert.equal(canAccessBackofficePath(`${path}/?view=admin`, selected), allowed);
+      assert.equal(resolveRoleLanding(path, selected), allowed ? path : fallback);
+      assert.equal(canAccessBackofficePath(`${path}-elsewhere`, selected), false);
+    }
+    assert.equal(backofficeMenu(selected).filter((item) => item.href === "/backoffice/event-logs").length, allowed ? 1 : 0);
+    assert.equal(backofficeMenu(selected).some((item) => item.href === "/backoffice/event-log"), false, "legacy alias is not a duplicate menu item");
+    assert.equal(backofficeMenu(selected).filter((item) => item.href === "/backoffice/health").length, allowed ? 1 : 0);
+  }
 });
