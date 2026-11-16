@@ -9,9 +9,25 @@ purpose:
     Browser verification of JWT role landing/access, seller product/SKU/image publication,
     administrator stock intake and a Buyer checkout whose explicit test-only callback
     makes the simulated sale PAID. Seller #225 extends this with delivered auction/sales
-    interactions and explicitly proposed #208/#261 offer/bank/payout stand-ins.
+    interactions and issue-aligned #208/#257/#261 offer, shop-profile, bank and
+    automatic payout stand-ins. The current contract supersedes the older manual
+    payout and OPEN-offer fixture assumptions recorded historically below.
     The frontend under test is never a simulation member.
 assumptions:
+  - id: seller-review-automatic-payout-and-offer-progression-20261116
+    status: supported
+    claim: The frontend follows the supplied updated issues for automatic payout reads, shop profile/bank management and second-chance progression after an accepted order times out.
+    reason: Paths/statuses and core fields were transcribed from the user's issue screenshots. Production code uses the shared HTTP boundary and no payout creation endpoint. Historical ACCEPTED entries no longer control current offer eligibility.
+    verification: On 2026-11-16 all 27 back-office browser cases passed, including company/contact edits, masked add/edit/default bank, verification releasing an automatic ON_HOLD payout, fee/net breakdown/history, UNKNOWN no-retry, stable-key retry before commit and fresh keys after authoritative reconciliation, and B accept/payment-timeout followed by C OFFERED while B stays ACCEPTED. Simulated steps are labeled. Native HTTP tests validate automatic completed/funded/no-refund checks, ownership errors, status/amount parsing and replay behavior. These observations establish caller behavior against stand-ins, not actual service or transfer guarantees.
+    source: tests/seller-operations.spec.ts; tests/payout-service.test.ts; tests/seller-accounts-service.test.ts; tests/seller-offer-service.test.ts; docs/api/seller-accounts.openapi.yaml; docs/api/seller-payouts.openapi.yaml; docs/api/seller-offers.openapi.yaml
+    updated_at: '2026-11-16'
+  - id: supplied-issues-complete-backend-dto-agreement
+    status: unknown
+    claim: The backend will expose the complete account/payout DTO projections and owner offer candidate/eligibility preview used by this frontend.
+    reason: The issues specify paths, lifecycle and core fields but not a complete owner-preview DTO. No #208/#257/#261 implementation is delivered in develop 5fc0244d. YAML files remain separate from delivered API type generation.
+    verification: On 2026-11-16 read all supplied issue screenshots, removed the invented manual-create/payable routes and version/If-Match requirement, and aligned OFFERED and payout statuses. The owner-state canOffer/candidate preview seam remains explicitly pending backend confirmation; actual email/stock/order/transfer behavior and live authorization require backend delivery.
+    source: docs/features/seller-operations.md; service/sellerOfferService.ts; service/sellerBankService.ts; service/sellerProfileService.ts; service/payoutService.ts
+    updated_at: '2026-11-16'
   - id: seller-admin-auctions-merge-20261116
     status: supported
     claim: The shared auction routes retain seller ownership workflows and staff management workflows after merging develop 13aa202e.
@@ -135,6 +151,10 @@ assumptions:
       ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionService.java
     updated_at: '2026-11-15'
 fingerprints:
+  - id: review225-contract-correction-20261116
+    date: '2026-11-16'
+    commit: seller225 f9ec7096 integrating develop 5fc0244d with updated issue 208/257/261 frontend and HTTP stand-ins
+    cli: Postman 1.73.0
   - id: seller225-develop-20261116
     date: '2026-11-16'
     commit: seller225 7bec971c merging develop 13aa202e with shared Seller/Admin auction and product-picker conflict resolution

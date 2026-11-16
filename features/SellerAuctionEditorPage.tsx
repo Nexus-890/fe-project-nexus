@@ -83,7 +83,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
     {error && error.kind !== "aborted" && <p role="alert" className="break-words text-sm text-danger">{error.detail || error.title}</p>}
     {created && error && <p role="status" className="text-sm">Your draft was saved. Retry scheduling or <Link href={sellerAuctionHref(roles, created.id)} className="text-primary underline">open the saved draft</Link>.</p>}
     {!editable && <p role="status" className="text-sm text-muted-foreground">This auction is locked for editing.</p>}
-    {initial && ["PAYMENT_TIMEOUT", "SETTLED"].includes(initial.status) && <div><SellerSecondChanceOffer auctionId={initial.id} auctionTitle={initial.title} triggerLabel={initial.status === "SETTLED" ? "Offer history" : "Offer to next bidder"} /></div>}
+    {initial && ["PAYMENT_TIMEOUT", "WON", "SETTLED"].includes(initial.status) && initial.bidCount > 0 && <div><SellerSecondChanceOffer auctionId={initial.id} auctionTitle={initial.title} triggerLabel={initial.status === "PAYMENT_TIMEOUT" ? "Offer to next bidder" : "Offer history"} /></div>}
     <form onSubmit={(event) => { event.preventDefault(); submit(false); }} className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
       <fieldset disabled={locked} className="min-w-0 space-y-6 disabled:opacity-70">
         <SellerPanel title="Product">{initial ? <><p className="font-medium">{initial.title}</p><p className="mt-2 break-all font-mono text-xs text-muted-foreground">SKU: {initial.skuId}</p></> : <>

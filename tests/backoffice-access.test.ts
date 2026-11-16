@@ -35,6 +35,10 @@ test("role menu and direct-route guards agree for seller, admin, support and mix
     assert.equal(canAccessBackofficePath(path, ["SUPPORT_STAFF"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/admin-payouts", ["ADMIN"]), true);
   assert.equal(canAccessBackofficePath("/backoffice/admin-payouts", ["SELLER"]), false);
+  assert.equal(canAccessBackofficePath("/backoffice/payouts", ["ADMIN"]), true);
+  assert.equal(canAccessBackofficePath("/backoffice/payouts?view=seller", ["BUYER"]), false);
+  for (const roles of [["ADMIN"], ["SELLER", "ADMIN"]] as const)
+    assert.equal(backofficeMenu(roles).filter((item) => item.href === "/backoffice/payouts").length, 1);
 });
 
 test("shared auction workspace gives management precedence and one menu entry for every role combination", () => {

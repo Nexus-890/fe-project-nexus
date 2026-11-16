@@ -1,3 +1,3 @@
-import SellerPayoutsPage from "../../../../features/SellerPayoutsPage";
+import BackofficePayoutsPage from "../../../../features/BackofficePayoutsPage";
 
-export default function Page() { return <SellerPayoutsPage />; }
+export default function Page() { return <BackofficePayoutsPage />; }

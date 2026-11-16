@@ -1,3 +1,3 @@
-import AdminPayoutsPage from "../../../../features/AdminPayoutsPage";
+import { redirect } from "next/navigation";
 
-export default function Page() { return <AdminPayoutsPage />; }
+export default function Page() { redirect("/backoffice/payouts"); }

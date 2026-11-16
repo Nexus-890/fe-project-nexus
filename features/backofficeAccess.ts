@@ -40,9 +40,9 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     ...(resolveAuctionWorkspace(roles) === "seller" ? [{ label: "Auctions", href: "/backoffice/auctions" }] : []),
     { label: "Sales", href: "/backoffice/sales" },
     { label: "Bank accounts", href: "/backoffice/bank-accounts" },
-    { label: "Payout history", href: "/backoffice/payouts" },
+    ...(!roles.includes("ADMIN") ? [{ label: "Payout history", href: "/backoffice/payouts" }] : []),
   );
-  if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/admin-payouts" });
+  if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/payouts" });
   if (roles.includes("ADMIN")) items.push({ label: "Stock", href: "/backoffice/stock" }, { label: "Categories", href: "/backoffice/categories", placeholder: true });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users", placeholder: true },
@@ -62,6 +62,7 @@ export function canAccessBackofficePath(path: string, roles: readonly Backoffice
   try { pathname = decodeURIComponent(new URL(path, "https://nexus.invalid").pathname).replace(/\/+$/, "") || "/"; }
   catch { return false; }
   if (pathname === "/backoffice" || pathname === "/backoffice/forbidden") return hasBackofficeAccess(roles);
+  if (pathname === "/backoffice/admin-payouts") return roles.includes("ADMIN");
   // Management reads do not grant seller creation. The static new route mounts the seller form.
   if (pathname === "/backoffice/auctions/new") return roles.includes("SELLER");
   return backofficeMenu(roles).some((item) => pathname === item.href || nestedSections.includes(item.href) && pathname.startsWith(`${item.href}/`));

@@ -1,5 +1,5 @@
 /** Normalized UI models for the proposed #208 contract in docs/api/seller-offers.openapi.yaml. */
-export type SellerOfferStatus = "OPEN" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+export type SellerOfferStatus = "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED";
 export type SellerOfferCandidate = {
   bidderId: string;
   displayName: string;
@@ -16,7 +16,6 @@ export type SellerOffer = SellerOfferCandidate & {
 };
 export type SellerOfferState = {
   auctionId: string;
-  version: number;
   canOffer: boolean;
   candidate: SellerOfferCandidate | null;
   offers: SellerOffer[];

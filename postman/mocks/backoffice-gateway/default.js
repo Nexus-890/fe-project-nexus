@@ -26,11 +26,13 @@ const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Ma
 const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key]) => key !== "costPrice"));
 const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
-const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus };
+const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus,
+  getBankAccounts: () => sellerAccountsFixture.accounts, onVerified: (account) => payoutFixture.releaseHeld(account) };
 const auctionFixture = require("./auctions.js").createAuctionFixture(fixtureOptions);
 const offerFixture = require("./offers.js").createOfferFixture(fixtureOptions);
+const sellerAccountsFixture = require("./sellerAccounts.js").createSellerAccountsFixture(fixtureOptions);
 const payoutFixture = require("./payouts.js").createPayoutFixture(fixtureOptions);
-const sellerFixtures = [auctionFixture, offerFixture, payoutFixture];
+const sellerFixtures = [auctionFixture, offerFixture, sellerAccountsFixture, payoutFixture];
 const auctionStatuses = ["CREATED", "SCHEDULED", "ACTIVE", "ENDED", "WON", "SETTLED", "FAILED", "PAYMENT_TIMEOUT", "CANCELLED"];
 const demoId = (prefix, n) => `${prefix}000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 function resetAuctions() {
@@ -120,7 +122,7 @@ async function session(req, res, url) {
 }
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", appOrigin); res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Idempotency-Key, If-Match"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, Idempotency-Key"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return json(res, {});
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });

@@ -1,155 +1,96 @@
 openapi: 3.0.3
 info:
-  title: PROPOSED seller bank accounts and payouts — pending backend issue 261
-  version: 0.1.0-proposed
-  description: |
-    Frontend integration proposal and explicit HTTP simulation input for #225/#261.
-    No delivered backend controller or OpenAPI implements these operations at the
-    #225 develop baseline. This file does not extend the delivered service contract
-    and is deliberately excluded from delivered DTO generation. Backend #261 must
-    confirm paths, privileges, fields, verification workflow and transactional rules.
-    Production UI sends real requests and displays unavailable errors; it never
-    supplies fake bank accounts, records a local payout or triggers a bank transfer.
-    All operations are protected. SELLER reads are scoped to JWT sub; another
-    seller's account data is forbidden. Admin verification is owned by backend #261
-    and no production verification control is proposed in this frontend.
+  title: Issue-aligned seller payout reads and administrator retry
+  version: 0.2.0-issue-257-261
+  description: >-
+    Frontend integration contract transcribed from issues 257 and 261 supplied on
+    2026-11-16. The current develop backend has no payout HTTP implementation.
+    This file documents the expected boundary and local HTTP stand-in, not a
+    delivered API. Production uses real requests and displays failures when absent.
+    Payout creation is automatic after OrderCompleted for a funded COMPLETED order
+    without refunds and positive net amount. There is no payout-create or payable-list
+    endpoint. Platform fee is rounded half up to two decimals from
+    (orderAmount - shippingFee) * platformFeeRate; netAmount is that base minus the
+    fee. Amounts and rate are decimal strings to preserve precision. Each payout
+    retains its fee-rate snapshot. A provider acknowledgement is not transfer success.
+    Seller profile and bank management use the separate issue 257 contracts under
+    /api/v1/sellers/me and /api/v1/payments/seller-bank-accounts; they do not create
+    payouts. A verified default account releases ON_HOLD payouts automatically.
 servers:
   - url: /
 security:
   - bearerAuth: []
 paths:
-  /api/v1/sellers/me/bank-accounts:
+  /api/v1/payments/payouts/me:
     get:
-      summary: List only the signed-in seller's masked bank accounts
-      x-proposed-role: SELLER
+      operationId: getOwnPayouts
+      summary: Read payouts scoped to the JWT seller
+      description: SELLER only, newest first. Identity comes from JWT sub, never a sellerId query.
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
       responses:
-        '200':
-          description: Own accounts only. Never return a full bank account number.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - {$ref: '#/components/schemas/Envelope'}
-                  - properties:
-                      data:
-                        type: array
-                        items: {$ref: '#/components/schemas/BankAccount'}
+        '200': {$ref: '#/components/responses/PayoutPage'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '501': {$ref: '#/components/responses/Unavailable'}
-    post:
-      summary: Add an unverified bank account for the JWT seller
-      x-proposed-role: SELLER
-      description: |
-        Full account number is write-only and must be protected by the owning BE.
-        Client cannot choose sellerId or set verified. Do not log account numbers.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [bankCode, bankName, accountHolder, accountNumber]
-              properties:
-                bankCode: {type: string, minLength: 1, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$'}
-                bankName: {type: string, minLength: 1, maxLength: 100}
-                accountHolder: {type: string, minLength: 1, maxLength: 100}
-                accountNumber: {type: string, writeOnly: true, pattern: '^\d{6,34}$'}
+  /api/v1/payments/payouts:
+    get:
+      operationId: getAdminPayouts
+      summary: Administrator payout list with seller, status and date filters
+      description: >-
+        ADMIN only; SELLER and SUPPORT_STAFF receive 403. Newest first. Needs action
+        sends exactly four repeated status parameters ON_HOLD, UNKNOWN, FAILED,
+        RETURNED. Lists read stored payouts and never calculate or create a payout.
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+        - {in: query, name: sellerId, schema: {type: string, format: uuid}}
+        - in: query
+          name: status
+          style: form
+          explode: true
+          schema: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/PayoutStatus'}}
+        - {in: query, name: from, schema: {type: string, format: date-time}}
+        - {in: query, name: to, schema: {type: string, format: date-time}}
       responses:
-        '201':
-          description: Created masked account with verified false
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - {$ref: '#/components/schemas/Envelope'}
-                  - properties:
-                      data: {$ref: '#/components/schemas/BankAccount'}
+        '200': {$ref: '#/components/responses/PayoutPage'}
         '400': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '501': {$ref: '#/components/responses/Unavailable'}
-  /api/v1/sellers/me/payouts:
+  /api/v1/payments/payouts/{id}:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
     get:
-      summary: Read only the JWT seller's payout history and status
-      x-proposed-role: SELLER
-      parameters:
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Size'}
+      operationId: getPayoutDetail
+      summary: Owner or administrator detail with newest-first payout history
+      description: Another seller's payout is 404 PAYOUT_NOT_FOUND. No full bank account number is returned.
       responses:
-        '200':
-          description: Newest payouts first, scoped by JWT seller identity
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - {$ref: '#/components/schemas/PagedEnvelope'}
-                  - properties:
-                      data: {type: array, items: {$ref: '#/components/schemas/Payout'}}
+        '200': {$ref: '#/components/responses/PayoutDetail'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '501': {$ref: '#/components/responses/Unavailable'}
-  /api/v1/payouts/payable-orders:
-    get:
-      summary: List completed orders with no payout and no refund
-      x-proposed-role: ADMIN
-      description: |
-        Backend filtering is mandatory: status COMPLETED, payoutId null and
-        refundStatus null. Include masked seller-owned bank accounts and their
-        verification status so an administrator can choose a verified account.
-      parameters:
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Size'}
-      responses:
-        '200':
-          description: Eligible orders; never PAID, SHIPPED, DELIVERED or REFUND_REQUESTED
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - {$ref: '#/components/schemas/PagedEnvelope'}
-                  - properties:
-                      data: {type: array, items: {$ref: '#/components/schemas/PayableOrder'}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '501': {$ref: '#/components/responses/Unavailable'}
-  /api/v1/payouts:
+  /api/v1/payments/payouts/{id}/retry:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
     post:
-      summary: Create one payout for a completed order and verified seller bank account
-      x-proposed-role: ADMIN
-      description: |
-        Validate ownership, bank verification, COMPLETED status, absence of refund
-        and absence of prior payout atomically. Non-completed order returns 409
-        PAYOUT_ORDER_NOT_COMPLETED and records nothing. Unverified account returns
-        409 PAYOUT_BANK_ACCOUNT_UNVERIFIED and records nothing. A payout already
-        exists returns 409 PAYOUT_ALREADY_EXISTS for a fresh key. Same administrator,
-        UUID key and identical payload replays the same payout with 200; changed
-        payload returns 409 PAYOUT_IDEMPOTENCY_CONFLICT. A unique order constraint
-        prevents distinct concurrent keys from creating duplicate payouts. Amount,
-        seller identity and currency come from server order data. Retry after an
-        uncertain response must retain the same key and payload. No automatic retry.
-        This request records a payout instruction; settlement/provider behavior
-        remains a backend #261 decision and is not simulated as a real bank transfer.
+      operationId: retryPayout
+      summary: Administrator retry of an existing failed or returned payout
+      description: >-
+        ADMIN only. Bodyless POST with a UUID Idempotency-Key per explicit retry
+        request. Reuse that exact key after an uncertain response; the same key
+        records one RETRIED action, never a second payout or attempt. Only FAILED
+        and RETURNED are eligible; all other states return 409 PAYOUT_NOT_RETRYABLE.
+        UNKNOWN must reconcile the original provider attempt and cannot be retried.
+        Recipient account verification and ownership remain server checks. Retry
+        does not prove payment success. The dispatch/provider transaction owns
+        attempt counting, frozen recipient snapshots and confirmed transfers.
       parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema: {type: string, format: uuid}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [orderId, bankAccountId]
-              properties:
-                orderId: {type: string, format: uuid}
-                bankAccountId: {type: string, format: uuid}
+        - {in: header, name: Idempotency-Key, required: true, schema: {type: string, format: uuid}}
       responses:
-        '201': {$ref: '#/components/responses/Payout'}
-        '200': {$ref: '#/components/responses/Payout'}
+        '200': {$ref: '#/components/responses/PayoutDetail'}
         '400': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
@@ -163,86 +104,100 @@ components:
     Page: {in: query, name: page, schema: {type: integer, minimum: 0, default: 0}}
     Size: {in: query, name: size, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
   responses:
-    Payout:
-      description: Payout instruction, masked bank snapshot; replay returns the same ID
+    PayoutPage:
+      description: Stored payouts, newest first, with sibling page metadata
       content:
         application/json:
           schema:
-            allOf:
-              - {$ref: '#/components/schemas/Envelope'}
-              - properties:
-                  data: {$ref: '#/components/schemas/Payout'}
+            type: object
+            required: [code, message, data, page]
+            properties:
+              code: {type: integer, example: 0}
+              message: {type: string}
+              data: {type: array, items: {$ref: '#/components/schemas/Payout'}}
+              page:
+                type: object
+                required: [number, size, totalElements, totalPages]
+                properties:
+                  number: {type: integer, minimum: 0}
+                  size: {type: integer, minimum: 1}
+                  totalElements: {type: integer, minimum: 0}
+                  totalPages: {type: integer, minimum: 0}
+    PayoutDetail:
+      description: Current payout and append-only newest-first history
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message, data]
+            properties:
+              code: {type: integer, example: 0}
+              message: {type: string}
+              data:
+                allOf:
+                  - {$ref: '#/components/schemas/Payout'}
+                  - type: object
+                    required: [history]
+                    properties:
+                      history: {type: array, items: {$ref: '#/components/schemas/HistoryStep'}}
     Problem:
-      description: Problem Details; no success record is fabricated
+      description: Problem Details; PAYOUT_NOT_FOUND 404, PAYOUT_NOT_RETRYABLE 409, or owning service ErrorCode
       content:
         application/problem+json:
           schema:
             type: object
-            required: [title, status, code, detail]
+            required: [title, status]
             properties:
+              type: {type: string}
               title: {type: string}
               status: {type: integer}
               code: {type: string}
               detail: {type: string}
     Unavailable:
-      description: Backend issue 261 is not delivered; UI displays unavailable/retry state
+      description: Backend capability is not delivered; UI shows the failure and explicit refresh
   schemas:
-    Envelope:
-      type: object
-      required: [code, message, data]
-      properties:
-        code: {type: integer, enum: [0]}
-        message: {type: string}
-    PagedEnvelope:
-      allOf:
-        - {$ref: '#/components/schemas/Envelope'}
-        - type: object
-          required: [page]
-          properties:
-            page:
-              type: object
-              required: [number, size, totalElements, totalPages]
-              properties:
-                number: {type: integer, minimum: 0}
-                size: {type: integer, minimum: 1}
-                totalElements: {type: integer, minimum: 0}
-                totalPages: {type: integer, minimum: 0}
-    BankAccount:
-      type: object
-      additionalProperties: false
-      required: [id, bankCode, bankName, accountHolder, last4, verified, createdAt]
-      properties:
-        id: {type: string, format: uuid}
-        bankCode: {type: string, minLength: 1, maxLength: 32}
-        bankName: {type: string, minLength: 1, maxLength: 100}
-        accountHolder: {type: string, minLength: 1, maxLength: 100}
-        last4: {type: string, pattern: '^\d{4}$'}
-        verified: {type: boolean}
-        createdAt: {type: string, format: date-time}
+    Money:
+      type: string
+      pattern: '^\d{1,17}\.\d{2}$'
+      example: '4770000.00'
+    PayoutStatus:
+      type: string
+      enum: [ON_HOLD, PENDING, PROCESSING, UNKNOWN, SUCCEEDED, FAILED, RETURNED]
     Payout:
       type: object
-      required: [id, orderId, orderNumber, bankAccount, amount, status, createdAt, paidAt, reference]
+      required: [id, orderId, sellerId, orderAmount, shippingFee, platformFeeRate, platformFee, netAmount, currency, status, attemptCount, recipientAccountLast4, createdAt]
       properties:
         id: {type: string, format: uuid}
         orderId: {type: string, format: uuid}
-        orderNumber: {type: string}
-        bankAccount: {$ref: '#/components/schemas/BankAccount'}
-        amount: {type: number, minimum: 0.01, description: Numeric wire VND amount}
-        status: {type: string, enum: [PENDING, PROCESSING, PAID, FAILED]}
-        createdAt: {type: string, format: date-time}
-        paidAt: {type: string, format: date-time, nullable: true}
-        reference: {type: string, nullable: true}
-    PayableOrder:
-      type: object
-      required: [orderId, orderNumber, sellerId, sellerName, totalAmount, completedAt, status, payoutId, refundStatus, bankAccounts]
-      properties:
-        orderId: {type: string, format: uuid}
-        orderNumber: {type: string}
         sellerId: {type: string, format: uuid}
-        sellerName: {type: string}
-        totalAmount: {type: number, minimum: 0.01}
-        completedAt: {type: string, format: date-time}
-        status: {type: string, enum: [COMPLETED]}
-        payoutId: {type: string, nullable: true, enum: [null]}
-        refundStatus: {type: string, nullable: true, enum: [null]}
-        bankAccounts: {type: array, items: {$ref: '#/components/schemas/BankAccount'}}
+        orderAmount: {$ref: '#/components/schemas/Money'}
+        shippingFee: {$ref: '#/components/schemas/Money'}
+        platformFeeRate: {type: string, pattern: '^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$', example: '0.0000'}
+        platformFee: {$ref: '#/components/schemas/Money'}
+        netAmount: {$ref: '#/components/schemas/Money'}
+        currency: {type: string, enum: [VND]}
+        status: {$ref: '#/components/schemas/PayoutStatus'}
+        attemptCount: {type: integer, minimum: 0}
+        recipientAccountLast4: {type: string, pattern: '^\d{4}$', nullable: true}
+        providerReference: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time, description: Persisted audit date used by list date filters.}
+    HistoryStep:
+      type: object
+      required: [id, event, fromStatus, toStatus, attemptNo, amount, sellerBankId, recipientAccountLast4, provider, providerReference, providerStatus, errorCode, errorMessage, simulated, actorId, occurredAt]
+      properties:
+        id: {type: string, format: uuid}
+        event: {type: string, enum: [CREATED, HELD, RELEASED, SENT, SUCCEEDED, FAILED, TIMED_OUT, RECONCILED, RETRIED, RETURNED]}
+        fromStatus: {type: string, nullable: true, enum: [null, ON_HOLD, PENDING, PROCESSING, UNKNOWN, SUCCEEDED, FAILED, RETURNED]}
+        toStatus: {$ref: '#/components/schemas/PayoutStatus'}
+        attemptNo: {type: integer, minimum: 0}
+        amount: {$ref: '#/components/schemas/Money'}
+        sellerBankId: {type: string, format: uuid, nullable: true}
+        recipientAccountLast4: {type: string, pattern: '^\d{4}$', nullable: true}
+        provider: {type: string, nullable: true}
+        providerReference: {type: string, nullable: true}
+        providerStatus: {type: string, nullable: true}
+        errorCode: {type: string, nullable: true}
+        errorMessage: {type: string, nullable: true}
+        simulated: {type: boolean, description: Every sandbox provider step is labelled true; never present it as a real transfer.}
+        actorId: {type: string, format: uuid, description: System UUID for automatic steps, administrator UUID for retry.}
+        occurredAt: {type: string, format: date-time}

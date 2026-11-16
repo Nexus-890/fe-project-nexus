@@ -1,39 +1,42 @@
-/** Normalized UI models for the proposed #261 contract; no full account number is retained. */
-export type SellerBankAccount = {
-  id: string;
-  bankCode: string;
-  bankName: string;
-  accountHolder: string;
-  last4: string;
-  verified: boolean;
-  createdAt: string;
-};
-export type SellerBankAccountInput = {
-  bankCode: string;
-  bankName: string;
-  accountHolder: string;
-  accountNumber: string;
-};
-export const payoutStatuses = ["PENDING", "PROCESSING", "PAID", "FAILED"] as const;
+/** Issue #257/#261 payout contract; monetary wire values remain exact decimal strings. */
+export const payoutStatuses = ["ON_HOLD", "PENDING", "PROCESSING", "UNKNOWN", "SUCCEEDED", "FAILED", "RETURNED"] as const;
 export type PayoutStatus = typeof payoutStatuses[number];
+export const payoutNeedsActionStatuses = ["ON_HOLD", "UNKNOWN", "FAILED", "RETURNED"] as const satisfies readonly PayoutStatus[];
+export const payoutHistoryEvents = ["CREATED", "HELD", "RELEASED", "SENT", "SUCCEEDED", "FAILED", "TIMED_OUT", "RECONCILED", "RETRIED", "RETURNED"] as const;
+export type PayoutHistoryEvent = typeof payoutHistoryEvents[number];
 export type SellerPayout = {
   id: string;
   orderId: string;
-  orderNumber: string;
-  bankAccount: SellerBankAccount;
-  amount: string;
-  status: PayoutStatus;
-  createdAt: string;
-  paidAt: string | null;
-  reference: string | null;
-};
-export type PayableOrder = {
-  orderId: string;
-  orderNumber: string;
   sellerId: string;
-  sellerName: string;
-  totalAmount: string;
-  completedAt: string;
-  bankAccounts: SellerBankAccount[];
+  orderAmount: string;
+  shippingFee: string;
+  platformFeeRate: string;
+  platformFee: string;
+  netAmount: string;
+  currency: "VND";
+  status: PayoutStatus;
+  attemptCount: number;
+  recipientAccountLast4: string | null;
+  providerReference: string | null;
+  createdAt: string;
 };
-export type CreatePayoutInput = { orderId: string; bankAccountId: string };
+export type PayoutHistoryEntry = {
+  id: string;
+  event: PayoutHistoryEvent;
+  fromStatus: PayoutStatus | null;
+  toStatus: PayoutStatus;
+  attemptNo: number;
+  amount: string;
+  sellerBankId: string | null;
+  recipientAccountLast4: string | null;
+  provider: string | null;
+  providerReference: string | null;
+  providerStatus: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  simulated: boolean;
+  actorId: string;
+  occurredAt: string;
+};
+export type PayoutDetail = SellerPayout & { history: PayoutHistoryEntry[] };
+export type PayoutFilters = { sellerId?: string; status?: readonly PayoutStatus[]; from?: string; to?: string; page?: number; size?: number };

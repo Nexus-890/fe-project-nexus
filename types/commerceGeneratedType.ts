@@ -1,5 +1,322 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
+    "/api/v1/promotions/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List visible mega sale events
+         * @description Seller sees open registration windows and events they registered for.
+         */
+        get: operations["listMegaSaleEvents"];
+        put?: never;
+        /** Create a draft mega sale event */
+        post: operations["createMegaSaleEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promotions/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a visible mega sale event
+         * @description Visibility follows the same rule as listMegaSaleEvents.
+         */
+        get: operations["getMegaSaleEvent"];
+        /** Edit a draft mega sale event */
+        put: operations["editMegaSaleEvent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promotions/events/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Open registration or cancel the event
+         * @description OPEN before registrationStartAt schedules opening when the window begins.
+         */
+        patch: operations["changeMegaSaleEventStatus"];
+        trace?: never;
+    };
+    "/api/v1/promotions/events/{id}/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List seller registrations */
+        get: operations["listEventRegistrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promotions/event-sellers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Approve or reject a pending registration */
+        patch: operations["reviewEventRegistration"];
+        trace?: never;
+    };
+    "/api/v1/promotions/events/{id}/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register the current seller */
+        post: operations["registerForMegaSaleEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promotions/events/{id}/registrations/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Withdraw the current seller before the event begins */
+        delete: operations["withdrawMegaSaleRegistration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List publicly claimable vouchers
+         * @description Product and seller filters narrow the eligible scope. Claim windows and stock are rechecked on claim.
+         */
+        get: operations["listClaimableVouchers"];
+        put?: never;
+        /**
+         * Create a draft voucher
+         * @description Admin creates PLATFORM or EVENT vouchers. A seller creates SHOP vouchers for its own products.
+         */
+        post: operations["createVoucher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List vouchers visible to the management caller
+         * @description Admin sees all. Sellers see their own shop vouchers and active event vouchers available to approved participants.
+         */
+        get: operations["listManagedVouchers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a managed voucher and selected products */
+        get: operations["getManagedVoucher"];
+        /** Edit a draft voucher */
+        put: operations["editVoucher"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Activate, pause or cancel the voucher */
+        patch: operations["changeVoucherStatus"];
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the selected products on a draft voucher */
+        put: operations["replaceVoucherProducts"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join with the accepted terms version
+         * @description Only approved registrants can join. The accepted terms and seller funding are stored as a snapshot.
+         */
+        post: operations["joinEventVoucher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/sellers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Withdraw from an event voucher before its validity starts */
+        delete: operations["withdrawFromEventVoucher"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/usages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List uses of the managed voucher */
+        get: operations["listVoucherUsages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/{id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a voucher for the current buyer
+         * @description Claims are unique per buyer and voucher. A repeated claim or exhausted limit returns 409.
+         */
+        post: operations["claimVoucher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vouchers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List claimed vouchers for the current buyer */
+        get: operations["listVoucherWallet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/orders/{id}/shipping-snapshot": {
         parameters: {
             query?: never;
@@ -93,7 +410,7 @@ export interface paths {
         };
         /**
          * Calculate current cart pricing (CRT-05)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; applied vouchers reduce only the merchandise total and rejected vouchers include a reason. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
          */
         get: operations["getCartPricing"];
         put?: never;
@@ -115,7 +432,7 @@ export interface paths {
         put?: never;
         /**
          * Validate the current cart (CRT-06)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; D01 gives discountAmount=0 and promoCode is ignored. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; applied vouchers reduce only the merchandise total and rejected vouchers include a reason. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
          */
         post: operations["validateCart"];
         delete?: never;
@@ -135,7 +452,7 @@ export interface paths {
         put?: never;
         /**
          * Preview checkout without creating an order (ORD-02)
-         * @description Read-only checkout for the JWT buyer: never creates a cart, touches activity timestamps, changes saved cart prices, reserves stock, creates orders or publishes events. Uses current catalog prices and returns item issues for review. A valid cart is grouped by seller; backend packs each seller parcel from catalog-owned per-unit shippingParcel metadata and calls shipment-service once per seller with the two-level recipient address. shippingFee is the sum of those quotes and total includes it. Missing metadata or an oversized parcel returns 409; carrier transport failure returns 503 instead of a zero fee. Client fees or parcel measurements are never trusted. Empty active cart returns 400 COMMERCE_CART_EMPTY. Promo code remains ignored under D01. Inactive/missing product issues leave shipping unknown; PRICE_CHANGED still quotes current catalog data for buyer review.
+         * @description Read-only checkout for the JWT buyer: never creates a cart, touches activity timestamps, changes saved cart prices, reserves stock, creates orders or publishes events. Uses current catalog prices and returns item issues for review. A valid cart is grouped by seller; backend packs each seller parcel from catalog-owned per-unit shippingParcel metadata and calls shipment-service once per seller with the two-level recipient address. shippingFee is the sum of those quotes and total includes it. Missing metadata or an oversized parcel returns 409; carrier transport failure returns 503 instead of a zero fee. Client fees or parcel measurements are never trusted. Empty active cart returns 400 COMMERCE_CART_EMPTY. The voucher selection is priced against current eligible merchandise. The response includes the discount and applicability reason for each code. Inactive/missing product issues leave shipping unknown; PRICE_CHANGED still quotes current catalog data for buyer review.
          */
         post: operations["previewCheckout"];
         delete?: never;
@@ -159,7 +476,7 @@ export interface paths {
         put?: never;
         /**
          * Place an order from the current cart
-         * @description Requires CHECKOUT.START AND ORDER.CREATE and a UUID Idempotency-Key. Splits the active cart by seller and checks current SKU availability before checkout. With nexus.order.idempotency-enabled=true (ORDER_IDEMPOTENCY_ENABLED, default true), a matching replay of the same key, buyer and shipping/payment payload returns the original order group and seller order IDs with 200 before price validation and creates no new rows; a fresh key returns 201. UUID letter case is normalized, so uppercase and lowercase forms are the same key. Concurrent successful requests for one key leave one group and one order per seller; the losing request returns the committed winner's group. A missing or invalid key returns 400 COMMERCE_INVALID_ORDER_REQUEST. A key owned by another buyer returns 400 COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED without that buyer's order data. The same buyer reusing a key with changed shipping/payment data returns 409 COMMERCE_IDEMPOTENCY_CONFLICT. When idempotency is disabled, the UUID header remains required but each successful checkout uses a fresh internal key and does not replay the supplied key. With nexus.checkout.price-revalidation=true (CHECKOUT_PRICE_REVALIDATION, default true), current SKU prices are compared with the cart prices using exact long minor units. A changed price returns 409 COMMERCE_PRICE_CHANGED with top-level skuId, oldPrice and newPrice in the original currency units. Only the reported cart item's price is updated and committed; no order or inventory reservation is created. A confirmed retry with a new Idempotency-Key returns 201 at the updated cart price if prices have not changed again. If several prices changed, each 409 reports and updates one item, leaving the other changed prices for subsequent confirmation. With price-revalidation=false, orders use the saved cart prices while SKU and product availability checks still apply. Cart ownership and checkout guards still apply. Unsupported promotion, unavailable item and unrepresentable money fail before checkout completes. Payment method is SEPAY. Quote every seller order before reserving anything using catalog-owned shippingParcel metadata; client shipping fees are never used. Shipping failure leaves no order or reservation. Save the group and child orders in the commerce transaction, then make one inventory reservation call with all seller order items. Inventory 409 becomes COMMERCE_INSUFFICIENT_STOCK with skuId, available and requested; all commerce group/order rows roll back. Timeout or open inventory circuit returns COMMERCE_INVENTORY_UNAVAILABLE within the configured bounded inventory-call deadline below 3 seconds, with no committed commerce order. Every child paymentDueAt and group dueAt come from reservation expiresAt. Saved shipping_info holds recipient{name,phone,address{line1,wardCode,provinceCode}}, warehouseId from the reservation and the backend-computed parcel. Failure after a successful remote hold may leave inventory for the expiry job; this path sends no compensating release. Gateway checks ORDER.CREATE; downstream additionally checks CHECKOUT.START.
+         * @description Requires CHECKOUT.START AND ORDER.CREATE and a UUID Idempotency-Key. Splits the active cart by seller and checks current SKU availability before checkout. With nexus.order.idempotency-enabled=true (ORDER_IDEMPOTENCY_ENABLED, default true), a matching replay of the same key, buyer and shipping/payment payload returns the original order group and seller order IDs with 200 before price validation and creates no new rows; a fresh key returns 201. UUID letter case is normalized, so uppercase and lowercase forms are the same key. Concurrent successful requests for one key leave one group and one order per seller; the losing request returns the committed winner's group. A missing or invalid key returns 400 COMMERCE_INVALID_ORDER_REQUEST. A key owned by another buyer returns 400 COMMERCE_IDEMPOTENCY_KEY_NOT_OWNED without that buyer's order data. The same buyer reusing a key with changed shipping/payment data returns 409 COMMERCE_IDEMPOTENCY_CONFLICT. When idempotency is disabled, the UUID header remains required but each successful checkout uses a fresh internal key and does not replay the supplied key. With nexus.checkout.price-revalidation=true (CHECKOUT_PRICE_REVALIDATION, default true), current SKU prices are compared with the cart prices using exact long minor units. A changed price returns 409 COMMERCE_PRICE_CHANGED with top-level skuId, oldPrice and newPrice in the original currency units. Only the reported cart item's price is updated and committed; no order or inventory reservation is created. A confirmed retry with a new Idempotency-Key returns 201 at the updated cart price if prices have not changed again. If several prices changed, each 409 reports and updates one item, leaving the other changed prices for subsequent confirmation. With price-revalidation=false, orders without a voucher use saved cart prices. Voucher checkout uses current catalog prices and all checkout paths validate SKU and product availability. Cart ownership and checkout guards still apply. Voucher selection participates in idempotency. A selected voucher must be applicable and quota is reserved before inventory is held. Usage and allocation rows commit with the order. Unavailable items and unrepresentable money fail before checkout completes. Payment method is SEPAY. Quote every seller order before reserving anything using catalog-owned shippingParcel metadata; client shipping fees are never used. Shipping failure leaves no order or reservation. Save the group and child orders in the commerce transaction, then make one inventory reservation call with all seller order items. Inventory 409 becomes COMMERCE_INSUFFICIENT_STOCK with skuId, available and requested; all commerce group/order rows roll back. Timeout or open inventory circuit returns COMMERCE_INVENTORY_UNAVAILABLE within the configured bounded inventory-call deadline below 3 seconds, with no committed commerce order. Every child paymentDueAt and group dueAt come from reservation expiresAt. Saved shipping_info holds recipient{name,phone,address{line1,wardCode,provinceCode}}, warehouseId from the reservation and the backend-computed parcel. Failure after a successful remote hold may leave inventory for the expiry job; this path sends no compensating release. Gateway checks ORDER.CREATE; downstream additionally checks CHECKOUT.START.
          */
         post: operations["createOrder"];
         delete?: never;
@@ -432,6 +749,257 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        EventStatus: "DRAFT" | "REGISTRATION_OPEN" | "REGISTRATION_CLOSED" | "ACTIVE" | "ENDED" | "CANCELED";
+        /** @enum {string} */
+        EventSellerStatus: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+        EventWrite: {
+            name: string;
+            description?: string | null;
+            bannerUrl?: string | null;
+            /** Format: date-time */
+            registrationStartAt: string;
+            /** Format: date-time */
+            registrationEndAt: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+        };
+        Event: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            bannerUrl?: string | null;
+            /** Format: date-time */
+            registrationStartAt: string;
+            /** Format: date-time */
+            registrationEndAt: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            status: components["schemas"]["EventStatus"];
+            registrationOpenRequested: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        EventChangeStatus: {
+            /** @enum {string} */
+            status: "OPEN" | "CANCEL";
+        };
+        EventReview: {
+            /** @enum {string} */
+            status: "APPROVED" | "REJECTED";
+            reviewNote?: string | null;
+        };
+        EventRegistration: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            eventId: string;
+            /** Format: uuid */
+            sellerId: string;
+            status: components["schemas"]["EventSellerStatus"];
+            /** Format: date-time */
+            registeredAt: string;
+            /** Format: uuid */
+            reviewedBy?: string | null;
+            /** Format: date-time */
+            reviewedAt?: string | null;
+            reviewNote?: string | null;
+            /** Format: date-time */
+            withdrawnAt?: string | null;
+        };
+        /** @enum {string} */
+        VoucherSource: "PLATFORM" | "SHOP" | "EVENT";
+        /** @enum {string} */
+        VoucherStatus: "DRAFT" | "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELED";
+        /** @enum {string} */
+        WalletStatus: "CLAIMED" | "USED" | "EXPIRED";
+        VoucherWrite: {
+            code: string;
+            name: string;
+            description?: string | null;
+            sourceType: components["schemas"]["VoucherSource"];
+            /** Format: uuid */
+            eventId?: string | null;
+            /** @enum {string} */
+            discountType: "PERCENT" | "FIXED";
+            discountValue: number;
+            maxDiscountAmount?: number | null;
+            minOrderAmount?: number | null;
+            /** @enum {string} */
+            fundingType: "PLATFORM" | "SELLER" | "CO_FUNDED";
+            sellerFundingPercent?: number | null;
+            /** @enum {string} */
+            productScope: "ALL" | "SELECTED";
+            claimLimit?: number | null;
+            usageLimit?: number | null;
+            discountBudget?: number | null;
+            /** Format: date-time */
+            claimStartAt: string;
+            /** Format: date-time */
+            claimEndAt: string;
+            /** Format: date-time */
+            validFrom: string;
+            /** Format: date-time */
+            validUntil: string;
+            termsText?: string | null;
+        };
+        Voucher: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            description?: string | null;
+            sourceType: components["schemas"]["VoucherSource"];
+            /** Format: uuid */
+            eventId?: string | null;
+            /** @enum {string} */
+            discountType: "PERCENT" | "FIXED";
+            discountValue: number;
+            maxDiscountAmount?: number | null;
+            minOrderAmount?: number | null;
+            /** @enum {string} */
+            fundingType: "PLATFORM" | "SELLER" | "CO_FUNDED";
+            sellerFundingPercent?: number | null;
+            /** @enum {string} */
+            productScope: "ALL" | "SELECTED";
+            claimLimit?: number | null;
+            usageLimit?: number | null;
+            discountBudget?: number | null;
+            /** Format: date-time */
+            claimStartAt: string;
+            /** Format: date-time */
+            claimEndAt: string;
+            /** Format: date-time */
+            validFrom: string;
+            /** Format: date-time */
+            validUntil: string;
+            termsText?: string | null;
+            /** Format: uuid */
+            ownerSellerId?: string | null;
+            termsVersion: number;
+            status: components["schemas"]["VoucherStatus"];
+            claimCount: number;
+            committedUses: number;
+            committedDiscount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ManagedVoucher: {
+            voucher: components["schemas"]["Voucher"];
+            productIds: string[];
+        };
+        VoucherChangeStatus: {
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "CANCELED";
+        };
+        VoucherProducts: {
+            productIds: string[];
+        };
+        JoinVoucher: {
+            acceptedTermsVersion: number;
+        };
+        VoucherParticipation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            voucherId: string;
+            /** Format: uuid */
+            eventSellerId: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "WITHDRAWN";
+            acceptedTermsVersion: number;
+            acceptedTermsSnapshot?: string | null;
+            sellerFundingPercentSnapshot: number;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            withdrawnAt?: string | null;
+        };
+        PublicVoucher: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            description?: string | null;
+            sourceType: components["schemas"]["VoucherSource"];
+            /** Format: uuid */
+            eventId?: string | null;
+            /** @enum {string} */
+            discountType: "PERCENT" | "FIXED";
+            discountValue: number;
+            maxDiscountAmount?: number | null;
+            minOrderAmount?: number | null;
+            /** @enum {string} */
+            productScope: "ALL" | "SELECTED";
+            /** Format: date-time */
+            claimStartAt: string;
+            /** Format: date-time */
+            claimEndAt: string;
+            /** Format: date-time */
+            validFrom: string;
+            /** Format: date-time */
+            validUntil: string;
+            termsText?: string | null;
+            /** Format: uuid */
+            ownerSellerId?: string | null;
+        };
+        VoucherWalletEntry: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["WalletStatus"];
+            /** Format: date-time */
+            claimedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            voucher: components["schemas"]["PublicVoucher"];
+        };
+        VoucherUsage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderId: string;
+            /** @enum {string} */
+            status: "RESERVED" | "REDEEMED" | "RELEASED" | "EXPIRED" | "REVERSED";
+            eligibleAmount: number;
+            discountAmount: number;
+            sellerFunded: number;
+            platformFunded: number;
+            /** Format: date-time */
+            reservedAt: string;
+            /** Format: date-time */
+            reservedUntil: string;
+            /** Format: date-time */
+            redeemedAt?: string | null;
+            /** Format: date-time */
+            releasedAt?: string | null;
+        };
+        /** @description Normalized in input order. If present, takes priority over promoCode. An empty list clears the saved cart code for this request. */
+        VoucherCodes: string[];
+        VoucherQuote: {
+            code: string;
+            /** @enum {string|null} */
+            sourceType?: "PLATFORM" | "SHOP" | "EVENT" | null;
+            applied: boolean;
+            discountAmount: number;
+            /** @enum {string|null} */
+            reason?: "MIN_ORDER_NOT_MET" | "NOT_CLAIMED" | "EXPIRED" | "LIMIT_REACHED" | "NOT_ELIGIBLE" | "STACKING" | null;
+            missingAmount?: number | null;
+        };
+        OrderVoucher: {
+            code: string;
+            discountAmount: number;
+            sellerFunded: number;
+            platformFunded: number;
+        };
         OrderShippingSnapshotEnvelope: {
             /** @example 0 */
             code: number;
@@ -472,6 +1040,7 @@ export interface components {
             quantity: number;
         };
         CartPricing: {
+            vouchers?: components["schemas"]["VoucherQuote"][];
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             subtotal: number;
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
@@ -512,6 +1081,7 @@ export interface components {
             lineTotal: number;
         };
         CheckoutPreview: {
+            vouchers?: components["schemas"]["VoucherQuote"][];
             items: components["schemas"]["CheckoutPreviewItem"][];
             /** @description Numeric VND amount; BigDecimal preserves the existing cart money contract. */
             subtotal: number;
@@ -532,8 +1102,9 @@ export interface components {
              * @enum {string}
              */
             paymentMethod: "SEPAY";
-            /** @description Optional; accepted and ignored under D01. No promotion is applied or persisted. */
+            /** @description Legacy alias for a single voucher code. */
             promoCode?: string;
+            voucherCodes?: components["schemas"]["VoucherCodes"];
         };
         CartPricingEnvelope: {
             /** @default 0 */
@@ -709,6 +1280,9 @@ export interface components {
              * @enum {string}
              */
             paymentMethod: "SEPAY";
+            /** @description Legacy alias for a single voucher code. */
+            promoCode?: string;
+            voucherCodes?: components["schemas"]["VoucherCodes"];
         };
         ChangeOrderStatus: {
             status: components["schemas"]["OrderStatus"];
@@ -758,6 +1332,8 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             /** @description Cancellation eligibility for the current caller: ORDER.CANCEL and ownership (or ADMIN/SUPPORT_STAFF), and either PAID or PENDING in a PENDING group. This is a read-time snapshot; cancellation rechecks locked state and can return 409. Missing on older backends must be treated as false. */
             canCancel: boolean;
+            /** @description Frozen voucher amounts per seller order, including the seller-funded and platform-funded shares. */
+            vouchers?: components["schemas"]["OrderVoucher"][];
             /** @description First receipt issue reported by the buyer; retained until D11 resolves it. */
             receiptIssueReason?: string | null;
             /**
@@ -889,6 +1465,2282 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMegaSaleEvents: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["EventStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "name": "November sale",
+                     *           "registrationStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "registrationEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "startAt": "2026-11-30T09:00:00+07:00",
+                     *           "endAt": "2026-11-30T20:00:00+07:00",
+                     *           "status": "DRAFT",
+                     *           "registrationOpenRequested": false,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["Event"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createMegaSaleEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventWrite"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "name": "November sale",
+                     *         "registrationStartAt": "2026-11-30T07:00:00+07:00",
+                     *         "registrationEndAt": "2026-11-30T08:00:00+07:00",
+                     *         "startAt": "2026-11-30T09:00:00+07:00",
+                     *         "endAt": "2026-11-30T20:00:00+07:00",
+                     *         "status": "DRAFT",
+                     *         "registrationOpenRequested": false,
+                     *         "createdAt": "2026-11-30T06:00:00+07:00",
+                     *         "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["Event"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMegaSaleEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "name": "November sale",
+                     *         "registrationStartAt": "2026-11-30T07:00:00+07:00",
+                     *         "registrationEndAt": "2026-11-30T08:00:00+07:00",
+                     *         "startAt": "2026-11-30T09:00:00+07:00",
+                     *         "endAt": "2026-11-30T20:00:00+07:00",
+                     *         "status": "DRAFT",
+                     *         "registrationOpenRequested": false,
+                     *         "createdAt": "2026-11-30T06:00:00+07:00",
+                     *         "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["Event"];
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    editMegaSaleEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventWrite"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "name": "November sale",
+                     *         "registrationStartAt": "2026-11-30T07:00:00+07:00",
+                     *         "registrationEndAt": "2026-11-30T08:00:00+07:00",
+                     *         "startAt": "2026-11-30T09:00:00+07:00",
+                     *         "endAt": "2026-11-30T20:00:00+07:00",
+                     *         "status": "DRAFT",
+                     *         "registrationOpenRequested": false,
+                     *         "createdAt": "2026-11-30T06:00:00+07:00",
+                     *         "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["Event"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changeMegaSaleEventStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventChangeStatus"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "name": "November sale",
+                     *         "registrationStartAt": "2026-11-30T07:00:00+07:00",
+                     *         "registrationEndAt": "2026-11-30T08:00:00+07:00",
+                     *         "startAt": "2026-11-30T09:00:00+07:00",
+                     *         "endAt": "2026-11-30T20:00:00+07:00",
+                     *         "status": "REGISTRATION_OPEN",
+                     *         "registrationOpenRequested": true,
+                     *         "createdAt": "2026-11-30T06:00:00+07:00",
+                     *         "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["Event"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listEventRegistrations: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["EventSellerStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "eventId": "66000000-0000-4000-8000-000000000001",
+                     *           "sellerId": "66000000-0000-4000-8000-000000000002",
+                     *           "status": "PENDING",
+                     *           "registeredAt": "2026-11-30T07:00:00+07:00"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["EventRegistration"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reviewEventRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventReview"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "eventId": "66000000-0000-4000-8000-000000000001",
+                     *         "sellerId": "66000000-0000-4000-8000-000000000002",
+                     *         "status": "APPROVED",
+                     *         "registeredAt": "2026-11-30T07:00:00+07:00",
+                     *         "reviewedBy": "66000000-0000-4000-8000-000000000001",
+                     *         "reviewedAt": "2026-11-30T07:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["EventRegistration"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    registerForMegaSaleEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "eventId": "66000000-0000-4000-8000-000000000001",
+                     *         "sellerId": "66000000-0000-4000-8000-000000000002",
+                     *         "status": "PENDING",
+                     *         "registeredAt": "2026-11-30T07:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["EventRegistration"];
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    withdrawMegaSaleRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listClaimableVouchers: {
+        parameters: {
+            query?: {
+                productId?: string;
+                sellerId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["PublicVoucher"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Catalog response */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catalog unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherWrite"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00",
+                     *           "fundingType": "PLATFORM",
+                     *           "sellerFundingPercent": 0,
+                     *           "termsVersion": 1,
+                     *           "status": "DRAFT",
+                     *           "claimCount": 0,
+                     *           "committedUses": 0,
+                     *           "committedDiscount": 0,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         },
+                     *         "productIds": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listManagedVouchers: {
+        parameters: {
+            query?: {
+                sourceType?: components["schemas"]["VoucherSource"];
+                status?: components["schemas"]["VoucherStatus"];
+                eventId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "voucher": {
+                     *             "id": "66000000-0000-4000-8000-000000000001",
+                     *             "code": "WELCOME",
+                     *             "name": "Welcome voucher",
+                     *             "sourceType": "PLATFORM",
+                     *             "discountType": "FIXED",
+                     *             "discountValue": 10000,
+                     *             "minOrderAmount": 50000,
+                     *             "productScope": "ALL",
+                     *             "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *             "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *             "validFrom": "2026-11-30T08:00:00+07:00",
+                     *             "validUntil": "2026-11-30T20:00:00+07:00",
+                     *             "fundingType": "PLATFORM",
+                     *             "sellerFundingPercent": 0,
+                     *             "termsVersion": 1,
+                     *             "status": "DRAFT",
+                     *             "claimCount": 0,
+                     *             "committedUses": 0,
+                     *             "committedDiscount": 0,
+                     *             "createdAt": "2026-11-30T06:00:00+07:00",
+                     *             "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *           },
+                     *           "productIds": []
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getManagedVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00",
+                     *           "fundingType": "PLATFORM",
+                     *           "sellerFundingPercent": 0,
+                     *           "termsVersion": 1,
+                     *           "status": "DRAFT",
+                     *           "claimCount": 0,
+                     *           "committedUses": 0,
+                     *           "committedDiscount": 0,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         },
+                     *         "productIds": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"];
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    editVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherWrite"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00",
+                     *           "fundingType": "PLATFORM",
+                     *           "sellerFundingPercent": 0,
+                     *           "termsVersion": 1,
+                     *           "status": "DRAFT",
+                     *           "claimCount": 0,
+                     *           "committedUses": 0,
+                     *           "committedDiscount": 0,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         },
+                     *         "productIds": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changeVoucherStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherChangeStatus"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00",
+                     *           "fundingType": "PLATFORM",
+                     *           "sellerFundingPercent": 0,
+                     *           "termsVersion": 1,
+                     *           "status": "ACTIVE",
+                     *           "claimCount": 0,
+                     *           "committedUses": 0,
+                     *           "committedDiscount": 0,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         },
+                     *         "productIds": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    replaceVoucherProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherProducts"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00",
+                     *           "fundingType": "PLATFORM",
+                     *           "sellerFundingPercent": 0,
+                     *           "termsVersion": 1,
+                     *           "status": "DRAFT",
+                     *           "claimCount": 0,
+                     *           "committedUses": 0,
+                     *           "committedDiscount": 0,
+                     *           "createdAt": "2026-11-30T06:00:00+07:00",
+                     *           "updatedAt": "2026-11-30T06:00:00+07:00"
+                     *         },
+                     *         "productIds": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["ManagedVoucher"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Catalog response */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catalog unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    joinEventVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinVoucher"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "voucherId": "66000000-0000-4000-8000-000000000001",
+                     *         "eventSellerId": "66000000-0000-4000-8000-000000000002",
+                     *         "status": "ACTIVE",
+                     *         "acceptedTermsVersion": 1,
+                     *         "acceptedTermsSnapshot": "Applies to eligible lines.",
+                     *         "sellerFundingPercentSnapshot": 35,
+                     *         "acceptedAt": "2026-11-30T07:00:00+07:00"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["VoucherParticipation"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    withdrawFromEventVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listVoucherUsages: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "orderId": "66000000-0000-4000-8000-000000000001",
+                     *           "status": "RESERVED",
+                     *           "eligibleAmount": 50000,
+                     *           "discountAmount": 10000,
+                     *           "sellerFunded": 0,
+                     *           "platformFunded": 10000,
+                     *           "reservedAt": "2026-11-30T08:00:00+07:00",
+                     *           "reservedUntil": "2026-11-30T09:00:00+07:00"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["VoucherUsage"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    claimVoucher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "id": "66000000-0000-4000-8000-000000000001",
+                     *         "status": "CLAIMED",
+                     *         "claimedAt": "2026-11-30T07:00:00+07:00",
+                     *         "expiresAt": "2026-11-30T20:00:00+07:00",
+                     *         "voucher": {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "code": "WELCOME",
+                     *           "name": "Welcome voucher",
+                     *           "sourceType": "PLATFORM",
+                     *           "discountType": "FIXED",
+                     *           "discountValue": 10000,
+                     *           "minOrderAmount": 50000,
+                     *           "productScope": "ALL",
+                     *           "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *           "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *           "validFrom": "2026-11-30T08:00:00+07:00",
+                     *           "validUntil": "2026-11-30T20:00:00+07:00"
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["VoucherWalletEntry"];
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Business rule or state conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listVoucherWallet: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["WalletStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "66000000-0000-4000-8000-000000000001",
+                     *           "status": "CLAIMED",
+                     *           "claimedAt": "2026-11-30T07:00:00+07:00",
+                     *           "expiresAt": "2026-11-30T20:00:00+07:00",
+                     *           "voucher": {
+                     *             "id": "66000000-0000-4000-8000-000000000001",
+                     *             "code": "WELCOME",
+                     *             "name": "Welcome voucher",
+                     *             "sourceType": "PLATFORM",
+                     *             "discountType": "FIXED",
+                     *             "discountValue": 10000,
+                     *             "minOrderAmount": 50000,
+                     *             "productScope": "ALL",
+                     *             "claimStartAt": "2026-11-30T07:00:00+07:00",
+                     *             "claimEndAt": "2026-11-30T08:00:00+07:00",
+                     *             "validFrom": "2026-11-30T08:00:00+07:00",
+                     *             "validUntil": "2026-11-30T20:00:00+07:00"
+                     *           }
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 10,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        /** @default 0 */
+                        code: number;
+                        message: string;
+                        data: components["schemas"]["VoucherWalletEntry"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            /** @description Invalid parameters or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Insufficient permission or wrong owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gateway rate limit reached */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getOrderShippingSnapshot: {
         parameters: {
             query?: never;
@@ -1698,8 +4550,9 @@ export interface operations {
     getCartPricing: {
         parameters: {
             query?: {
-                /** @description Accepted and ignored (D01). */
+                /** @description Legacy alias for one voucher code. */
                 promoCode?: string;
+                voucherCodes?: components["schemas"]["VoucherCodes"];
             };
             header?: never;
             path?: never;
@@ -2050,7 +4903,9 @@ export interface operations {
                  *         "countryCode": "VN"
                  *       },
                  *       "paymentMethod": "SEPAY",
-                 *       "promoCode": "IGNORED-D01"
+                 *       "voucherCodes": [
+                 *         "WELCOME"
+                 *       ]
                  *     }
                  */
                 "application/json": components["schemas"]["CheckoutPreviewRequest"];
@@ -2532,7 +5387,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Conflict. Codes: `COMMERCE_INSUFFICIENT_STOCK`, `COMMERCE_IDEMPOTENCY_CONFLICT`, `COMMERCE_PROMOTION_NOT_SUPPORTED`, `COMMERCE_ITEM_UNAVAILABLE`, `COMMERCE_INVALID_ORDER_AMOUNT`, `COMMERCE_PRICE_CHANGED`. IDEMPOTENCY_CONFLICT applies when the same buyer reuses a key with changed shipping/payment data; a key belonging to another buyer returns 400 instead. PRICE_CHANGED includes skuId, oldPrice and newPrice; the reported cart price is saved, but no order or inventory reservation is created. Additional codes: `COMMERCE_SHIPPING_METADATA_REQUIRED`, `COMMERCE_INVALID_PARCEL`. */
+            /** @description Conflict. Codes: `COMMERCE_INSUFFICIENT_STOCK`, `COMMERCE_IDEMPOTENCY_CONFLICT`, `COMMERCE_VOUCHER_NOT_APPLICABLE`, `COMMERCE_ITEM_UNAVAILABLE`, `COMMERCE_INVALID_ORDER_AMOUNT`, `COMMERCE_PRICE_CHANGED`. IDEMPOTENCY_CONFLICT applies when the same buyer reuses a key with changed shipping/payment data; a key belonging to another buyer returns 400 instead. PRICE_CHANGED includes skuId, oldPrice and newPrice; the reported cart price is saved, but no order or inventory reservation is created. Additional codes: `COMMERCE_SHIPPING_METADATA_REQUIRED`, `COMMERCE_INVALID_PARCEL`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2542,7 +5397,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 409;
                         /** @enum {string} */
-                        code?: "COMMERCE_IDEMPOTENCY_CONFLICT" | "COMMERCE_PROMOTION_NOT_SUPPORTED" | "COMMERCE_ITEM_UNAVAILABLE" | "COMMERCE_INVALID_ORDER_AMOUNT" | "COMMERCE_SHIPPING_METADATA_REQUIRED" | "COMMERCE_INVALID_PARCEL";
+                        code?: "COMMERCE_IDEMPOTENCY_CONFLICT" | "COMMERCE_VOUCHER_NOT_APPLICABLE" | "COMMERCE_ITEM_UNAVAILABLE" | "COMMERCE_INVALID_ORDER_AMOUNT" | "COMMERCE_SHIPPING_METADATA_REQUIRED" | "COMMERCE_INVALID_PARCEL";
                     });
                 };
             };

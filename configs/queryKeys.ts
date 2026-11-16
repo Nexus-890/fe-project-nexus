@@ -4,6 +4,8 @@ import type { OrderFilters } from "../types/orderRequestType";
 import type { NotificationFilters } from "../types/notificationRequestType";
 import type { SellerAuctionFilters } from "../types/sellerAuctionType";
 import type { AuctionStatus } from "../types/auctionRoomType";
+import type { PayoutFilters } from "../types/payoutType";
+import type { SellerBankFilters } from "../types/sellerBankType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
@@ -22,7 +24,8 @@ export const queryKeys = {
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
     balances: (sessionId: number, skuId: string, warehouseId?: string) => ["backoffice", sessionId, "balances", { skuId, warehouseId }] as const,
     intake: (sessionId: number) => ["backoffice", sessionId, "intake"] as const,
-    payableOrders: (sessionId: number, page?: number) => page === undefined ? ["backoffice", sessionId, "payable-orders"] as const : ["backoffice", sessionId, "payable-orders", page] as const,
+    payouts: (sessionId: number, filters?: PayoutFilters) => filters === undefined ? ["backoffice", sessionId, "payouts"] as const : ["backoffice", sessionId, "payouts", filters] as const,
+    bankAccounts: (sessionId: number, filters?: SellerBankFilters) => filters === undefined ? ["backoffice", sessionId, "bank-accounts"] as const : ["backoffice", sessionId, "bank-accounts", filters] as const,
   },
   seller: {
     all: (sessionId: number) => ["seller", sessionId] as const,
@@ -37,7 +40,9 @@ export const queryKeys = {
     auctionProducts: (sessionId: number, page: number) => ["seller", sessionId, "auction-products", page] as const,
     auctionProduct: (sessionId: number, id: string) => ["seller", sessionId, "auction-product", id] as const,
     bankAccounts: (sessionId: number) => ["seller", sessionId, "bank-accounts"] as const,
-    payouts: (sessionId: number, page?: number) => page === undefined ? ["seller", sessionId, "payouts"] as const : ["seller", sessionId, "payouts", page] as const,
+    profile: (sessionId: number) => ["seller", sessionId, "profile"] as const,
+    payouts: (sessionId: number, page?: number, filters?: PayoutFilters) => page === undefined ? ["seller", sessionId, "payouts"] as const : ["seller", sessionId, "payouts", { page, ...filters }] as const,
+    payoutDetail: (sessionId: number, id: string) => ["seller", sessionId, "payout-detail", id] as const,
   },
 
   auctions: {
