@@ -12,7 +12,7 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
   const publicRow = (row) => ({ id: row.id, orderId: row.orderId, sellerId: row.sellerId, orderAmount: row.orderAmount,
     shippingFee: row.shippingFee, platformFeeRate: row.platformFeeRate, platformFee: row.platformFee, netAmount: row.netAmount,
     currency: row.currency, status: row.status, attemptCount: row.attemptCount, recipientAccountLast4: row.recipientAccountLast4,
-    providerReference: row.providerReference, createdAt: row.createdAt });
+    providerReference: row.providerReference, createdAt: row.createdAt, simulated: true });
   const snapshot = (row) => ({ ...publicRow(row), history: row.history.map((step) => ({ ...step })).reverse() });
   const verifiedBank = (sellerId) => getBankAccounts().find((bank) => bank.sellerId === sellerId && bank.active && bank.isDefault && bank.verificationStatus === "VERIFIED");
   const record = (row, event, fromStatus, actorId = system, extra = {}) => row.history.push({ id: randomUUID(), event, fromStatus, toStatus: row.status,

@@ -3,15 +3,15 @@ info:
   title: Issue-aligned seller payout reads and administrator retry
   version: 0.2.0-issue-257-261
   description: >-
-    Frontend integration contract transcribed from issues 257 and 261 supplied on
-    2026-11-16. The current develop backend has no payout HTTP implementation.
-    This file documents the expected boundary and local HTTP stand-in, not a
-    delivered API. Production uses real requests and displays failures when absent.
+    Frontend integration contract for the #257 payout API and the separate #261
+    administrator list follow-up. Production uses real requests and preserves
+    backend failures; local simulations are test-only.
     Payout creation is automatic after OrderCompleted for a funded COMPLETED order
     without refunds and positive net amount. There is no payout-create or payable-list
     endpoint. Platform fee is rounded half up to two decimals from
     (orderAmount - shippingFee) * platformFeeRate; netAmount is that base minus the
-    fee. Amounts and rate are decimal strings to preserve precision. Each payout
+    fee. The delivered backend serializes amounts and rate as JSON numbers; the
+    frontend normalizes them into exact decimal strings before rendering. Each payout
     retains its fee-rate snapshot. A provider acknowledgement is not transfer success.
     Seller profile and bank management use the separate issue 257 contracts under
     /api/v1/sellers/me and /api/v1/payments/seller-bank-accounts; they do not create
@@ -157,9 +157,12 @@ components:
       description: Backend capability is not delivered; UI shows the failure and explicit refresh
   schemas:
     Money:
-      type: string
-      pattern: '^\d{1,17}\.\d{2}$'
-      example: '4770000.00'
+      oneOf:
+        - type: number
+          minimum: 0
+        - type: string
+          pattern: '^\d{1,17}\.\d{2}$'
+      example: 4770000
     PayoutStatus:
       type: string
       enum: [ON_HOLD, PENDING, PROCESSING, UNKNOWN, SUCCEEDED, FAILED, RETURNED]
@@ -172,7 +175,14 @@ components:
         sellerId: {type: string, format: uuid}
         orderAmount: {$ref: '#/components/schemas/Money'}
         shippingFee: {$ref: '#/components/schemas/Money'}
-        platformFeeRate: {type: string, pattern: '^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$', example: '0.0000'}
+        platformFeeRate:
+          oneOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: string
+              pattern: '^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$'
+          example: 0
         platformFee: {$ref: '#/components/schemas/Money'}
         netAmount: {$ref: '#/components/schemas/Money'}
         currency: {type: string, enum: [VND]}

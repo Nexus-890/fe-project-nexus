@@ -1,4 +1,4 @@
-/** Issue #257/#261 payout contract; monetary wire values remain exact decimal strings. */
+/** Mô hình UI dùng chuỗi thập phân; API #257 trả tiền và tỷ lệ phí dạng số JSON. */
 export const payoutStatuses = ["ON_HOLD", "PENDING", "PROCESSING", "UNKNOWN", "SUCCEEDED", "FAILED", "RETURNED"] as const;
 export type PayoutStatus = typeof payoutStatuses[number];
 export const payoutNeedsActionStatuses = ["ON_HOLD", "UNKNOWN", "FAILED", "RETURNED"] as const satisfies readonly PayoutStatus[];
@@ -19,6 +19,7 @@ export type SellerPayout = {
   recipientAccountLast4: string | null;
   providerReference: string | null;
   createdAt: string;
+  simulated: boolean;
 };
 export type PayoutHistoryEntry = {
   id: string;

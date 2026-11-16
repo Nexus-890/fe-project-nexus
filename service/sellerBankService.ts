@@ -10,10 +10,12 @@ export const parseSellerBankAccount = (value: unknown): SellerBankAccount => {
     typeof value.accountLast4 !== "string" || !/^\d{4}$/.test(value.accountLast4) || typeof value.accountHolderName !== "string" ||
     !value.accountHolderName.trim() || value.accountHolderName.length > 100 || !bankVerificationStatuses.some((status) => status === value.verificationStatus) ||
     typeof value.isDefault !== "boolean" || typeof value.active !== "boolean" ||
+    !Number.isSafeInteger(value.version) || Number(value.version) < 0 ||
     ["accountNumber", "accountNumberEncrypted", "account_number", "account_number_encrypted", "recipientAccountEncrypted"].some((key) => Object.hasOwn(value, key)))
     throw createInvalidResponseError("Invalid masked seller bank account response");
   return { id: value.id, sellerId: value.sellerId, bankCode: value.bankCode, accountLast4: value.accountLast4,
-    accountHolderName: value.accountHolderName, verificationStatus: value.verificationStatus as SellerBankAccount["verificationStatus"], isDefault: value.isDefault, active: value.active };
+    accountHolderName: value.accountHolderName, verificationStatus: value.verificationStatus as SellerBankAccount["verificationStatus"],
+    isDefault: value.isDefault, active: value.active, version: Number(value.version) };
 };
 export const maskedSellerBankAccount = (account: Pick<SellerBankAccount, "accountLast4">) => `•••• ${account.accountLast4}`;
 const parseAccounts = (value: unknown): SellerBankAccount[] => {
@@ -25,7 +27,7 @@ const parseAccounts = (value: unknown): SellerBankAccount[] => {
   return rows;
 };
 const bankInput = (input: SellerBankAccountInput): SellerBankAccountInput => {
-  if (!/^\d{6}$/.test(input.bankCode) || !/^\d{6,34}$/.test(input.accountNumber) ||
+  if (!/^\d{6}$/.test(input.bankCode) || !/^\d{4,34}$/.test(input.accountNumber) ||
     !input.accountHolderName.trim() || input.accountHolderName.trim().length > 100)
     throw createInvalidResponseError("Enter a six-digit bank BIN, account number and account holder name");
   return { bankCode: input.bankCode, accountNumber: input.accountNumber, accountHolderName: input.accountHolderName.trim() };
@@ -53,8 +55,9 @@ export const updateSellerBankAccount = async (id: string, input: SellerBankAccou
   const body = bankInput(input);
   const { data } = await requestApi("PUT", `${bankPath}/${id}`, body, { ...options, auth: true, params: undefined });
   const account = parseSellerBankAccount(data);
-  if (account.id !== id || account.accountLast4 !== body.accountNumber.slice(-4) || account.verificationStatus !== "UNVERIFIED")
-    throw createInvalidResponseError("Bank account edits must require verification again");
+  if (account.id !== id || account.accountLast4 !== body.accountNumber.slice(-4) ||
+    account.bankCode !== body.bankCode || account.accountHolderName !== body.accountHolderName)
+    throw createInvalidResponseError("Mismatched bank account update response");
   return account;
 };
 export const setDefaultSellerBankAccount = async (id: string, options: ServiceRequestOptions = {}): Promise<SellerBankAccount> => {
@@ -77,12 +80,15 @@ export const getAdminBankAccounts = async (filters: SellerBankAccountFilters, op
   return { content, page, size, totalPages: response.page.totalPages, totalElements: response.page.totalElements };
 };
 export const verifySellerBankAccount = async (id: string, input: VerifySellerBankAccountInput, options: ServiceRequestOptions = {}): Promise<SellerBankAccount> => {
-  if (!uuid(id) || !["VERIFIED", "REJECTED"].includes(input.verificationStatus) || input.reason !== undefined && (!input.reason.trim() || input.reason.trim().length > 500) ||
+  if (!uuid(id) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 ||
+    !["VERIFIED", "REJECTED"].includes(input.verificationStatus) || input.reason !== undefined && (!input.reason.trim() || input.reason.trim().length > 500) ||
     input.verificationStatus === "REJECTED" && !input.reason?.trim()) throw createInvalidResponseError("Provide a verification decision and a reason for rejection");
-  const body = { verificationStatus: input.verificationStatus, ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) };
+  const body = { verificationStatus: input.verificationStatus, expectedVersion: input.expectedVersion,
+    ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) };
   const { data } = await requestApi("POST", `${bankPath}/${id}/verify`, body, { ...options, auth: true, params: undefined });
   const account = parseSellerBankAccount(data);
-  if (account.id !== id || account.verificationStatus !== input.verificationStatus) throw createInvalidResponseError("Mismatched bank verification response");
+  if (account.id !== id || account.verificationStatus !== input.verificationStatus || account.version !== input.expectedVersion + 1)
+    throw createInvalidResponseError("Mismatched bank verification response");
   return account;
 };
 export const sellerAccountErrorMessage = (error: ApiError) => error.status === 501 ? "Seller account services are not available yet. Please try again later." : error.detail || error.title;

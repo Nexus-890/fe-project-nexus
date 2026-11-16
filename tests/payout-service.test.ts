@@ -15,7 +15,7 @@ const bankId = "95000000-0000-4000-8000-000000000001";
 const orderId = "95000000-0000-4000-8000-000000000002";
 const id = "95000000-0000-4000-8000-000000000003";
 const createdAt = "2026-11-16T03:00:00Z";
-const row = { id, orderId, sellerId, orderAmount: "4800000.00", shippingFee: "30000.00", platformFeeRate: "0.0000", platformFee: "0.00", netAmount: "4770000.00", currency: "VND", status: "ON_HOLD", attemptCount: 0, recipientAccountLast4: null, providerReference: null, createdAt };
+const row = { id, orderId, sellerId, orderAmount: "4800000.00", shippingFee: "30000.00", platformFeeRate: "0.0000", platformFee: "0.00", netAmount: "4770000.00", currency: "VND", status: "ON_HOLD", attemptCount: 0, recipientAccountLast4: null, providerReference: null, createdAt, simulated: true };
 const step = { id: bankId, event: "HELD", fromStatus: null, toStatus: "ON_HOLD", attemptNo: 0, amount: "4770000.00", sellerBankId: null, recipientAccountLast4: null, provider: null, providerReference: null, providerStatus: null, errorCode: null, errorMessage: null, simulated: true, actorId: "00000000-0000-0000-0000-000000000000", occurredAt: createdAt };
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
 const status = (expected: number) => (error: unknown) => isApiError(error) && error.status === expected;
@@ -26,12 +26,34 @@ test("payout models preserve exact money strings and all issue statuses, includi
     ...(["SUCCEEDED", "RETURNED"].includes(state) ? { attemptCount: 1, recipientAccountLast4: "4321", providerReference: "CONFIRMED-1" } : {}) }).status, state);
   assert.deepEqual(payoutNeedsActionStatuses, ["ON_HOLD", "UNKNOWN", "FAILED", "RETURNED"]);
   assert.equal(parseSellerPayout({ ...row, orderAmount: "99999999999999999.99", shippingFee: "0.01", netAmount: "99999999999999999.98" }).netAmount, "99999999999999999.98");
-  for (const bad of [{ ...row, status: "PAID" }, { ...row, status: "REVERSED" }, { ...row, netAmount: 4770000 }, { ...row, netAmount: "4.77e6" }, { ...row, netAmount: "4770000.001" }, { ...row, shippingFee: "-1.00" }, { ...row, netAmount: "4800000.00" }, { ...row, platformFeeRate: "1.1" }, { ...row, recipientAccountLast4: "12345678" }, { ...row, recipientAccountNumber: "0012345678" }]) assert.throws(() => parseSellerPayout(bad), invalid);
+  for (const bad of [{ ...row, status: "PAID" }, { ...row, status: "REVERSED" }, { ...row, netAmount: NaN }, { ...row, netAmount: "4.77e6" }, { ...row, netAmount: "4770000.001" }, { ...row, shippingFee: "-1.00" }, { ...row, netAmount: "4800000.00" }, { ...row, platformFeeRate: "1.1" }, { ...row, simulated: undefined }, { ...row, recipientAccountLast4: "12345678" }, { ...row, recipientAccountNumber: "0012345678" }]) assert.throws(() => parseSellerPayout(bad), invalid);
   for (const state of ["SUCCEEDED", "RETURNED"]) {
     const confirmed = { ...row, status: state, attemptCount: 1, recipientAccountLast4: "4321", providerReference: "CONFIRMED-1" };
     for (const missing of [{ attemptCount: 0 }, { recipientAccountLast4: null }, { providerReference: null }, { providerReference: undefined }])
       assert.throws(() => parseSellerPayout({ ...confirmed, ...missing }), invalid);
   }
+});
+
+test("delivered numeric payout money and rate normalize without rounding or losing the simulation marker", async () => {
+  const numeric = { ...row, orderAmount: 100000.40, shippingFee: 5000, platformFeeRate: 0.0125,
+    platformFee: 1187.51, netAmount: 93812.89, simulated: true };
+  const normalized = parseSellerPayout(numeric);
+  assert.equal(normalized.orderAmount, "100000.40"); assert.equal(normalized.shippingFee, "5000.00");
+  assert.equal(normalized.platformFee, "1187.51"); assert.equal(normalized.netAmount, "93812.89");
+  assert.equal(normalized.platformFeeRate, "0.0125"); assert.equal(normalized.simulated, true);
+  assert.equal(parseSellerPayout({ ...numeric, simulated: false }).simulated, false);
+  const detail = { ...numeric, history: [{ ...step, amount: 93812.89 }] };
+  assert.equal(parsePayoutDetail(detail).history[0].amount, "93812.89");
+  const request = { context: { fetch: async () => Response.json({ ...envelope([numeric]),
+    page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } }) } };
+  assert.equal((await getSellerPayouts(0, request)).content[0].netAmount, "93812.89");
+  const detailRequest = { context: { fetch: async () => Response.json(envelope(detail)) } };
+  assert.equal((await getPayoutDetail(id, detailRequest)).history[0].amount, "93812.89");
+  assert.equal((await retryPayout(id, randomUUID(), detailRequest)).simulated, true);
+  for (const bad of [{ netAmount: Infinity }, { netAmount: -1 }, { netAmount: 93812.891 },
+    { orderAmount: Number.MAX_SAFE_INTEGER }, { platformFeeRate: NaN }, { platformFeeRate: Infinity },
+    { platformFeeRate: 0.00001 }, { platformFeeRate: -0.01 }, { platformFeeRate: 1.0001 }])
+    assert.throws(() => parseSellerPayout({ ...numeric, ...bad }), invalid);
 });
 
 test("detail history validates statuses, masked snapshots and newest-first steps without losing sandbox labels", () => {

@@ -1,4 +1,4 @@
-/** Masked bank projection from issue #257; never retain the account number. */
+/** Mô hình tài khoản đã che số; version gắn quyết định duyệt với dữ liệu admin đã xem. */
 export const bankVerificationStatuses = ["UNVERIFIED", "VERIFIED", "REJECTED"] as const;
 export type BankVerificationStatus = typeof bankVerificationStatuses[number];
 export type SellerBankAccount = {
@@ -10,6 +10,7 @@ export type SellerBankAccount = {
   verificationStatus: BankVerificationStatus;
   isDefault: boolean;
   active: boolean;
+  version: number;
 };
 export type SellerBankAccountInput = {
   bankCode: string;
@@ -18,6 +19,7 @@ export type SellerBankAccountInput = {
 };
 export type VerifySellerBankAccountInput = {
   verificationStatus: "VERIFIED" | "REJECTED";
+  expectedVersion: number;
   reason?: string;
 };
 export type SellerBankAccountFilters = {

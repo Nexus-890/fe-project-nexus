@@ -112,7 +112,7 @@ paths:
       - {$ref: '#/components/parameters/Id'}
     post:
       summary: Administrator verifies or rejects a bank account
-      description: ADMIN only; VERIFIED active default releases eligible ON_HOLD payouts automatically. This operation is not a manual payout trigger or a money transfer.
+      description: ADMIN only; expectedVersion must match the displayed bank account version. A stale review returns409 without verifying or releasing payouts. VERIFIED active default releases eligible ON_HOLD payouts automatically.
       requestBody:
         required: true
         content:
@@ -120,9 +120,10 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [verificationStatus]
+              required: [verificationStatus, expectedVersion]
               properties:
                 verificationStatus: {type: string, enum: [VERIFIED, REJECTED]}
+                expectedVersion: {type: integer, format: int64, minimum: 0, description: Version of the account details reviewed by the administrator.}
                 reason: {type: string, minLength: 1, maxLength: 500, description: Frontend requires a reason for rejection; owning BE must confirm final validation.}
       responses:
         '200': {$ref: '#/components/responses/Bank'}
@@ -130,6 +131,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
@@ -208,16 +210,24 @@ components:
         totalPages: {type: integer, minimum: 0}
     SellerProfile:
       type: object
-      required: [sellerId, companyName, contactPhone, status]
+      required: [userId, companyName, contactPhone, status, applicationNote, rejectionReason, appliedAt, reviewedBy, reviewedAt, version, createdAt, updatedAt]
       properties:
-        sellerId: {type: string, format: uuid}
+        userId: {type: string, format: uuid}
         companyName: {type: string, minLength: 1, maxLength: 200}
         contactPhone: {type: string, minLength: 1, maxLength: 20}
         status: {type: string, enum: [PENDING, ACTIVE, REJECTED]}
+        applicationNote: {type: string, nullable: true}
+        rejectionReason: {type: string, nullable: true}
+        appliedAt: {type: string, format: date-time}
+        reviewedBy: {type: string, format: uuid, nullable: true}
+        reviewedAt: {type: string, format: date-time, nullable: true}
+        version: {type: integer, format: int64, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     VerificationStatus: {type: string, enum: [UNVERIFIED, VERIFIED, REJECTED]}
     BankAccount:
       type: object
-      required: [id, sellerId, bankCode, accountLast4, accountHolderName, verificationStatus, isDefault, active]
+      required: [id, sellerId, bankCode, accountLast4, accountHolderName, verificationStatus, isDefault, active, version]
       properties:
         id: {type: string, format: uuid}
         sellerId: {type: string, format: uuid}
@@ -227,3 +237,4 @@ components:
         verificationStatus: {$ref: '#/components/schemas/VerificationStatus'}
         isDefault: {type: boolean}
         active: {type: boolean}
+        version: {type: integer, format: int64, minimum: 0}
