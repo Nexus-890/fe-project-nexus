@@ -1,4 +1,4 @@
-/* Test-only HTTP dependencies. State/history follow the #168/#169 draft;
+/* Dependency HTTP chỉ dùng cho test. State/history theo #168/#169;
  * /stream and named state events follow the #253 frontend handoff. */
 const http = require("node:http");
 const { createHash, randomUUID } = require("node:crypto");
@@ -383,29 +383,44 @@ http.createServer(async (req, res) => {
     const rows = frozenBids ?? bids;
     return json(res, success(rows.slice(number * size, (number + 1) * size), page(number, size, rows.length)));
   }
+  // Mô phỏng consumer riêng: POST chỉ xếp hàng, GET quan sát kết quả xử lý sau đó.
+  if (path.startsWith(`/v1/auctions/${auctionId}/bids/`) && req.method === "GET") {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your bid result.");
+    const command = Object.values(attempts).find((attempt) => attempt.receipt.bidId === path.split("/").at(-1));
+    if (!command) return problem(res, 404, "AUCTION_BID_NOT_FOUND", "Bid not found.");
+    if (mode === "status-unavailable") return problem(res, 503, "AUCTION_UNAVAILABLE", "The result is temporarily unavailable.");
+    if (!command.result && mode !== "queued-delay") {
+      const minimum = command.minimum ?? detail.currentPrice + detail.bidIncrement;
+      if (command.amount < minimum) command.result = { ...command.receipt, status: "REJECTED", amount: command.amount, reason: "AUCTION_BID_TOO_LOW", minimum };
+      else {
+        detail.currentPrice = command.amount; detail.bidCount += 1;
+        if (Date.parse(detail.endAt) - Date.parse(command.receipt.requestedAt) <= 300000) { detail.endAt = new Date(Date.parse(detail.endAt) + 300000).toISOString(); detail.extensionCount += 1; }
+        bids.unshift({ amount: command.amount, bidderName: "j***n", placedAt: command.receipt.requestedAt });
+        own = { auctionId, title, amount: command.amount, placedAt: bids[0].placedAt, auctionStatus: detail.status, leading: true, won: false, orderId: null, paymentDueAt: null, finalPrice: null };
+        command.result = { ...command.receipt, status: "PLACED", amount: command.amount, currentPrice: command.amount, leaderBidderId: buyerId };
+        evidence.bidWrites += 1;
+        publish();
+      }
+    }
+    return json(res, success(command.result ?? { ...command.receipt, amount: command.amount }));
+  }
   if (path === `/v1/auctions/${auctionId}/bids` && req.method === "POST") {
     const key = req.headers["idempotency-key"];
     const amount = req.body?.amount;
     evidence.bidRequests.push({ key, amount, authorized: authenticated, at: Date.now() });
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to place a bid.");
     if (!key) return problem(res, 400, "AUCTION_IDEMPOTENCY_KEY_REQUIRED", "An Idempotency-Key is required.");
-    if (attempts[key]) return json(res, success(attempts[key]));
+    if (attempts[key]) {
+      if (attempts[key].amount !== amount) return problem(res, 409, "AUCTION_IDEMPOTENCY_KEY_CONFLICT", "Use the original bid amount.");
+      return json(res, success(attempts[key].receipt), 202);
+    }
     if (detail.status !== "ACTIVE") return problem(res, 409, "AUCTION_NOT_ACTIVE", "This auction has ended.");
-    if (mode === "low") return problem(res, 400, "AUCTION_BID_TOO_LOW", "The bid is below the minimum.", { minimum: detail.currentPrice + 100 });
     if (typeof amount !== "number" || !Number.isFinite(amount)) return problem(res, 400, "VALIDATION_FAILED", "Bid amount must be a JSON number.");
-    const minimum = detail.currentPrice + detail.bidIncrement;
-    if (amount < minimum) return problem(res, 400, "AUCTION_BID_TOO_LOW", "The bid is below the minimum.", { minimum });
-    detail.currentPrice = amount; detail.bidCount += 1;
-    if (Date.parse(detail.endAt) - Date.now() <= 300000) { detail.endAt = new Date(Date.parse(detail.endAt) + 300000).toISOString(); detail.extensionCount += 1; }
-    bids.unshift({ amount, bidderName: "j***n", placedAt: new Date().toISOString() });
-    own = { auctionId, title, amount, placedAt: bids[0].placedAt, auctionStatus: detail.status, leading: true, won: false, orderId: null, paymentDueAt: null, finalPrice: null };
-    const result = { bidId: randomUUID(), currentPrice: amount, leaderBidderId: buyerId };
-    attempts[key] = result;
+    const receipt = { bidId: randomUUID(), status: "QUEUED", requestedAt: new Date().toISOString() };
+    attempts[key] = { receipt, amount, minimum: mode === "low" ? detail.currentPrice + 100 : null };
     await pm.state.set("auction-api:attempts", attempts);
-    evidence.bidWrites += 1;
     if (mode === "lost-response") { mode = "normal"; return problem(res, 503, "AUCTION_UNAVAILABLE", "The bid response was lost. Retry this bid safely."); }
-    publish();
-    return json(res, success(result), 201);
+    return json(res, success(receipt), 202);
   }
   return problem(res, 501, "FIXTURE_UNMODELED", `Unmodeled dependency call: ${req.method} ${path}`);
 }).listen(process.env.PORT || 4500, "127.0.0.1");

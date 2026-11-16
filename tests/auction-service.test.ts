@@ -182,7 +182,8 @@ test("personal auction bid lookup searches every delivered page using current au
   } finally { await close(server); }
 });
 
-test("auction bids serialize numeric money with the supplied idempotency key for creation and replay", async () => {
+// Kiểm tra POST/replay luôn trả cùng biên nhận QUEUED, không nhầm 202 là bid đã thắng.
+test("auction bids serialize numeric money with the supplied idempotency key for queue acceptance and replay", async () => {
   let count = 0;
   let token = "first";
   const server = createServer(async (request, response) => {
@@ -194,8 +195,8 @@ test("auction bids serialize numeric money with the supplied idempotency key for
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), { amount: 9900.5 });
-    response.writeHead(count === 1 ? 201 : 200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(json({ bidId, currentPrice: 9900.5, leaderBidderId: bidderId })));
+    response.writeHead(202, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(json({ bidId, status: "QUEUED", requestedAt: ownBid.placedAt })));
   });
   const context = { baseUrl: await listen(server), getAccessToken: () => token };
   const headers = new AxiosHeaders({ "Idempotency-Key": "incorrect" });
@@ -203,7 +204,8 @@ test("auction bids serialize numeric money with the supplied idempotency key for
     const accepted = await placeAuctionBid(auctionId, { amount: "9900.50", idempotencyKey: key }, { context, auth: false, params: { ignored: true }, config: { headers } });
     token = "second";
     assert.deepEqual(await placeAuctionBid(auctionId, { amount: "9900.5", idempotencyKey: key }, { context }), accepted);
-    assert.equal(accepted.currentPrice, "9900.50");
+    assert.deepEqual(accepted, { bidId, status: "QUEUED", requestedAt: ownBid.placedAt });
+    assert.equal(count, 2);
     assert.equal(headers.get("Idempotency-Key"), "incorrect");
   } finally { await close(server); }
 });

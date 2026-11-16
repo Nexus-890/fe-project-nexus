@@ -41,7 +41,14 @@ export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount" | "fina
   paymentDueAt: string | null;
   orderId: string | null;
 };
-export type PlacedAuctionBid = Omit<components["schemas"]["BidResponse"], "currentPrice"> & { currentPrice: string };
+/** Biên nhận bất biến của yêu cầu; QUEUED chưa có nghĩa là giá bid đã được chấp nhận. */
+export type QueuedAuctionBid = components["schemas"]["BidResponse"];
+/** Kết quả riêng của người đặt bid; giá tiền được chuẩn hóa thành chuỗi thập phân. */
+export type AuctionBidResult =
+  | (QueuedAuctionBid & { amount: string })
+  | { bidId: string; status: "PLACED" | "OUTBID" | "WON"; requestedAt: string; amount: string; currentPrice: string; leaderBidderId: string }
+  | { bidId: string; status: "CANCELLED"; requestedAt: string; amount: string }
+  | { bidId: string; status: "REJECTED"; requestedAt: string; amount: string; reason: string; minimum: string | null };
 export type AuctionBidInput = { amount: string; idempotencyKey: string };
 export type AuctionUpdateRequest = components["schemas"]["UpdateAuctionRequest"];
 export type AuctionUpdateInput = Omit<AuctionUpdateRequest, "startingPrice" | "bidIncrement"> & { startingPrice: string; bidIncrement: string };

@@ -202,8 +202,8 @@ export interface paths {
         get: operations["listAuctionBids"];
         put?: never;
         /**
-         * Place a bid as a buyer
-         * @description Places a bid on an ACTIVE auction from startAt (inclusive) to endAt (exclusive). Outside that window, bids are refused even if the status is still ACTIVE. A conditional update prevents concurrent bids from both winning the same price. The authenticated buyer may not bid on their own auction. Anti-sniping is enabled by default: an accepted bid with at most five minutes remaining adds five minutes to endAt, capped at originalEndAt plus the configured maximum extension (30 minutes by default). The bid, extension and BidPlaced outbox event commit together; refused bids leave the deadline unchanged. Read the auction again to obtain its effective endAt and extensionCount. Idempotency-Key is a required UUID. A new key returns 201. Reusing a key for the same auction, authenticated bidder and numeric amount returns 200 with the original bidId, accepted amount and leaderBidderId, even if the auction state has since changed. Amounts such as 1050000 and 1050000.00 are equivalent. A different amount with the same key returns 409 AUCTION_IDEMPOTENCY_KEY_CONFLICT; use a new key for a different bid. A replay does not extend endAt or increment extensionCount, update the auction, insert a bid or publish another event. UUID letter case is normalized. The key is globally unique; reusing it for another auction, bidder or amount returns 409 without exposing the original bid. Concurrent successful requests with one key create one bid, increment bid_count once and publish one BidPlaced event.
+         * Accept a bid request for asynchronous processing
+         * @description Validates amount format, ACTIVE/time window and seller exclusion without locking the auction price. Persists a QUEUED request and BidRequested outbox command atomically, then returns 202. Minimum-price validation and anti-sniping run in the consumer using requestedAt, including requests consumed after endAt. Reusing the same UUID Idempotency-Key for the same auction, bidder and numeric amount returns the original 202 receipt even after processing. A different payload returns 409. Follow the private bid-status URL until PLACED or REJECTED.
          */
         post: operations["placeBid"];
         delete?: never;
@@ -266,6 +266,43 @@ export interface paths {
          * @description Any auction in CREATED/SCHEDULED/ACTIVE/ENDED/WON, including auctions with bids. Final SETTLED/FAILED/PAYMENT_TIMEOUT/CANCELLED cannot be cancelled. Emits one AuctionCancelled; repeated calls return 409 without another event.
          */
         post: operations["adminCancelAuction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/{id}/bids/{bidId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the authenticated bidder’s queued or final result */
+        get: operations["getBidStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/{id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream public auction snapshots over Server-Sent Events
+         * @description The first named state event is the current public state. Subsequent committed auction events coalesce for 200 ms and invalidate the one-second state cache. data is exactly GET /state data, without ApiResponse; id is the auction version. heartbeat events arrive every 15 seconds. Reconnect always receives the current snapshot, including when Last-Event-ID was supplied; this is not an event-history replay. The stream closes on ENDED, WON, SETTLED, FAILED, CANCELLED or PAYMENT_TIMEOUT. On failure/refusal the frontend retains its two-second polling fallback. Timeout is 30 minutes; each instance enforces its own configured connection cap.
+         */
+        get: operations["streamAuctionState"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -447,10 +484,41 @@ export interface components {
         BidResponse: {
             /** Format: uuid */
             bidId: string;
-            /** @description The original accepted bid amount, including on a replay after the auction price has changed. */
-            currentPrice: number;
+            /** @enum {string} */
+            status: "QUEUED";
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        BidAcceptedResponse: {
+            /** @example 0 */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["BidResponse"];
+        };
+        BidStatusEnvelope: {
+            /** @example 0 */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["BidStatus"];
+        };
+        BidStatus: {
             /** Format: uuid */
-            leaderBidderId: string;
+            bidId: string;
+            /** @enum {string} */
+            status: "QUEUED" | "PLACED" | "REJECTED" | "OUTBID" | "WON" | "CANCELLED";
+            /** Format: date-time */
+            requestedAt: string;
+            amount: number;
+            /** @description Accepted price at the time this request was processed. */
+            currentPrice?: number;
+            /** Format: uuid */
+            leaderBidderId?: string;
+            /** @enum {string} */
+            reason?: "AUCTION_BID_TOO_LOW" | "AUCTION_NOT_ACTIVE" | "AUCTION_SELLER_CANNOT_BID";
+            /** @description Minimum accepted price when a too-low request was rejected. */
+            minimum?: number;
         };
         Auction: {
             /** Format: uuid */
@@ -1225,9 +1293,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The key was already accepted for this auction, bidder and numeric amount. Returns the original response data and leaves the auction, bids and outbox unchanged. */
-            200: {
+            /** @description Durable queued receipt, also returned for a matching idempotent replay. */
+            202: {
                 headers: {
+                    /** @description Private result resource for the authenticated bidder. */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1236,36 +1306,16 @@ export interface operations {
                      *       "code": 0,
                      *       "message": "response success",
                      *       "data": {
-                     *         "bidId": "019a5509-abcd-7111-8111-111111111112",
-                     *         "currentPrice": 1200000,
-                     *         "leaderBidderId": "68000000-0000-4000-8000-000000000003"
+                     *         "bidId": "019a5509-abcd-7111-8111-111111111113",
+                     *         "status": "QUEUED",
+                     *         "requestedAt": "2026-11-16T10:00:00Z"
                      *       }
                      *     }
                      */
-                    "application/json": components["schemas"]["PlaceBidResponse"];
+                    "application/json": components["schemas"]["BidAcceptedResponse"];
                 };
             };
-            /** @description Bid accepted and the auction price advanced. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "code": 0,
-                     *       "message": "response success",
-                     *       "data": {
-                     *         "bidId": "019a5509-abcd-7111-8111-111111111112",
-                     *         "currentPrice": 1200000,
-                     *         "leaderBidderId": "68000000-0000-4000-8000-000000000003"
-                     *       }
-                     *     }
-                     */
-                    "application/json": components["schemas"]["PlaceBidResponse"];
-                };
-            };
-            /** @description Idempotency-Key is missing or invalid, or the bid amount is invalid or below the current minimum. A rejected request writes no bid. */
+            /** @description Invalid amount, missing/malformed UUID Idempotency-Key or invalid request/parameter. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1275,7 +1325,7 @@ export interface operations {
                         /** @enum {unknown} */
                         status?: 400;
                         /** @enum {unknown} */
-                        code?: "AUCTION_BID_TOO_LOW";
+                        code?: never;
                         /** @description The minimum amount accepted at the time of the failed bid. */
                         minimum: number;
                     }) | (components["schemas"]["Problem"] & {
@@ -1580,6 +1630,157 @@ export interface operations {
             429: components["responses"]["RateLimited"];
             500: components["responses"]["UnexpectedError"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getBidStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                bidId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description QUEUED while waiting, PLACED with the price/leader snapshot, or REJECTED with reason and optional minimum. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BidStatusEnvelope"];
+                };
+            };
+            /** @description Invalid UUID path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description UNAUTHENTICATED — A valid bearer token is required. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description FORBIDDEN — The caller lacks the BUYER role or the AUCTION.BID privilege. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown request, wrong auction or another bidder. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "AUCTION_BID_NOT_FOUND";
+                    };
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UnexpectedError"];
+        };
+    };
+    streamAuctionState: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional browser reconnection cursor; a fresh current state is always sent. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A long-lived SSE protocol response, without an ApiResponse wrapper. */
+            200: {
+                headers: {
+                    "X-Accel-Buffering"?: "no";
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example id: 12
+                     *     event: state
+                     *     data: {"auctionId":"019a5509-abcd-7111-8111-111111111111","currentPrice":1200000,"bidCount":2,"bidIncrement":50000,"leaderBidderName":"N***","endAt":"2026-11-16T11:05:00Z","status":"ACTIVE","serverTime":"2026-11-16T11:00:00Z"}
+                     *
+                     *     event: heartbeat
+                     *     data: 2026-11-16T11:00:15Z
+                     */
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Invalid auction UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER";
+                    };
+                };
+            };
+            /** @description Unknown, restricted or soft-deleted auction; stream has not opened. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "AUCTION_NOT_FOUND";
+                    };
+                };
+            };
+            500: components["responses"]["UnexpectedError"];
+            /** @description Instance connection cap reached or shutting down; use polling. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "AUCTION_STREAM_BUSY";
+                    };
+                };
+            };
         };
     };
 }

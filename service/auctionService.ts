@@ -6,7 +6,7 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { ApiResponse, Page } from "../types/commonResponseType";
 import type {
   AuctionBid, AuctionBidInput, AuctionCancelRequest, AuctionRoom, AuctionState, AuctionStatus,
-  AuctionUpdateInput, AuctionUpdateRequest, MyAuctionBid, PlacedAuctionBid,
+  AuctionUpdateInput, AuctionUpdateRequest, MyAuctionBid, QueuedAuctionBid, AuctionBidResult,
 } from "../types/auctionRoomType";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -260,9 +260,10 @@ export const getMyAuctionBid = async (
   return null;
 };
 
+/** Gửi một yêu cầu có khóa idempotency; chỉ trả biên nhận 202, chưa tuyên bố bid thắng. */
 export const placeAuctionBid = async (
   id: string, input: AuctionBidInput, options: ServiceRequestOptions = {},
-): Promise<PlacedAuctionBid> => {
+): Promise<QueuedAuctionBid> => {
   requireAuctionId(id);
   if (!isUuid(input.idempotencyKey))
     throw createInvalidResponseError("A valid Idempotency-Key is required");
@@ -272,9 +273,35 @@ export const placeAuctionBid = async (
   const { data } = await requestApi<unknown>("POST", `/api/v1/auctions/${id}/bids`, { amount }, {
     ...options, auth: true, params: undefined, config: { ...options.config, headers },
   });
-  if (!isRecord(data) || !isUuid(data.bidId) || !isUuid(data.leaderBidderId))
-    throw createInvalidResponseError("Invalid placed bid");
-  return { bidId: data.bidId, currentPrice: parseAuctionMoney(data.currentPrice), leaderBidderId: data.leaderBidderId };
+  if (!isRecord(data) || !isUuid(data.bidId) || data.status !== "QUEUED" || !isInstant(data.requestedAt))
+    throw createInvalidResponseError("Invalid queued bid receipt");
+  return { bidId: data.bidId, status: "QUEUED", requestedAt: data.requestedAt };
+};
+
+/** Đọc trạng thái riêng bằng token hiện tại; không lấy kết quả từ tên người bid đã che. */
+export const getAuctionBidStatus = async (
+  id: string, bidId: string, options: ServiceRequestOptions = {},
+): Promise<AuctionBidResult> => {
+  requireAuctionId(id);
+  if (!isUuid(bidId)) throw createInvalidResponseError("A valid bid reference is required");
+  const { data } = await requestApi<unknown>("GET", `/api/v1/auctions/${id}/bids/${bidId}`, undefined, {
+    ...options, auth: true, params: undefined,
+  });
+  if (!isRecord(data) || data.bidId !== bidId || !isInstant(data.requestedAt))
+    throw createInvalidResponseError("Invalid bid result reference");
+  const common = { bidId, requestedAt: data.requestedAt, amount: parseAuctionMoney(data.amount) };
+  if (data.status === "QUEUED") return { ...common, status: "QUEUED" };
+  // Replay khóa cũ vẫn có thể trỏ tới bid OUTBID/WON/CANCELLED đã tồn tại trước migration queue.
+  if ((data.status === "PLACED" || data.status === "OUTBID" || data.status === "WON") && isUuid(data.leaderBidderId))
+    return { ...common, status: data.status, currentPrice: parseAuctionMoney(data.currentPrice), leaderBidderId: data.leaderBidderId };
+  if (data.status === "CANCELLED") return { ...common, status: "CANCELLED" };
+  if (data.status === "REJECTED" && typeof data.reason === "string" && /^AUCTION_[A-Z_]+$/.test(data.reason)) {
+    const minimum = data.minimum == null ? null : parseAuctionMoney(data.minimum);
+    if (data.reason === "AUCTION_BID_TOO_LOW" && minimum === null)
+      throw createInvalidResponseError("A rejected low bid must include the minimum");
+    return { ...common, status: "REJECTED", reason: data.reason, minimum };
+  }
+  throw createInvalidResponseError("Invalid bid processing status");
 };
 
 /** Only the named low-bid problem can change the form's actionable minimum. */

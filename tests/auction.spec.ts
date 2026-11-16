@@ -533,3 +533,40 @@ test("a private payment timeout closes checkout while the public projection is s
   await expect(page.getByRole("link", { name: "Continue to payment", exact: true })).toHaveCount(0);
   expect((await evidence(request)).shippingRequests).toHaveLength(0);
 });
+
+// Bằng chứng UI: 202 vẫn đang chờ; chỉ GET PLACED mới cho phép hiển thị thành công và nhận bid mới.
+test("a queued receipt keeps the bid form pending until its private result is placed", async ({ page, request }) => {
+  await signIn(page);
+  await control(request, { mode: "queued-delay" });
+  await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Placing bid…", exact: true })).toBeDisabled();
+  await expect.poll(async () => (await evidence(request)).requests.filter((call) => /\/bids\/[0-9a-f-]+$/.test(call.path)).length).toBeGreaterThanOrEqual(2);
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Bid amount", { exact: true })).toBeDisabled();
+  expect((await evidence(request)).bidWrites).toBe(0);
+  await control(request, { mode: "normal" });
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Place Bid", exact: true })).toBeEnabled();
+  const result = await evidence(request);
+  expect(result.bidRequests).toHaveLength(1);
+  expect(result.bidWrites).toBe(1);
+  expect(result.requests.filter((call) => /\/bids\/[0-9a-f-]+$/.test(call.path)).every((call) => call.authorized)).toBe(true);
+});
+
+// Đã có biên nhận rồi mà GET lỗi thì retry đọc lại cùng bidId, không POST thêm một yêu cầu bid khác.
+test("retry after a result read failure resumes the accepted bid without another POST", async ({ page, request }) => {
+  await signIn(page);
+  await control(request, { mode: "status-unavailable" });
+  await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /result is unknown/ })).toBeVisible();
+  await expect(page.getByLabel("Bid amount", { exact: true })).toBeDisabled();
+  await control(request, { mode: "normal" });
+  await page.getByRole("button", { name: "Retry same bid", exact: true }).click();
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
+  const result = await evidence(request);
+  expect(result.bidRequests).toHaveLength(1);
+  expect(result.bidWrites).toBe(1);
+  const results = result.requests.filter((call) => /\/bids\/[0-9a-f-]+$/.test(call.path));
+  expect(results.length).toBeGreaterThanOrEqual(2);
+  expect(new Set(results.map((call) => call.path)).size).toBe(1);
+});
