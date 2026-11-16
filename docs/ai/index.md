@@ -4,6 +4,7 @@ Read the frontend [AGENTS.md](../../AGENTS.md) first. Use the table to select re
 
 | Task | Documentation | Source to inspect |
 | --- | --- | --- |
+| Auction list, My Bids or second chance offers | [Buyer auction list](../features/auction-list-my-bids.md), [verification](../features/auction-list-verification.md) | AuctionsPage, MyBidsPage, AuctionSecondChanceOffers, auctionService/auctionOfferService and delivered auction controller/spec |
 | General orientation | [Project](project.md), [architecture](architecture.md) | `package.json`, `app/`, `features/` |
 | Add/change an API request | [API contract](../api/api-contract.md), [errors](../api/error-handling.md), [coding rules](coding-rules.md) | `configs/api.ts`, `hooks/useApi.ts`, owning `service/*Service.ts`, delivered OpenAPI |
 | Login, registration, logout, or account switch | [Authentication](../features/authentication.md), [API errors](../api/error-handling.md) | `providers/Provider.tsx`, `hooks/useAuth.ts`, `service/authService.ts`, auth regression tests |
@@ -16,6 +17,7 @@ Read the frontend [AGENTS.md](../../AGENTS.md) first. Use the table to select re
 | Place order or checkout retry | [Place order](../features/place-order.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | useCheckout/CheckoutOrderFeedback, checkoutService, delivered order controller/DTOs and checkout simulation |
 | Component or visual change | [Design system](../ui/design-system.md), [components](../ui/components.md) | Owning component, `app/globals.css`, real consumers |
 | Buyer order list | [Order list](../features/order-list.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | OrdersPage, useOrders, orderService, OrderStatusBadge and delivered order controller/DTO/spec |
+| Buyer search, order rating or receipt confirmation | [Buyer #220](../features/buyer-search-rating-receipt.md), [catalog](../features/catalog.md), [API contract](../api/api-contract.md) | SearchPage/searchUtils, AuctionRoomPage, OrderRating/RatingDialog, SellerReputation, OrderDetailPage/ConfirmReceiptDialog, receipt issue hold, ratingService and orderService; delivered OpenAPI and real PostgreSQL/HTTP evidence |
 | Buyer order detail, cancellation or refund state | [Order detail](../features/order-detail.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md), [design system](../ui/design-system.md) | OrderDetailPage, orderService, delivered order controller/DTO/spec and order-detail browser tests |
 | Order shipment tracking | [Shipment tracking](../features/shipment-tracking.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md), [design system](../ui/design-system.md) | OrderDetailPage, ShipmentTracking, shipmentService and delivered shipment controller/DTO/spec |
 | Group payment QR, memo or countdown | [Payment](../features/payment.md), [API contract](../api/api-contract.md), [errors](../api/error-handling.md) | CheckoutPaymentPage, CopyableField/CountdownTimer, paymentService, delivered payment controller/DTO/spec and payment simulation |

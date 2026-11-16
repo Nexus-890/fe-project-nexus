@@ -16,7 +16,7 @@ export type AuctionRoom = Omit<
   cancelledReason: string | null;
 };
 
-/** UI model for #178's provisional state endpoint in docs/api/auction-service.yaml. */
+/** Delivered state normalized with a monotonic local clock anchor. */
 export type AuctionState = {
   auctionId: string;
   currentPrice: string;
@@ -31,7 +31,7 @@ export type AuctionState = {
   remainingMs: number;
 };
 
-/** UI model for #168's provisional masked public history endpoint. */
+/** Normalized row from the delivered masked public history endpoint. */
 export type AuctionBid = { amount: string; bidderName: string; placedAt: string };
 
 export type MyAuctionBid = Omit<components["schemas"]["MyBid"], "amount" | "finalPrice" | "orderId" | "paymentDueAt"> & {

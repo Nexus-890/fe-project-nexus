@@ -19,6 +19,7 @@ for (const [name, output] of [
   ["api-gateway", "gatewayGeneratedType.ts"],
   ["payment-service", "paymentGeneratedType.ts"],
   ["shipment-service", "shipmentGeneratedType.ts"],
+  ["rating-service", "ratingGeneratedType.ts"],
   ["account-210-snapshot", "account210GeneratedType.ts"],
   ["seller-application-210-proposal", "sellerApplication210GeneratedType.ts"],
   ["auction-service", "auctionGeneratedType.ts"],

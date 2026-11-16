@@ -76,8 +76,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List visible products, optionally by category
-         * @description Only ACTIVE/nondeleted products. A missing or empty category match produces an empty result; it does not promise category validation. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
+         * Search visible products with filters and stable ordering
+         * @description Only ACTIVE/nondeleted products. q is a trimmed case-insensitive literal product-title substring (SQL wildcard characters are literal). Filters combine with AND before pagination. Relevance ranks exact title, title prefix, then substring, newest first within each rank. Every ordering ends with UUID ascending. Price ordering uses the lowest SKU price, null prices last. maxPrice requires at least one SKU at or below the ceiling and retains the full min/max response range. listingType maps to persisted auctionEnable, not active auction state. An unmatched search returns empty data[] and zero totals. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
          */
         get: operations["listProducts"];
         put?: never;
@@ -1601,6 +1601,14 @@ export interface operations {
     listProducts: {
         parameters: {
             query?: {
+                /** @description Trimmed case-insensitive literal product-title substring. Blank means all titles. */
+                q?: string;
+                /** @description Stable ordering before pagination; UUID ascending is the final tie-breaker. */
+                sort?: "relevance" | "createdAt,desc" | "price,asc" | "price,desc";
+                /** @description all has no restriction; auction requires auctionEnable=true, buy-now requires false. */
+                listingType?: "all" | "buy-now" | "auction";
+                /** @description Maximum lowest-SKU price in VND; products with no SKU do not match. Decimal(19,2). */
+                maxPrice?: number;
                 /** @description Optional category UUID. */
                 categoryId?: string;
                 /** @description Zero-based page. */

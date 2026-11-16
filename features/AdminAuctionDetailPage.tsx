@@ -142,7 +142,7 @@ function AdminAuctionDetailPage({ auctionId }: { auctionId: string }) {
           ["Starting price", money(auction.startingPrice)], ["Bid increment", money(auction.bidIncrement)], ["Current price", money(auction.currentPrice)],
           ["Start", time(auction.startAt)], ["End", time(auction.endAt)], ["Original end", time(auction.originalEndAt)], ["Extensions", count(auction.extensionCount)],
           ["Seller", reference(auction.sellerId)], ["Product", reference(auction.productId)], ["SKU", reference(auction.skuId)],
-          ...(auction.status === "CANCELLED" ? [["Cancelled by", auction.cancelledBy === "ADMIN" ? "Administrator" : "Seller"], ["Cancellation reason", auction.cancelledReason || "—"]] satisfies [string, ReactNode][] : []),
+          ...(auction.status === "CANCELLED" ? [["Cancelled by", auction.cancelledBy === "ADMIN" ? "Administrator" : auction.cancelledBy === "SYSTEM" ? "System" : "Seller"], ["Cancellation reason", auction.cancelledReason || "—"]] satisfies [string, ReactNode][] : []),
         ]} /></SellerPanel>
         <SellerPanel title="Live state">{state.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading live state…</p> : state.error ? <SellerError error={state.error} retry={() => void state.refetch()} /> : <FieldList fields={[
           ["Status", auctionStatusLabels[state.data.status]], ["Current price", money(state.data.currentPrice)], ["Bids", count(state.data.bidCount)],

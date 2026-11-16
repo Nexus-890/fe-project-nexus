@@ -28,6 +28,8 @@ for (const width of [375, 768]) {
     await expect(navigation.getByRole("link", { name: "My profile", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(navigation.getByRole("link", { name: "My orders", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(navigation.getByRole("link", { name: "My Bids", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(navigation).toHaveCount(0);
     await expect(trigger).toBeFocused();
@@ -56,9 +58,15 @@ for (const width of [375, 768]) {
     await expect(navigation).toHaveCount(0);
 
     await trigger.click();
+    await navigation.getByRole("link", { name: "My Bids", exact: true }).click();
+    await expect(page).toHaveURL(/\/my-bids$/);
+    await expect(page.getByRole("heading", { name: "Sign in to view your bids", exact: true })).toBeVisible();
+    await expect(navigation).toHaveCount(0);
+
+    await trigger.click();
     await navigation.getByRole("link", { name: "Explore auctions", exact: true }).click();
-    await expect(page).toHaveURL(/\/#live-auctions$/);
-    await expect(page.getByRole("heading", { name: "Live auctions ending soon", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/auctions$/);
+    await expect(page.getByRole("heading", { name: "Auctions", exact: true })).toBeVisible();
     await expect(navigation).toHaveCount(0);
 
     await trigger.click();
@@ -79,6 +87,7 @@ test("desktop keeps separate My Nexus and Watchlist destinations", async ({ page
   await account.locator("summary").press("Enter");
   await expect(account.getByRole("link", { name: "My orders", exact: true })).toBeVisible();
   await expect(account.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("href", "/profile");
+  await expect(account.getByRole("link", { name: "My Bids", exact: true })).toHaveAttribute("href", "/my-bids");
   await account.getByRole("link", { name: "Saved items", exact: true }).click();
   await expect(page).toHaveURL(/\/saved$/);
 
@@ -88,6 +97,11 @@ test("desktop keeps separate My Nexus and Watchlist destinations", async ({ page
   await expect(account).not.toHaveAttribute("open", "");
   await expect(watchlist.getByRole("link", { name: "Saved items", exact: true })).toHaveAttribute("href", "/saved");
   await watchlist.getByRole("link", { name: "Explore auctions", exact: true }).click();
-  await expect(page).toHaveURL(/\/#live-auctions$/);
+  await expect(page).toHaveURL(/\/auctions$/);
+  await expect(page.getByRole("heading", { name: "Auctions", exact: true })).toBeVisible();
+  await account.locator("summary").click();
+  await account.getByRole("link", { name: "My Bids", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-bids$/);
+  await expect(page.getByRole("heading", { name: "Sign in to view your bids", exact: true })).toBeVisible();
   await noHorizontalOverflow(page);
 });

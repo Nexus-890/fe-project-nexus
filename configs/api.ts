@@ -73,7 +73,6 @@ const normalizeBaseUrl = (baseUrl: string): string => {
   }
   return url.origin;
 };
-
 /** Public auction streams cannot carry a Bearer token in native EventSource. */
 export const openPublicAuctionStream = (auctionId: string): EventSource => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auctionId))

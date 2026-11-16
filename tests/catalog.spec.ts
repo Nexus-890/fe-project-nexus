@@ -325,25 +325,25 @@ test("malformed successful API response renders an error", async ({ page }) => {
 test("search filters preserve query parameters and Clear All restores the default URL", async ({
   page,
 }) => {
-  await page.goto("/search?q=headphones");
+  await page.goto("/search?q=Product");
   await expect(
-    page.getByRole("heading", { name: "Results for “headphones”" }),
+    page.getByRole("heading", { name: "Results for “Product”" }),
   ).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(5);
   await page
     .getByRole("combobox", { name: "Category filter" })
     .selectOption("headphones");
-  await expect(page).toHaveURL(/q=headphones&category=headphones$/);
+  await expect(page).toHaveURL(/q=Product&category=headphones$/);
   await expect(page.getByRole("article")).toHaveCount(12);
   await page
     .getByRole("combobox", { name: "Sort by" })
     .selectOption("price,asc");
   await expect(page).toHaveURL(
-    /q=headphones&category=headphones&sort=price%2Casc$/,
+    /q=Product&category=headphones&sort=price%2Casc$/,
   );
   await page.getByRole("link", { name: "Next", exact: true }).click();
   await expect(page).toHaveURL(
-    /q=headphones&category=headphones&sort=price%2Casc&page=2$/,
+    /q=Product&category=headphones&sort=price%2Casc&page=2$/,
   );
   await expect(page.getByRole("article").first()).toContainText("Product 112");
   await page.getByRole("link", { name: "Clear All", exact: true }).click();
@@ -361,14 +361,14 @@ test("header category selection reaches the product API and All Categories clear
   const categoryPicker = page.getByRole("combobox", { name: "Search category" });
   await categoryPicker.click();
   await page.getByRole("option", { name: "Headphones", exact: true }).click();
-  await page.getByRole("textbox", { name: "Search for anything" }).fill("wireless & wired");
+  await page.getByRole("textbox", { name: "Search for anything" }).fill("Product 1");
   const categoryRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return url.pathname === "/api/v1/products" && url.searchParams.get("categoryId") === "headphones";
   });
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await categoryRequest;
-  await expect(page).toHaveURL(/\/search\?q=wireless\+%26\+wired&category=headphones$/);
+  await expect(page).toHaveURL(/\/search\?q=Product\+1&category=headphones$/);
   await expect(page.getByRole("article")).toHaveCount(12);
   await page.reload();
   await expect(categoryPicker).toContainText("Headphones");
@@ -385,6 +385,90 @@ test("header category selection reaches the product API and All Categories clear
   await expect(page).toHaveURL(/\/search$/);
   await expect(page.getByRole("article")).toHaveCount(5);
   await expect(categoryPicker).toContainText("All Categories");
+});
+
+test("search filters survive reload, paging, category changes and header searches", async ({ page }, info) => {
+  await page.goto("/search?q=Product&category=headphones&sort=price%2Casc&page=2");
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.getByRole("button", { name: "More filters", exact: true }).click();
+  await page.getByRole("radio", { name: "Auction", exact: true }).click();
+  await expect(page).toHaveURL(/listingType=auction/);
+  expect(new URL(page.url()).searchParams.has("page")).toBe(false);
+  await expect(page.getByRole("checkbox", { name: "Trusted", exact: true })).toBeDisabled();
+  await expect(page.getByRole("group", { name: "Condition", exact: true }).getByRole("checkbox", { name: "New", exact: true })).toBeDisabled();
+  await expect(page.getByRole("radio", { name: "4 stars and up", exact: true })).toBeDisabled();
+  const price = page.locator("#catalog-max-price");
+  await price.focus();
+  await price.press("ArrowLeft");
+  await expect(page).toHaveURL(/maxPrice=49900000/);
+
+  const expectPreservedFilters = async () => {
+    await expect.poll(() => {
+      const params = new URL(page.url()).searchParams;
+      return [params.get("sort"), params.get("listingType"), params.getAll("trust"), params.getAll("condition"), params.get("maxPrice"), params.get("minRating")];
+    }).toEqual(["price,asc", "auction", [], [], "49900000", null]);
+  };
+  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expectPreservedFilters();
+  await page.reload();
+  await expect(page.getByRole("article")).toHaveCount(12);
+  await page.getByRole("button", { name: "More filters", exact: true }).click();
+  await expect(page.getByRole("radio", { name: "Auction", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("checkbox", { name: "Trusted", exact: true })).toBeDisabled();
+  await expect(price).toHaveValue("49900000");
+  await expectPreservedFilters();
+  await mobileChecks(page);
+  await page.screenshot({ path: info.outputPath("search-filters-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await layoutChecks(page);
+  await page.screenshot({ path: info.outputPath("search-filters-desktop.png"), fullPage: true });
+
+  await page.getByRole("complementary", { name: "Filters" }).getByRole("link", { name: "Electronics", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("category")).toBe("electronics");
+  expect(new URL(page.url()).searchParams.has("page")).toBe(false);
+  await expectPreservedFilters();
+  const search = page.getByRole("textbox", { name: "Search for anything" });
+  await search.fill("camera & lens");
+  await search.press("Enter");
+  await expect(page.getByRole("heading", { name: "Results for “camera & lens”", exact: true })).toBeVisible();
+  await expectPreservedFilters();
+  await page.goBack();
+  await expect(search).toHaveValue("Product");
+  await expectPreservedFilters();
+  await page.getByRole("link", { name: "Remove filter Listing Type: Auction", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.getAll("trust")).toEqual([]);
+  expect(new URL(page.url()).searchParams.get("condition")).toBeNull();
+  await page.getByRole("link", { name: "Clear All", exact: true }).click();
+  await expect(page).toHaveURL(/\/search$/);
+  await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue("relevance");
+});
+
+test("an empty search response shows a helpful empty state without an error", async ({ page }) => {
+  await page.goto("/search?q=missing+item");
+  await expect(page.getByRole("heading", { name: "No products found", exact: true })).toBeVisible();
+  await expect(page.getByText("Try another category or change your filters.", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 results", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Search results" }).getByRole("alert")).toHaveCount(0);
+});
+
+test("title search and price/listing filters change the returned products and unsupported filters are disabled", async ({ page }) => {
+  await page.goto("/search?q=Product+3&trust=trusted&condition=new&minRating=4");
+  await expect(page.getByRole("article")).toHaveCount(1);
+  await expect(page.getByRole("article")).toContainText("Product 3");
+  await expect.poll(() => new URL(page.url()).searchParams.has("trust")).toBe(false);
+  await page.getByRole("button", { name: "More filters", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Trusted", exact: true })).toBeDisabled();
+  await page.getByRole("radio", { name: "Auction", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No products found", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Buy Now", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(1);
+  const price = page.locator("#catalog-max-price");
+  await price.focus();
+  await price.press("Home");
+  await expect(page.getByRole("heading", { name: "No products found", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Clear All", exact: true }).click();
+  await expect(page.getByRole("article")).toHaveCount(5);
 });
 
 test("product hearts share the visit watchlist across shop navigation", async ({ page }) => {

@@ -424,6 +424,20 @@ test("Support Staff reads auctions without edit or cancel controls and sends no 
   for (const name of ["Save changes", "Cancel auction", "Confirm cancellation"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Cancellation reason", { exact: true })).toHaveCount(0);
   await auctionScreens(page, "support-auction-detail");
+  const cancelledId = "92000000-0000-4000-8000-000000000018";
+  expect((await request.post(`${api}/test/auction`, { data: {
+    id: cancelledId, cancelledBy: "SYSTEM", cancelledReason: "STOCK_UNAVAILABLE",
+  } })).ok()).toBe(true);
+  await page.goto(auctionPath(18));
+  const cancellationActor = page.getByText("Cancelled by", { exact: true }).locator("..").locator("dd");
+  await expect(cancellationActor).toHaveText("System");
+  await expect(page.getByText("STOCK_UNAVAILABLE", { exact: true })).toBeVisible();
+  expect((await request.post(`${api}/test/auction`, { data: {
+    id: cancelledId, cancelledBy: "SELLER", cancelledReason: "Seller withdrew the listing",
+  } })).ok()).toBe(true);
+  await page.reload();
+  await expect(cancellationActor).toHaveText("Seller");
+  await expect(page.getByText("Seller withdrew the listing", { exact: true })).toBeVisible();
   expect(await auctionWrites(request)).toEqual([]);
 });
 

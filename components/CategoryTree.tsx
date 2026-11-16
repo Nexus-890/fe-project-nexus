@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { Smartphone, Laptop, Camera, Watch, Headphones, Shirt, Gamepad2, Sofa, BookOpen, Gem, Shapes } from "lucide-react";
 import type { CategoryNode } from "@/types/catalogResponseType";
-import { categoryHref } from "@/features/catalogUtils";
+import { categoryHref, searchHref, type SearchState } from "@/features/catalogUtils";
 
 type CategoryTreeProps = {
   categories: CategoryNode[];
   depth?: number;
   activeSlug?: string;
   variant?: "tree" | "tiles";
+  searchState?: SearchState;
 };
 
 const categoryIcons = { phone: Smartphone, phones: Smartphone, electronics: Laptop, laptop: Laptop, laptops: Laptop, camera: Camera, cameras: Camera, watch: Watch, watches: Watch, audio: Headphones, headphones: Headphones, fashion: Shirt, gaming: Gamepad2, game: Gamepad2, home: Sofa, "home-garden": Sofa, book: BookOpen, books: BookOpen, collectible: Gem, collectibles: Gem };
@@ -26,6 +27,7 @@ export function CategoryTree({
   depth = 0,
   activeSlug,
   variant = "tree",
+  searchState,
 }: CategoryTreeProps) {
   if (!categories.length || depth >= 3) return null;
   const tiles = variant === "tiles" && depth === 0;
@@ -42,7 +44,7 @@ export function CategoryTree({
       {categories.map((category) => (
         <li key={category.id} className="min-w-0">
           <Link
-            href={categoryHref(category.slug)}
+            href={searchState ? searchHref({ ...searchState, category: category.slug, page: 1 }) : categoryHref(category.slug)}
             aria-current={activeSlug === category.slug ? "page" : undefined}
             className={`flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm [overflow-wrap:anywhere] hover:bg-muted ${tiles ? "min-h-24 flex-col justify-center gap-2 bg-card text-center" : ""} ${depth === 0 ? "font-medium" : ""} ${activeSlug === category.slug ? "bg-muted text-primary" : ""}`}
           >
@@ -53,6 +55,7 @@ export function CategoryTree({
             categories={category.children}
             depth={depth + 1}
             activeSlug={activeSlug}
+            searchState={searchState}
           /> : null}
         </li>
       ))}

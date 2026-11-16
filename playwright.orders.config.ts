@@ -7,7 +7,7 @@ const orderPort = process.env.NEXUS_ORDER_LIST_PORT || "3914";
 
 export default defineConfig({
   ...shared,
-  testMatch: ["**/orders.spec.ts", "**/order-detail.spec.ts"],
+  testMatch: ["**/orders.spec.ts", "**/order-detail.spec.ts", "**/buyer-rating.spec.ts"],
   webServer: [
     { command: "node tests/order-list-fixture.mjs", url: `http://127.0.0.1:${orderPort}/api/health`, reuseExistingServer: false, timeout: 60_000 },
     ...servers.map((server) => server.env ? {

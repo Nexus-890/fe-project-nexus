@@ -6,6 +6,11 @@ import type { AuctionStatus } from "../types/auctionRoomType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  reputation: {
+    seller: (sessionId: number, sellerId: string) => ["reputation", sessionId, "seller", sellerId] as const,
+    orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>
+      ["rating", sessionId, "order", sellerId, buyerId, orderId] as const,
+  },
   account: {
     addresses: (sessionId: number) => ["account", sessionId, "addresses"] as const,
     sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
@@ -26,6 +31,9 @@ export const queryKeys = {
   },
 
   auctions: {
+    list: (status: string, page: number) => ["auctions", "list", status, page] as const,
+    own: (sessionId: number, page: number) => ["auction-bids", sessionId, "list", page] as const,
+    offers: (sessionId: number, page: number) => ["auction-offers", sessionId, page] as const,
     active: ["auctions", "active"] as const,
     manage: {
       lists: (sessionId: number) => ["auctions", "manage", sessionId, "list"] as const,

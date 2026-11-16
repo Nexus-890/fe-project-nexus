@@ -102,6 +102,9 @@ test("countdown follows server time when the browser clock is one hour ahead", a
 
 test("signed-in buyer starts at the minimum, submits numeric money once and sees own leading status", async ({ page, request }, info) => {
   await signIn(page);
+  const seller = page.getByRole("region", { name: "Auction seller", exact: true });
+  await expect(seller.getByRole("region", { name: "Seller reputation", exact: true })).toContainText("78/100");
+  await expect(seller).toContainText("Trusted");
   const amount = page.getByLabel("Bid amount", { exact: true });
   await expect(amount).toHaveValue("9900.00");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();

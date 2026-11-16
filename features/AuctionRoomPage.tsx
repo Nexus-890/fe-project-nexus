@@ -17,6 +17,7 @@ import { useAuctionState } from "./useAuctionState";
 import AuctionWinnerCheckout from "./AuctionWinnerCheckout";
 import { hasCurrentAuctionResult } from "./auctionStateReconciliation";
 import type { AuctionRoom, MyAuctionBid } from "../types/auctionRoomType";
+import SellerReputation from "./SellerReputation";
 
 const buttonClass = "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-sm border border-border px-4 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -87,7 +88,7 @@ function AuctionRoomContents({ auctionId }: { auctionId: string }) {
           {room.mine.isError && authStatus === "authenticated" ? <p className="mt-4 text-xs text-muted-foreground">Your bidding status is unavailable. <button type="button" className="min-h-11 min-w-11 underline" onClick={() => void room.mine.refetch()}>Retry your status</button></p> : null}
         </div>
         <AuctionBidHistory bids={room.history.data?.content ?? []} currency={auction.currency} currentPrice={currentPrice} now={room.serverNow} page={room.page} totalPages={room.history.data?.totalPages ?? 0} loading={room.history.isPending} error={room.history.isError} leading={leading} onPage={room.setPage} onRetry={() => void room.history.refetch()} />
-        <section className="rounded-sm border border-border p-5 sm:p-6" aria-label="Auction seller"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-secondary"><ShieldCheck size={18} aria-hidden="true" /></span><div className="min-w-0"><p className="text-sm font-medium">About this item</p><p className="mt-1 text-xs text-muted-foreground">View the seller’s item details</p></div><Link href={`/products/${product.data?.slug ?? auction.productId}`} className={`${buttonClass} ml-auto shrink-0`}>View item</Link></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Bids in the final 5 minutes extend the auction by 5 minutes, up to 30 minutes beyond its original end time.</p></section>
+        <section className="rounded-sm border border-border p-5 sm:p-6" aria-label="Auction seller"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-secondary"><ShieldCheck size={18} aria-hidden="true" /></span><div className="min-w-0"><p className="text-sm font-medium">About this item</p><p className="mt-1 text-xs text-muted-foreground">View the seller’s item details</p></div><Link href={`/products/${encodeURIComponent(product.data?.slug ?? auction.productId)}?id=${encodeURIComponent(auction.productId)}`} className={`${buttonClass} ml-auto shrink-0`}>View item</Link></div><div className="mt-4"><SellerReputation sellerId={auction.sellerId} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Bids in the final 5 minutes extend the auction by 5 minutes, up to 30 minutes beyond its original end time.</p></section>
       </div>
     </div>
   </section>;
