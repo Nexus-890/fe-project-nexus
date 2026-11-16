@@ -1,3 +1,7 @@
 import BackofficeAuctionsPage from "../../../../features/BackofficeAuctionsPage";
 
-export default BackofficeAuctionsPage;
+function Page() {
+  return <BackofficeAuctionsPage />;
+}
+
+export default Page;
