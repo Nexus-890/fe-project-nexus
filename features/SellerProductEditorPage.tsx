@@ -164,8 +164,8 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
   });
   const remove = useApiMutation({
     execute: () => deleteSellerProduct(initial.id, requestOptions()), isCurrent,
-    invalidateKey: [[...queryKeys.seller.all(auth.sessionId), "listings"], [...queryKeys.seller.all(auth.sessionId), "products"], ["catalog", "products"]],
-    removeKey: [[...queryKeys.seller.all(auth.sessionId), "product", initial.id], queryKeys.catalog.product(initial.id)],
+    invalidateKey: [[...queryKeys.seller.all(auth.sessionId), "listings"], [...queryKeys.seller.all(auth.sessionId), "products"], [...queryKeys.seller.all(auth.sessionId), "auction-products"], ["catalog", "products"]],
+    removeKey: [[...queryKeys.seller.all(auth.sessionId), "product", initial.id], queryKeys.seller.auctionProduct(auth.sessionId, initial.id), queryKeys.catalog.product(initial.id)],
   }, { onSuccess: () => router.replace("/backoffice/products") });
   const publishReady = canPublishSellerProduct({ skus, images });
   const statusSave = useApiMutation({ execute: (target: SellerProductStatus) => {

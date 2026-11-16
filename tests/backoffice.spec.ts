@@ -441,16 +441,78 @@ test("Support Staff reads auctions without edit or cancel controls and sends no 
   expect(await auctionWrites(request)).toEqual([]);
 });
 
-for (const role of ["SELLER", "BUYER"]) {
-  test(`${role} gets Access denied on the auction admin pages`, async ({ page, request }) => {
-    await signIn(page, request, role);
-    await expect(page).toHaveURL(role === "SELLER" ? "/backoffice" : "/");
-    if (role === "SELLER") await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toHaveCount(0);
-    for (const destination of ["/backoffice/auctions", auctionPath(1)]) {
+test("Buyer cannot open the shared back-office auction pages or add access with a view parameter", async ({ page, request }) => {
+  await signIn(page, request, "BUYER");
+  await expect(page).toHaveURL("/");
+  for (const destination of ["/backoffice/auctions", auctionPath(1), "/backoffice/auctions?view=seller", "/backoffice/auctions/new"]) {
+    await page.goto(destination);
+    await expect(page.getByRole("heading", { name: "Access denied", exact: true })).toBeVisible();
+  }
+  expect((await auctionRequests(request)).filter((row) => row.path !== "/api/v1/auctions" || row.query.size === "10")).toEqual([]);
+});
+
+test("Seller opens own auctions and details without mounting management requests", async ({ page, request }) => {
+  expect((await request.post(`${api}/test/seller-seed`)).ok()).toBe(true);
+  await signIn(page, request, "SELLER", "/backoffice/auctions");
+  await expect(page).toHaveURL("/backoffice/auctions");
+  await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("table", { name: "Your auctions", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create Auction", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Studio auction — active", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Auction Details", exact: true })).toBeVisible();
+  expect((await auctionRequests(request)).some((row) => row.path === "/api/v1/auctions/mine")).toBe(true);
+  expect((await auctionRequests(request)).filter((row) => row.path.startsWith("/api/v1/auctions/manage"))).toEqual([]);
+  expect(await auctionWrites(request)).toEqual([]);
+});
+
+for (const role of ["ADMIN", "SUPPORT_STAFF"]) {
+  test(`${role} cannot open seller auction creation through the shared route`, async ({ page, request }) => {
+    await signIn(page, request, role, "/backoffice/auctions");
+    await expect(page.getByRole("table", { name: "Auctions", exact: true })).toBeVisible();
+    for (const destination of ["/backoffice/auctions/new", "/backoffice/auctions/new?view=seller"]) {
       await page.goto(destination);
       await expect(page.getByRole("heading", { name: "Access denied", exact: true })).toBeVisible();
     }
-    expect((await auctionRequests(request)).filter((row) => row.path !== "/api/v1/auctions" || row.query.size === "10")).toEqual([]);
+    expect((await auctionRequests(request)).filter((row) => row.path === "/api/v1/auctions/mine")).toEqual([]);
+    expect((await evidence(request)).requests.some((row: { path: string }) => row.path === "/api/v1/products/mine")).toBe(false);
+    expect(await auctionWrites(request)).toEqual([]);
+  });
+}
+
+for (const role of ["ADMIN,SELLER", "SELLER,SUPPORT_STAFF"]) {
+  test(`${role} defaults to managed auctions and retains its seller create edit schedule workflow`, async ({ page, request }) => {
+    expect((await request.post(`${api}/test/seller-seed`)).ok()).toBe(true);
+    await signIn(page, request, role, "/backoffice/auctions");
+    await expect(page.getByRole("table", { name: "Auctions", exact: true })).toBeVisible();
+    await expect(backofficeNav(page).getByRole("link", { name: "Auctions", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Create Auction", exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Rolex Submariner Watch", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Rolex Submariner Watch", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel auction", exact: true })).toHaveCount(role.includes("ADMIN") ? 1 : 0);
+    expect((await auctionRequests(request)).filter((row) => row.path === "/api/v1/auctions/mine")).toEqual([]);
+    await page.getByRole("link", { name: "My auctions", exact: true }).click();
+    await expect(page).toHaveURL("/backoffice/auctions?view=seller");
+    await expect(page.getByRole("table", { name: "Your auctions", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Create Auction", exact: true }).click();
+    await expect(page).toHaveURL("/backoffice/auctions/new?view=seller");
+    await page.getByRole("combobox", { name: "Product", exact: true }).selectOption("a2250000-0000-4000-8000-000000000001");
+    await page.getByRole("combobox", { name: "SKU", exact: true }).selectOption("a2250000-0000-4000-8000-000000000002");
+    await page.getByRole("button", { name: "Use 3-minute demo", exact: true }).click();
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await expect(page).toHaveURL(/\/backoffice\/auctions\/[0-9a-f-]{36}\?view=seller$/);
+    await expect(page.getByRole("heading", { name: "Edit Auction", exact: true })).toBeVisible();
+    await page.getByLabel("Bid Increment (VND)", { exact: true }).fill("20000");
+    const saved = page.waitForResponse((response) => response.request().method() === "PUT" && /\/v1\/auctions\/[0-9a-f-]{36}$/.test(new URL(response.url()).pathname));
+    await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+    expect((await saved).ok()).toBe(true);
+    await page.getByRole("button", { name: "Schedule Auction", exact: true }).click();
+    await expect(page.getByText("SCHEDULED", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\?view=seller$/);
+    await page.getByRole("link", { name: "Auctions / Auction details", exact: true }).click();
+    await expect(page).toHaveURL("/backoffice/auctions?view=seller");
+    await page.getByRole("link", { name: "Manage auctions", exact: true }).click();
+    await expect(page).toHaveURL("/backoffice/auctions");
+    await expect(page.getByRole("table", { name: "Auctions", exact: true })).toBeVisible();
   });
 }
 

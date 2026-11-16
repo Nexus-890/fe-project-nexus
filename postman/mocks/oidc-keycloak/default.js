@@ -94,7 +94,7 @@ async function issueToken(res, session, nonce) {
     id_token: jwt({ ...claims, aud: "nexus-web", nonce, email: "buyer@nexus.local", name: "Fixture Buyer" }),
   });
 }
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   if (appOrigins.has(req.headers.origin)) res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -248,5 +248,13 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, target.href);
   }
   return json(res, { error: "Fixture endpoint not implemented", path: url.pathname }, 501);
+}
+// pm.state reads return snapshots. Serialize read/modify/write operations so
+// concurrent browser sessions cannot overwrite each other's rotated tokens.
+let requestQueue = Promise.resolve();
+const server = http.createServer((req, res) => {
+  const pending = requestQueue.then(() => handleRequest(req, res));
+  requestQueue = pending.catch(() => {});
+  return pending;
 });
 server.listen(process.env.PORT);

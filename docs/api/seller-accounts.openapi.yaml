@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: Seller profile and bank accounts — issue-derived FE contract for 257 and 261
+  version: 0.2.0-issue-derived
+  description: |
+    Canonical methods, paths and business rules are copied from the supplied
+    #257/#261 issue screenshots updated 16 November 2026. No matching backend
+    controller/OpenAPI is delivered on the checked-out develop baseline. The
+    camelCase response projections below map the issue's seller/seller_bank
+    columns; their final DTO shape and validation require owning-BE confirmation.
+    This file is not a delivered backend specification and is excluded from
+    delivered DTO generation. Production UI uses the shared HTTP boundary and
+    reports unavailable endpoints; only the explicit local HTTP fixture supplies
+    simulation data. There is no bank DELETE operation in the latest catalogue.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/sellers/me:
+    get:
+      summary: Read the authenticated seller's shop profile
+      description: SELLER only; sellerId equals the authenticated user UUID. Existing SELLER users may be lazily given an ACTIVE seller row by the owning service.
+      responses:
+        '200': {$ref: '#/components/responses/Profile'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    put:
+      summary: Update only companyName and contactPhone of the authenticated seller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [companyName, contactPhone]
+              properties:
+                companyName: {type: string, minLength: 1, maxLength: 200}
+                contactPhone: {type: string, minLength: 1, maxLength: 20}
+      responses:
+        '200': {$ref: '#/components/responses/Profile'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /api/v1/payments/seller-bank-accounts:
+    post:
+      summary: Add a bank account for the authenticated seller
+      description: SELLER; NAPAS BIN bankCode, write-only accountNumber preserving leading zeroes and accountHolderName. New account is UNVERIFIED; owner/default/verification cannot be chosen in this body.
+      requestBody: {$ref: '#/components/requestBodies/BankWrite'}
+      responses:
+        '201': {$ref: '#/components/responses/Bank'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    get:
+      summary: Administrator bank account queue
+      description: ADMIN only. Oldest UNVERIFIED first by default; only four account digits returned. #261 adds this list on top of #257's account operations.
+      parameters:
+        - {in: query, name: sellerId, schema: {type: string, format: uuid}}
+        - {in: query, name: verificationStatus, schema: {$ref: '#/components/schemas/VerificationStatus'}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {$ref: '#/components/responses/Banks'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /api/v1/payments/seller-bank-accounts/me:
+    get:
+      summary: List only the authenticated seller's masked accounts
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {$ref: '#/components/responses/Banks'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /api/v1/payments/seller-bank-accounts/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    put:
+      summary: Owning seller updates account details
+      description: |
+        Editing bank code, account number or holder requires verification again;
+        account becomes UNVERIFIED. Full number must be re-entered, never recovered
+        from a response. Foreign account IDs return404 SELLER_BANK_ACCOUNT_NOT_FOUND.
+        Already sent payouts retain their frozen recipient snapshot.
+      requestBody: {$ref: '#/components/requestBodies/BankWrite'}
+      responses:
+        '200': {$ref: '#/components/responses/Bank'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /api/v1/payments/seller-bank-accounts/{id}/default:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: Owning seller chooses an active default receiving account
+      description: Bodyless. Only one active default per seller. Automatic payouts remain ON_HOLD without a VERIFIED active default.
+      responses:
+        '200': {$ref: '#/components/responses/Bank'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /api/v1/payments/seller-bank-accounts/{id}/verify:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: Administrator verifies or rejects a bank account
+      description: ADMIN only; VERIFIED active default releases eligible ON_HOLD payouts automatically. This operation is not a manual payout trigger or a money transfer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [verificationStatus]
+              properties:
+                verificationStatus: {type: string, enum: [VERIFIED, REJECTED]}
+                reason: {type: string, minLength: 1, maxLength: 500, description: Frontend requires a reason for rejection; owning BE must confirm final validation.}
+      responses:
+        '200': {$ref: '#/components/responses/Bank'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    Page: {in: query, name: page, schema: {type: integer, minimum: 0, default: 0}}
+    Size: {in: query, name: size, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+  requestBodies:
+    BankWrite:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [bankCode, accountNumber, accountHolderName]
+            properties:
+              bankCode: {type: string, pattern: '^\d{6}$', description: NAPAS bank BIN}
+              accountNumber: {type: string, writeOnly: true, pattern: '^\d{6,34}$', description: FE input bound pending backend DTO confirmation; leading zeroes preserved}
+              accountHolderName: {type: string, minLength: 1, maxLength: 100}
+  responses:
+    Profile:
+      description: Issue-derived seller profile projection
+      content:
+        application/json:
+          schema:
+            allOf:
+              - {$ref: '#/components/schemas/Envelope'}
+              - properties:
+                  data: {$ref: '#/components/schemas/SellerProfile'}
+    Bank:
+      description: Masked bank projection; never full account number, encryption key or provider credential
+      content:
+        application/json:
+          schema:
+            allOf:
+              - {$ref: '#/components/schemas/Envelope'}
+              - properties:
+                  data: {$ref: '#/components/schemas/BankAccount'}
+    Banks:
+      description: Paged masked account list, data[] plus sibling page metadata
+      content:
+        application/json:
+          schema:
+            allOf:
+              - {$ref: '#/components/schemas/Envelope'}
+              - properties:
+                  data: {type: array, items: {$ref: '#/components/schemas/BankAccount'}}
+                  page: {$ref: '#/components/schemas/Page'}
+    Problem:
+      description: Problem Details; owning service codes include SELLER_BANK_ACCOUNT_NOT_FOUND404 and SELLER_BANK_ACCOUNT_INVALID400. Missing implementation remains an error.
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [title, status, code, detail]
+            properties:
+              title: {type: string}
+              status: {type: integer}
+              code: {type: string}
+              detail: {type: string}
+  schemas:
+    Envelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, enum: [0]}
+        message: {type: string}
+    Page:
+      type: object
+      required: [number, size, totalElements, totalPages]
+      properties:
+        number: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 1}
+        totalElements: {type: integer, minimum: 0}
+        totalPages: {type: integer, minimum: 0}
+    SellerProfile:
+      type: object
+      required: [sellerId, companyName, contactPhone, status]
+      properties:
+        sellerId: {type: string, format: uuid}
+        companyName: {type: string, minLength: 1, maxLength: 200}
+        contactPhone: {type: string, minLength: 1, maxLength: 20}
+        status: {type: string, enum: [PENDING, ACTIVE, REJECTED]}
+    VerificationStatus: {type: string, enum: [UNVERIFIED, VERIFIED, REJECTED]}
+    BankAccount:
+      type: object
+      required: [id, sellerId, bankCode, accountLast4, accountHolderName, verificationStatus, isDefault, active]
+      properties:
+        id: {type: string, format: uuid}
+        sellerId: {type: string, format: uuid}
+        bankCode: {type: string, pattern: '^\d{6}$'}
+        accountLast4: {type: string, pattern: '^\d{4}$'}
+        accountHolderName: {type: string, minLength: 1, maxLength: 100}
+        verificationStatus: {$ref: '#/components/schemas/VerificationStatus'}
+        isDefault: {type: boolean}
+        active: {type: boolean}

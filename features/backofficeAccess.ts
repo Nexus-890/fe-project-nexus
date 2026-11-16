@@ -20,9 +20,29 @@ export function readBackofficeRoles(accessToken: string | null): BackofficeRole[
 export const hasBackofficeAccess = (roles: readonly BackofficeRole[]) =>
   roles.some((role) => role === "SELLER" || role === "ADMIN" || role === "SUPPORT_STAFF");
 
+/** The shared auction URLs show management reads to staff, including mixed-role accounts. */
+export function resolveAuctionWorkspace(roles: readonly BackofficeRole[], view?: string | null): "manage" | "seller" | null {
+  if (view === "seller" && roles.includes("SELLER")) return "seller";
+  if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) return "manage";
+  return roles.includes("SELLER") ? "seller" : null;
+}
+
+/** Mixed-role sellers retain their own workflow after navigating through the shared URLs. */
+export function sellerAuctionHref(roles: readonly BackofficeRole[], reference?: string): string {
+  const path = `/backoffice/auctions${reference ? `/${encodeURIComponent(reference)}` : ""}`;
+  return roles.includes("SELLER") && (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) ? `${path}?view=seller` : path;
+}
+
 export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenuItem[] {
   const items: BackofficeMenuItem[] = [];
-  if (roles.includes("SELLER")) items.push({ label: "Products", href: "/backoffice/products" }, { label: "Sales", href: "/backoffice/sales" });
+  if (roles.includes("SELLER")) items.push(
+    { label: "Products", href: "/backoffice/products" },
+    ...(resolveAuctionWorkspace(roles) === "seller" ? [{ label: "Auctions", href: "/backoffice/auctions" }] : []),
+    { label: "Sales", href: "/backoffice/sales" },
+    { label: "Bank accounts", href: "/backoffice/bank-accounts" },
+    ...(!roles.includes("ADMIN") ? [{ label: "Payout history", href: "/backoffice/payouts" }] : []),
+  );
+  if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/payouts" });
   if (roles.includes("ADMIN")) items.push({ label: "Stock", href: "/backoffice/stock" }, { label: "Categories", href: "/backoffice/categories", placeholder: true });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users", placeholder: true },
@@ -42,6 +62,9 @@ export function canAccessBackofficePath(path: string, roles: readonly Backoffice
   try { pathname = decodeURIComponent(new URL(path, "https://nexus.invalid").pathname).replace(/\/+$/, "") || "/"; }
   catch { return false; }
   if (pathname === "/backoffice" || pathname === "/backoffice/forbidden") return hasBackofficeAccess(roles);
+  if (pathname === "/backoffice/admin-payouts") return roles.includes("ADMIN");
+  // Management reads do not grant seller creation. The static new route mounts the seller form.
+  if (pathname === "/backoffice/auctions/new") return roles.includes("SELLER");
   return backofficeMenu(roles).some((item) => pathname === item.href || nestedSections.includes(item.href) && pathname.startsWith(`${item.href}/`));
 }
 

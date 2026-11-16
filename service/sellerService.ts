@@ -133,11 +133,13 @@ export const createSellerSku = async (productId: string, body: SellerSkuInput, o
 export const updateSellerSku = async (productId: string, skuId: string, body: SellerSkuInput, options: ServiceRequestOptions = {}): Promise<ProductSku> =>
   saveSellerSku(productId, skuId, body, options);
 
-export const getSellerSales = async (pageNumber: number, status: string | undefined, options: ServiceRequestOptions = {}): Promise<Page<SellerSale>> => {
+export const getSellerSales = async (pageNumber: number, status: string | undefined, options: ServiceRequestOptions = {}, dates: { from?: string; to?: string } = {}): Promise<Page<SellerSale>> => {
   if (!Number.isInteger(pageNumber) || pageNumber < 0 || pageNumber > 2147483646 ||
-    status !== undefined && !["PENDING", "PAID", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELED", "REFUND_REQUESTED", "REFUNDED"].includes(status))
+    status !== undefined && !["PENDING", "PAID", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELED", "REFUND_REQUESTED", "REFUNDED"].includes(status) ||
+    [dates.from, dates.to].some((date) => date !== undefined && (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(date) || !Number.isFinite(Date.parse(date)))) ||
+    dates.from !== undefined && dates.to !== undefined && Date.parse(dates.from) > Date.parse(dates.to))
     throw createInvalidResponseError("Invalid seller sales filters");
-  const { data, page } = await requestApi("GET", "/api/v1/orders/sales", undefined, { ...options, auth: true, params: { page: pageNumber, size: 10, status } });
+  const { data, page } = await requestApi("GET", "/api/v1/orders/sales", undefined, { ...options, auth: true, params: { page: pageNumber, size: 10, status, from: dates.from, to: dates.to } });
   if (!Array.isArray(data) || !page) throw createInvalidResponseError("Invalid seller order page");
   return { content: data.map((row): SellerSale => {
     const summary = parseOrderSummary(row);

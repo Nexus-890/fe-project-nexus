@@ -1,4 +1,3 @@
-import AdminAuctionsPage from "@/features/AdminAuctionsPage";
+import BackofficeAuctionsPage from "../../../../features/BackofficeAuctionsPage";
 
-function Page() { return <AdminAuctionsPage />; }
-export default Page;
+export default BackofficeAuctionsPage;

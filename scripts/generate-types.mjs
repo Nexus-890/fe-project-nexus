@@ -13,6 +13,7 @@ for (const [name, output] of [
   ["user-service", "userGeneratedType.ts"],
   ["catalog-service", "catalogGeneratedType.ts"],
   ["inventory-service", "inventoryGeneratedType.ts"],
+  ["auction-service", "auctionGeneratedType.ts"],
   ["commerce-service", "commerceGeneratedType.ts"],
   ["notification-service", "notificationGeneratedType.ts"],
   // refresh-token cookie endpoints of the gateway (#252)
@@ -22,7 +23,6 @@ for (const [name, output] of [
   ["rating-service", "ratingGeneratedType.ts"],
   ["account-210-snapshot", "account210GeneratedType.ts"],
   ["seller-application-210-proposal", "sellerApplication210GeneratedType.ts"],
-  ["auction-service", "auctionGeneratedType.ts"],
 ]) {
   const integration = integrationSpecs[name];
   const spec = new URL(

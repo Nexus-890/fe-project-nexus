@@ -8,8 +8,61 @@ purpose:
   unblocks: >-
     Browser verification of JWT role landing/access, seller product/SKU/image publication,
     administrator stock intake and a Buyer checkout whose explicit test-only callback
-    makes the simulated sale PAID. The frontend under test is never a simulation member.
+    makes the simulated sale PAID. Seller #225 extends this with delivered auction/sales
+    interactions and issue-aligned #208/#257/#261 offer, shop-profile, bank and
+    automatic payout stand-ins. The current contract supersedes the older manual
+    payout and OPEN-offer fixture assumptions recorded historically below.
+    The frontend under test is never a simulation member.
 assumptions:
+  - id: seller-review-automatic-payout-and-offer-progression-20261116
+    status: supported
+    claim: The frontend follows the supplied updated issues for automatic payout reads, shop profile/bank management and second-chance progression after an accepted order times out.
+    reason: Paths/statuses and core fields were transcribed from the user's issue screenshots. Production code uses the shared HTTP boundary and no payout creation endpoint. Historical ACCEPTED entries no longer control current offer eligibility.
+    verification: On 2026-11-16 all 27 back-office browser cases passed, including company/contact edits, masked add/edit/default bank, verification releasing an automatic ON_HOLD payout, fee/net breakdown/history, UNKNOWN no-retry, stable-key retry before commit and fresh keys after authoritative reconciliation, and B accept/payment-timeout followed by C OFFERED while B stays ACCEPTED. Simulated steps are labeled. Native HTTP tests validate automatic completed/funded/no-refund checks, ownership errors, status/amount parsing and replay behavior. These observations establish caller behavior against stand-ins, not actual service or transfer guarantees.
+    source: tests/seller-operations.spec.ts; tests/payout-service.test.ts; tests/seller-accounts-service.test.ts; tests/seller-offer-service.test.ts; docs/api/seller-accounts.openapi.yaml; docs/api/seller-payouts.openapi.yaml; docs/api/seller-offers.openapi.yaml
+    updated_at: '2026-11-16'
+  - id: supplied-issues-complete-backend-dto-agreement
+    status: unknown
+    claim: The backend will expose the complete account/payout DTO projections and owner offer candidate/eligibility preview used by this frontend.
+    reason: The issues specify paths, lifecycle and core fields but not a complete owner-preview DTO. No #208/#257/#261 implementation is delivered in develop 5fc0244d. YAML files remain separate from delivered API type generation.
+    verification: On 2026-11-16 read all supplied issue screenshots, removed the invented manual-create/payable routes and version/If-Match requirement, and aligned OFFERED and payout statuses. The owner-state canOffer/candidate preview seam remains explicitly pending backend confirmation; actual email/stock/order/transfer behavior and live authorization require backend delivery.
+    source: docs/features/seller-operations.md; service/sellerOfferService.ts; service/sellerBankService.ts; service/sellerProfileService.ts; service/payoutService.ts
+    updated_at: '2026-11-16'
+  - id: seller-admin-auctions-merge-20261116
+    status: supported
+    claim: The shared auction routes retain seller ownership workflows and staff management workflows after merging develop 13aa202e.
+    reason: The routes mount one feature by JWT role, with an explicit seller view for mixed-role accounts. The combined fixture preserves seller, staff and product-editing handlers and configurable ports.
+    verification: On 2026-11-16 the full back-office run passed 25 scenarios; the new product-deletion/picker case initially used an ordered product and correctly received409, then passed independently after preparing an unordered fixture. Together these cover 26 scenarios including seller/staff endpoint isolation, admin edit/cancel, support reads, mixed-role seller draft/edit/schedule continuity, product editing and cached picker removal. All379 unit tests passed; general shop browser regression passed58 with54 configured skips. Tests ran the real frontend against explicit HTTP stand-ins on ports3130/4940; they do not establish live backend enforcement or transfers.
+    source: features/BackofficeAuctionsPage.tsx; features/backofficeAccess.ts; features/SellerAuctionEditorPage.tsx; features/SellerProductEditorPage.tsx; tests/backoffice.spec.ts; tests/seller-operations.spec.ts; docs/features/seller-operations.md
+    updated_at: '2026-11-16'
+  - id: seller-225-develop-buyer220-integration-20261115
+    status: supported
+    claim: Seller frontend behavior remains covered after integrating develop dc9a0207 and buyer branch 220 at c1dd33c5.
+    reason: The generated auction contract was regenerated and shared keys/provider controls retain both sides. New SYSTEM cancellation data is accepted by the seller parser instead of failing the own-auction page.
+    verification: On 2026-11-15 all 13 back-office browser scenarios passed against this HTTP simulation; all 359 frontend unit tests passed, including SYSTEM cancellation and image/inventory rejection cases. Buyer regression suites separately passed 48 order/rating/receipt cases, 58 general shop cases (53 configured skips) and 12 auction-list cases. These observations concern the actual frontend against local dependencies, not new live backend, bank or email guarantees. Inherited backend changes were not manually modified or reverified with Maven here.
+    source: tests/seller-auction-service.test.ts; tests/backoffice.spec.ts; tests/seller-operations.spec.ts; service/sellerAuctionService.ts; docs/features/seller-operations.md
+    updated_at: '2026-11-15'
+  - id: seller-225-caller-against-explicit-http
+    status: supported
+    claim: The real frontend can manage auctions, combine sales filters, explicitly send an offer and display masked bank accounts and payouts against these local HTTP stand-ins.
+    reason: Browser cases use the actual Next frontend and shared HTTP boundary; fixtures keep related state and expose test-only transitions separately from production UI.
+    verification: On 2026-11-14 the four new browser scenarios passed, including create/edit/schedule/cancel, accelerated three-minute lifecycle, full Vietnam calendar-day filters, no notification intent before explicit offer confirmation, own-bid pricing/decline progression/accepted order/settled history, masked account creation and administrator payout appearing in seller history. Desktop1440/mobile375 screenshots were reviewed without document overflow. These are caller observations against stand-ins, not real service guarantees.
+    source: tests/seller-operations.spec.ts; postman/mocks/backoffice-gateway/auctions.js; postman/mocks/backoffice-gateway/offers.js; postman/mocks/backoffice-gateway/payouts.js; docs/features/seller-operations.md
+    updated_at: '2026-11-14'
+  - id: seller-225-live-proposed-contracts
+    status: unknown
+    claim: Backend second-chance offers and bank/payout services implement the paths, schemas, transactional behavior and authorization in the frontend proposals.
+    reason: Origin/develop 09b3cf6f contains no delivered #208/#261 controller or OpenAPI. The local mocks were built from the issue criteria and explicit frontend proposals; they cannot establish backend behavior.
+    verification: On 2026-11-14 inspected delivered specs/controllers and implemented production API calls with visible unavailable errors and no fixture fallback. Actual notification timing, expiry/stock return, acceptance/payment/settlement, bank verification, payout uniqueness/idempotency and cross-seller authorization still require delivered backend/live integration checks. Owner mock search was skipped because the installed Postman CLI has no status command; nothing was published.
+    source: docs/api/seller-offers.openapi.yaml; docs/api/seller-payouts.openapi.yaml; service/sellerOfferService.ts; service/payoutService.ts
+    updated_at: '2026-11-14'
+  - id: oidc-fixture-concurrent-rotation-20261114
+    status: supported
+    claim: Independent local fixture sessions survive concurrent refresh rotation while used refresh tokens remain invalid.
+    reason: Serializing fixture requests prevents non-atomic pm.state snapshot updates from overwriting another session's rotated token. This changes only the local provider stand-in.
+    verification: On 2026-11-14 regression testing found a pre-existing race during the multi-account demo. The exact-source concurrent-session unit test reproduces lost rotation without the queue and passes with it: both sessions refresh twice with original role/subject and all consumed tokens return invalid_grant. Production authentication and token reuse policy are unchanged.
+    source: postman/mocks/oidc-keycloak/default.js; tests/oidc-provider-concurrency.test.ts
+    updated_at: '2026-11-14'
   - id: flat-jwt-roles-determine-workspace
     status: supported
     claim: Back-office menus and access read the access token's flat roles claim and ignore privileges or conflicting profile roles.
@@ -98,6 +151,22 @@ assumptions:
       ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionService.java
     updated_at: '2026-11-15'
 fingerprints:
+  - id: review225-contract-correction-20261116
+    date: '2026-11-16'
+    commit: seller225 f9ec7096 integrating develop 5fc0244d with updated issue 208/257/261 frontend and HTTP stand-ins
+    cli: Postman 1.73.0
+  - id: seller225-develop-20261116
+    date: '2026-11-16'
+    commit: seller225 7bec971c merging develop 13aa202e with shared Seller/Admin auction and product-picker conflict resolution
+    cli: Postman 1.73.0
+  - id: seller-225-merge220-20261115
+    date: '2026-11-15'
+    commit: seller225 4dc5689c integrating buyer220 c1dd33c5 and its develop dc9a0207 ancestor, with conflict-resolution changes
+    cli: Postman 1.73.0
+  - id: seller-225-20261114
+    date: '2026-11-14'
+    commit: origin/develop 09b3cf6f with uncommitted seller225 frontend and explicit simulation changes
+    cli: Postman 1.73.0
   - id: review158-live-acceptance-20261111
     date: '2026-11-11'
     commit: develop fa659a90 merged with the reduced back-office task
