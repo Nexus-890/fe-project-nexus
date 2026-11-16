@@ -3,11 +3,11 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { SellerProfile, SellerProfileInput } from "../types/sellerProfileType";
 
 export const parseSellerProfile = (value: unknown): SellerProfile => {
-  if (!isRecord(value) || typeof value.sellerId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.sellerId) ||
+  if (!isRecord(value) || typeof value.userId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.userId) ||
     typeof value.companyName !== "string" || !value.companyName.trim() || value.companyName.length > 200 ||
     typeof value.contactPhone !== "string" || !value.contactPhone.trim() || value.contactPhone.length > 20 ||
     !["PENDING", "ACTIVE", "REJECTED"].includes(String(value.status))) throw createInvalidResponseError("Invalid seller profile response");
-  return { sellerId: value.sellerId, companyName: value.companyName, contactPhone: value.contactPhone, status: value.status as SellerProfile["status"] };
+  return { sellerId: value.userId, companyName: value.companyName, contactPhone: value.contactPhone, status: value.status as SellerProfile["status"] };
 };
 
 export const getSellerProfile = async (options: ServiceRequestOptions = {}): Promise<SellerProfile> => {

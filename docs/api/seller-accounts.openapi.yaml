@@ -208,12 +208,20 @@ components:
         totalPages: {type: integer, minimum: 0}
     SellerProfile:
       type: object
-      required: [sellerId, companyName, contactPhone, status]
+      required: [userId, companyName, contactPhone, status, applicationNote, rejectionReason, appliedAt, reviewedBy, reviewedAt, version, createdAt, updatedAt]
       properties:
-        sellerId: {type: string, format: uuid}
+        userId: {type: string, format: uuid}
         companyName: {type: string, minLength: 1, maxLength: 200}
         contactPhone: {type: string, minLength: 1, maxLength: 20}
         status: {type: string, enum: [PENDING, ACTIVE, REJECTED]}
+        applicationNote: {type: string, nullable: true}
+        rejectionReason: {type: string, nullable: true}
+        appliedAt: {type: string, format: date-time}
+        reviewedBy: {type: string, format: uuid, nullable: true}
+        reviewedAt: {type: string, format: date-time, nullable: true}
+        version: {type: integer, format: int64, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     VerificationStatus: {type: string, enum: [UNVERIFIED, VERIFIED, REJECTED]}
     BankAccount:
       type: object

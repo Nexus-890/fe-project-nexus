@@ -84,6 +84,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sellers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated seller profile
+         * @description Requires the SELLER role. Existing sellers with no seller row receive a lazy ACTIVE profile copied from their local user name and phone, reviewed by the system actor. The user UUID is the seller ID. Application and approval operations belong to #210.
+         */
+        get: operations["getOwnSellerProfile"];
+        /**
+         * Update company name and contact phone
+         * @description Requires the SELLER role. Updates only the authenticated seller companyName/contactPhone; application status, review and audit fields cannot be changed by this request.
+         */
+        put: operations["updateOwnSellerProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -242,6 +266,41 @@ export interface components {
             message: string;
             data: components["schemas"]["User"][];
             page: components["schemas"]["PageInfo"];
+        };
+        SellerProfileRequest: {
+            /** @description Trimmed, nonblank company name. */
+            companyName: string;
+            /** @description Trimmed, nonblank contact phone. */
+            contactPhone: string;
+        };
+        SellerProfile: {
+            /** Format: uuid */
+            userId: string;
+            companyName: string;
+            contactPhone: string;
+            /** @enum {string} */
+            status: "PENDING" | "ACTIVE" | "REJECTED";
+            applicationNote: string | null;
+            rejectionReason: string | null;
+            /** Format: date-time */
+            appliedAt: string;
+            /** Format: uuid */
+            reviewedBy: string | null;
+            /** Format: date-time */
+            reviewedAt: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SellerProfileApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SellerProfile"];
         };
     };
     responses: never;
@@ -1151,6 +1210,187 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    getOwnSellerProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own profile, with a lazy ACTIVE row for an existing SELLER if necessary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerProfileApiResponse"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The local user does not exist or is deleted (USER_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "The local user does not exist or is deleted",
+                     *       "instance": "/api/v1/sellers/me",
+                     *       "code": "USER_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateOwnSellerProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated seller profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerProfileApiResponse"];
+                };
+            };
+            /** @description Company name and contact phone must satisfy the request constraints (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Company name and contact phone must satisfy the request constraints",
+                     *       "instance": "/api/v1/sellers/me",
+                     *       "code": "VALIDATION_FAILED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The local user does not exist or is deleted (USER_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "The local user does not exist or is deleted",
+                     *       "instance": "/api/v1/sellers/me",
+                     *       "code": "USER_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

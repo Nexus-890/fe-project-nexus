@@ -1,4 +1,4 @@
-/** Issue #257 profile projection; delivered backend DTO is still pending. */
+/** Mô hình UI: sellerId được ánh xạ từ userId của API hồ sơ seller. */
 export type SellerProfile = {
   sellerId: string;
   companyName: string;

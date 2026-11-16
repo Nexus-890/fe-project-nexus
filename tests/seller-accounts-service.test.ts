@@ -13,12 +13,12 @@ import type { ApiContext } from "../types/commonRequestType";
 const sellerId = "68000000-0000-4000-8000-000000000002";
 const bankId = "95000000-0000-4000-8000-000000000001";
 const bank = { id: bankId, sellerId, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true };
-const profile = { sellerId, companyName: "Seller Shop", contactPhone: "0901234567", status: "ACTIVE" };
+const profile = { userId: sellerId, companyName: "Seller Shop", contactPhone: "0901234567", status: "ACTIVE" };
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
 const status = (expected: number) => (error: unknown) => isApiError(error) && error.status === expected;
 const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
 
-test("seller profile writes only companyName/contactPhone and validates the issue-derived profile projection", async () => {
+test("seller profile maps the delivered userId and writes only companyName/contactPhone", async () => {
   const calls: unknown[] = [];
   const context: ApiContext = { getAccessToken: () => "current-seller", fetch: async (input, init) => {
     assert.equal(String(input), "/api/v1/sellers/me");
@@ -26,10 +26,11 @@ test("seller profile writes only companyName/contactPhone and validates the issu
     calls.push(init?.body ? JSON.parse(String(init.body)) : null);
     return Response.json(envelope(profile));
   } };
-  assert.equal((await getSellerProfile({ context })).status, "ACTIVE");
+  const result = await getSellerProfile({ context });
+  assert.equal(result.status, "ACTIVE"); assert.equal(result.sellerId, sellerId);
   await updateSellerProfile({ companyName: " Seller Shop ", contactPhone: " 0901234567 ", status: "REJECTED", sellerId: bankId } as Parameters<typeof updateSellerProfile>[0], { context });
   assert.deepEqual(calls, [null, { companyName: "Seller Shop", contactPhone: "0901234567" }]);
-  for (const bad of [{ ...profile, sellerId: "bad" }, { ...profile, status: "VERIFIED" }, { ...profile, companyName: "" }, { ...profile, contactPhone: 123 }]) assert.throws(() => parseSellerProfile(bad), invalid);
+  for (const bad of [{ ...profile, userId: "bad" }, { ...profile, userId: undefined, sellerId }, { ...profile, status: "VERIFIED" }, { ...profile, companyName: "" }, { ...profile, contactPhone: 123 }]) assert.throws(() => parseSellerProfile(bad), invalid);
 });
 
 test("bank parser retains a safe mask and rejects leaked full or encrypted account fields", () => {
@@ -40,7 +41,7 @@ test("bank parser retains a safe mask and rejects leaked full or encrypted accou
     assert.throws(() => parseSellerBankAccount(bad), invalid);
 });
 
-test("bank creation preserves leading zeroes, sends canonical fields and refuses a verified update response", async () => {
+test("bank creation preserves leading zeroes and unchanged verified updates keep the server decision", async () => {
   const input = { bankCode: "970436", accountNumber: "000004321", accountHolderName: " DEMO SELLER " };
   const context: ApiContext = { getAccessToken: () => "seller", fetch: async (url, init) => {
     assert.equal(String(url), "/api/v1/payments/seller-bank-accounts");
@@ -48,7 +49,11 @@ test("bank creation preserves leading zeroes, sends canonical fields and refuses
     return Response.json(envelope(bank), { status: 201 });
   } };
   assert.equal((await addSellerBankAccount(input, { context })).accountLast4, "4321");
-  await assert.rejects(updateSellerBankAccount(bankId, input, { context: { fetch: async () => Response.json(envelope({ ...bank, verificationStatus: "VERIFIED" })) } }), invalid);
+  const unchanged = await updateSellerBankAccount(bankId, input, { context: { fetch: async () => Response.json(envelope({ ...bank, verificationStatus: "VERIFIED" })) } });
+  assert.equal(unchanged.verificationStatus, "VERIFIED");
+  for (const mismatch of [{ id: randomUUID() }, { bankCode: "970415" }, { accountLast4: "9999" }, { accountHolderName: "OTHER HOLDER" }]) {
+    await assert.rejects(updateSellerBankAccount(bankId, input, { context: { fetch: async () => Response.json(envelope({ ...bank, ...mismatch })) } }), invalid);
+  }
   let sent = false;
   await assert.rejects(addSellerBankAccount({ ...input, accountNumber: "1e10" }, { context: { fetch: async () => { sent = true; return Response.json(envelope(bank)); } } }), invalid);
   assert.equal(sent, false);

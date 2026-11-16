@@ -1,10 +1,11 @@
 import { AxiosHeaders } from "axios";
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
+import { normalizeMoney } from "./catalogService";
 import type { ApiError, ApiResponse, Page } from "../types/commonResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import { payoutHistoryEvents, payoutStatuses, type PayoutDetail, type PayoutFilters, type PayoutHistoryEntry, type PayoutStatus, type SellerPayout } from "../types/payoutType";
 
-// Issue-aligned boundary for #257/#261; these APIs are not delivered on the current backend.
+// API #257 đã triển khai; admin list vẫn thuộc #261.
 const path = "/api/v1/payments/payouts";
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const text = (value: unknown, max = 500): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
@@ -13,8 +14,17 @@ const status = (value: unknown): value is PayoutStatus => payoutStatuses.some((e
 const nullableText = (value: unknown) => value === null || text(value);
 const last4 = (value: unknown): value is string | null => value === null || typeof value === "string" && /^\d{4}$/.test(value);
 const money = (value: unknown): string => {
-  if (typeof value !== "string" || !/^\d{1,17}\.\d{2}$/.test(value)) throw createInvalidResponseError("Invalid payout decimal amount");
-  return value;
+  const normalized = normalizeMoney(value);
+  if (normalized === null || !/^\d{1,17}\.\d{2}$/.test(normalized) ||
+    typeof value === "number" && (Number(normalized) !== value || BigInt(normalized.replace(".", "")) > BigInt(Number.MAX_SAFE_INTEGER)))
+    throw createInvalidResponseError("Invalid payout decimal amount");
+  return normalized;
+};
+const feeRate = (value: unknown): string => {
+  const normalized = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
+  if (typeof normalized !== "string" || !/^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$/.test(normalized))
+    throw createInvalidResponseError("Invalid payout platform fee rate");
+  return normalized;
 };
 const minor = (value: string) => BigInt(value.replace(".", ""));
 
@@ -22,18 +32,19 @@ export const parseSellerPayout = (value: unknown): SellerPayout => {
   if (!isRecord(value) || !uuid(value.id) || !uuid(value.orderId) || !uuid(value.sellerId) || value.currency !== "VND" || !status(value.status) ||
     !Number.isSafeInteger(value.attemptCount) || Number(value.attemptCount) < 0 || !last4(value.recipientAccountLast4) ||
     !(value.providerReference == null || text(value.providerReference, 200)) || !instant(value.createdAt) ||
-    typeof value.platformFeeRate !== "string" || !/^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$/.test(value.platformFeeRate) ||
+    typeof value.simulated !== "boolean" ||
     ["accountNumber", "recipientAccountNumber", "recipientAccountEncrypted"].some((key) => Object.hasOwn(value, key)))
     throw createInvalidResponseError("Invalid payout response");
   const orderAmount = money(value.orderAmount), shippingFee = money(value.shippingFee), platformFee = money(value.platformFee), netAmount = money(value.netAmount);
+  const platformFeeRate = feeRate(value.platformFeeRate);
   if (minor(netAmount) <= BigInt(0) || minor(orderAmount) - minor(shippingFee) - minor(platformFee) !== minor(netAmount))
     throw createInvalidResponseError("Payout amount breakdown does not balance");
   if (["SUCCEEDED", "RETURNED"].includes(value.status) &&
     (Number(value.attemptCount) < 1 || value.recipientAccountLast4 === null || !text(value.providerReference, 200)))
     throw createInvalidResponseError("Confirmed payout requires an attempted transfer, receiving account and provider reference");
-  return { id: value.id, orderId: value.orderId, sellerId: value.sellerId, orderAmount, shippingFee, platformFeeRate: value.platformFeeRate,
+  return { id: value.id, orderId: value.orderId, sellerId: value.sellerId, orderAmount, shippingFee, platformFeeRate,
     platformFee, netAmount, currency: "VND", status: value.status, attemptCount: Number(value.attemptCount), recipientAccountLast4: value.recipientAccountLast4,
-    providerReference: value.providerReference == null ? null : value.providerReference, createdAt: value.createdAt };
+    providerReference: value.providerReference == null ? null : value.providerReference, createdAt: value.createdAt, simulated: value.simulated };
 };
 
 export const parsePayoutHistoryEntry = (value: unknown): PayoutHistoryEntry => {

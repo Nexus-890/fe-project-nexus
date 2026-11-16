@@ -6,7 +6,7 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
   const safe = (account) => ({ id: account.id, sellerId: account.sellerId, bankCode: account.bankCode, accountLast4: account.accountLast4,
     accountHolderName: account.accountHolderName, verificationStatus: account.verificationStatus, isDefault: account.isDefault, active: account.active });
   function reset() {
-    profiles = new Map([[seller, { sellerId: seller, companyName: "Demo Seller Shop", contactPhone: "0901234567", status: "ACTIVE" }]]);
+    profiles = new Map([[seller, { userId: seller, companyName: "Demo Seller Shop", contactPhone: "0901234567", status: "ACTIVE" }]]);
     accounts = [{ id: seedBank, sellerId: seller, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true, createdAt: "2026-11-14T03:00:00Z" }];
     requests = [];
   }
@@ -29,7 +29,7 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
     if (path === "/v1/sellers/me") {
       if (!has("SELLER")) return reject(res, 403, "Seller role required", "FORBIDDEN");
       let profile = profiles.get(claims.sub);
-      if (!profile) { profile = { sellerId: claims.sub, companyName: "Seller shop", contactPhone: "0901234567", status: "ACTIVE" }; profiles.set(claims.sub, profile); }
+      if (!profile) { profile = { userId: claims.sub, companyName: "Seller shop", contactPhone: "0901234567", status: "ACTIVE" }; profiles.set(claims.sub, profile); }
       if (req.method === "GET") return respond(res, profile);
       if (req.method === "PUT") {
         if (typeof body.companyName !== "string" || !body.companyName.trim() || body.companyName.trim().length > 200 ||

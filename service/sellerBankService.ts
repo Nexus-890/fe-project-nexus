@@ -25,7 +25,7 @@ const parseAccounts = (value: unknown): SellerBankAccount[] => {
   return rows;
 };
 const bankInput = (input: SellerBankAccountInput): SellerBankAccountInput => {
-  if (!/^\d{6}$/.test(input.bankCode) || !/^\d{6,34}$/.test(input.accountNumber) ||
+  if (!/^\d{6}$/.test(input.bankCode) || !/^\d{4,34}$/.test(input.accountNumber) ||
     !input.accountHolderName.trim() || input.accountHolderName.trim().length > 100)
     throw createInvalidResponseError("Enter a six-digit bank BIN, account number and account holder name");
   return { bankCode: input.bankCode, accountNumber: input.accountNumber, accountHolderName: input.accountHolderName.trim() };
@@ -53,8 +53,9 @@ export const updateSellerBankAccount = async (id: string, input: SellerBankAccou
   const body = bankInput(input);
   const { data } = await requestApi("PUT", `${bankPath}/${id}`, body, { ...options, auth: true, params: undefined });
   const account = parseSellerBankAccount(data);
-  if (account.id !== id || account.accountLast4 !== body.accountNumber.slice(-4) || account.verificationStatus !== "UNVERIFIED")
-    throw createInvalidResponseError("Bank account edits must require verification again");
+  if (account.id !== id || account.accountLast4 !== body.accountNumber.slice(-4) ||
+    account.bankCode !== body.bankCode || account.accountHolderName !== body.accountHolderName)
+    throw createInvalidResponseError("Mismatched bank account update response");
   return account;
 };
 export const setDefaultSellerBankAccount = async (id: string, options: ServiceRequestOptions = {}): Promise<SellerBankAccount> => {

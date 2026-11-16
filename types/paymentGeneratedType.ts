@@ -88,6 +88,183 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payments/seller-bank-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an encrypted seller bank account
+         * @description Seller ID comes from the authenticated JWT. Account numbers retain leading zeroes and are encrypted with AES-GCM. Responses expose only accountLast4. Accounts start UNVERIFIED; verification does not transfer money.
+         */
+        post: operations["createSellerBankAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/seller-bank-accounts/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the authenticated seller bank accounts */
+        get: operations["listOwnSellerBankAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/seller-bank-accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update an owned bank account
+         * @description Changing bank code, account number or holder resets verification to UNVERIFIED and clears previous verification/rejection metadata. Omitted isDefault/active preserve their stored values. A sent payout retains its recipient snapshot. active=false deactivates the account.
+         */
+        put: operations["updateSellerBankAccount"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/seller-bank-accounts/{id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose the seller active default bank account
+         * @description At most one active default account per seller. Selecting a default does not verify it. An account must also be active and VERIFIED before a payout can be sent.
+         */
+        post: operations["setDefaultSellerBankAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/seller-bank-accounts/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify or reject a bank account
+         * @description Administrator verification only. Rejecting requires a nonblank reason. Verifying an active default account releases eligible ON_HOLD payouts automatically; no manual payout creation endpoint exists.
+         */
+        post: operations["verifySellerBankAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated seller automatic payouts
+         * @description One payout per completed, funded seller order. PAID buyer state is distinct from payout state. simulated=true identifies sandbox evidence; provider acceptance alone does not mean seller funds have arrived.
+         */
+        get: operations["listOwnPayouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read payout state and immutable history
+         * @description The owning seller or an administrator can read the payout, with history newest first. History exposes last four account digits and sanitized provider outcomes; recipient ciphertext and credentials are never returned.
+         */
+        get: operations["getPayout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a definitively failed or returned payout
+         * @description Only FAILED or RETURNED can be retried. Requires an Idempotency-Key of 1 to 100 letters, digits, dots, underscores, colons or hyphens. Repeating the same authorized request does not enqueue another attempt. PROCESSING or UNKNOWN must be reconciled before retry. The next send uses a fresh attempt key and the verified active default bank account.
+         */
+        post: operations["retryPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/callbacks/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a signed payout provider outcome
+         * @description Public to JWT authentication; authenticates the raw bytes using X-Payout-Timestamp and X-Payout-Signature. HMAC-SHA256 signs epoch seconds, one dot and the exact UTF-8 request body; maximum clock skew is 300 seconds. The payout, provider, attempt and idempotency key must match the persisted send. Duplicate callbacks create no additional money movement. ACCEPTED is PROCESSING; only confirmed SUCCEEDED writes PAYOUT evidence. Provider acknowledgement uses @ProtocolResponse, outside ApiResponse.
+         */
+        post: operations["receivePayoutCallback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -266,6 +443,166 @@ export interface components {
             instance: string;
             code: string;
             traceId?: string;
+        };
+        SellerBankAccountRequest: {
+            /** @description NAPAS bank BIN. */
+            bankCode: string;
+            /** @description Keep leading zeroes. Encrypted at rest; never included in responses or logs. */
+            accountNumber: string;
+            accountHolderName: string;
+            /** @description Optional; false on create, preserve existing value on update. */
+            isDefault?: boolean;
+            /** @description Optional; true on create, preserve existing value on update. */
+            active?: boolean;
+        };
+        SellerBankVerificationRequest: {
+            /** @enum {string} */
+            verificationStatus: "VERIFIED" | "REJECTED";
+            /** @description Required and nonblank when REJECTED. */
+            reason?: string;
+        };
+        SellerBankAccount: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sellerId: string;
+            bankCode: string;
+            accountLast4: string;
+            accountHolderName: string;
+            /** @enum {string} */
+            verificationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED";
+            isDefault: boolean;
+            active: boolean;
+            rejectionReason: string | null;
+            /** Format: uuid */
+            verifiedBy: string | null;
+            /** Format: date-time */
+            verifiedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: int64 */
+            version: number;
+        };
+        SellerBankAccountApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SellerBankAccount"];
+        };
+        SellerBankAccountListApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SellerBankAccount"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
+        };
+        /** @enum {string} */
+        PayoutStatus: "ON_HOLD" | "PENDING" | "PROCESSING" | "UNKNOWN" | "SUCCEEDED" | "FAILED" | "RETURNED";
+        Payout: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderId: string;
+            /** Format: uuid */
+            sellerId: string;
+            /** @description Decimal monetary value, persisted as numeric(19,2). */
+            orderAmount: number;
+            /** @description Decimal monetary value, persisted as numeric(19,2). */
+            shippingFee: number;
+            /** @description Rate frozen at payout creation; configuration changes affect only later payouts. */
+            platformFeeRate: number;
+            /** @description Decimal monetary value, persisted as numeric(19,2). */
+            platformFee: number;
+            /** @description Decimal monetary value, persisted as numeric(19,2). */
+            netAmount: number;
+            /** @example VND */
+            currency: string;
+            status: components["schemas"]["PayoutStatus"];
+            attemptCount: number;
+            recipientAccountLast4: string | null;
+            providerReference: string | null;
+            /** @description true means simulated sandbox evidence, not a real bank transfer. */
+            simulated: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PayoutHistory: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            event: "CREATED" | "HELD" | "RELEASED" | "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "RECONCILED" | "RETRIED" | "RETURNED";
+            /** Format: int64 */
+            eventSeq: number;
+            /** @enum {string|null} */
+            fromStatus: "ON_HOLD" | "PENDING" | "PROCESSING" | "UNKNOWN" | "SUCCEEDED" | "FAILED" | "RETURNED" | null;
+            toStatus: components["schemas"]["PayoutStatus"];
+            attemptNo: number;
+            /** @description Decimal monetary value, persisted as numeric(19,2). */
+            amount: number;
+            /** Format: uuid */
+            sellerBankId: string | null;
+            recipientAccountLast4: string | null;
+            provider: string | null;
+            providerReference: string | null;
+            providerStatus: string | null;
+            errorCode: string | null;
+            errorMessage: string | null;
+            simulated: boolean;
+            /** Format: uuid */
+            actorId: string;
+            /** Format: date-time */
+            occurredAt: string;
+            /** Format: uuid */
+            transactionId: string | null;
+        };
+        PayoutDetail: components["schemas"]["Payout"] & {
+            /** @description Newest first; eventSeq orders the immutable lifecycle. */
+            history: components["schemas"]["PayoutHistory"][];
+        };
+        PayoutDetailApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["PayoutDetail"];
+        };
+        PayoutListApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Payout"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
+        };
+        PayoutProviderCallback: {
+            /** Format: uuid */
+            payoutId: string;
+            attempt: number;
+            idempotencyKey: string;
+            /** @enum {string} */
+            state: "ACCEPTED" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "RETURNED";
+            reference?: string | null;
+            providerStatus?: string | null;
+        };
+        PayoutCallbackAcknowledgement: {
+            /** @enum {string} */
+            status: "ok";
         };
     };
     responses: never;
@@ -732,6 +1069,906 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createSellerBankAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerBankAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Created unverified bank account */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerBankAccountApiResponse"];
+                };
+            };
+            /** @description Bank details or verification request are invalid (PAYMENT_SELLER_BANK_ACCOUNT_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Bank details or verification request are invalid",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listOwnSellerBankAccounts: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own accounts, including verification state; account numbers are masked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerBankAccountListApiResponse"];
+                };
+            };
+            /** @description Invalid pagination parameters (PAYMENT_SELLER_BANK_ACCOUNT_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Invalid pagination parameters",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateSellerBankAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerBankAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated bank account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerBankAccountApiResponse"];
+                };
+            };
+            /** @description Bank details or verification request are invalid (PAYMENT_SELLER_BANK_ACCOUNT_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Bank details or verification request are invalid",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Bank account not found, including an account owned by another seller (PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Bank account not found, including an account owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setDefaultSellerBankAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Selected default account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerBankAccountApiResponse"];
+                };
+            };
+            /** @description Bank details or verification request are invalid (PAYMENT_SELLER_BANK_ACCOUNT_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Bank details or verification request are invalid",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Bank account not found, including an account owned by another seller (PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Bank account not found, including an account owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    verifySellerBankAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerBankVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorded administrator verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerBankAccountApiResponse"];
+                };
+            };
+            /** @description Bank details or verification request are invalid (PAYMENT_SELLER_BANK_ACCOUNT_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Bank details or verification request are invalid",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Bank account not found, including an account owned by another seller (PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Bank account not found, including an account owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listOwnPayouts: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own payouts newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "00000000-0000-4000-8000-000000000257",
+                     *           "orderId": "00000000-0000-4000-8000-000000000001",
+                     *           "sellerId": "00000000-0000-4000-8000-000000000004",
+                     *           "orderAmount": 325000,
+                     *           "shippingFee": 25000,
+                     *           "platformFeeRate": 0,
+                     *           "platformFee": 0,
+                     *           "netAmount": 300000,
+                     *           "currency": "VND",
+                     *           "status": "ON_HOLD",
+                     *           "attemptCount": 0,
+                     *           "recipientAccountLast4": null,
+                     *           "providerReference": null,
+                     *           "simulated": true,
+                     *           "createdAt": "2026-11-16T05:00:00Z"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 20,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PayoutListApiResponse"];
+                };
+            };
+            /** @description Invalid pagination parameters (PAYMENT_PAYOUT_INVALID_REQUEST). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Invalid pagination parameters",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_INVALID_REQUEST"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getPayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payout including immutable history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayoutDetailApiResponse"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payout not found, including a payout owned by another seller (PAYMENT_PAYOUT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Payout not found, including a payout owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    retryPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payout after the retry request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayoutDetailApiResponse"];
+                };
+            };
+            /** @description Missing or invalid Idempotency-Key (PAYMENT_PAYOUT_IDEMPOTENCY_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Missing or invalid Idempotency-Key",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_IDEMPOTENCY_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication is required (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for JWT authentication failures. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "Authentication is required",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "UNAUTHENTICATED"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The authenticated user is not allowed to perform this action (FORBIDDEN). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "The authenticated user is not allowed to perform this action",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "FORBIDDEN"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payout not found, including a payout owned by another seller (PAYMENT_PAYOUT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Payout not found, including a payout owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payout state is not retryable or a verified active default bank account is missing (PAYMENT_PAYOUT_NOT_RETRYABLE). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Conflict",
+                     *       "status": 409,
+                     *       "detail": "Payout state is not retryable or a verified active default bank account is missing",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_NOT_RETRYABLE"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    receivePayoutCallback: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for provider authentication; absent or stale headers return 401. */
+                "X-Payout-Timestamp"?: string;
+                /** @description Hex HMAC-SHA256 digest of timestamp + dot + raw body. */
+                "X-Payout-Signature"?: string;
+            };
+            path: {
+                provider: "sandbox" | "http";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayoutProviderCallback"];
+            };
+        };
+        responses: {
+            /** @description Native provider acknowledgement, including duplicate callbacks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "ok"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PayoutCallbackAcknowledgement"];
+                };
+            };
+            /** @description Invalid signed callback body (PAYMENT_PAYOUT_CALLBACK_INVALID). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "Invalid signed callback body",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_CALLBACK_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The provider callback signature is invalid (PAYMENT_PAYOUT_CALLBACK_SIGNATURE_INVALID). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unauthorized",
+                     *       "status": 401,
+                     *       "detail": "The provider callback signature is invalid",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_CALLBACK_SIGNATURE_INVALID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payout not found, including a payout owned by another seller (PAYMENT_PAYOUT_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Not Found",
+                     *       "status": 404,
+                     *       "detail": "Payout not found, including a payout owned by another seller",
+                     *       "instance": "/api/v1/payments/payouts",
+                     *       "code": "PAYMENT_PAYOUT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Provider reference conflicts with the stored transfer (PAYMENT_PAYOUT_PROVIDER_CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Conflict",
+                     *       "status": 409,
+                     *       "detail": "Provider reference conflicts with the stored transfer",
+                     *       "instance": "/api/v1/payments/payouts/callbacks/http",
+                     *       "code": "PAYMENT_PAYOUT_PROVIDER_CONFLICT"
+                     *     }
+                     */
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
