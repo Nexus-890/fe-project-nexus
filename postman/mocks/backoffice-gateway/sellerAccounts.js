@@ -4,10 +4,11 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
   const seedBank = "95000000-0000-4000-8000-000000000001";
   const uuid = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   const safe = (account) => ({ id: account.id, sellerId: account.sellerId, bankCode: account.bankCode, accountLast4: account.accountLast4,
-    accountHolderName: account.accountHolderName, verificationStatus: account.verificationStatus, isDefault: account.isDefault, active: account.active });
+    accountHolderName: account.accountHolderName, verificationStatus: account.verificationStatus,
+    isDefault: account.isDefault, active: account.active, version: account.version });
   function reset() {
     profiles = new Map([[seller, { userId: seller, companyName: "Demo Seller Shop", contactPhone: "0901234567", status: "ACTIVE" }]]);
-    accounts = [{ id: seedBank, sellerId: seller, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true, createdAt: "2026-11-14T03:00:00Z" }];
+    accounts = [{ id: seedBank, sellerId: seller, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true, version: 0, createdAt: "2026-11-14T03:00:00Z" }];
     requests = [];
   }
   const reject = (res, status, detail, code) => { problem(res, status, detail, code); return true; };
@@ -23,7 +24,7 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
     const body = bodyOf(req);
     requests.push({ method: req.method, path, actor: claims?.sub || null,
       ...(path === "/v1/sellers/me" && req.method === "PUT" ? { body: { companyName: body.companyName, contactPhone: body.contactPhone } } : {}),
-      ...(path.startsWith(bankPath) && ["POST", "PUT"].includes(req.method) ? { body: path.endsWith("/verify") ? { verificationStatus: body.verificationStatus, reason: body.reason } : { bankCode: body.bankCode, accountLast4: typeof body.accountNumber === "string" ? body.accountNumber.slice(-4) : undefined, accountHolderName: body.accountHolderName } } : {}) });
+      ...(path.startsWith(bankPath) && ["POST", "PUT"].includes(req.method) ? { body: path.endsWith("/verify") ? { verificationStatus: body.verificationStatus, expectedVersion: body.expectedVersion, reason: body.reason } : { bankCode: body.bankCode, accountLast4: typeof body.accountNumber === "string" ? body.accountNumber.slice(-4) : undefined, accountHolderName: body.accountHolderName } } : {}) });
     if (!claims) return reject(res, 401, "Sign in first", "UNAUTHENTICATED");
     const has = (role) => claims.roles?.includes(role);
     if (path === "/v1/sellers/me") {
@@ -55,7 +56,7 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
     if (path === bankPath && req.method === "POST") {
       if (!has("SELLER")) return reject(res, 403, "Seller role required", "FORBIDDEN");
       if (!validInput(body)) return reject(res, 400, "Valid bank BIN, account number and holder are required", "SELLER_BANK_ACCOUNT_INVALID");
-      const account = { id: randomUUID(), sellerId: claims.sub, bankCode: body.bankCode, accountLast4: body.accountNumber.slice(-4), accountHolderName: body.accountHolderName.trim(), verificationStatus: "UNVERIFIED", isDefault: false, active: true, createdAt: new Date().toISOString() };
+      const account = { id: randomUUID(), sellerId: claims.sub, bankCode: body.bankCode, accountLast4: body.accountNumber.slice(-4), accountHolderName: body.accountHolderName.trim(), verificationStatus: "UNVERIFIED", isDefault: false, active: true, version: 0, createdAt: new Date().toISOString() };
       accounts.push(account); return respond(res, safe(account), 201);
     }
     const match = new RegExp(`^${bankPath}/([^/]+)(?:/(default|verify))?$`).exec(path);
@@ -64,10 +65,12 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
       if (match[2] === "verify" && req.method === "POST") {
         if (!has("ADMIN")) return reject(res, 403, "Administrator role required", "FORBIDDEN");
         if (!account) return reject(res, 404, "Bank account not found", "SELLER_BANK_ACCOUNT_NOT_FOUND");
-        if (!["VERIFIED", "REJECTED"].includes(body.verificationStatus) ||
+        if (!Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 0 || !["VERIFIED", "REJECTED"].includes(body.verificationStatus) ||
           body.reason != null && (typeof body.reason !== "string" || !body.reason.trim() || body.reason.trim().length > 500) ||
           body.verificationStatus === "REJECTED" && !body.reason?.trim()) return reject(res, 400, "Provide a decision and rejection reason", "VALIDATION_FAILED");
-        account.verificationStatus = body.verificationStatus;
+        if (body.expectedVersion !== account.version)
+          return reject(res, 409, "Bank account changed; review the latest details", "PAYMENT_SELLER_BANK_ACCOUNT_CONFLICT");
+        account.verificationStatus = body.verificationStatus; account.version++;
         if (account.verificationStatus === "VERIFIED") onVerified(safe(account));
         return respond(res, safe(account));
       }
@@ -75,12 +78,15 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
       if (!account || account.sellerId !== claims.sub) return reject(res, 404, "Bank account not found", "SELLER_BANK_ACCOUNT_NOT_FOUND");
       if (req.method === "PUT" && !match[2]) {
         if (!validInput(body)) return reject(res, 400, "Valid bank details are required", "SELLER_BANK_ACCOUNT_INVALID");
-        Object.assign(account, { bankCode: body.bankCode, accountLast4: body.accountNumber.slice(-4), accountHolderName: body.accountHolderName.trim(), verificationStatus: "UNVERIFIED" });
+        Object.assign(account, { bankCode: body.bankCode, accountLast4: body.accountNumber.slice(-4), accountHolderName: body.accountHolderName.trim(), verificationStatus: "UNVERIFIED", version: account.version + 1 });
         return respond(res, safe(account));
       }
       if (req.method === "POST" && match[2] === "default") {
         if (!account.active) return reject(res, 400, "Default bank account must be active", "SELLER_BANK_ACCOUNT_INVALID");
-        accounts.filter((row) => row.sellerId === claims.sub).forEach((row) => { row.isDefault = row.id === account.id; });
+        accounts.filter((row) => row.sellerId === claims.sub).forEach((row) => {
+          const isDefault = row.id === account.id;
+          if (row.isDefault !== isDefault) { row.isDefault = isDefault; row.version++; }
+        });
         if (account.verificationStatus === "VERIFIED") onVerified(safe(account));
         return respond(res, safe(account));
       }

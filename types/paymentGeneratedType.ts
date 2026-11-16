@@ -176,7 +176,7 @@ export interface paths {
         put?: never;
         /**
          * Verify or reject a bank account
-         * @description Administrator verification only. Rejecting requires a nonblank reason. Verifying an active default account releases eligible ON_HOLD payouts automatically; no manual payout creation endpoint exists.
+         * @description Administrator verification only. expectedVersion must match the account version displayed during review; a changed account returns 409 and must be reviewed again. Rejecting requires a nonblank reason. Verifying an active default account releases eligible ON_HOLD payouts automatically; no manual payout creation endpoint exists.
          */
         post: operations["verifySellerBankAccount"];
         delete?: never;
@@ -460,6 +460,11 @@ export interface components {
             verificationStatus: "VERIFIED" | "REJECTED";
             /** @description Required and nonblank when REJECTED. */
             reason?: string;
+            /**
+             * Format: int64
+             * @description Version from the exact bank-account snapshot the administrator reviewed. Missing or negative is 400; stale is 409.
+             */
+            expectedVersion: number;
         };
         SellerBankAccount: {
             /** Format: uuid */
@@ -1540,6 +1545,25 @@ export interface operations {
                      *       "detail": "Bank account not found, including an account owned by another seller",
                      *       "instance": "/api/v1/payments/payouts",
                      *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_NOT_FOUND"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The bank account changed after the administrator reviewed it (PAYMENT_SELLER_BANK_ACCOUNT_CONFLICT). Reload and review the current account before retrying. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Conflict",
+                     *       "status": 409,
+                     *       "detail": "Bank account changed since review; reload it before submitting a decision",
+                     *       "instance": "/api/v1/payments/seller-bank-accounts/00000000-0000-4000-8000-000000000001/verify",
+                     *       "code": "PAYMENT_SELLER_BANK_ACCOUNT_CONFLICT"
                      *     }
                      */
                     "application/problem+json": components["schemas"]["Problem"];

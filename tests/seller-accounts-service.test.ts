@@ -12,7 +12,7 @@ import type { ApiContext } from "../types/commonRequestType";
 
 const sellerId = "68000000-0000-4000-8000-000000000002";
 const bankId = "95000000-0000-4000-8000-000000000001";
-const bank = { id: bankId, sellerId, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true };
+const bank = { id: bankId, sellerId, bankCode: "970436", accountLast4: "4321", accountHolderName: "DEMO SELLER", verificationStatus: "UNVERIFIED", isDefault: true, active: true, version: 0 };
 const profile = { userId: sellerId, companyName: "Seller Shop", contactPhone: "0901234567", status: "ACTIVE" };
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
 const status = (expected: number) => (error: unknown) => isApiError(error) && error.status === expected;
@@ -37,6 +37,7 @@ test("bank parser retains a safe mask and rejects leaked full or encrypted accou
   const result = parseSellerBankAccount(bank);
   assert.equal(maskedSellerBankAccount(result), "•••• 4321");
   for (const bad of [{ ...bank, accountLast4: "123456789" }, { ...bank, bankCode: "VCB" }, { ...bank, verificationStatus: "PENDING" },
+    { ...bank, version: undefined }, { ...bank, version: -1 }, { ...bank, version: 1.5 },
     { ...bank, accountNumber: "00012344321" }, { ...bank, accountNumberEncrypted: "ciphertext" }, { ...bank, account_number: "00012344321" }])
     assert.throws(() => parseSellerBankAccount(bad), invalid);
 });
@@ -57,6 +58,32 @@ test("bank creation preserves leading zeroes and unchanged verified updates keep
   let sent = false;
   await assert.rejects(addSellerBankAccount({ ...input, accountNumber: "1e10" }, { context: { fetch: async () => { sent = true; return Response.json(envelope(bank)); } } }), invalid);
   assert.equal(sent, false);
+});
+
+test("bank review sends the displayed version and preserves409 without retrying or refreshing the decision", async () => {
+  const calls: unknown[] = [];
+  const current = { ...bank, version: 7 };
+  const verified = await verifySellerBankAccount(bankId, { verificationStatus: "VERIFIED", expectedVersion: current.version }, {
+    context: { fetch: async (_url, init) => {
+      calls.push(JSON.parse(String(init?.body)));
+      return Response.json(envelope({ ...current, verificationStatus: "VERIFIED", version: 8 }));
+    } },
+  });
+  assert.equal(verified.version, 8);
+  assert.deepEqual(calls, [{ verificationStatus: "VERIFIED", expectedVersion: 7 }]);
+  let sent = 0;
+  const conflict = { context: { fetch: async () => {
+    sent++;
+    return Response.json({ title: "Conflict", status: 409, code: "PAYMENT_SELLER_BANK_ACCOUNT_CONFLICT",
+      detail: "Bank account changed; review the latest details" }, { status: 409 });
+  } } };
+  await assert.rejects(verifySellerBankAccount(bankId, { verificationStatus: "VERIFIED", expectedVersion: 7 }, conflict), status(409));
+  assert.equal(sent, 1);
+  for (const expectedVersion of [undefined, null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(verifySellerBankAccount(bankId,
+      { verificationStatus: "VERIFIED", expectedVersion } as Parameters<typeof verifySellerBankAccount>[1], conflict), invalid);
+  }
+  assert.equal(sent, 1, "invalid version is rejected before transport");
 });
 
 type MockRequest = IncomingMessage & { body?: unknown };
@@ -108,13 +135,16 @@ test("native HTTP profile/bank flow edits, selects defaults, verifies and hides 
     await assert.rejects(getAdminBankAccounts({ page: 0, size: 10 }, options("seller")), status(403));
     const adminPage = await getAdminBankAccounts({ page: 0, size: 10, verificationStatus: "UNVERIFIED" }, options("admin"));
     assert.equal(adminPage.content[0].id, bankId, "oldest unverified account is reviewed first");
-    await verifySellerBankAccount(created.id, { verificationStatus: "VERIFIED" }, options("admin"));
+    const current = mine.find((row) => row.id === created.id)!;
+    const reviewed = await verifySellerBankAccount(created.id, { verificationStatus: "VERIFIED", expectedVersion: current.version }, options("admin"));
     assert.deepEqual(releases, [created.id]);
     const edited = await updateSellerBankAccount(created.id, { bankCode: "970415", accountNumber: "000098765432", accountHolderName: "Updated Seller" }, options("seller"));
     assert.equal(edited.verificationStatus, "UNVERIFIED"); assert.equal(edited.accountLast4, "5432");
-    await verifySellerBankAccount(created.id, { verificationStatus: "REJECTED", reason: "Holder details need correction" }, options("admin"));
+    await assert.rejects(verifySellerBankAccount(created.id, { verificationStatus: "VERIFIED", expectedVersion: reviewed.version }, options("admin")), status(409));
+    assert.deepEqual(releases, [created.id], "stale approval must not release held payouts again");
+    await verifySellerBankAccount(created.id, { verificationStatus: "REJECTED", reason: "Holder details need correction", expectedVersion: edited.version }, options("admin"));
     mine = await getSellerBankAccounts(options("seller")); assert.equal(mine.find((row) => row.id === created.id)?.verificationStatus, "REJECTED");
-    await assert.rejects(verifySellerBankAccount(bankId, { verificationStatus: "VERIFIED" }, options("seller")), status(403));
+    await assert.rejects(verifySellerBankAccount(bankId, { verificationStatus: "VERIFIED", expectedVersion: 0 }, options("seller")), status(403));
     const evidence = await (await fetch(`${baseUrl}/test/seller-accounts/evidence`)).text();
     assert.equal(evidence.includes("000012345678"), false); assert.equal(evidence.includes("000098765432"), false); assert.equal(evidence.includes("accountNumber"), false);
   } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }

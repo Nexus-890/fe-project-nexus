@@ -218,6 +218,39 @@ test("shop profile and masked default bank release automatic payouts after verif
   } finally { await context.close(); }
 });
 
+test("admin must review the changed bank again after a stale version conflict", async ({ page, request, browser }) => {
+  await signIn(page, request, "ADMIN", "/backoffice/payouts");
+  const sellerContext = await browser.newContext();
+  try {
+    const sellerPage = await sellerContext.newPage();
+    await signIn(sellerPage, request, "SELLER", "/backoffice/bank-accounts");
+    await expect(sellerPage.getByRole("button", { name: "Edit bank account", exact: true })).toBeVisible();
+    await page.getByRole("row").filter({ hasText: "4321" })
+      .getByRole("button", { name: "Review bank account", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Confirm bank verification", exact: true })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Edit bank account", exact: true }).click();
+    await sellerPage.getByLabel("Account holder name", { exact: true }).fill("CHANGED AFTER ADMIN REVIEW");
+    await sellerPage.getByLabel("Account number", { exact: true }).fill("000000008888");
+    await sellerPage.getByRole("button", { name: "Save bank account", exact: true }).click();
+    await expect(sellerPage.getByText("•••• 8888", { exact: true })).toBeVisible();
+    const stale = page.waitForResponse((response) => response.url().endsWith("/seller-bank-accounts/95000000-0000-4000-8000-000000000001/verify"));
+    await page.getByRole("button", { name: "Confirm bank verification", exact: true }).click();
+    const rejected = await stale;
+    expect(rejected.status()).toBe(409);
+    expect(rejected.request().postDataJSON().expectedVersion).toBe(0);
+    await expect(page.getByRole("alert").filter({ hasText: "Bank details changed since you opened this review" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm bank verification", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("row").filter({ hasText: "8888" })).toContainText("UNVERIFIED");
+    const state = (await (await request.get(`${api}/test/seller-accounts/evidence`)).json()).data;
+    expect(state.accounts[0]).toMatchObject({ accountLast4: "8888", verificationStatus: "UNVERIFIED", version: 1 });
+    await page.getByRole("row").filter({ hasText: "8888" })
+      .getByRole("button", { name: "Review bank account", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Bank details changed since you opened this review" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Confirm bank verification", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Bank account verified." })).toBeVisible();
+  } finally { await sellerContext.close(); }
+});
+
 test("admin needs-action filters and payout retries preserve one request key", async ({ page, request }) => {
   await signIn(page, request, "ADMIN", "/backoffice/payouts");
   const bankRow = page.getByRole("row").filter({ hasText: "4321" });
