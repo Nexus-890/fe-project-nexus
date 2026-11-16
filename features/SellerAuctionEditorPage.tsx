@@ -14,6 +14,7 @@ import { formatVND } from "../components/formatPrice";
 import { SellerError, SellerHeading, SellerPanel, SellerStatus, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import SellerSecondChanceOffer from "../components/SellerSecondChanceOffer";
 import type { SellerAuction, SellerAuctionUpdate } from "../types/sellerAuctionType";
+import { readBackofficeRoles, sellerAuctionHref } from "./backofficeAccess";
 
 const toLocalInput = (value: string) => {
   const date = new Date(value);
@@ -24,6 +25,7 @@ const moneyInput = (value: string) => /^\d+(?:\.\d{1,2})?$/.test(value) && Numbe
 
 function AuctionEditor({ initial }: { initial?: SellerAuction }) {
   const auth = useAuth();
+  const roles = readBackofficeRoles(auth.accessToken);
   const router = useRouter();
   const [productId, setProductId] = useState(initial?.productId ?? "");
   const [skuId, setSkuId] = useState(initial?.skuId ?? "");
@@ -39,7 +41,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
-  const own = useApiQuery({ queryKey: queryKeys.seller.auctionProducts(auth.sessionId, page), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, { context: auth.requestContext, signal }) }, { enabled: !initial, retry: false });
+  const own = useApiQuery({ queryKey: queryKeys.seller.auctionProducts(auth.sessionId, page), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, "ACTIVE", { context: auth.requestContext, signal }) }, { enabled: !initial, retry: false });
   const product = useApiQuery({ queryKey: queryKeys.seller.auctionProduct(auth.sessionId, productId), meta: { requiresAuth: true }, service: (signal) => getSellerProduct(productId, { context: auth.requestContext, signal }) }, { enabled: Boolean(productId), retry: false });
   const choices = (own.data?.content ?? []).filter((row) => row.status === "ACTIVE" && row.auctionEnable && row.skus.some((sku) => sku.status === "ACTIVE"));
   const selected = product.data;
@@ -60,7 +62,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
     },
     isCurrent: ({ sessionId }) => auth.isSessionCurrent(sessionId) && pending.current?.signal.aborted !== true,
     invalidateKey: [queryKeys.seller.auctionRoot(auth.sessionId)],
-  }, { onSuccess: (auction) => { setNotice(auction.status === "SCHEDULED" ? "Auction scheduled." : initial ? "Auction changes saved." : "Auction draft saved."); router.push(`/backoffice/auctions/${auction.id}`); } });
+  }, { onSuccess: (auction) => { setNotice(auction.status === "SCHEDULED" ? "Auction scheduled." : initial ? "Auction changes saved." : "Auction draft saved."); router.push(sellerAuctionHref(roles, auction.id)); } });
 
   const busy = save.isPending;
   const locked = !editable || busy || Boolean(created);
@@ -74,12 +76,12 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
 
   const error = save.error;
   return <>
-    <Link href="/backoffice/auctions" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-primary">Auctions / {initial ? "Auction details" : "New Auction"}</Link>
+    <Link href={sellerAuctionHref(readBackofficeRoles(auth.accessToken))} className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-primary">Auctions / {initial ? "Auction details" : "New Auction"}</Link>
     <SellerHeading title={initial ? editable ? "Edit Auction" : "Auction Details" : "Create Auction"} description="Settings lock when the auction starts.">{initial && <SellerStatus>{initial.status.replaceAll("_", " ")}</SellerStatus>}</SellerHeading>
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {validation && <p role="alert" className="text-sm text-danger">{validation}</p>}
     {error && error.kind !== "aborted" && <p role="alert" className="break-words text-sm text-danger">{error.detail || error.title}</p>}
-    {created && error && <p role="status" className="text-sm">Your draft was saved. Retry scheduling or <Link href={`/backoffice/auctions/${created.id}`} className="text-primary underline">open the saved draft</Link>.</p>}
+    {created && error && <p role="status" className="text-sm">Your draft was saved. Retry scheduling or <Link href={sellerAuctionHref(roles, created.id)} className="text-primary underline">open the saved draft</Link>.</p>}
     {!editable && <p role="status" className="text-sm text-muted-foreground">This auction is locked for editing.</p>}
     {initial && ["PAYMENT_TIMEOUT", "SETTLED"].includes(initial.status) && <div><SellerSecondChanceOffer auctionId={initial.id} auctionTitle={initial.title} triggerLabel={initial.status === "SETTLED" ? "Offer history" : "Offer to next bidder"} /></div>}
     <form onSubmit={(event) => { event.preventDefault(); submit(false); }} className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -111,7 +113,7 @@ function SellerAuctionEditorPage({ auctionId }: { auctionId?: string }) {
   const detail = useApiQuery({ queryKey: queryKeys.seller.auction(auth.sessionId, auctionId), meta: { requiresAuth: true }, service: (signal) => getSellerAuction(auctionId!, { context: auth.requestContext, signal }) }, { enabled: Boolean(auctionId), retry: false });
   if (!auctionId) return <AuctionEditor key={`${auth.sessionId}:new`} />;
   if (detail.isPending) return <p role="status">Loading auction…</p>;
-  if (detail.error) return <><SellerHeading title="Auction unavailable" /><SellerError error={detail.error} retry={() => void detail.refetch()} /><Link href="/backoffice/auctions" className={sellerButton}>Return to auctions</Link></>;
+  if (detail.error) return <><SellerHeading title="Auction unavailable" /><SellerError error={detail.error} retry={() => void detail.refetch()} /><Link href={sellerAuctionHref(readBackofficeRoles(auth.accessToken))} className={sellerButton}>Return to auctions</Link></>;
   if (!detail.data || detail.data.sellerId !== auth.user?.id) return <p role="alert">This auction is not available in your seller workspace.</p>;
   return <AuctionEditor key={`${auth.sessionId}:${detail.data.id}:${detail.data.status}:${detail.data.startAt}`} initial={detail.data} />;
 }

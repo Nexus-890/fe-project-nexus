@@ -2,8 +2,9 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { mkdir } from "node:fs/promises";
 
 test.skip(!process.env.NEXUS_BACKOFFICE_TEST, "Uses the explicit seller Postman HTTP simulation.");
-const api = "http://127.0.0.1:3920/api";
-const provider = "http://127.0.0.1:3920/keycloak";
+const simulationOrigin = `http://127.0.0.1:${process.env.NEXUS_BACKOFFICE_API_PORT || "3920"}`;
+const api = `${simulationOrigin}/api`;
+const provider = `${simulationOrigin}/keycloak`;
 const ids = { SELLER: "68000000-0000-4000-8000-000000000002", ADMIN: "68000000-0000-4000-8000-000000000001" };
 async function signIn(page: Page, request: APIRequestContext, role: keyof typeof ids, destination: string) {
   await request.get(`${provider}/test/control?roles=${role}&subject=${ids[role]}`);
@@ -34,6 +35,8 @@ test("seller creates, edits and schedules a three-minute auction and can cancel 
   await screenshot(page, "auctions");
   await page.getByRole("link", { name: "Create Auction", exact: true }).click();
   await page.getByRole("combobox", { name: "Product", exact: true }).selectOption("a2250000-0000-4000-8000-000000000001");
+  const state = await (await request.get(`${api}/test/evidence`)).json();
+  expect(state.requests.some((row: { path: string; query: Record<string, string> }) => row.path === "/api/v1/products/mine" && row.query.status === "ACTIVE")).toBe(true);
   await page.getByRole("combobox", { name: "SKU", exact: true }).selectOption("a2250000-0000-4000-8000-000000000002");
   await page.getByRole("button", { name: "Use 3-minute demo", exact: true }).click();
   await page.getByLabel("Starting Price (VND)", { exact: true }).fill("4800000");
@@ -61,6 +64,25 @@ test("seller creates, edits and schedules a three-minute auction and can cancel 
   await request.post(`${api}/test/auctions/advance`, { data: { milliseconds: 180_000 } });
   await page.getByRole("button", { name: "Failed", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "Studio Wireless Headphones" })).toContainText("failed");
+});
+
+test("deleting a product clears its cached auction picker entry", async ({ page, request }) => {
+  expect((await request.post(`${api}/test/seller-seed`, { data: { withoutOrders: true } })).ok()).toBe(true);
+  await signIn(page, request, "SELLER", "/backoffice/auctions/new");
+  const productId = "a2250000-0000-4000-8000-000000000001";
+  const nav = page.getByRole("navigation", { name: "Back-office navigation", exact: true });
+  const product = page.getByRole("combobox", { name: "Product", exact: true });
+  await product.selectOption(productId);
+  await page.getByRole("combobox", { name: "SKU", exact: true }).selectOption("a2250000-0000-4000-8000-000000000002");
+  await nav.getByRole("link", { name: "Products", exact: true }).click();
+  await page.getByRole("link", { name: "Studio Wireless Headphones", exact: true }).click();
+  await page.getByRole("button", { name: "Delete product", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
+  await expect(page).toHaveURL("/backoffice/products");
+  await nav.getByRole("link", { name: "Auctions", exact: true }).click();
+  await page.getByRole("link", { name: "Create Auction", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "No eligible products" })).toBeVisible();
+  await expect(product.locator(`option[value="${productId}"]`)).toHaveCount(0);
 });
 
 test("sales combines status and full-day Vietnam date filters", async ({ page, request }) => {

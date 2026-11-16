@@ -1,3 +1,3 @@
-import SellerAuctionsPage from "../../../../features/SellerAuctionsPage";
+import BackofficeAuctionsPage from "../../../../features/BackofficeAuctionsPage";
 
-export default SellerAuctionsPage;
+export default BackofficeAuctionsPage;

@@ -12,6 +12,13 @@ purpose:
     interactions and explicitly proposed #208/#261 offer/bank/payout stand-ins.
     The frontend under test is never a simulation member.
 assumptions:
+  - id: seller-admin-auctions-merge-20261116
+    status: supported
+    claim: The shared auction routes retain seller ownership workflows and staff management workflows after merging develop 13aa202e.
+    reason: The routes mount one feature by JWT role, with an explicit seller view for mixed-role accounts. The combined fixture preserves seller, staff and product-editing handlers and configurable ports.
+    verification: On 2026-11-16 the full back-office run passed 25 scenarios; the new product-deletion/picker case initially used an ordered product and correctly received409, then passed independently after preparing an unordered fixture. Together these cover 26 scenarios including seller/staff endpoint isolation, admin edit/cancel, support reads, mixed-role seller draft/edit/schedule continuity, product editing and cached picker removal. All379 unit tests passed; general shop browser regression passed58 with54 configured skips. Tests ran the real frontend against explicit HTTP stand-ins on ports3130/4940; they do not establish live backend enforcement or transfers.
+    source: features/BackofficeAuctionsPage.tsx; features/backofficeAccess.ts; features/SellerAuctionEditorPage.tsx; features/SellerProductEditorPage.tsx; tests/backoffice.spec.ts; tests/seller-operations.spec.ts; docs/features/seller-operations.md
+    updated_at: '2026-11-16'
   - id: seller-225-develop-buyer220-integration-20261115
     status: supported
     claim: Seller frontend behavior remains covered after integrating develop dc9a0207 and buyer branch 220 at c1dd33c5.
@@ -95,7 +102,43 @@ assumptions:
       ../be-project-nexus/catalog-service/src/main/java/com/group5/catalogservice/product/service/SkuService.java;
       postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts
     updated_at: '2026-11-11'
+  - id: admin-auctions-260-20261115
+    status: supported
+    claim: >-
+      The back-office auction pages list every auction by status, Draft and
+      Cancelled included, show detail, live state and masked bids for any
+      visibility, let Admin edit any not-started auction and force cancel with a
+      reason, and keep Support Staff read only.
+    reason: >-
+      The handler models the #260 back-office reads GET /v1/auctions/manage
+      (optional status, createdAt then id descending), /manage/{id}, /state and
+      /bids for ADMIN or SUPPORT_STAFF only (401 without a token, 403 for other
+      roles), keeps the public GET /v1/auctions empty for CREATED and CANCELLED,
+      and models PUT like AuctionService.update (an ADMIN skips the owner check,
+      a SELLER who does not own the auction gets AUCTION_FORBIDDEN, then
+      AUCTION_NOT_EDITABLE, AUCTION_HAS_BIDS and the 60 minute to 168 hour
+      window) and admin-cancel limited to ADMIN with a 1..255 code point
+      reason. Privileges such as AUCTION.LIST or AUCTION.ADMIN_CANCEL are not
+      modelled; only roles are checked, which matches the seeded ADMIN and
+      SUPPORT_STAFF privileges.
+    verification: >-
+      On 2026-11-15 the auction-service suite covered admin edit of another
+      seller's auction, seller non-owner 403, admin 409 after start and the four
+      manage reads for RESTRICTED, CREATED and CANCELLED auctions; the
+      back-office Chrome suite covered the manage query params for every tab,
+      Draft and Cancelled rows, masked bids, confirm-dialog cancel, the edit PUT
+      body, a simulated 409 after start, Support without controls and
+      Seller/Buyer Access denied.
+    source: >-
+      postman/mocks/backoffice-gateway/default.js; tests/backoffice.spec.ts;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionController.java;
+      ../be-project-nexus/auction-service/src/main/java/com/group5/auctionservice/auction/AuctionService.java
+    updated_at: '2026-11-15'
 fingerprints:
+  - id: seller225-develop-20261116
+    date: '2026-11-16'
+    commit: seller225 7bec971c merging develop 13aa202e with shared Seller/Admin auction and product-picker conflict resolution
+    cli: Postman 1.73.0
   - id: seller-225-merge220-20261115
     date: '2026-11-15'
     commit: seller225 4dc5689c integrating buyer220 c1dd33c5 and its develop dc9a0207 ancestor, with conflict-resolution changes

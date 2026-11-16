@@ -71,7 +71,7 @@ export const isCategoryTree = (value: unknown): value is CategoryNode[] =>
       isCategoryTree(node.children),
   );
 
-const parseProductImages = (value: unknown): ProductImage[] => {
+export const parseProductImages = (value: unknown): ProductImage[] => {
   if (!Array.isArray(value))
     throw createInvalidResponseError("Invalid product images");
   return value.map((image) => {

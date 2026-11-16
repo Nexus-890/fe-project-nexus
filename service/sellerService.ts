@@ -1,13 +1,17 @@
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
-import { isValidShippingParcel, normalizeMoney, parseProductDetail, parseProductPage, parseProductSku, parseShippingParcel } from "./catalogService";
+import { isValidShippingParcel, normalizeMoney, parseProductDetail, parseProductImages, parseProductPage, parseProductSku, parseShippingParcel } from "./catalogService";
 import { parseOrderSummary } from "./orderService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
 import type { ProductDetail, ProductImage, ProductSku, ProductSummary } from "../types/catalogResponseType";
-import type { SellerProductInput, SellerProductStatus, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance } from "../types/sellerType";
+import type { SellerProductInput, SellerProductStatus, SellerProductUpdate, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance } from "../types/sellerType";
 
-export const getSellerProducts = async (page: number, options: ServiceRequestOptions = {}): Promise<Page<ProductSummary>> =>
-  parseProductPage(await requestApi("GET", "/api/v1/products/mine", undefined, { ...options, auth: true, params: { page, size: 10 } }));
+const sellerProductStatuses: readonly SellerProductStatus[] = ["DRAFT", "INACTIVE", "ACTIVE"];
+
+export const getSellerProducts = async (page: number, status: SellerProductStatus | undefined, options: ServiceRequestOptions = {}): Promise<Page<ProductSummary>> => {
+  if (!Number.isInteger(page) || page < 0 || status !== undefined && !sellerProductStatuses.includes(status)) throw createInvalidResponseError("Invalid seller product filters");
+  return parseProductPage(await requestApi("GET", "/api/v1/products/mine", undefined, { ...options, auth: true, params: { page, size: 10, status } }));
+};
 
 export const getSellerProduct = async (id: string, options: ServiceRequestOptions = {}): Promise<ProductDetail> => {
   if (!id.trim()) throw createInvalidResponseError("Product id is required");
@@ -39,8 +43,8 @@ export const canPublishSellerProduct = (product: Pick<ProductDetail, "skus" | "i
     product.images.some((image) => image.imageUrl.trim().length > 0);
 };
 
-export const getSellerProductListings = async (page: number, options: ServiceRequestOptions = {}): Promise<Page<SellerProductListing>> => {
-  const result = await getSellerProducts(page, options);
+export const getSellerProductListings = async (page: number, status: SellerProductStatus | undefined, options: ServiceRequestOptions = {}): Promise<Page<SellerProductListing>> => {
+  const result = await getSellerProducts(page, status, options);
   const details = await Promise.all(result.content.map((product) => getSellerProduct(product.id, options)));
   return { ...result, content: details.map((product) => ({ ...product, ...getSellerPriceRange(product.skus) })) };
 };
@@ -80,6 +84,19 @@ const parseProductWrite = (data: unknown): ProductSummary =>
 export const createSellerProduct = async (body: SellerProductInput, options: ServiceRequestOptions = {}): Promise<ProductSummary> => {
   const { data } = await requestApi("POST", "/api/v1/products", body, { ...options, auth: true });
   return parseProductWrite(data);
+};
+
+export const updateSellerProduct = async (id: string, body: SellerProductUpdate, options: ServiceRequestOptions = {}): Promise<ProductSummary> => {
+  if (!id.trim()) throw createInvalidResponseError("Product id is required");
+  const { data } = await requestApi("PUT", `/api/v1/products/${encodeURIComponent(id)}`, body, { ...options, auth: true });
+  const product = parseProductWrite(data);
+  if (product.id !== id) throw createInvalidResponseError("Mismatched updated product");
+  return product;
+};
+
+export const deleteSellerProduct = async (id: string, options: ServiceRequestOptions = {}): Promise<void> => {
+  if (!id.trim()) throw createInvalidResponseError("Product id is required");
+  await requestApi("DELETE", `/api/v1/products/${encodeURIComponent(id)}`, undefined, { ...options, auth: true });
 };
 
 export const changeSellerProductStatus = async (id: string, status: SellerProductStatus, options: ServiceRequestOptions = {}): Promise<ProductSummary> => {
@@ -151,4 +168,13 @@ export const uploadSellerImage = async (id: string, file: File, options: Service
 
 export const removeSellerImage = async (productId: string, imageId: string, options: ServiceRequestOptions = {}): Promise<void> => {
   await requestApi("DELETE", `/api/v1/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`, undefined, { ...options, auth: true });
+};
+
+export const reorderSellerImages = async (productId: string, imageIds: readonly string[], options: ServiceRequestOptions = {}): Promise<ProductImage[]> => {
+  if (!productId.trim() || imageIds.some((id) => !id.trim()) || new Set(imageIds).size !== imageIds.length) throw createInvalidResponseError("Invalid image order");
+  const { data } = await requestApi("PUT", `/api/v1/products/${encodeURIComponent(productId)}/images/order`, { imageIds }, { ...options, auth: true });
+  const images = parseProductImages(data);
+  if (images.length !== imageIds.length || images.some((image, index) => image.id !== imageIds[index] || image.sortOrder !== index))
+    throw createInvalidResponseError("Mismatched image order");
+  return images;
 };

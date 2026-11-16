@@ -1,6 +1,7 @@
 /* Stateful stand-in for the delivered auction controller. No business data is written. */
 function createAuctionFixture(options) {
   const { ok, problem, list, bodyOf, randomUUID, seller, findProduct } = options;
+  const origin = options.origin || `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || 3920}`;
   const productId = "a2250000-0000-4000-8000-000000000001";
   const timedOutId = "a2250000-0000-4000-8000-000000000099";
   const statuses = ["ACTIVE", "SCHEDULED", "CREATED", "ENDED", "WON", "SETTLED", "FAILED", "PAYMENT_TIMEOUT", "CANCELLED"];
@@ -15,7 +16,7 @@ function createAuctionFixture(options) {
       return { id: status === "PAYMENT_TIMEOUT" ? timedOutId : `a2250000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
         productId, skuId: `a2250000-0000-4000-8000-${String(200 + index).padStart(12, "0")}`, sellerId: seller,
         title: status === "PAYMENT_TIMEOUT" ? "Studio auction — unpaid winner" : `Studio auction — ${status.toLowerCase()}`,
-        imageUrl: "http://127.0.0.1:3920/api/test/image.svg", startingPrice: 100000, bidIncrement: 10000, currentPrice: index > 2 && status !== "CANCELLED" ? 5000000 : 100000,
+        imageUrl: `${origin}/api/test/image.svg`, startingPrice: 100000, bidIncrement: 10000, currentPrice: index > 2 && status !== "CANCELLED" ? 5000000 : 100000,
         bidCount: index > 2 && status !== "CANCELLED" ? 5 : 0, currency: "VND", startAt, endAt, originalEndAt: endAt, extensionCount: 0, status,
         cancelledBy: status === "CANCELLED" ? "SELLER" : null, cancelledReason: status === "CANCELLED" ? "Item unavailable" : null,
         cancelledActorId: status === "CANCELLED" ? seller : null, cancelledAt: status === "CANCELLED" ? new Date(clock()).toISOString() : null };

@@ -290,7 +290,40 @@ assumptions:
       docs/features/auction-list-verification.md; docs/features/auction-list-evidence/;
       node_modules/.cache/auction-review-evidence/ (ignored local HTTP evidence)
     updated_at: '2026-11-15'
+  - id: auction-list-develop-sync-20261116
+    status: supported
+    claim: >-
+      The resolved shared auction service retains buyer list/offer behavior and the
+      new protected back-office auction reads and actions against local HTTP stand-ins.
+    reason: >-
+      The merge preserves both upstream state wrappers and exports the shared page
+      parser used by the offer service. Generated types were refreshed from the
+      delivered managed-auction OpenAPI. Passing tests exercise caller requests and
+      rendered results; they do not establish live offer or shipping provider delivery.
+    verification: >-
+      On 2026-11-16 generated drift, lint, typecheck and336unit tests passed after
+      merging target63d0a3a8 into6259d278. Buyer suite12/12passed in1.2minutes and
+      targeted admin/support4/4passed in24.3seconds; each needed an unchanged retry
+      after an installed Next reminder stopped startup. Logs show canonical offer
+      reads/actions, shipping/payment and managed auction reads/edit/cancel; expected
+      buyer404/503 and admin409 scenarios, with no unmodeled501. No test/fixture/UI
+      change was made for this merge. Catalog passed55 with38existing skips in
+      2.3minutes. Isolated build at .next-auction-205-sync-20261116 passed with all
+      31static pages; catalog/build each passed an unchanged Next-reminder retry.
+      Marker/diff checks passed; fetched target and merge parent stayed63d0a3a8.
+    source: >-
+      service/auctionService.ts; types/auctionGeneratedType.ts;
+      tests/auction-list.spec.ts; tests/admin-auction.test.ts;
+      tests/backoffice.spec.ts; docs/features/auction-list-verification.md;
+      node_modules/.cache/auction-conflict-20261116/ (ignored local evidence)
+    updated_at: '2026-11-16'
 fingerprints:
+  - id: auction-list-develop-sync-20261116
+    date: '2026-11-16'
+    commit: >-
+      #205head6259d278 plus resolved merge of develop63d0a3a8 and regenerated
+      managed-auction types; verification before merge commit
+    cli: 1.73.0
   - id: auction-list-review-20261115
     date: '2026-11-15'
     commit: >-
