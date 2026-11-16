@@ -9,9 +9,9 @@ const buyerId = "68000000-0000-4000-8000-000000000003";
 const sellerId = "68000000-0000-4000-8000-000000000004";
 const orderId = "68000000-0000-4000-8000-000000000002";
 const otherId = "68000000-0000-4000-8000-000000000005";
-const body = { orderId, toUserId: sellerId, score: 4, comment: "Well packed." };
-const rating = { ...body, id: "68000000-0000-4000-8000-000000000006", fromUserId: buyerId, createdAt: "2026-11-14T01:00:00Z" };
-const reputation = { userId: sellerId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2 };
+const body = { orderId, score: 4, comment: "Well packed." };
+const rating = { ...body, id: "68000000-0000-4000-8000-000000000006", auctionId: null, raterName: "B***r", ratedByMe: true, createdAt: "2026-11-14T01:00:00Z" };
+const reputation = { userId: sellerId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2, ratingCount: 20, policyVersion: "reputation-policy-1" };
 const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
 const pageEnvelope = (data: unknown, number = 0, totalPages = 1) => ({ ...envelope(data), page: { number, size: 100, totalElements: totalPages * 100, totalPages } });
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
@@ -26,7 +26,7 @@ const close = async (server: Server) => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 };
 
-test("rating write sends exact protected payload and validates order, seller and author", async () => {
+test("rating write omits caller and target identities and validates its masked own-rating response", async () => {
   const calls: Array<{ method?: string; url?: string; auth?: string; body: unknown }> = [];
   let result: unknown = rating;
   const server = createServer(async (request, response) => {
@@ -39,17 +39,17 @@ test("rating write sends exact protected payload and validates order, seller and
   let token = "initial-buyer";
   const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => token };
   try {
-    assert.deepEqual(await createRating({ ...body, fromUserId: otherId } as typeof body, buyerId, { context, auth: false, params: { attacker: true } }), rating);
+    assert.deepEqual(await createRating({ ...body, fromUserId: otherId, toUserId: buyerId } as typeof body, buyerId, { context, auth: false, params: { attacker: true } }), rating);
     assert.deepEqual(calls[0], { method: "POST", url: "/api/v1/ratings", auth: "Bearer initial-buyer", body });
     token = "renewed-buyer";
     await createRating(body, buyerId, { context });
     assert.equal(calls[1].auth, "Bearer renewed-buyer");
-    for (const changed of [{ fromUserId: otherId }, { orderId: otherId }, { toUserId: otherId }, { score: 3 }, { comment: "Changed" }]) {
+    for (const changed of [{ ratedByMe: false }, { orderId: otherId }, { orderId: null }, { score: 3 }, { comment: "Changed" }, { raterName: "Buyer full name" }, { fromUserId: otherId }, { toUserId: sellerId }]) {
       result = { ...rating, ...changed };
       await assert.rejects(createRating(body, buyerId, { context }), invalid);
     }
     const before = calls.length;
-    for (const changed of [{ score: 0 }, { score: 5.5 }, { score: 6 }, { orderId: "invalid" }, { comment: "a".repeat(1001) }, { toUserId: buyerId }]) {
+    for (const changed of [{ score: 0 }, { score: 5.5 }, { score: 6 }, { orderId: "invalid" }, { comment: "a".repeat(1001) }]) {
       await assert.rejects(createRating({ ...body, ...changed }, buyerId, { context }), invalid);
     }
     assert.equal(calls.length, before);
@@ -64,7 +64,7 @@ test("rating lookup reads every page before treating a completed order as unrate
     queries.push(url.search);
     assert.equal(request.headers.authorization, "Bearer buyer");
     const number = Number(url.searchParams.get("page"));
-    const data = number === 0 ? [{ ...rating, orderId: otherId }] : found ? [rating] : [];
+    const data = number === 0 ? [{ ...rating, ratedByMe: false }, { ...rating, id: otherId, orderId: null, ratedByMe: false }] : found ? [rating] : [];
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(pageEnvelope(data, number, 2)));
   });
@@ -72,13 +72,12 @@ test("rating lookup reads every page before treating a completed order as unrate
   try {
     assert.deepEqual(await getOrderRating(sellerId, buyerId, orderId, { context, auth: false, params: { userId: otherId, page: 99 } }), rating);
     assert.deepEqual(queries, [`?userId=${sellerId}&page=0&size=100`, `?userId=${sellerId}&page=1&size=100`]);
-    // An unexpectedly empty intermediate page is not evidence that the order has never been rated.
     found = false;
     await assert.rejects(getOrderRating(sellerId, buyerId, orderId, { context }), invalid);
   } finally { await close(server); }
 });
 
-test("a valid empty seller rating list returns null while malformed or foreign lists reject", async () => {
+test("a valid empty or another rater's list is unrated while unmasked or malformed lists reject", async () => {
   let result: unknown = { ...envelope([]), page: { number: 0, size: 100, totalElements: 0, totalPages: 0 } };
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -87,7 +86,9 @@ test("a valid empty seller rating list returns null while malformed or foreign l
   const context = { baseUrl: await listen(server) };
   try {
     assert.equal(await getOrderRating(sellerId, buyerId, orderId, { context }), null);
-    for (result of [envelope([]), pageEnvelope([{ ...rating, toUserId: otherId }]), pageEnvelope([{ ...rating, score: 9 }]), pageEnvelope([rating], 2), pageEnvelope([{ ...rating, createdAt: "yesterday" }]), pageEnvelope([{ ...rating, fromUserId: sellerId }])]) {
+    result = pageEnvelope([{ ...rating, ratedByMe: false }]);
+    assert.equal(await getOrderRating(sellerId, buyerId, orderId, { context }), null);
+    for (result of [envelope([]), pageEnvelope([{ ...rating, ratedByMe: undefined }]), pageEnvelope([{ ...rating, ratedByMe: "true" }]), pageEnvelope([{ ...rating, score: 9 }]), pageEnvelope([rating], 2), pageEnvelope([{ ...rating, createdAt: "yesterday" }]), pageEnvelope([{ ...rating, fromUserId: sellerId }]), pageEnvelope([{ ...rating, raterName: "Actual Buyer Name" }]), pageEnvelope([{ ...rating, auctionId: "invalid" }])]) {
       await assert.rejects(getOrderRating(sellerId, buyerId, orderId, { context }), invalid);
     }
   } finally { await close(server); }
@@ -104,7 +105,7 @@ test("reputation reads the protected seller resource and rejects invalid trust s
   const context = { baseUrl: await listen(server), getAccessToken: () => "buyer" };
   try {
     assert.deepEqual(await getSellerReputation(sellerId, { context, auth: false, params: { userId: otherId } }), reputation);
-    for (const changed of [{ userId: otherId }, { score: 101 }, { score: -1 }, { score: 78.5 }, { trustLevel: "unknown" }, { failedTransaction: -1 }, { successfulTransaction: 43 }]) {
+    for (const changed of [{ userId: otherId }, { score: 101 }, { score: -1 }, { score: 78.5 }, { trustLevel: "unknown" }, { failedTransaction: -1 }, { successfulTransaction: 43 }, { ratingCount: -1 }, { ratingCount: 1.5 }, { policyVersion: " " }]) {
       result = { ...reputation, ...changed };
       await assert.rejects(getSellerReputation(sellerId, { context }), invalid);
     }
