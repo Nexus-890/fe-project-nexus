@@ -1,0 +1,16 @@
+import type { components as commerce, operations } from "./commerceGeneratedType";
+import type { components as payment } from "./paymentGeneratedType";
+import type { components as shipment } from "./shipmentGeneratedType";
+
+export type ManagedOrderFilters = NonNullable<operations["listManagedOrders"]["parameters"]["query"]>;
+export type ChangeOrderStatusInput = commerce["schemas"]["ChangeOrderStatus"];
+export type PaymentTransaction = payment["schemas"]["PaymentView"];
+export type PaymentFilters = { orderId?: string; status?: PaymentTransaction["status"]; page?: number; size?: number };
+export type Refund = payment["schemas"]["Refund"];
+export type RefundInput = payment["schemas"]["RefundRequest"];
+export type RefundResult = Pick<Refund, "refundId" | "status">;
+export type ManagedShipment = shipment["schemas"]["ShipmentResponse"];
+export type ShipmentInput = shipment["schemas"]["CreateShipmentRequest"];
+export type ShipmentUpdate = shipment["schemas"]["OverrideShipmentStatusRequest"];
+export type ShipmentFilters = { orderId?: string; status?: ManagedShipment["status"]; page?: number; size?: number };
+export type ShipmentStep = shipment["schemas"]["ShipmentTrackingEntryResponse"];

@@ -9,6 +9,10 @@ import type { SellerBankFilters } from "../types/sellerBankType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  operations: {
+    root: (sessionId: number) => ["order-operations", sessionId] as const,
+    list: (sessionId: number, area: string, filters: object) => ["order-operations", sessionId, area, filters] as const,
+  },
   admin: {
     root: (sessionId: number) => ["admin", sessionId] as const,
     users: (sessionId: number, filters: object) => ["admin", sessionId, "users", filters] as const,
