@@ -53,6 +53,8 @@ export function useAuctionState(auctionId: string) {
   });
   const currentStatus = reconcileAuctionStatus(state.data?.status, detail.data?.status);
   const terminal = isAuctionTerminal(currentStatus ?? "");
+  // ENDED đóng SSE; REST/private polling vẫn chờ kết quả settlement và order.
+  const stopStream = currentStatus === "ENDED" || terminal;
   const hasDetail = Boolean(detail.data);
   const serverNow = state.data ? Date.parse(state.data.serverTime) + Math.max(0, clock.monotonic - state.data.receivedAt) : clock.wall;
   const history = useApiQuery({
@@ -90,7 +92,7 @@ export function useAuctionState(auctionId: string) {
   }, []);
 
   useEffect(() => {
-    if (!visible || terminal || !hasDetail) return;
+    if (!visible || stopStream || !hasDetail) return;
     let stream: EventSource;
     try { stream = openPublicAuctionStream(auctionId); } catch { return; }
     let disposed = false;
@@ -144,7 +146,7 @@ export function useAuctionState(auctionId: string) {
       stream.close();
       if (queued !== undefined) window.clearTimeout(queued);
     };
-  }, [auctionId, authStatus, client, sessionId, visible, terminal, hasDetail]);
+  }, [auctionId, authStatus, client, sessionId, visible, stopStream, hasDetail]);
 
   useEffect(() => {
     if (!visible || !hasDetail || !currentStatus || (currentStatus !== "ENDED" && !isAuctionTerminal(currentStatus))) return;
@@ -171,7 +173,7 @@ export function useAuctionState(auctionId: string) {
       : Date.parse(["CREATED", "SCHEDULED"].includes(currentStatus ?? "") ? auction.startAt : endAt) - clock.wall) / 1000,
   )) : 0;
   return { detail, state, history, mine, page, setPage, refresh, seconds, serverNow, terminal,
-    connected: connected && visible && !terminal, status: currentStatus,
+    connected: connected && visible && !stopStream, status: currentStatus,
     currentPrice: live && (!auction || compareAuctionMoney(live.currentPrice, auction.currentPrice) >= 0) ? live.currentPrice : auction?.currentPrice,
     bidIncrement: live?.bidIncrement ?? auction?.bidIncrement,
     bidCount: Math.max(live?.bidCount ?? 0, auction?.bidCount ?? 0),

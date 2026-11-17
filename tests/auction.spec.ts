@@ -37,6 +37,22 @@ async function ready(page: Page) {
   await expect(page.getByRole("heading", { name: "Bid History", exact: true })).toBeVisible();
   await expect(page.getByRole("timer", { name: "Time remaining", exact: true })).not.toHaveText("00:00:00");
 }
+async function observeAuctionStreams(page: Page) {
+  await page.addInitScript(() => {
+    const streams: EventSource[] = [];
+    Object.defineProperty(window, "__auctionStreams", { value: streams });
+    const NativeEventSource = window.EventSource;
+    // Observe the real browser transport, including sources closed by StrictMode.
+    window.EventSource = class extends NativeEventSource {
+      constructor(...args: ConstructorParameters<typeof EventSource>) {
+        super(...args);
+        streams.push(this);
+      }
+    };
+  });
+}
+const auctionStreamStates = (page: Page) => page.evaluate(() =>
+  (window as unknown as { __auctionStreams: EventSource[] }).__auctionStreams.map((stream) => stream.readyState));
 async function capture(page: Page, info: TestInfo, name: string) {
   const path = info.outputPath(`${name}.png`);
   await page.screenshot({ path, fullPage: true, style: "nextjs-portal { visibility: hidden !important; }" });
@@ -108,6 +124,7 @@ test("signed-in buyer starts at the minimum, submits numeric money once and sees
   const amount = page.getByLabel("Bid amount", { exact: true });
   await expect(amount).toHaveValue("9900.00");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
   await expect(page.getByText("$9,900.00", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/You’re the highest bidder|You're the highest bidder/)).toBeVisible();
   const result = await evidence(request);
@@ -130,6 +147,7 @@ test("a rejected bid shows the server minimum and lets the buyer submit the corr
   await expect(page.getByLabel("Bid amount", { exact: true })).toHaveValue("9950.00");
   await control(request, { mode: "normal" });
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
   await expect(page.getByText("$9,950.00", { exact: true }).first()).toBeVisible();
   const result = await evidence(request);
   expect(result.bidWrites).toBe(1);
@@ -281,6 +299,7 @@ test("unsafe large money fails locally and leaves the amount editable for correc
   expect((await evidence(request)).bidRequests).toHaveLength(0);
   await amount.fill("9900.00");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
   await expect(page.getByText("$9,900.00", { exact: true }).first()).toBeVisible();
   expect((await evidence(request)).bidWrites).toBe(1);
 });
@@ -378,6 +397,45 @@ test("malformed and other-auction stream payloads never replace the room state",
   await page.waitForTimeout(1200);
   await expect(page.getByText("$999,999.00", { exact: true })).toHaveCount(0);
   await expect(page.getByText("$9,850.00", { exact: true }).first()).toBeVisible();
+});
+
+test("a room already ENDED never opens an EventSource while waiting for settlement", async ({ page, request }) => {
+  await observeAuctionStreams(page);
+  await control(request, { mode: "stream", status: "ENDED", remainingMs: -1000 });
+  await page.goto(roomPath);
+  await expect(page.getByRole("heading", { name: "Confirming auction result", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bid History", exact: true })).toBeVisible();
+  await expect(page.getByRole("timer", { name: "Time remaining", exact: true })).toHaveText("00:00:00");
+  const pendingAt = stateCalls(await evidence(request)).length;
+  await page.waitForTimeout(5000);
+  expect(await auctionStreamStates(page)).toEqual([]);
+  const result = await evidence(request);
+  expect(result.requests.filter((call) => call.path.endsWith("/stream"))).toHaveLength(0);
+  expect(stateCalls(result).length).toBeGreaterThan(pendingAt);
+  await expect(page.getByRole("button", { name: "Place Bid", exact: true })).toHaveCount(0);
+});
+
+test("an ENDED push closes EventSource without reconnecting and REST completes the winner handoff", async ({ page, request }) => {
+  await observeAuctionStreams(page);
+  await control(request, { mode: "stream" });
+  await signIn(page);
+  await expect(page.getByRole("status").filter({ hasText: "Live updates connected" })).toBeVisible();
+  expect((await auctionStreamStates(page)).length).toBeGreaterThan(0);
+  await control(request, { status: "ENDED", publish: true });
+  await expect(page.getByRole("heading", { name: "Confirming auction result", exact: true })).toBeVisible();
+  await expect.poll(async () => (await auctionStreamStates(page)).every((readyState) => readyState === 2)).toBe(true);
+  const closedSources = await auctionStreamStates(page);
+  const pendingAt = stateCalls(await evidence(request)).length;
+  await page.waitForTimeout(5000);
+  expect(await auctionStreamStates(page)).toEqual(closedSources);
+  expect(stateCalls(await evidence(request)).length).toBeGreaterThan(pendingAt);
+  await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toHaveCount(0);
+  // No more push events: REST and the private winner read must discover the order.
+  await control(request, { status: "SETTLED" });
+  await expect(page.getByRole("heading", { name: "You won this auction", exact: true })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('a[href="/order/00000081-1111-4111-8111-111111111111"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirm address and pay", exact: true })).toBeVisible();
+  expect(await auctionStreamStates(page)).toEqual(closedSources);
 });
 
 test("ENDED keeps checking until delayed settlement confirms a loss", async ({ page, request }) => {
