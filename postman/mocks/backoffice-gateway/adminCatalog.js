@@ -1,4 +1,4 @@
-/* Test-only HTTP simulation. SYS DTOs model the explicit FE proposal pending #217. */
+/* Test-only HTTP simulation. SYS DTOs follow delivered config-service OpenAPI. */
 exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) => {
   const id = (n) => `a2280000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   let active = false, categories = [], warehouses = [], configs = [], movements = [], balance, requests = [], unavailable = false;
@@ -18,9 +18,10 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
       movementType: index === 0 ? "ADJUSTMENT" : "INTAKE", quantity: index === 0 ? -2 : 1, referenceId: null,
       reason: index === 0 ? "Damaged packaging" : null, createdAt: new Date(Date.UTC(2026, 10, 17, 1, index)).toISOString() }));
     configs = [
-      { key: "AUCTION_MIN_DURATION_HOURS", value: 1, defaultValue: 1, description: "Minimum auction duration", group: "Auctions" },
-      { key: "FEATURE_AUCTION_ENABLED", value: true, defaultValue: true, description: "Enable auctions", group: "Feature Flags" },
-      { key: "SUPPORT_CONTACT", value: "support@example.test", defaultValue: "support@example.test", description: "Support contact address", group: "General" },
+      { key: "AUCTION_MIN_DURATION_MINUTES", value: 60, defaultValue: 60, description: "Minimum auction duration", service: "auction-service", applyMode: "CONFIG_SOURCE", configuredValue: 60 },
+      { key: "MAX_LOGIN_ATTEMPTS", value: 5, defaultValue: 5, description: "Maximum failed login attempts", service: "user-service", applyMode: "KEYCLOAK_MANAGED", configuredValue: 5 },
+      { key: "ALLOW_GUEST_CART", value: true, defaultValue: true, description: "Allow guest users to have carts", service: "commerce-service", applyMode: "CONFIG_SOURCE", configuredValue: true },
+      { key: "NOTIFICATION_RETRY_LIMIT", value: 3, defaultValue: 3, description: "Notification retry attempts", service: "notification-service", applyMode: "RUNTIME", configuredValue: 3 },
     ];
   };
   const depth = (row) => row.parentId ? 1 + depth(categories.find((item) => item.id === row.parentId)) : 1;
@@ -95,11 +96,13 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
     if (path === "/v1/inventory/movements") { list(res, movements.filter((row) => !url.searchParams.get("warehouseId") || url.searchParams.get("warehouseId") === row.warehouseId), url); return true; }
     if (path.startsWith("/v1/system/configs")) {
       if (unavailable) problem(res, 404, "No configuration API is delivered");
-      else if (req.method === "GET") ok(res, configs);
+      else if (req.method === "GET") list(res, configs, url);
       else {
         const row = configs.find((item) => item.key === decodeURIComponent(path.split("/").at(-1)));
-        if (typeof body.value !== typeof row.value) problem(res, 400, "Configuration value has the wrong type", "SYSTEM_CONFIG_TYPE_INVALID");
-        else { row.value = body.value; ok(res, row); }
+        if (!row) problem(res, 400, "Unknown system configuration key", "CONFIG_KEY_UNKNOWN");
+        else if (row.applyMode === "KEYCLOAK_MANAGED") problem(res, 400, "This configuration is managed by Keycloak", "CONFIG_KEY_EXTERNALLY_MANAGED");
+        else if (typeof body.value !== typeof row.value) problem(res, 400, "Configuration value has the wrong type", "CONFIG_VALUE_INVALID");
+        else { row.value = body.value; row.configuredValue = body.value; ok(res, { key: row.key, value: row.value }); }
       }
       return true;
     }

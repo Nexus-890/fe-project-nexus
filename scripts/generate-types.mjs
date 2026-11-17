@@ -5,14 +5,13 @@ import openapiTS, { astToString } from "openapi-typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const integrationSpecs = {
-  "system-config-217-proposal": { path: "../docs/api/system-config-217-proposal.openapi.json", status: "the proposed #217 system config contract, not a delivered API" },
   "admin-user-211-snapshot": { path: "../docs/api/admin-user-211.openapi.yaml", status: "the unmerged #211 snapshot, not develop" },
   "account-210-snapshot": { path: "../docs/api/account-210.openapi.json", status: "the unmerged #210 snapshot, not develop" },
   "seller-application-210-proposal": { path: "../docs/api/seller-application-210.openapi.json", status: "the proposed #210 seller contract, not a delivered API" },
 };
 let drift = false;
 for (const [name, output] of [
-  ["system-config-217-proposal", "systemConfig217GeneratedType.ts"],
+  ["config-service", "configGeneratedType.ts"],
   ["user-service", "userGeneratedType.ts"],
   ["catalog-service", "catalogGeneratedType.ts"],
   ["inventory-service", "inventoryGeneratedType.ts"],

@@ -100,19 +100,49 @@ test("SKU intake refreshes balances and ledger, paginates and rejects inactive w
   expect(body.data.requests.some((row: { path: string }) => row.path.includes("adjustments"))).toBe(false);
 });
 
-test("configuration proposal shows keys, saves values, and preserves backend wrong-type 400", async ({ page, request }) => {
+test("configuration uses delivered GET rows and short PUT response, refetches, and preserves wrong-type 400", async ({ page, request }) => {
   await signIn(page, request, "/backoffice/configuration");
-  const input = page.getByLabel("Value for AUCTION_MIN_DURATION_HOURS", { exact: true });
+  const input = page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true });
   await input.fill("wrong-type");
   await input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Configuration value has the wrong type");
   await expect(input).toHaveValue("wrong-type");
-  await input.fill("2");
+  await input.fill("120");
   await input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Configuration saved.", { exact: true })).toBeVisible();
+  await expect(input.locator("xpath=ancestor::tr")).toContainText("Configured: 120");
+  await expect(input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  const body = await (await request.get(`${api}/api/test/catalog-admin/evidence`)).json();
+  const writes = body.data.requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path.includes("system/configs"));
+  expect(writes.map((row: { body: unknown }) => row.body)).toEqual([{ value: "wrong-type" }, { value: 120 }]);
+  expect(body.data.requests.filter((row: { method: string; path: string }) => row.method === "GET" && row.path === "/v1/system/configs").length).toBeGreaterThanOrEqual(2);
   await screenshot(page, "configuration");
   await page.reload();
-  await expect(input).toHaveValue("2");
+  await expect(input).toHaveValue("120");
+});
+
+test("configuration groups by delivered service, keeps drafts across refetch, and Keycloak settings are read-only", async ({ page, request }) => {
+  await signIn(page, request, "/backoffice/configuration");
+  const navigation = page.getByRole("navigation", { name: "Configuration services", exact: true });
+  const managed = page.getByLabel("Value for MAX_LOGIN_ATTEMPTS", { exact: true });
+  await expect(managed).toBeDisabled();
+  await expect(managed.locator("xpath=ancestor::tr").getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await navigation.getByRole("button", { name: "auction-service", exact: true }).click();
+  await expect(page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true })).toHaveValue("60");
+  await expect(managed).toHaveCount(0);
+  await navigation.getByRole("button", { name: "All services", exact: true }).click();
+  const numeric = page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true });
+  await numeric.fill("unsaved");
+  const flag = page.getByLabel("Value for ALLOW_GUEST_CART", { exact: true });
+  await flag.uncheck();
+  await flag.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Configuration saved.", { exact: true })).toBeVisible();
+  await expect(flag).not.toBeChecked();
+  await expect(numeric).toHaveValue("unsaved");
+  await numeric.locator("xpath=ancestor::form").getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(numeric).toHaveValue("60");
+  const body = await (await request.get(`${api}/api/test/catalog-admin/evidence`)).json();
+  expect(body.data.requests.some((row: { method: string; path: string }) => row.method === "PUT" && row.path.endsWith("MAX_LOGIN_ATTEMPTS"))).toBe(false);
 });
 
 test("configuration unavailable has retry and no invented values", async ({ page, request }) => {
@@ -122,7 +152,7 @@ test("configuration unavailable has retry and no invented values", async ({ page
   await expect(page.getByRole("table")).toHaveCount(0);
   await request.post(`${api}/api/test/catalog-admin/control`, { data: { unavailable: false } });
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByLabel("Value for AUCTION_MIN_DURATION_HOURS", { exact: true })).toHaveValue("1");
+  await expect(page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true })).toHaveValue("60");
 });
 
 for (const role of ["SELLER", "SUPPORT_STAFF"]) {

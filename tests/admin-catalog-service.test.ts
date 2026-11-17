@@ -59,7 +59,7 @@ test("warehouse detail uses the authenticated WH-03 read and rejects a mismatche
   } };
   await assert.rejects(getAdminWarehouse(id, { context }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
 });
-test("pending config contract preserves backend type errors and encodes setting keys", async () => {
+test("config contract preserves backend type errors and encodes setting keys", async () => {
   const context: ApiContext = { getAccessToken: () => "admin", fetch: async (input, init) => {
     assert.ok(String(input).includes("AUCTION%2FMIN"));
     assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer admin");
@@ -67,7 +67,39 @@ test("pending config contract preserves backend type errors and encodes setting 
     return Response.json({ title: "Wrong type", status: 400, detail: "Expected number" }, { status: 400 });
   } };
   await assert.rejects(updateSystemConfig("AUCTION/MIN", "wrong-type", { context }), (error: unknown) => isApiError(error) && error.status === 400 && error.detail === "Expected number");
-  await assert.rejects(getSystemConfigs({ context: { fetch: async () => Response.json(envelope([{ key: "X", value: {}, defaultValue: 1, description: "", group: "" }])) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+  await assert.rejects(getSystemConfigs({ context: { fetch: async () => Response.json({ ...envelope([{ key: "X", value: 1, defaultValue: 1, description: "", service: "auction-service", applyMode: "CONFIG_SOURCE", configuredValue: 1 }]), page: { number: 1, size: 10, totalElements: 1, totalPages: 1 } }) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+});
+test("config GET parses the delivered service/applyMode/configuredValue row and PUT parses its short response", async () => {
+  const context: ApiContext = { getAccessToken: () => "admin", fetch: async (_input, init) => {
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer admin");
+    const method = init?.method ?? "GET";
+    if (method === "GET") return Response.json({ ...envelope([{ key: "NOTIFICATION_RETRY_LIMIT", value: 3, defaultValue: 3, description: "Retry attempts", service: "notification-service", applyMode: "RUNTIME", configuredValue: 3 }]), page: { number: 0, size: 57, totalElements: 57, totalPages: 1 } });
+    return Response.json(envelope({ key: "NOTIFICATION_RETRY_LIMIT", value: 4 }));
+  } };
+  const rows = await getSystemConfigs({ context });
+  assert.equal(rows[0].service, "notification-service");
+  assert.equal(rows[0].applyMode, "RUNTIME");
+  assert.equal(rows[0].configuredValue, 3);
+  const updated = await updateSystemConfig("NOTIFICATION_RETRY_LIMIT", 4, { context });
+  assert.deepEqual(updated, { key: "NOTIFICATION_RETRY_LIMIT", value: 4 });
+});
+test("config GET accepts nullable effective values, zero, false and distinct configured values", async () => {
+  const rows = [
+    { key: "MAX_LOGIN_ATTEMPTS", value: 0, defaultValue: 5, configuredValue: 5, service: "user-service", applyMode: "KEYCLOAK_MANAGED", description: "Realm value" },
+    { key: "ALLOW_GUEST_CART", value: false, defaultValue: true, configuredValue: false, service: "commerce-service", applyMode: "CONFIG_SOURCE", description: "Guest carts" },
+    { key: "NULL_EFFECTIVE", value: null, defaultValue: null, configuredValue: "source", service: "application", applyMode: "RUNTIME", description: "Nullable scalar" },
+  ];
+  assert.deepEqual(await getSystemConfigs({ context: { fetch: async () => Response.json({ ...envelope(rows), page: { number: 0, size: 3, totalElements: 3, totalPages: 1 } }) } }), rows);
+});
+test("config parsers reject obsolete proposals, malformed metadata and mismatched PUT keys", async () => {
+  const row = { key: "NOTIFICATION_RETRY_LIMIT", value: 3, defaultValue: 3, configuredValue: 3, service: "notification-service", applyMode: "RUNTIME", description: "Retry attempts" };
+  const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
+  for (const data of [
+    [{ key: row.key, value: 3, defaultValue: 3, description: "Retry attempts", group: "Notification" }],
+    [{ ...row, applyMode: "UNKNOWN" }], [{ ...row, configuredValue: null }], [{ ...row, value: {} }], [row, row],
+  ]) await assert.rejects(getSystemConfigs({ context: { fetch: async () => Response.json({ ...envelope(data), page: { number: 0, size: data.length, totalElements: data.length, totalPages: 1 } }) } }), invalid);
+  for (const data of [{ key: "OTHER", value: 4 }, { key: row.key }, { key: row.key, value: {} }])
+    await assert.rejects(updateSystemConfig(row.key, 4, { context: { fetch: async () => Response.json(envelope(data)) } }), invalid);
 });
 test("parent choices retain ancestry so descendants can never become parents", () => {
   const rows = flattenAdminCategories([{ id, name: "Root", slug: "root", parentId: null, level: 1, children: [{ id: "child", name: "Child", slug: "child", parentId: id, level: 2, children: [] }] }]);
