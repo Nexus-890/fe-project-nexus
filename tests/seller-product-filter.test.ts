@@ -17,20 +17,26 @@ const listing = (paths: string[]): ApiContext => ({ getAccessToken: () => "fixtu
 test("seller product listing sends the status filter only when one is chosen", async () => {
   const paths: string[] = [];
   const context = listing(paths);
-  await getSellerProducts(0, "DRAFT", { context });
-  await getSellerProducts(3, undefined, { context });
-  const result = await getSellerProductListings(0, "DRAFT", { context });
+  await getSellerProducts(0, { status: "DRAFT" }, { context });
+  await getSellerProducts(3, {}, { context });
+  const result = await getSellerProductListings(0, { status: "DRAFT" }, { context });
   assert.equal(result.content[0].status, "DRAFT");
   assert.deepEqual(paths, ["/api/v1/products/mine?page=0&size=10&status=DRAFT", "/api/v1/products/mine?page=3&size=10",
     "/api/v1/products/mine?page=0&size=10&status=DRAFT", "/api/v1/products/mine/product-1"]);
+});
+
+test("auction product picker asks only for active auction products", async () => {
+  const paths: string[] = [];
+  await getSellerProductListings(1, { status: "ACTIVE", auctionEnable: true }, { context: listing(paths) });
+  assert.equal(paths[0], "/api/v1/products/mine?page=1&size=10&status=ACTIVE&auctionEnable=true");
 });
 
 test("seller product listing rejects an unknown status or page before any request", async () => {
   const paths: string[] = [];
   const context = listing(paths);
   const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
-  await assert.rejects(getSellerProducts(0, "SOLD" as SellerProductStatus, { context }), invalid);
-  await assert.rejects(getSellerProducts(-1, undefined, { context }), invalid);
+  await assert.rejects(getSellerProducts(0, { status: "SOLD" as SellerProductStatus }, { context }), invalid);
+  await assert.rejects(getSellerProducts(-1, {}, { context }), invalid);
   assert.deepEqual(paths, []);
 });
 
@@ -38,5 +44,5 @@ test("seller product listing shows the backend's invalid status problem detail",
   const context: ApiContext = { getAccessToken: () => "fixture-only", fetch: async () => Response.json(
     { type: "urn:problem:invalid-parameter", title: "Invalid parameter", status: 400, code: "INVALID_PARAMETER", detail: "A valid value is required" },
     { status: 400, headers: { "Content-Type": "application/problem+json" } }) };
-  await assert.rejects(getSellerProducts(0, "ACTIVE", { context }), (error) => isApiError(error) && error.status === 400 && error.detail === "A valid value is required");
+  await assert.rejects(getSellerProducts(0, { status: "ACTIVE" }, { context }), (error) => isApiError(error) && error.status === 400 && error.detail === "A valid value is required");
 });

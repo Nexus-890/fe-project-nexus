@@ -4,13 +4,13 @@ import { parseOrderSummary } from "./orderService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
 import type { ProductDetail, ProductImage, ProductSku, ProductSummary } from "../types/catalogResponseType";
-import type { SellerProductInput, SellerProductStatus, SellerProductUpdate, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance } from "../types/sellerType";
+import type { SellerProductFilters, SellerProductInput, SellerProductStatus, SellerProductUpdate, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance } from "../types/sellerType";
 
 const sellerProductStatuses: readonly SellerProductStatus[] = ["DRAFT", "INACTIVE", "ACTIVE"];
 
-export const getSellerProducts = async (page: number, status: SellerProductStatus | undefined, options: ServiceRequestOptions = {}): Promise<Page<ProductSummary>> => {
+export const getSellerProducts = async (page: number, { status, auctionEnable }: SellerProductFilters, options: ServiceRequestOptions = {}): Promise<Page<ProductSummary>> => {
   if (!Number.isInteger(page) || page < 0 || status !== undefined && !sellerProductStatuses.includes(status)) throw createInvalidResponseError("Invalid seller product filters");
-  return parseProductPage(await requestApi("GET", "/api/v1/products/mine", undefined, { ...options, auth: true, params: { page, size: 10, status } }));
+  return parseProductPage(await requestApi("GET", "/api/v1/products/mine", undefined, { ...options, auth: true, params: { page, size: 10, status, auctionEnable } }));
 };
 
 export const getSellerProduct = async (id: string, options: ServiceRequestOptions = {}): Promise<ProductDetail> => {
@@ -43,8 +43,8 @@ export const canPublishSellerProduct = (product: Pick<ProductDetail, "skus" | "i
     product.images.some((image) => image.imageUrl.trim().length > 0);
 };
 
-export const getSellerProductListings = async (page: number, status: SellerProductStatus | undefined, options: ServiceRequestOptions = {}): Promise<Page<SellerProductListing>> => {
-  const result = await getSellerProducts(page, status, options);
+export const getSellerProductListings = async (page: number, filters: SellerProductFilters, options: ServiceRequestOptions = {}): Promise<Page<SellerProductListing>> => {
+  const result = await getSellerProducts(page, filters, options);
   const details = await Promise.all(result.content.map((product) => getSellerProduct(product.id, options)));
   return { ...result, content: details.map((product) => ({ ...product, ...getSellerPriceRange(product.skus) })) };
 };
