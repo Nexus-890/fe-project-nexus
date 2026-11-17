@@ -56,9 +56,17 @@ export interface paths {
          * @description Allows USER.VIEW OR a path id equal to the authenticated subject. Gateway requires a token, because it cannot decide subject equality. Access: authenticated bearer token. Ownership/business restriction: Own id OR USER.VIEW; other caller receives 403.
          */
         get: operations["getUser"];
-        put?: never;
+        /**
+         * Update permitted profile fields
+         * @description Update permitted profile fields. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        put: operations["adminUpdateUser"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete profile according to USER_SOFT_DELETE and disable Keycloak sign-in
+         * @description Delete profile according to USER_SOFT_DELETE and disable Keycloak sign-in. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        delete: operations["adminDeleteUser"];
         options?: never;
         head?: never;
         patch?: never;
@@ -76,6 +84,130 @@ export interface paths {
          * @description Search q matches existing name/email/phone filters; status and role filter the result. Stable secondary sort is id. Empty/out-of-range pages are 200. Access: requires USER.LIST. Ownership/business restriction: None.
          */
         get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create user with fixed Keycloak roles
+         * @description Create user with fixed Keycloak roles. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        post: operations["adminCreateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change password under Keycloak password policy
+         * @description Change password under Keycloak password policy. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. USER_IDENTITY_RECONCILIATION_REQUIRED means Keycloak confirmed the change but local completion failed; the durable operationId identifies the reconciliation record. Do not blindly retry the password reset. See docs/testing/admin-user-management.md for recovery and ambiguous timeout handling.
+         */
+        put: operations["adminChangePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the fixed application role set
+         * @description Replace the fixed application role set. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        put: operations["adminAssignRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear a current Keycloak brute-force lock
+         * @description Clear a current Keycloak brute-force lock. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. USER_IDENTITY_RECONCILIATION_REQUIRED means Keycloak confirmed the unlock but local completion failed; the durable operationId identifies the reconciliation record. Do not blindly retry the unlock. See docs/testing/admin-user-management.md for recovery and ambiguous timeout handling.
+         */
+        post: operations["adminUnlockUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List fixed realm roles and their client permissions
+         * @description List fixed realm roles and their client permissions. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        get: operations["listRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a fixed realm role by Keycloak ID
+         * @description Read a fixed realm role by Keycloak ID. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        get: operations["getRole"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List nexus-web client role permissions
+         * @description List nexus-web client role permissions. Requires the named role and exact privilege. Keycloak owns credentials, realm roles and brute-force state; user_db stores the profile. See docs/testing/admin-user-management.md for compensation and failure boundaries.
+         */
+        get: operations["listPermissions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -265,6 +397,73 @@ export interface components {
              */
             message: string;
             data: components["schemas"]["User"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        AdminCreateUser: {
+            /**
+             * Format: email
+             * @description Trimmed and normalized to lower case.
+             */
+            email: string;
+            /** @description Whitespace, parentheses and hyphens are removed before validation. */
+            phone: string;
+            /**
+             * Format: password
+             * @description At least 8 characters. Sent only to Keycloak, which applies the realm password policy; user-service stores no password.
+             */
+            password: string;
+            fullName: string;
+            identityNumber: string;
+            /** @enum {string} */
+            gender: "MALE" | "FEMALE" | "OTHER";
+            address: string;
+            /**
+             * Format: date
+             * @description Valid yyyy-MM-dd date; must not be in the future in the service clock.
+             */
+            dateOfBirth: string;
+            roleCodes: ("ADMIN" | "SUPPORT_STAFF" | "BUYER" | "SELLER")[];
+        };
+        AssignRoles: {
+            roleCodes: ("ADMIN" | "SUPPORT_STAFF" | "BUYER" | "SELLER")[];
+        };
+        AdminPassword: {
+            newPassword: string;
+        };
+        Permission: {
+            code: string;
+            name: string;
+            description?: string | null;
+        };
+        Role: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            description?: string | null;
+            privileges: components["schemas"]["Permission"][];
+        };
+        RoleListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Role"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        RoleDetailResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Role"];
+        };
+        PermissionListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Permission"][];
             page: components["schemas"]["PageInfo"];
         };
         SellerProfileRequest: {
@@ -1047,6 +1246,252 @@ export interface operations {
             };
         };
     };
+    adminUpdateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfile"];
+            };
+        };
+        responses: {
+            /** @description Success. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetUserResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_IDENTITY_REJECTED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "USER_IDENTITY_REJECTED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_EMAIL_ALREADY_USED, USER_PROFILE_CONFLICT, USER_IDENTITY_NOT_FOUND. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_EMAIL_ALREADY_USED" | "USER_PROFILE_CONFLICT" | "USER_IDENTITY_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
+    adminDeleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_IDENTITY_NOT_FOUND. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
     listUsers: {
         parameters: {
             query?: {
@@ -1209,6 +1654,793 @@ export interface operations {
                         status?: 504;
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUser"];
+            };
+        };
+        responses: {
+            /** @description Success. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetUserResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_ROLE_INVALID, USER_IDENTITY_REJECTED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "USER_ROLE_INVALID" | "USER_IDENTITY_REJECTED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_EMAIL_ALREADY_USED, USER_PHONE_ALREADY_USED, USER_IDENTITY_NUMBER_ALREADY_USED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_EMAIL_ALREADY_USED" | "USER_PHONE_ALREADY_USED" | "USER_IDENTITY_NUMBER_ALREADY_USED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
+    adminChangePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPassword"];
+            };
+        };
+        responses: {
+            /** @description No content; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_IDENTITY_REJECTED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "USER_IDENTITY_REJECTED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_IDENTITY_NOT_FOUND. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE, USER_IDENTITY_RECONCILIATION_REQUIRED. The latter confirms the remote change; use operationId for reconciliation and do not blindly retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE" | "USER_IDENTITY_RECONCILIATION_REQUIRED";
+                        /**
+                         * Format: uuid
+                         * @description Durable identity-operation journal ID, present when local completion of a confirmed remote change needs reconciliation.
+                         */
+                        operationId?: string;
+                    };
+                };
+            };
+        };
+    };
+    adminAssignRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignRoles"];
+            };
+        };
+        responses: {
+            /** @description Success. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetUserResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED, USER_ROLE_INVALID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED" | "USER_ROLE_INVALID";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_IDENTITY_NOT_FOUND. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
+    adminUnlockUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Conflict. Codes: USER_IDENTITY_NOT_FOUND, USER_ACCOUNT_NOT_LOCKED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 409;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_NOT_FOUND" | "USER_ACCOUNT_NOT_LOCKED";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE, USER_IDENTITY_RECONCILIATION_REQUIRED. The latter confirms the remote change; use operationId for reconciliation and do not blindly retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE" | "USER_IDENTITY_RECONCILIATION_REQUIRED";
+                        /**
+                         * Format: uuid
+                         * @description Durable identity-operation journal ID, present when local completion of a confirmed remote change needs reconciliation.
+                         */
+                        operationId?: string;
+                    };
+                };
+            };
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: {
+                q?: string;
+                sort?: "name,asc" | "name,desc";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleListResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, VALIDATION_FAILED, USER_ROLE_INVALID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "VALIDATION_FAILED" | "USER_ROLE_INVALID";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
+    getRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetailResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Not Found. Codes: USER_ROLE_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 404;
+                        /** @enum {string} */
+                        code?: "USER_ROLE_NOT_FOUND";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
+                    };
+                };
+            };
+        };
+    };
+    listPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionListResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: INVALID_PARAMETER, INVALID_REQUEST_BODY, VALIDATION_FAILED. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "INVALID_REQUEST_BODY" | "VALIDATION_FAILED";
+                    };
+                };
+            };
+            /** @description Unauthorized. Codes: UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description Forbidden. Codes: FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN";
+                    };
+                };
+            };
+            /** @description Internal Server Error. Codes: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description Service Unavailable. Codes: USER_IDENTITY_PROVIDER_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "USER_IDENTITY_PROVIDER_UNAVAILABLE";
                     };
                 };
             };
