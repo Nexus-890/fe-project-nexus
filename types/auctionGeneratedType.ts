@@ -135,7 +135,7 @@ export interface paths {
         put?: never;
         /**
          * Create an auction as a seller
-         * @description Creates an auction in CREATED status. sellerId comes from the authenticated JWT subject. The selected product must belong to that seller and contain the selected SKU. The auction stores the catalog product name and its first image URL at creation. The duration must be between the configured minimum and maximum, inclusive. Defaults are 60 minutes and 168 hours. startingPrice must be greater than zero. startAt must not be in the past, allowing up to 5 seconds of clock skew against server time. A non-deleted auction in CREATED, SCHEDULED or ACTIVE is live. A SKU can have one live auction, and each seller can have up to the configured limit (default 5).
+         * @description Creates an auction in CREATED status. sellerId comes from the authenticated JWT subject. The selected product must belong to that seller and contain the selected SKU. The auction stores the catalog product name and its first image URL at creation. The duration must be between the configured minimum and maximum, inclusive. Defaults are 60 minutes and 168 hours. startingPrice must be greater than zero. startAt must not be in the past, allowing up to 5 seconds of clock skew against server time. A non-deleted auction in CREATED, SCHEDULED or ACTIVE is live. A SKU can have one live auction, and each seller can have up to the configured limit (default 5). With FEATURE_REPUTATION_ENFORCEMENT enabled, the seller must pass the direct rating-service SELL eligibility check before the auction is written. A score below MIN_REPUTATION_TO_SELL (default 50) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. When the flag is off, this check and its dependency calls are skipped. With enforcement on, unavailable rating-service, malformed decisions, machine-token failures or an open circuit return 503 AUCTION_REPUTATION_UNAVAILABLE. Refusal writes no auction or creation outbox event.
          */
         post: operations["createAuction"];
         delete?: never;
@@ -203,7 +203,7 @@ export interface paths {
         put?: never;
         /**
          * Place a bid as a buyer
-         * @description Places a bid on an ACTIVE auction from startAt (inclusive) to endAt (exclusive). Outside that window, bids are refused even if the status is still ACTIVE. A conditional update prevents concurrent bids from both winning the same price. The authenticated buyer may not bid on their own auction. Anti-sniping is enabled by default: an accepted bid with at most five minutes remaining adds five minutes to endAt, capped at originalEndAt plus the configured maximum extension (30 minutes by default). The bid, extension and BidPlaced outbox event commit together; refused bids leave the deadline unchanged. Read the auction again to obtain its effective endAt and extensionCount. Idempotency-Key is a required UUID. A new key returns 201. Reusing a key for the same auction, authenticated bidder and numeric amount returns 200 with the original bidId, accepted amount and leaderBidderId, even if the auction state has since changed. Amounts such as 1050000 and 1050000.00 are equivalent. A different amount with the same key returns 409 AUCTION_IDEMPOTENCY_KEY_CONFLICT; use a new key for a different bid. A replay does not extend endAt or increment extensionCount, update the auction, insert a bid or publish another event. UUID letter case is normalized. The key is globally unique; reusing it for another auction, bidder or amount returns 409 without exposing the original bid. Concurrent successful requests with one key create one bid, increment bid_count once and publish one BidPlaced event.
+         * @description Places a bid on an ACTIVE auction from startAt (inclusive) to endAt (exclusive). Outside that window, bids are refused even if the status is still ACTIVE. A conditional update prevents concurrent bids from both winning the same price. The authenticated buyer may not bid on their own auction. Anti-sniping is enabled by default: an accepted bid with at most five minutes remaining adds five minutes to endAt, capped at originalEndAt plus the configured maximum extension (30 minutes by default). The bid, extension and BidPlaced outbox event commit together; refused bids leave the deadline unchanged. Read the auction again to obtain its effective endAt and extensionCount. Idempotency-Key is a required UUID. A new key returns 201. Reusing a key for the same auction, authenticated bidder and numeric amount returns 200 with the original bidId, accepted amount and leaderBidderId, even if the auction state has since changed. Amounts such as 1050000 and 1050000.00 are equivalent. A different amount with the same key returns 409 AUCTION_IDEMPOTENCY_KEY_CONFLICT; use a new key for a different bid. A replay does not extend endAt or increment extensionCount, update the auction, insert a bid or publish another event. UUID letter case is normalized. The key is globally unique; reusing it for another auction, bidder or amount returns 409 without exposing the original bid. Concurrent successful requests with one key create one bid, increment bid_count once and publish one BidPlaced event. With FEATURE_REPUTATION_ENFORCEMENT enabled, each new bid must pass rating-service BID eligibility before any bid, price, deadline or outbox write. A score below MIN_REPUTATION_TO_BID (default 40) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. When the flag is off, the reputation check and its dependency calls are skipped. When on, rating-service unavailability, malformed decisions, machine-token failures or an open circuit fail closed with 503 AUCTION_REPUTATION_UNAVAILABLE. A replay of an already accepted key still returns its original 200 response even when reputation is now denied or rating-service is down; the accepted operation is not written again.
          */
         post: operations["placeBid"];
         delete?: never;
@@ -924,25 +924,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller lacks SELLER or AUCTION.CREATE, or the product belongs to another seller. */
+            /** @description The caller lacks SELLER or AUCTION.CREATE, the product belongs to another seller, or enabled reputation enforcement denies SELL eligibility. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "urn:problem:domain-error",
-                     *       "title": "Forbidden",
-                     *       "status": 403,
-                     *       "detail": "The product belongs to another seller",
-                     *       "instance": "/api/v1/auctions",
-                     *       "code": "AUCTION_FORBIDDEN"
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"] & {
                         /** @enum {unknown} */
-                        code?: "FORBIDDEN" | "AUCTION_FORBIDDEN";
+                        code?: "FORBIDDEN" | "AUCTION_FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW";
+                        /** @description Policy explanation included for AUCTION_REPUTATION_TOO_LOW. */
+                        reason?: string;
                     };
                 };
             };
@@ -992,25 +984,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Catalog or inventory is unavailable, or the gateway cannot reach auction-service. */
+            /** @description Catalog or inventory is unavailable, an enabled reputation check cannot obtain a valid decision, or the gateway cannot reach auction-service. Reputation token/timeout/transport/malformed-response/circuit failures fail closed before any auction write. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "urn:problem:domain-error",
-                     *       "title": "Service Unavailable",
-                     *       "status": 503,
-                     *       "detail": "Catalog is temporarily unavailable",
-                     *       "instance": "/api/v1/auctions",
-                     *       "code": "AUCTION_CATALOG_UNAVAILABLE"
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"] & {
                         /** @enum {unknown} */
-                        code?: "AUCTION_CATALOG_UNAVAILABLE" | "AUCTION_INVENTORY_UNAVAILABLE" | "SERVICE_UNAVAILABLE";
+                        code?: "AUCTION_CATALOG_UNAVAILABLE" | "AUCTION_INVENTORY_UNAVAILABLE" | "AUCTION_REPUTATION_UNAVAILABLE" | "SERVICE_UNAVAILABLE";
                     };
                 };
             };
@@ -1297,13 +1279,29 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description FORBIDDEN — The caller lacks the BUYER role or the AUCTION.BID privilege. */
+            /** @description FORBIDDEN for a missing BUYER role or AUCTION.BID privilege; AUCTION_REPUTATION_TOO_LOW when enabled enforcement denies BID eligibility. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Forbidden",
+                     *       "status": 403,
+                     *       "detail": "Reputation score 39 is below 40 required for BID",
+                     *       "instance": "/api/v1/auctions/019afe64-9800-7000-8000-000000000001/bids",
+                     *       "code": "AUCTION_REPUTATION_TOO_LOW",
+                     *       "reason": "Reputation score 39 is below 40 required for BID"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {unknown} */
+                        code?: "FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW";
+                        /** @description Policy explanation included for AUCTION_REPUTATION_TOO_LOW. */
+                        reason?: string;
+                    };
                 };
             };
             /** @description Auction not found. */
@@ -1364,13 +1362,26 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description SERVICE_UNAVAILABLE — The gateway could not reach auction-service. */
+            /** @description AUCTION_REPUTATION_UNAVAILABLE when an enabled check has token, timeout, transport, circuit or malformed-decision failure; SERVICE_UNAVAILABLE when the gateway cannot reach auction-service. No bid, price, deadline or outbox write occurs. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Service Unavailable",
+                     *       "status": 503,
+                     *       "detail": "Reputation eligibility is temporarily unavailable",
+                     *       "instance": "/api/v1/auctions/019afe64-9800-7000-8000-000000000001/bids",
+                     *       "code": "AUCTION_REPUTATION_UNAVAILABLE"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {unknown} */
+                        code?: "AUCTION_REPUTATION_UNAVAILABLE" | "SERVICE_UNAVAILABLE";
+                    };
                 };
             };
         };

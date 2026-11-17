@@ -178,7 +178,6 @@ const server = http.createServer(async (req, res) => {
     const size = Number(url.searchParams.get("size") || 10);
     return json(res, success(orders.slice(page * size, (page + 1) * size), { number: page, size, totalElements: orders.length, totalPages: Math.ceil(orders.length / size) }));
   }
-  // Provisional #212/#213 boundary, exercised by the real frontend. Not a delivered service contract.
   const reputationMatch = /^\/v1\/reputations\/([0-9a-f-]+)$/.exec(url.pathname);
   if (url.pathname === "/v1/ratings" || reputationMatch) {
     const authorized = /^Bearer .+/.test(req.headers.authorization || "");
@@ -191,34 +190,39 @@ const server = http.createServer(async (req, res) => {
     if (mode === "unavailable") return problem(res, 503, "SERVICE_UNAVAILABLE", "Ratings are temporarily unavailable.");
     if (reputationMatch && req.method === "GET") return json(res, success({
       userId: reputationMatch[1], score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2,
+      ratingCount: 20, policyVersion: "reputation-policy-1",
     }));
     const ratings = await pm.state.get("order-list-api:ratings") || [];
+    const ratingResponse = (rating) => ({
+      id: rating.id, orderId: rating.orderId, auctionId: rating.auctionId,
+      score: rating.score, comment: rating.comment, raterName: rating.raterName,
+      ratedByMe: rating.fromUserId === userId, createdAt: rating.createdAt,
+    });
     if (req.method === "GET") {
       const page = Number(url.searchParams.get("page") || 0);
       const size = Number(url.searchParams.get("size") || 100);
       const filtered = ratings.filter((rating) => rating.toUserId === url.searchParams.get("userId"));
-      return json(res, success(filtered.slice(page * size, (page + 1) * size), {
+      return json(res, success(filtered.slice(page * size, (page + 1) * size).map(ratingResponse), {
         number: page, size, totalElements: filtered.length, totalPages: Math.ceil(filtered.length / size),
       }));
     }
     if (req.method === "POST") {
       const orders = await pm.state.get("order-list-api:orders") || initialOrders();
       const entry = orders.find((order) => order.orderId === body?.orderId);
-      if (!entry || entry.status !== "COMPLETED" || body.toUserId !== entry.sellerId)
-        return problem(res, 409, "RATING_NOT_ELIGIBLE", "Only a completed order can be rated.");
+      if (!entry || entry.status !== "COMPLETED")
+        return problem(res, 400, "RATING_ORDER_NOT_COMPLETED", "Only a completed order can be rated.");
       if (ratings.some((rating) => rating.orderId === entry.orderId && rating.fromUserId === userId))
         return problem(res, 409, "RATING_ALREADY_EXISTS", "You have already rated this order.");
       if (!Number.isInteger(body.score) || body.score < 1 || body.score > 5 ||
         (body.comment !== null && (typeof body.comment !== "string" || body.comment.length > 1000)))
-        return problem(res, 400, "VALIDATION_FAILED", "Select between one and five stars.");
+        return problem(res, 400, "RATING_VALIDATION_FAILED", "Select between one and five stars.");
       const rating = { id: "73000000-0000-4000-8000-000000000001", fromUserId: userId,
         toUserId: entry.sellerId, orderId: entry.orderId, score: body.score, comment: body.comment,
-        createdAt: "2026-11-14T03:00:00Z" };
+        auctionId: null, raterName: "B***r", createdAt: "2026-11-14T03:00:00Z" };
       ratings.push(rating);
       await pm.state.set("order-list-api:ratings", ratings);
-      // Represents another tab completing the same rating before this write.
       if (mode === "conflict") return problem(res, 409, "RATING_ALREADY_EXISTS", "You have already rated this order.");
-      return json(res, success(rating), 201);
+      return json(res, success(ratingResponse(rating)), 201);
     }
   }
   const detailMatch = /^\/v1\/orders\/([0-9a-f-]+)(?:\/(history|cancel|confirm-receipt|receipt-issue))?$/.exec(url.pathname);

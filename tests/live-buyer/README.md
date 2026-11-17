@@ -44,6 +44,10 @@ After confirmation, a test-only explicit step copies the committed
 `OrderCompleted` payload from commerce outbox into rating eligibility. This
 models event delivery; this browser suite does **not** exercise Kafka delivery,
 receipt-email transport, payouts, real Keycloak or reputation recomputation.
+The seller's display fixture uses policy version `reputation-policy-1`, zero
+activity counters and an explicit adjustment offset of 28 to produce 78/TRUSTED.
+This is a seeded test snapshot, not evidence of historical transactions or an
+admin-adjustment audit workflow.
 Commerce Kafka/listener and rating consumer tests cover their own boundaries
 separately. The attachment records sanitized method/path/status evidence, with
 no credentials, cookies or tokens.

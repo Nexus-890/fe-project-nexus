@@ -37,7 +37,6 @@ function CompletedOrderRating({ order }: { order: RatingOrder }) {
       setOpen(false);
     },
     onError: async (error, { sessionId }) => {
-      // Another tab may have rated this order. Re-read; a conflict by itself does not prove a rating exists.
       if (error.status === 409 && auth.isSessionCurrent(sessionId)) {
         const result = await own.refetch();
         if (auth.isSessionCurrent(sessionId) && result.data) setOpen(false);
@@ -51,7 +50,7 @@ function CompletedOrderRating({ order }: { order: RatingOrder }) {
   if (own.data) return <p role="status" className="mt-4 flex items-center gap-2 text-sm text-success"><Star size={16} aria-hidden="true" />{mutation.isSuccess ? "Your rating was submitted. " : ""}You rated this seller {own.data.score} out of 5.</p>;
   return <div className="mt-4">
     <button type="button" aria-haspopup="dialog" onClick={() => { mutation.reset(); setOpen(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-border px-5 text-sm font-medium hover:bg-muted"><Star size={16} aria-hidden="true" />Rate the seller</button>
-    {open && <RatingDialog orderNumber={order.orderNumber} pending={mutation.isPending} error={mutation.error} onClose={() => { if (!mutation.isPending) setOpen(false); }} onSubmit={(score, comment) => { if (!mutation.isPending) mutation.mutate({ body: { orderId: order.orderId, toUserId: sellerId, score, comment }, sessionId: auth.sessionId }); }} />}
+    {open && <RatingDialog orderNumber={order.orderNumber} pending={mutation.isPending} error={mutation.error} onClose={() => { if (!mutation.isPending) setOpen(false); }} onSubmit={(score, comment) => { if (!mutation.isPending) mutation.mutate({ body: { orderId: order.orderId, score, comment }, sessionId: auth.sessionId }); }} />}
   </div>;
 }
 

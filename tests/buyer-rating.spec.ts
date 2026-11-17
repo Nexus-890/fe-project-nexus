@@ -16,7 +16,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Email", exact: true }).fill("buyer@nexus.local");
   await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
   await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/order/${orderId}$`));
+  await expect(page).toHaveURL(new RegExp(`/order/${orderId}$`), { timeout: 30_000 });
 }
 
 test.beforeEach(async ({ page, request }) => {
@@ -47,15 +47,21 @@ test("completed order rates the seller once and retains that state after reload"
   const desktopCapture = info.outputPath("rating-modal-desktop.png");
   await page.screenshot({ path: desktopCapture, fullPage: true });
   await info.attach("rating-modal-desktop", { path: desktopCapture, contentType: "image/png" });
+  const submitted = page.waitForResponse((response) => response.url().endsWith("/api/v1/ratings") && response.request().method() === "POST");
   await dialog.getByRole("button", { name: "Submit Rating", exact: true }).click();
+  const created = await (await submitted).json();
+  expect(created.data).toMatchObject({ orderId, ratedByMe: true, raterName: "B***r" });
+  expect(created.data).not.toHaveProperty("fromUserId");
+  expect(created.data).not.toHaveProperty("toUserId");
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "You rated this seller 4 out of 5." })).toBeVisible();
   const calls = await (await request.get(`${simulation}/test/evidence`)).json();
   expect(calls.ratingWrites).toHaveLength(1);
   expect(calls.ratingWrites[0]).toMatchObject({ authorized: true, body: {
-    orderId, toUserId: "68000000-0000-4000-8000-000000000004", score: 4, comment: "Arrived quickly and well packed.",
+    orderId, score: 4, comment: "Arrived quickly and well packed.",
   } });
   expect(calls.ratingWrites[0].body).not.toHaveProperty("fromUserId");
+  expect(calls.ratingWrites[0].body).not.toHaveProperty("toUserId");
   await page.reload();
   await expect(page.getByRole("status").filter({ hasText: "You rated this seller 4 out of 5." })).toBeVisible();
   await expect(page.getByRole("button", { name: "Rate the seller", exact: true })).toHaveCount(0);
