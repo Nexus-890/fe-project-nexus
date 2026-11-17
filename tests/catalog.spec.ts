@@ -74,7 +74,7 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await expect(page.getByRole("button", { name: "Remove NEXUS50 sample voucher", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(
     apiRequests.every(
-      (url) => ["/api/v1/categories/tree", "/api/v1/products", "/api/v1/auctions"].includes(new URL(url).pathname),
+      (url) => ["/api/v1/categories/tree", "/api/v1/products/search", "/api/v1/auctions"].includes(new URL(url).pathname),
     ),
   ).toBe(true);
   const initialApiRequests = [...apiRequests];
@@ -132,7 +132,7 @@ test("home renders live catalog and auctions with responsive campaign and vouche
 
 test("cards align short, long and unavailable-price products while home categories show only roots", async ({ page }) => {
   const imageUrl = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="silver"/></svg>')}`;
-  await page.route("**/api/v1/products?*", (route) => route.fulfill({ json: {
+  await page.route("**/api/v1/products/search?*", (route) => route.fulfill({ json: {
     code: 0, message: "response success",
     data: [
       { id: "aligned-1", slug: "short-title", name: "Short title", minPrice: 150000, images: [{ id: "photo-1", imageUrl, sortOrder: 0 }] },
@@ -265,7 +265,7 @@ test("product loading and failure are independent and retry recovers", async ({
   page,
 }) => {
   let failed = true;
-  await page.route("**/api/v1/products?*", async (route) => {
+  await page.route("**/api/v1/products/search?*", async (route) => {
     if (!failed) return route.continue();
     await new Promise((resolve) => setTimeout(resolve, 500));
     await route.fulfill({
@@ -308,7 +308,7 @@ test("category API failure renders error instead of not-found and can recover", 
 });
 
 test("malformed successful API response renders an error", async ({ page }) => {
-  await page.route("**/api/v1/products?*", (route) =>
+  await page.route("**/api/v1/products/search?*", (route) =>
     route.fulfill({
       json: {
         code: 0,
@@ -361,14 +361,14 @@ test("header category selection reaches the product API and All Categories clear
   const categoryPicker = page.getByRole("combobox", { name: "Search category" });
   await categoryPicker.click();
   await page.getByRole("option", { name: "Headphones", exact: true }).click();
-  await page.getByRole("textbox", { name: "Search for anything" }).fill("Product 1");
+  await page.getByRole("textbox", { name: "Search for anything" }).fill("Product");
   const categoryRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname === "/api/v1/products" && url.searchParams.get("categoryId") === "headphones";
+    return url.pathname === "/api/v1/products/search" && url.searchParams.get("categoryId") === "headphones";
   });
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await categoryRequest;
-  await expect(page).toHaveURL(/\/search\?q=Product\+1&category=headphones$/);
+  await expect(page).toHaveURL(/\/search\?q=Product&category=headphones$/);
   await expect(page.getByRole("article")).toHaveCount(12);
   await page.reload();
   await expect(categoryPicker).toContainText("Headphones");
@@ -378,7 +378,7 @@ test("header category selection reaches the product API and All Categories clear
   await page.getByRole("textbox", { name: "Search for anything" }).fill("");
   const allProductsRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname === "/api/v1/products" && !url.searchParams.has("categoryId");
+    return url.pathname === "/api/v1/products/search" && !url.searchParams.has("categoryId");
   });
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await allProductsRequest;

@@ -9,7 +9,7 @@ export interface paths {
         };
         /**
          * List categories as a flat page
-         * @description Filter nondeleted categories by case-insensitive name or slug, direct parent and exact level.
+         * @description Filter nondeleted categories by accent-insensitive and case-insensitive name or slug, direct parent and exact level. SQL wildcard characters in q are literal.
          */
         get: operations["listFlatCategories"];
         put?: never;
@@ -81,7 +81,7 @@ export interface paths {
         };
         /**
          * Search visible products with filters and stable ordering
-         * @description Only ACTIVE/nondeleted products. q is a trimmed case-insensitive literal product-title substring (SQL wildcard characters are literal). Filters combine with AND before pagination. Relevance ranks exact title, title prefix, then substring, newest first within each rank. Every ordering ends with UUID ascending. Price ordering uses the lowest SKU price, null prices last. maxPrice requires at least one SKU at or below the ceiling and retains the full min/max response range. listingType maps to persisted auctionEnable, not active auction state. An unmatched search returns empty data[] and zero totals. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
+         * @description Legacy compatibility endpoint for existing title-substring clients. Buyer frontend search and browsing use GET /api/v1/products/search for accent-insensitive full-text name/description matching. This endpoint retains its original matching and sort parameters. Only ACTIVE/nondeleted products. q is a trimmed case-insensitive literal product-title substring (SQL wildcard characters are literal). Filters combine with AND before pagination. Relevance ranks exact title, title prefix, then substring, newest first within each rank. Every ordering ends with UUID ascending. Price ordering uses the lowest SKU price, null prices last. maxPrice requires at least one SKU at or below the ceiling and retains the full min/max response range. listingType maps to persisted auctionEnable, not active auction state. An unmatched search returns empty data[] and zero totals. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
          */
         get: operations["listProducts"];
         put?: never;
@@ -133,7 +133,7 @@ export interface paths {
         };
         /**
          * Search public products
-         * @description Find a phrase in the name or description of nondeleted ACTIVE products, ignoring accents and case. An empty q browses the filtered catalog. Price filters and price sort use the lowest ACTIVE SKU price, with unpriced products last. Relevance weights name matches above description matches. Remaining ties use newest and ID.
+         * @description Canonical buyer frontend search and browsing endpoint. Find a phrase in the name or description of nondeleted ACTIVE products, ignoring accents and case. An empty q browses the filtered catalog. Price filters require the same ACTIVE SKU to satisfy every supplied bound (inclusive); inactive variants do not match. Displayed minPrice/maxPrice retain the full ACTIVE variant range. Price sort uses the lowest ACTIVE SKU price, with unpriced products last. listingType filters persisted auctionEnable, not live auction state. The legacy GET /api/v1/products retains literal title-substring matching for compatibility; new clients use this endpoint. Relevance weights name matches above description matches. Remaining ties use newest and ID.
          */
         get: operations["searchProducts"];
         put?: never;
@@ -2549,6 +2549,7 @@ export interface operations {
             query?: {
                 q?: string;
                 categoryId?: string;
+                listingType?: "all" | "buy-now" | "auction";
                 minPrice?: number;
                 maxPrice?: number;
                 sort?: "relevance" | "price_asc" | "price_desc" | "newest";

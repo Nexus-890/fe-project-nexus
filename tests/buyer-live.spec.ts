@@ -58,7 +58,7 @@ test("browser searches PostgreSQL and confirms then rates an order through real 
   const evidence = await (await request.get(`${router}/test/evidence`)).json();
   expect(evidence.database).toEqual({ completed: 1, completionHistories: 1, completionEvents: 1, ratings: 1, ratingEvents: 1 });
   expect(evidence.calls).toEqual(expect.arrayContaining([
-    expect.objectContaining({ method: "GET", service: "catalog", path: "/api/v1/products", status: 200 }),
+    expect.objectContaining({ method: "GET", service: "catalog", path: "/api/v1/products/search", status: 200 }),
     expect.objectContaining({ method: "POST", service: "commerce", path: `/api/v1/orders/${orderId}/confirm-receipt`, status: 200 }),
     expect.objectContaining({ method: "POST", service: "rating", path: "/api/v1/ratings", status: 201 }),
   ]));

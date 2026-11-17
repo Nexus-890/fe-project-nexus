@@ -137,10 +137,35 @@ test("backend catalog service preserves paths, pagination and public auth policy
   await getProducts({ q: "wireless & wired", sort: "price,asc", listingType: "auction", maxPrice: 200000, page: 0, size: 12 }, { context });
   assert.deepEqual(calls, [
     { path: "/api/v1/categories/tree", auth: null },
-    { path: "/api/v1/products?categoryId=2&page=1&size=12", auth: null },
-    { path: "/api/v1/products?q=wireless+%26+wired&sort=price,asc&listingType=auction&maxPrice=200000&page=0&size=12", auth: null },
+    { path: "/api/v1/products/search?categoryId=2&page=1&size=12&sort=relevance", auth: null },
+    { path: "/api/v1/products/search?q=wireless+%26+wired&sort=price_asc&listingType=auction&maxPrice=200000&page=0&size=12", auth: null },
   ]);
 });
+test("catalog search translates all URL sorts and preserves the canonical public request", async () => {
+  for (const [sort, expected] of [
+    ["relevance", "relevance"], ["createdAt,desc", "newest"],
+    ["price,asc", "price_asc"], ["price,desc", "price_desc"],
+  ] as const) {
+    const controller = new AbortController();
+    const context: ApiContext = {
+      getAccessToken: () => "must-not-leak",
+      fetch: async (input, init) => {
+        const url = new URL(String(input), "http://mock.local");
+        assert.equal(url.pathname, "/api/v1/products/search");
+        assert.equal(url.searchParams.get("sort"), expected);
+        assert.equal(url.searchParams.get("listingType"), "auction");
+        assert.equal(url.searchParams.get("q"), "áo thun");
+        assert.equal(url.searchParams.get("minPrice"), "300000");
+        assert.equal(new Headers(init?.headers).get("authorization"), null);
+        assert.ok(init?.signal);
+        return new Response(JSON.stringify(envelope([], { number: 0, size: 12, totalElements: 0, totalPages: 0 })));
+      },
+    };
+    await getProducts({ sort, q: "áo thun", listingType: "auction", minPrice: 300000 },
+      { context, signal: controller.signal });
+  }
+});
+
 test("VND formatting preserves decimal precision, grouping and invalid/null fallbacks", () => {
   for (const [input, expected] of [
     ["150000", "150.000 ₫"],
@@ -224,6 +249,7 @@ test("catalog/cart dev transports model numeric wire money and honor abort", asy
   try {
     process.env.NEXT_PUBLIC_PRODUCT_DETAIL_MOCK = "true";
     process.env.NEXT_PUBLIC_CART_MOCK = "true";
+    assert.equal(getCatalogMockFetch("/api/v1/products/search"), undefined);
     const productFetch = getCatalogMockFetch("/api/v1/products/mock-id");
     assert.ok(productFetch);
     const productResponse = await productFetch(

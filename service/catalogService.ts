@@ -192,9 +192,14 @@ export const getProducts = async (
   options: ServiceRequestOptions = {},
 ): Promise<Page<ProductSummary>> =>
   parseProductPage(
-    await requestApi<unknown>("GET", "/api/v1/products", undefined, {
+    await requestApi<unknown>("GET", "/api/v1/products/search", undefined, {
       ...options,
-      params: { ...filters },
+      params: {
+        ...filters,
+        sort: filters.sort === "price,asc" ? "price_asc"
+          : filters.sort === "price,desc" ? "price_desc"
+            : filters.sort === "createdAt,desc" ? "newest" : "relevance",
+      },
       auth: false,
     }),
   );

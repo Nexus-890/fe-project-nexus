@@ -1,18 +1,20 @@
 # Buyer search, ratings and receipt confirmation — #220 review
 
+Buyer search now uses `/api/v1/products/search` from #215, including listingType. Existing URL sort choices are mapped by catalogService; `/api/v1/products` is a legacy compatibility endpoint. Full-text ignores accents and searches name or description.
+
 The review of `0174be82` found that URL state and fixtures did not establish real
 search, rating API integration or the #258 delivery wait. This revision adds the
 owning backend behavior, delivered OpenAPI and generated frontend types.
 
 ## Search
 
-Public `GET /api/v1/products` applies a trimmed, case-insensitive literal product
-title search (`q`, maximum 255 characters), `categoryId`, `listingType` and
-`maxPrice` in PostgreSQL before pagination. Relevance prefers exact/prefix title
-matches, then newest; explicit newest/price sorts have a UUID tie-breaker and
-unpriced products sort last. A price ceiling requires an affordable SKU without
-truncating the product's displayed variant range. Inactive/deleted products stay
-hidden. An unmatched query returns `data: []` with zero totals.
+Public `GET /api/v1/products/search` applies accent-insensitive phrase matching in
+name or description, category/listing-type filters and inclusive price bounds
+on the same ACTIVE SKU before pagination. Relevance weights the name above
+description, then newest/UUID; price sorts use the lowest ACTIVE SKU price,
+null prices last. Result prices retain the full ACTIVE variant range. The
+service maps existing UI sort values to the canonical API sort enum.
+
 
 The header, category links, chips, sort and pagination preserve these supported
 filters through reload/history. Unsupported seller trust, condition and rating
