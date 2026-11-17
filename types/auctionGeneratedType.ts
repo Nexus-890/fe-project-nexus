@@ -9,7 +9,7 @@ export interface paths {
         };
         /**
          * Preview next eligible bidder and read offer history
-         * @description Read only. Never sends an offer/email. Candidate exists only in PAYMENT_TIMEOUT without an OFFERED row. History can contain earlier ACCEPTED offers whose orders later timed out. If Rating eligibility is unavailable, return history with canOffer=false and candidate=null; sending still fails with 503.
+         * @description Read only. Never sends an offer/email. Candidate exists only in PAYMENT_TIMEOUT without an OFFERED row. History can contain earlier ACCEPTED offers whose orders later timed out. If Rating eligibility is unavailable, return history with eligibilityUnavailable=true, canOffer=false and candidate=null; this is not an exhausted bidder list. Other responses set eligibilityUnavailable=false. Sending still fails with 503 during Rating outage.
          */
         get: operations["getSellerSecondChanceOffers"];
         put?: never;
@@ -413,6 +413,8 @@ export interface components {
             /** Format: uuid */
             auctionId: string;
             canOffer: boolean;
+            /** @description True only when the candidate eligibility check failed because Rating is unavailable. Keep history and allow a read-only retry; canOffer is false and candidate is null. False when bidders are exhausted, an offer is open, or the auction is not timed out. */
+            eligibilityUnavailable: boolean;
             candidate: components["schemas"]["SecondChanceCandidate"] | null;
             offers: components["schemas"]["SecondChanceOffer"][];
         };
