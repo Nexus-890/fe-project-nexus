@@ -33,6 +33,7 @@ const offerFixture = require("./offers.js").createOfferFixture(fixtureOptions);
 const sellerAccountsFixture = require("./sellerAccounts.js").createSellerAccountsFixture(fixtureOptions);
 const payoutFixture = require("./payouts.js").createPayoutFixture(fixtureOptions);
 const sellerFixtures = [auctionFixture, offerFixture, sellerAccountsFixture, payoutFixture];
+const adminFixture = require("./admin.js").createAdminFixture(fixtureOptions);
 const auctionStatuses = ["CREATED", "SCHEDULED", "ACTIVE", "ENDED", "WON", "SETTLED", "FAILED", "PAYMENT_TIMEOUT", "CANCELLED"];
 const demoId = (prefix, n) => `${prefix}000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 function resetAuctions() {
@@ -127,7 +128,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
-  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); return json(res, {}); }
+  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); adminFixture.reset(); return json(res, {}); }
   if (path === "/test/seller-seed" && req.method === "POST") {
     const id = "a2250000-0000-4000-8000-000000000001", skuId = "a2250000-0000-4000-8000-000000000002";
     products = [{ id, sellerId: seller, name: "Studio Wireless Headphones", slug: `demo-${id}`, categoryId: category, status: "ACTIVE", description: "Seller operations fixture", auctionEnable: true,
@@ -162,6 +163,7 @@ const server = http.createServer(async (req, res) => {
   const token = /^Bearer (.+)$/.exec(req.headers.authorization || "")?.[1];
   if (token) { try { const hash = createHash("sha256").update(token).digest("hex"); const allowed = await pm.state.get("oidc-keycloak:access-tokens") || {}; if (allowed[hash]) claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url")); } catch {} }
   const roles = claims?.roles || [], has = (role) => roles.includes(role);
+  if (adminFixture.handle(req, res, url, claims)) return;
   const operation = { method: req.method, path: `/api${path}`, role: roles.join(","), query: Object.fromEntries(url.searchParams) };
   if (req.method === "POST" && /^\/v1\/products\/[^/]+\/skus$/.test(path) || req.method === "PUT" && /^\/v1\/(?:skus\/[^/]+|products\/[^/]+(?:\/images\/order)?)$/.test(path) || req.method === "POST" && path === "/v1/inventory/intake" || req.method === "PUT" && /^\/v1\/auctions\/[^/]+$/.test(path) || req.method === "POST" && /^\/v1\/auctions\/[^/]+\/admin-cancel$/.test(path)) operation.body = bodyOf(req);
   evidence.push(operation);

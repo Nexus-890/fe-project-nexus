@@ -123,7 +123,13 @@ The table lists FE consumers/prepared calls, not every BE endpoint or a guarante
 describe protected access, real PostgreSQL/HTTP verification and remaining event
 delivery boundaries. Rating and auction wire types are generated alongside
 commerce/catalog types. All new receipt writes require BUYER + ORDER.VIEW and
-ownership. Reputation recomputation remains owned by #213.
+ownership. Rating requests send `orderId`, `score` and `comment`; the backend
+derives both parties from its completed-order projection. Rating responses use
+masked `raterName` and the caller-relative `ratedByMe` boolean, without raw rater
+UUIDs. The completed-order lookup matches `orderId` and `ratedByMe` across seller
+rating pages. Reputation score/history is updated asynchronously by the #212
+engine, which includes the merged #213 scope; reads include `ratingCount` and
+`policyVersion`, and an absent aggregate returns the neutral `50/NEW` result.
 
 ## Type generation and runtime checks
 

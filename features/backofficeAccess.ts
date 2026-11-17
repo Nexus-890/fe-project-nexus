@@ -45,17 +45,21 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
   if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/payouts" });
   if (roles.includes("ADMIN")) items.push({ label: "Stock", href: "/backoffice/stock" }, { label: "Categories", href: "/backoffice/categories", placeholder: true });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
-    { label: "Users", href: "/backoffice/users", placeholder: true },
+    { label: "Users", href: "/backoffice/users" },
     { label: "Orders", href: "/backoffice/orders", placeholder: true },
     { label: "Auctions", href: "/backoffice/auctions" },
-    { label: "Event log", href: "/backoffice/event-log", placeholder: true },
-    { label: "Health", href: "/backoffice/health", placeholder: true },
+    { label: "Event Logs", href: "/backoffice/event-logs" },
+    { label: "System Health", href: "/backoffice/health" },
+  );
+  if (roles.includes("ADMIN")) items.push(
+    { label: "Seller Applications", href: "/backoffice/seller-applications" },
+    { label: "Audit Logs", href: "/backoffice/audit-logs" },
   );
   if (roles.includes("ADMIN")) items.push({ label: "Configuration", href: "/backoffice/configuration", placeholder: true });
   return items;
 }
 
-const nestedSections = ["/backoffice/products", "/backoffice/auctions"];
+const nestedSections = ["/backoffice/products", "/backoffice/auctions", "/backoffice/users"];
 
 export function canAccessBackofficePath(path: string, roles: readonly BackofficeRole[]): boolean {
   let pathname: string;
@@ -63,6 +67,7 @@ export function canAccessBackofficePath(path: string, roles: readonly Backoffice
   catch { return false; }
   if (pathname === "/backoffice" || pathname === "/backoffice/forbidden") return hasBackofficeAccess(roles);
   if (pathname === "/backoffice/admin-payouts") return roles.includes("ADMIN");
+  if (pathname === "/backoffice/event-log") return roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF");
   // Management reads do not grant seller creation. The static new route mounts the seller form.
   if (pathname === "/backoffice/auctions/new") return roles.includes("SELLER");
   return backofficeMenu(roles).some((item) => pathname === item.href || nestedSections.includes(item.href) && pathname.startsWith(`${item.href}/`));

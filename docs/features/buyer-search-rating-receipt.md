@@ -22,20 +22,25 @@ filter products. These controls need a real catalog projection before enabling.
 ## Rating and auction seller information
 
 Rating-service delivers protected `POST /ratings`, `GET /ratings?userId=` and
-`GET /reputations/{userId}`. The request does not accept the caller identity.
-Only the projected completed order's buyer can rate its seller, with score 1–5
-and an optional comment up to 1000 characters. A pessimistic eligibility lock
-and the existing unique constraint prevent concurrent duplicate ratings. The
-rating and canonical `UserRated` outbox entry commit together. Reputation reads
-the persisted aggregate; #213 owns score recomputation and policy.
+`GET /reputations/{userId}`. The request sends only `orderId`, `score` and
+`comment`; the authenticated actor and recipient come from the local completed
+order projection. Buyer and seller can each rate the other party once, with
+score 1–5 and an optional comment up to 1000 characters. The database unique
+constraint prevents concurrent duplicate ratings. The rating and canonical
+`UserRated` outbox entry commit together. Responses expose a masked `raterName`
+and caller-relative `ratedByMe`, without raw rater or recipient UUIDs. Reputation
+updates asynchronously under the versioned policy and includes ratingCount and
+policyVersion.
 
-The completed-order UI checks all seller rating pages before enabling the modal,
-retains a submitted rating after reload, and refreshes after a duplicate conflict.
+The completed-order UI checks all seller rating pages for matching `orderId` and
+`ratedByMe=true` before enabling the modal, retains a submitted rating after
+reload, and refreshes after a duplicate conflict.
 `/auctions/[auctionId]` now uses the canonical MR !169 room (`6550d254`),
 preserving bidding, SSE/polling, history, winner reconciliation and checkout.
 Seller information/score/trust is rendered in that same room and homepage cards
 enter it. Product detail uses the same reputation component. A missing aggregate
-has an unavailable state; no fabricated score is shown. The room's state/stream
+returns the backend's neutral `50/NEW` policy result. HTTP or malformed response
+failures remain unavailable states. The room's state/stream
 and winner API dependencies remain those documented by !169.
 
 ## Delivery wait and receipt issue hold

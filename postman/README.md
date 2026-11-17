@@ -1,5 +1,17 @@
 # Frontend HTTP simulations
 
+## Admin #227 verification
+
+`npm run test:admin` runs the actual frontend against the existing back-office
+simulation with the local `backoffice-gateway/admin.js` extension. It covers
+Admin/Support user permissions, all user operations, seller review, full event
+payloads, Admin-only audit and 10-second service/broker health polling. The
+test server explicitly enables the existing seller-application feature flag.
+See [Admin scope and API dependencies](../docs/features/admin.md) for commands,
+screenshots and the distinction between delivered observability APIs, the
+unmerged #211 snapshot and the proposed #210 lifecycle. This is local caller
+verification; no backend persistence or identity-provider guarantee is implied.
+
 ## Buyer order detail and cancellation
 
 ```powershell

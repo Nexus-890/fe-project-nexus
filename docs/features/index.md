@@ -2,6 +2,7 @@
 
 | Feature | Flow and implementation |
 | --- | --- |
+| [Admin (#227)](admin.md) | Users and restricted Support actions, seller review, event payloads, Admin-only audit and 10-second service/broker health |
 | [Authentication](authentication.md) | Sign-up, Keycloak OIDC sign-in, in-memory session, profile retry, logout and account isolation |
 | [Session restore and silent renewal](session-restore.md) | Restore the provider SSO session on reload, renew in-memory tokens and replay a protected request once after 401 |
 | [Profile](../profile-page.md) | Authenticated profile, supported partial updates, shared header data, validation and retry |
