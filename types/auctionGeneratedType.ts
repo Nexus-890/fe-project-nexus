@@ -9,13 +9,13 @@ export interface paths {
         };
         /**
          * Preview next eligible bidder and read offer history
-         * @description Read only. Never sends an offer/email. Candidate exists only in PAYMENT_TIMEOUT without an OFFERED row. History can contain earlier ACCEPTED offers whose orders later timed out.
+         * @description Read only. Never sends an offer/email. Candidate exists only in PAYMENT_TIMEOUT without an OFFERED row. History can contain earlier ACCEPTED offers whose orders later timed out. If Rating eligibility is unavailable, return history with canOffer=false and candidate=null; sending still fails with 503.
          */
         get: operations["getSellerSecondChanceOffers"];
         put?: never;
         /**
          * Offer the item to the next eligible bidder
-         * @description No body. Lock auction, select highest valid own bid per bidder, skip all timed-out winners/previously offered/ineligible bidders; stable earliest-bid tie break. One OFFERED per auction. Inventory asynchronously holds one unit; only then bidder email is sent. No eligible bidder returns 409.
+         * @description No body. Select highest valid own bid per bidder and check Rating eligibility before acquiring an auction row lock or write transaction. Then lock and recheck auction state, open offer and candidate ranking/exclusions. A changed snapshot returns OFFER_CANDIDATE_CHANGED (409); refresh and retry. Skip timed-out winners/previously offered/ineligible bidders; stable earliest-bid tie break. One OFFERED per auction. Inventory asynchronously holds one unit; only then bidder email is sent. No eligible bidder returns 409; Rating outage returns 503.
          */
         post: operations["sendSecondChanceOffer"];
         delete?: never;
@@ -966,7 +966,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_CANDIDATE_CHANGED, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
             409: {
                 headers: {
                     [name: string]: unknown;
