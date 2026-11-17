@@ -107,7 +107,10 @@ test("signed-in buyer starts at the minimum, submits numeric money once and sees
   await expect(seller).toContainText("Trusted");
   const amount = page.getByLabel("Bid amount", { exact: true });
   await expect(amount).toHaveValue("9900.00");
-  await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/api/v1/auctions/${auctionId}/bids`) && response.status() === 201),
+    page.getByRole("button", { name: "Place Bid", exact: true }).click(),
+  ]);
   await expect(page.getByText("$9,900.00", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/You’re the highest bidder|You're the highest bidder/)).toBeVisible();
   const result = await evidence(request);
@@ -129,7 +132,10 @@ test("a rejected bid shows the server minimum and lets the buyer submit the corr
   await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /minimum|9,950|9950/i })).toBeVisible();
   await expect(page.getByLabel("Bid amount", { exact: true })).toHaveValue("9950.00");
   await control(request, { mode: "normal" });
-  await page.getByRole("button", { name: "Place Bid", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/api/v1/auctions/${auctionId}/bids`) && response.status() === 201),
+    page.getByRole("button", { name: "Place Bid", exact: true }).click(),
+  ]);
   await expect(page.getByText("$9,950.00", { exact: true }).first()).toBeVisible();
   const result = await evidence(request);
   expect(result.bidWrites).toBe(1);
