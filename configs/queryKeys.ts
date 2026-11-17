@@ -33,6 +33,12 @@ export const queryKeys = {
     phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
   },
   backoffice: {
+    categories: (sessionId: number) => ["admin-categories", sessionId] as const,
+    category: (sessionId: number, id: string) => ["admin-categories", sessionId, id] as const,
+    warehouses: (sessionId: number) => ["admin-warehouses", sessionId] as const,
+    warehouse: (sessionId: number, id: string) => ["admin-warehouses", sessionId, id] as const,
+    movements: (sessionId: number, skuId: string, warehouseId: string | undefined, page: number) => ["backoffice", sessionId, "movements", { skuId, warehouseId, page }] as const,
+    systemConfigs: (sessionId: number) => ["admin-system-configs", sessionId] as const,
     products: (sessionId: number, page: number) => ["backoffice", sessionId, "products", page] as const,
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
     balances: (sessionId: number, skuId: string, warehouseId?: string) => ["backoffice", sessionId, "balances", { skuId, warehouseId }] as const,

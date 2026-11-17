@@ -6,6 +6,7 @@ Read the frontend [AGENTS.md](../../AGENTS.md) first. Use the table to select re
 | --- | --- | --- |
 | Auction list, My Bids or second chance offers | [Buyer auction list](../features/auction-list-my-bids.md), [verification](../features/auction-list-verification.md) | AuctionsPage, MyBidsPage, AuctionSecondChanceOffers, auctionService/auctionOfferService and delivered auction controller/spec |
 | General orientation | [Project](project.md), [architecture](architecture.md) | `package.json`, `app/`, `features/` |
+| Admin category, warehouse, stock or system configuration | [Admin catalogue](../features/admin-catalog.md), [API contract](../api/api-contract.md) | AdminCategoriesPage, AdminWarehousesPage, AdminStockPage, AdminConfigurationPage, adminCatalogService, adminConfigService |
 | Add/change an API request | [API contract](../api/api-contract.md), [errors](../api/error-handling.md), [coding rules](coding-rules.md) | `configs/api.ts`, `hooks/useApi.ts`, owning `service/*Service.ts`, delivered OpenAPI |
 | Login, registration, logout, or account switch | [Authentication](../features/authentication.md), [API errors](../api/error-handling.md) | `providers/Provider.tsx`, `hooks/useAuth.ts`, `service/authService.ts`, auth regression tests |
 | Catalog, category, or search | [Catalog](../features/catalog.md), [functional scope](../requirement/functional.md) | Catalog service, page features, `features/catalogUtils.ts`, category routes |

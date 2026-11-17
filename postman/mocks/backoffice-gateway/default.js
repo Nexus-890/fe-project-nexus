@@ -34,6 +34,7 @@ const sellerAccountsFixture = require("./sellerAccounts.js").createSellerAccount
 const payoutFixture = require("./payouts.js").createPayoutFixture(fixtureOptions);
 const sellerFixtures = [auctionFixture, offerFixture, sellerAccountsFixture, payoutFixture];
 const adminFixture = require("./admin.js").createAdminFixture(fixtureOptions);
+const adminCatalogFixture = require("./adminCatalog.js").createAdminCatalogFixture(fixtureOptions);
 const auctionStatuses = ["CREATED", "SCHEDULED", "ACTIVE", "ENDED", "WON", "SETTLED", "FAILED", "PAYMENT_TIMEOUT", "CANCELLED"];
 const demoId = (prefix, n) => `${prefix}000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 function resetAuctions() {
@@ -163,6 +164,7 @@ const server = http.createServer(async (req, res) => {
   const token = /^Bearer (.+)$/.exec(req.headers.authorization || "")?.[1];
   if (token) { try { const hash = createHash("sha256").update(token).digest("hex"); const allowed = await pm.state.get("oidc-keycloak:access-tokens") || {}; if (allowed[hash]) claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url")); } catch {} }
   const roles = claims?.roles || [], has = (role) => roles.includes(role);
+  if (adminCatalogFixture.handle(req, res, url, claims)) return;
   if (adminFixture.handle(req, res, url, claims)) return;
   const operation = { method: req.method, path: `/api${path}`, role: roles.join(","), query: Object.fromEntries(url.searchParams) };
   if (req.method === "POST" && /^\/v1\/products\/[^/]+\/skus$/.test(path) || req.method === "PUT" && /^\/v1\/(?:skus\/[^/]+|products\/[^/]+(?:\/images\/order)?)$/.test(path) || req.method === "POST" && path === "/v1/inventory/intake" || req.method === "PUT" && /^\/v1\/auctions\/[^/]+$/.test(path) || req.method === "POST" && /^\/v1\/auctions\/[^/]+\/admin-cancel$/.test(path)) operation.body = bodyOf(req);

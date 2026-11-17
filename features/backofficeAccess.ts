@@ -43,7 +43,7 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     ...(!roles.includes("ADMIN") ? [{ label: "Payout history", href: "/backoffice/payouts" }] : []),
   );
   if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/payouts" });
-  if (roles.includes("ADMIN")) items.push({ label: "Stock", href: "/backoffice/stock" }, { label: "Categories", href: "/backoffice/categories", placeholder: true });
+  if (roles.includes("ADMIN")) items.push({ label: "Categories", href: "/backoffice/categories" }, { label: "Warehouses", href: "/backoffice/warehouses" }, { label: "Stock", href: "/backoffice/stock" });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users" },
     { label: "Orders", href: "/backoffice/orders", placeholder: true },
@@ -55,7 +55,7 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     { label: "Seller Applications", href: "/backoffice/seller-applications" },
     { label: "Audit Logs", href: "/backoffice/audit-logs" },
   );
-  if (roles.includes("ADMIN")) items.push({ label: "Configuration", href: "/backoffice/configuration", placeholder: true });
+  if (roles.includes("ADMIN")) items.push({ label: "Configuration", href: "/backoffice/configuration" });
   return items;
 }
 

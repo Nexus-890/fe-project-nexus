@@ -1,0 +1,18 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "System config #217 FE integration proposal", "version": "0.0.0-pending", "description": "Not a delivered backend API. Paths follow ADR-009; DTO shape requires agreement with #217 before live integration." },
+  "paths": {},
+  "components": { "schemas": {
+    "ConfigValue": { "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }] },
+    "SystemConfig": {
+      "type": "object", "required": ["key", "value", "defaultValue", "description", "group"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/components/schemas/ConfigValue" },
+        "defaultValue": { "$ref": "#/components/schemas/ConfigValue" },
+        "description": { "type": "string" }, "group": { "type": "string" }
+      }
+    },
+    "ConfigUpdate": { "type": "object", "required": ["value"], "properties": { "value": { "$ref": "#/components/schemas/ConfigValue" } } }
+  } }
+}

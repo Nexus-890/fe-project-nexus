@@ -745,6 +745,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/shipping-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the winning auction order's shipping address
+         * @description Requires CHECKOUT.START, BUYER and winner ownership. Only an unexpired PENDING AUCTION order can be confirmed. Reads the linked HELD reservation's warehouse through #170/#209; an empty/unlinked hold returns 409. No new reservation is made. Uses Catalog parcel measurements and Shipment quotes, preserving the AuctionWon price and payment deadline. The configured nexus.checkout.free-shipping-threshold (default 1000000 VND) applies to the winning final price. Saves the two-level address, warehouse, parcel, shipping fee, order/group totals and one CheckoutPaymentRequested atomically. Identical normalized address retries return the saved result without dependency calls or another manifest. A different address or non-PENDING/expired order returns 409.
+         */
+        post: operations["confirmAuctionShipping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7560,6 +7580,167 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    confirmAuctionShipping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "recipientName": "Winner",
+                 *       "phoneNumber": "0900000000",
+                 *       "addressLine": "1 Main Street",
+                 *       "wardCode": "1003646",
+                 *       "provinceCode": "1000001",
+                 *       "countryCode": "VN"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ShippingAddress"];
+            };
+        };
+        responses: {
+            /** @description Shipping confirmed, or the original stored confirmation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "orderGroupId": "c8000000-0000-4000-8000-000000000006",
+                     *         "shippingFee": 0,
+                     *         "totalAmount": 1500000,
+                     *         "dueAt": "2031-01-02T00:00:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        code: number;
+                        message: string;
+                        data: {
+                            /** Format: uuid */
+                            orderGroupId: string;
+                            shippingFee: number;
+                            totalAmount: number;
+                            /** Format: date-time */
+                            dueAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Codes: VALIDATION_FAILED, INVALID_REQUEST_BODY, INVALID_PARAMETER, COMMERCE_INVALID_SHIPPING_ADDRESS. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "The shipping address is invalid",
+                     *       "instance": "/api/v1/orders/id/shipping-confirmation",
+                     *       "code": "COMMERCE_INVALID_SHIPPING_ADDRESS"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: FORBIDDEN, COMMERCE_FORBIDDEN. Requires BUYER, CHECKOUT.START and winner ownership. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_ORDER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: COMMERCE_AUCTION_SHIPPING_CONFLICT, COMMERCE_AUCTION_HOLD_NOT_LINKED, COMMERCE_INVALID_ORDER_AMOUNT, COMMERCE_SHIPPING_METADATA_REQUIRED, COMMERCE_INVALID_PARCEL. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_SHIPPING_NOT_AVAILABLE. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_INVALID_CATALOG_RESPONSE. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: COMMERCE_INVENTORY_UNAVAILABLE, COMMERCE_SHIPPING_UNAVAILABLE, COMMERCE_CATALOG_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Service Unavailable",
+                     *       "status": 503,
+                     *       "detail": "Inventory is unavailable; retry checkout later",
+                     *       "instance": "/api/v1/orders/id/shipping-confirmation",
+                     *       "code": "COMMERCE_INVENTORY_UNAVAILABLE"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

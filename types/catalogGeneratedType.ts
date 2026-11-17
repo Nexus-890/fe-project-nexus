@@ -330,6 +330,8 @@ export interface components {
             /** Format: int32 */
             level: number;
             path: string;
+            /** @description Stored category description, returned for admin editing. */
+            description?: string | null;
         };
         CategoryTree: {
             /** Format: uuid */

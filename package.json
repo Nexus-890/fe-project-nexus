@@ -14,6 +14,7 @@
     "generate:types:check": "node scripts/generate-types.mjs --check",
     "test:unit": "node scripts/test-auth.mjs",
     "test:admin": "node scripts/test-browser.mjs --config playwright.admin.config.ts",
+    "test:admin-catalog": "node scripts/test-browser.mjs --config playwright.admin-catalog.config.ts",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:cart": "node scripts/test-browser.mjs --config playwright.cart.config.ts",
