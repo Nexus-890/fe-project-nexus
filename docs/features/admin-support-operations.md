@@ -80,3 +80,23 @@ Local simulation results do not establish real bank transfers, live carrier
 delivery, Kafka propagation, PostgreSQL validation or deployed gateway policy.
 Docker was unavailable during this task, so live service/PostgreSQL checks and
 the full #261 backend journey remain unverified.
+
+## Executed verification — 2026-11-17
+
+Verified after integrating `origin/develop` at `ff155986`:
+
+- `npm run generate:types:check`, `npm run lint`, `npm run typecheck`: passed.
+- `npm run test:unit`: 428 passed, no failures or skips.
+- `npm run test:operations`: 14 passed against explicit HTTP/OIDC simulations.
+- `npm run test:catalog`: 58 passed, 79 intentionally skipped by suite guards.
+  Default provider port 3913 was occupied, so this run used app/API/provider ports
+  3142/3941/3943 and `.next-operations-catalog` output.
+- `npm run build`: passed with isolated `.next-operations-build` output.
+- Visual review: desktop Orders and mobile Shipments screenshots inspected;
+  browser overflow checks passed at 375, 768 and 1440 pixels.
+- `git diff --check`: passed; the task diff only changes frontend source, tests,
+  explicit fixtures and documentation. No backend service was modified.
+
+The installed Next CLI emitted a security upgrade reminder and interrupted the
+first invocation of its commands; rerunning those commands completed the checks.
+Dependency upgrades are outside this MR.
