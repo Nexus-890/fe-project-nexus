@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page, type Request, type TestInfo } from "@playwright/test";
 import type { OrderStatus } from "../types/orderResponseType";
 
 // The focused config supplies a real HTTP stand-in; the general suite does not.
@@ -386,13 +386,46 @@ test("pending order without a group cannot navigate to an invented payment", asy
   await expect(pending.getByRole("button", { name: "Pay Now", exact: true })).toBeDisabled();
 });
 
-test("commerce 401 refreshes once then asks for sign-in without another query retry", async ({ page, request }) => {
+test("commerce 401 refreshes once then asks for sign-in without another query retry", async ({ page, request }, info) => {
+  const attempts: { request: Request; afterReplayRejection: boolean }[] = [];
+  let unauthorizedResponses = 0;
+  page.on("request", (outgoing) => {
+    if (outgoing.method() === "GET" && new URL(outgoing.url()).pathname === "/api/v1/orders")
+      attempts.push({ request: outgoing, afterReplayRejection: unauthorizedResponses >= 2 });
+  });
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/v1/orders" && response.status() === 401)
+      unauthorizedResponses += 1;
+  });
   await mode(request, "unauthenticated");
   await signIn(page, "/orders?status=PENDING");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Your order session has expired. Sign in again.");
   await expect(page.getByRole("button", { name: /retry orders/i })).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", `/sign-in?returnTo=${encodeURIComponent("/orders?status=PENDING")}`);
-  expect((await evidence(request)).reads).toHaveLength(2);
+  const outcomes = await Promise.all(attempts.map(async (attempt) => {
+    const response = await attempt.request.response();
+    const responseFailure = response ? await response.finished() : null;
+    return { status: response?.status() ?? null,
+      failure: attempt.request.failure()?.errorText ?? responseFailure?.message ?? null,
+      afterReplayRejection: attempt.afterReplayRejection };
+  }));
+  await info.attach("order-401-request-outcomes", { body: JSON.stringify(outcomes), contentType: "application/json" });
+  // Next dev can cancel a mount request after the stand-in receives it. Count
+  // completed responses separately: one original 401 and one replay after refresh.
+  // An additional completed response or any request after the replay is a retry.
+  expect(outcomes.filter((outcome) => outcome.failure === null)).toEqual([
+    { status: 401, failure: null, afterReplayRejection: false },
+    { status: 401, failure: null, afterReplayRejection: false },
+  ]);
+  for (const aborted of outcomes.filter((outcome) => outcome.failure !== null))
+    expect(aborted).toEqual({ status: null, failure: "net::ERR_ABORTED", afterReplayRejection: false });
+  const reads = (await evidence(request)).reads;
+  expect(reads).toEqual(Array.from({ length: reads.length }, () => ({
+    method: "GET", status: "PENDING", page: "0", size: "10", authorized: true,
+  })));
+  // A cancelled transport can stop before it reaches the fixture.
+  expect(reads.length).toBeGreaterThanOrEqual(2);
+  expect(reads.length).toBeLessThanOrEqual(outcomes.length);
   const authEvidence = await request.get(`${provider}/api/test/evidence`);
   expect(authEvidence.ok()).toBe(true);
   expect((await authEvidence.json()).sessionRefreshes).toBe(1);

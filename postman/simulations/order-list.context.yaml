@@ -263,7 +263,82 @@ assumptions:
       ../be-project-nexus/docs/api/openapi/shipment-service.yaml;
       test-results/order-list-simulation.ndjson
     updated_at: '2026-11-12'
+  - id: buyer-220-receipt-backend-boundary
+    status: supported
+    claim: >-
+      Commerce #258 accepts POST /orders/{id}/confirm-receipt and returns a
+      completed Order with optional deliveredAt/autoCompleteAt detail fields.
+    reason: >-
+      The boundary was provisional at 0174be82. The review revision now delivers
+      the controller, response fields, locked completion routine, scheduler and
+      receipt issue hold, with generated frontend types and PostgreSQL tests.
+    verification: >-
+      On 2026-11-14 commerce verify passed 459 tests with no failures/errors
+      and five existing skips against native PostgreSQL 18.6 and embedded Kafka.
+      Tests cover delivered waiting, concurrent buyer/job completion, receipt
+      holds, rollback, history and one outbox event. The live browser also called
+      the real commerce jar and checked committed completion rows. Email/payout
+      transport and full production infrastructure remain outside this evidence.
+    source: >-
+      ../be-project-nexus/commerce-service/src/main/java/com/group5/commerceservice/order/OrderReceiptConfirmationController.java;
+      ../be-project-nexus/docs/api/openapi/commerce-service.yaml;
+      docs/features/buyer-search-rating-receipt.md;
+      postman/mocks/order-list-api/default.js
+    updated_at: '2026-11-14'
+  - id: buyer-220-rating-backend-boundary
+    status: supported
+    claim: >-
+      Rating #212 supports the delivered request/resource fields used by
+      ratingService, protected seller reputation, and one rating per buyer/order.
+    reason: >-
+      The boundary was provisional at 0174be82. The review revision delivers
+      controllers/OpenAPI, eligibility locking, duplicate enforcement and atomic
+      UserRated outbox writes. Reputation reads its existing persisted aggregate.
+    verification: >-
+      On 2026-11-14 all eight rating-service verify tests passed on native
+      PostgreSQL 18.6, including real HTTP with RS256 signature validation,
+      concurrent duplicate submissions, persisted resources and one outbox write.
+      The live browser confirmed then rated through real service jars, copied the
+      committed completion event into eligibility explicitly, reloaded the rating
+      and read reputation. That explicit projection step does not prove Kafka
+      delivery or #213 policy recomputation. Postman 1.73.0 has no status command.
+    source: >-
+      service/ratingService.ts; types/ratingType.ts;
+      ../be-project-nexus/docs/api/gateway-permissions.md;
+      postman/mocks/order-list-api/default.js
+    updated_at: '2026-11-14'
+  - id: buyer-220-simulated-frontend
+    status: supported
+    claim: >-
+      In the tested stand-in scenarios, the actual frontend confirms receipt
+      only from DELIVERED, observes server completion/history, rates a completed
+      order once across reload, recovers from lookup failures and conflicts,
+      and displays seller score/trust on product and live auction views.
+    reason: >-
+      Browser assertions exercise the real Next application and shared HTTP
+      client against the local Postman simulation. Unit HTTP tests additionally
+      cover request allowlists, private auth, pagination, invalid resources,
+      errors and cancellation. Desktop/mobile screenshots were inspected.
+    verification: >-
+      On 2026-11-14 all 47 order/rating browser scenarios passed in 2.2 minutes,
+      including five buyer-rating and four receipt cases and a 30-second server
+      completion refresh without a buyer write. The simulation NDJSON recorded protected rating GET/POST and
+      receipt POST requests with success and modeled failures. All 280 unit
+      tests passed. No live backend behavior is inferred.
+    source: >-
+      tests/buyer-rating.spec.ts; tests/order-detail.spec.ts;
+      tests/rating-service.test.ts; tests/order-service.test.ts;
+      playwright.orders.config.ts; test-results/order-list-simulation.ndjson
+    updated_at: '2026-11-14'
 fingerprints:
+  - id: buyer-220-review-real-services
+    date: '2026-11-14'
+    commit: '0174be82 with search/rating/receipt review corrections'
+    cli: 'Java 21, native PostgreSQL 18.6, Postman 1.73.0 and Chrome'
+  - id: buyer-220-search-rating-receipt
+    date: '2026-11-14'
+    commit: '09b3cf6f with uncommitted #220 frontend/test changes'
+    cli: 'Postman 1.73.0; local Next dev and Chrome; status command unavailable'
   - id: order-list-154
     date: '2026-11-04'
     commit: '0d0a36a4 with uncommitted #154 frontend and test changes'

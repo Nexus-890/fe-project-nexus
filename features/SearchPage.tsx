@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useOptimistic, useTransition } from "react";
 import { ChevronRight, House, X } from "lucide-react";
 import { useApiQuery } from "@/hooks/useApi";
 import { getCategoryTree, getProducts } from "@/service/catalogService";
@@ -11,11 +12,12 @@ import { CategoryFilterSidebar } from "@/components/CategoryFilterSidebar";
 import { Pagination } from "@/components/Pagination";
 import {
   CATALOG_PAGE_SIZE,
+  SEARCH_MAX_PRICE,
   findCategory,
-  parsePage,
-  readQueryValue,
   searchHref,
+  type SearchState,
 } from "@/features/catalogUtils";
+import { readSearchState, searchFilterChips } from "@/features/searchUtils";
 
 interface SearchPageClientProps {
   query: Record<string, string | string[] | undefined>;
@@ -23,10 +25,24 @@ interface SearchPageClientProps {
 
 function SearchPage({ query: rawQuery }: SearchPageClientProps) {
   const router = useRouter();
-  const query = readQueryValue(rawQuery.q);
-  const categorySlug = readQueryValue(rawQuery.category);
-  const sort = readQueryValue(rawQuery.sort) || "relevance";
-  const page = parsePage(rawQuery.page);
+  // Merge quick selections while the server-rendered URL state is still transitioning.
+  const [searchState, setSearchState] = useOptimistic(
+    readSearchState(rawQuery),
+    (current, patch: Partial<SearchState>) => ({ ...current, ...patch, page: 1 }),
+  );
+  const [, startTransition] = useTransition();
+  const unsupportedFilters = rawQuery.trust !== undefined || rawQuery.condition !== undefined || rawQuery.minRating !== undefined;
+  const canonicalHref = searchHref(readSearchState(rawQuery));
+  useEffect(() => {
+    if (unsupportedFilters) router.replace(canonicalHref, { scroll: false });
+  }, [unsupportedFilters, canonicalHref, router]);
+  function changeSearch(patch: Partial<SearchState>) {
+    startTransition(() => {
+      setSearchState(patch);
+      router.push(searchHref({ ...searchState, ...patch, page: 1 }), { scroll: false });
+    });
+  }
+  const { q: query = "", category: categorySlug = "", sort = "relevance", page = 1 } = searchState;
   const categoryTree = useApiQuery({
     queryKey: queryKeys.catalog.tree,
     service: (signal) => getCategoryTree({ signal }),
@@ -39,6 +55,8 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
     ...(selectedCategory ? { categoryId: selectedCategory.id } : {}),
     ...(query ? { q: query } : {}),
     ...(sort !== "relevance" ? { sort } : {}),
+    ...(searchState.listingType !== "all" ? { listingType: searchState.listingType } : {}),
+    ...(searchState.maxPrice !== undefined && searchState.maxPrice < SEARCH_MAX_PRICE ? { maxPrice: searchState.maxPrice } : {}),
     page: page - 1,
     size: CATALOG_PAGE_SIZE,
   };
@@ -56,9 +74,7 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
     : 0;
   const hrefForPage = (next: number) =>
     searchHref({
-      q: query,
-      category: categorySlug,
-      sort: sort === "relevance" ? "" : sort,
+      ...searchState,
       page: next,
     });
   const clearHref = "/search";
@@ -85,7 +101,7 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
       </nav>
 
       <div className="mt-3 mb-5 space-y-1">
-        <h1 className="text-heading-32">
+        <h1 className="text-heading-32 [overflow-wrap:anywhere]">
           {query ? `Results for “${query}”` : "Browse products"}
         </h1>
         <p className="min-h-5 text-sm text-gray-900" aria-live="polite">
@@ -103,7 +119,8 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
           selectedSlug={categorySlug}
           basePath="/search"
           clearHref={clearHref}
-          searchQuery={query}
+          searchState={searchState}
+          onSearchChange={changeSearch}
           loading={categoryTree.isPending}
           error={categoryTree.isError}
           retrying={categoryTree.isFetching}
@@ -114,29 +131,23 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
           <div className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {query ? (
-                <Link href={searchHref({ category: categorySlug, sort: sort === "relevance" ? "" : sort })} aria-label={`Remove search ${query}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-primary bg-orange-100 px-3 py-1.5 text-sm text-primary [overflow-wrap:anywhere]">{query}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
+                <Link href={searchHref({ ...searchState, q: "", page: 1 })} aria-label={`Remove search ${query}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-primary bg-orange-100 px-3 py-1.5 text-sm text-primary [overflow-wrap:anywhere]">{query}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
               ) : null}
               {selectedCategory ? (
-                <Link href={searchHref({ q: query, sort: sort === "relevance" ? "" : sort })} aria-label={`Remove category ${selectedCategory.name}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm [overflow-wrap:anywhere]">{selectedCategory.name}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
+                <Link href={searchHref({ ...searchState, category: "", page: 1 })} aria-label={`Remove category ${selectedCategory.name}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm [overflow-wrap:anywhere]">{selectedCategory.name}<X size={14} className="shrink-0" aria-hidden="true" /></Link>
               ) : null}
+              {searchFilterChips(searchState).map((chip) => (
+                <Link key={chip.key} href={searchHref({ ...searchState, ...chip.remove, page: 1 })} aria-label={`Remove filter ${chip.label}`} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm [overflow-wrap:anywhere]">
+                  {chip.label}<X size={14} className="shrink-0" aria-hidden="true" />
+                </Link>
+              ))}
             </div>
             <label className="flex min-h-11 items-center gap-2 text-sm">
               <span>Sort by</span>
               <select
                 aria-label="Sort by"
                 value={sort}
-                onChange={(event) =>
-                  router.push(
-                    searchHref({
-                      q: query,
-                      category: categorySlug,
-                      sort:
-                        event.target.value === "relevance"
-                          ? ""
-                          : event.target.value,
-                    }),
-                  )
-                }
+                onChange={(event) => changeSearch({ sort: readSearchState({ sort: event.target.value }).sort })}
                 className="min-h-11 min-w-36 rounded-md border border-border bg-card px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="relevance">Relevance</option>
@@ -147,8 +158,6 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
             </label>
           </div>
 
-          {query || sort !== "relevance" ? <p className="rounded-sm bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">Text search and sorting are previews. Results currently follow the selected category.</p> : null}
-
           {products.isSuccess && page > Math.max(1, totalPages) ? (
             <div
               role="status"
@@ -158,9 +167,7 @@ function SearchPage({ query: rawQuery }: SearchPageClientProps) {
               <Link
                 className="inline-flex min-h-11 min-w-11 items-center text-primary"
                 href={searchHref({
-                  q: query,
-                  category: categorySlug,
-                  sort: sort === "relevance" ? "" : sort,
+                  ...searchState,
                   page: 1,
                 })}
               >

@@ -18,7 +18,7 @@ const success = (data, metadata) => ({ code: 0, message: "response success", dat
 const streams = new Set();
 const streamIds = new WeakMap();
 let streamSequence = 0;
-const initialEvidence = () => ({ requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0, streamEvents: [], shippingRequests: [], shippingWrites: 0, paymentRequests: [], qrRequests: 0 });
+const initialEvidence = () => ({ requests: [], bidRequests: [], bidWrites: 0, sseConnections: 0, sseEvents: 0, streamEvents: [], shippingRequests: [], shippingWrites: 0, paymentRequests: [], qrRequests: 0, offerRequests: [], offerOrders: 0 });
 let evidence = initialEvidence();
 let mode = "normal";
 let failures = {};
@@ -31,6 +31,51 @@ let pushSequence = 0;
 let confirmedShipping = null;
 let own;
 let attempts = {};
+let listMode = false;
+let listings = [];
+let mineRows = [];
+let offers = [];
+const offerId = "00000092-1111-4111-8111-111111111111";
+const listId = (index) => `000000${String(51 + index).padStart(2, "0")}-1111-4111-8111-111111111111`;
+function seedLists() {
+  const names = [title, "Rolex Datejust 36mm, Jubilee Bracelet", "Nike Air Jordan 1 Red And Black, US 10", "Annibale Colombo Sofa — Italian Leather", "Kawasaki Z800 (2019), 8,200 km", "Apple Watch Series 4 Gold, 40mm", "Longines Master Collection, Automatic", "Annibale Colombo Bed — Queen, Walnut", "Vintage camera", "Classic turntable", "Scheduled Omega watch", "Scheduled leather briefcase", "Won collector watch", "Lost collector watch"];
+  listings = names.map((name, index) => ({
+    ...detail, id: listId(index), title: name, imageUrl: `${imageUrl}?item=${index}`,
+    startingPrice: index === 0 ? 6000 : 100, currentPrice: [9850, 8420, 212, 1640, 6150, 186, 1050, 1210][index] ?? 500,
+    bidCount: index >= 10 && index < 12 ? 0 : 12 + index,
+    startAt: new Date(Date.now() + (index >= 10 && index < 12 ? 3600000 : -3600000)).toISOString(),
+    endAt: new Date(Date.now() + (index >= 12 ? -60000 : 252000 + index * 3600000)).toISOString(),
+    status: index < 10 ? "ACTIVE" : index < 12 ? "SCHEDULED" : index === 12 ? "SETTLED" : "WON",
+    orderId: index === 12 ? orderId : null,
+    paymentDueAt: index === 12 ? new Date(Date.now() + 86400000).toISOString() : null,
+  }));
+  mineRows = listings.filter((row) => row.status !== "SCHEDULED").map((row, index) => ({
+    auctionId: row.id, title: row.title, amount: row.currentPrice - (index % 2 ? 120 : 0),
+    placedAt: new Date(Date.now() - 60000 * index).toISOString(), auctionStatus: row.status,
+    leading: row.status === "ACTIVE" && index % 2 === 0, won: row.id === listId(12),
+    orderId: row.id === listId(12) ? orderId : null,
+    paymentDueAt: row.id === listId(12) ? row.paymentDueAt : null,
+    finalPrice: row.id === listId(12) ? row.currentPrice : null,
+  }));
+}
+function createSellerOffer() {
+  if (offers.length) return;
+  // Only explicit test seller action creates a row. A timeout by itself creates no offer.
+  offers = [{ id: offerId, auctionId, title, imageUrl, currency: "VND", amount: 4800000,
+    status: "OFFERED", offeredAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    orderId: null, paymentDueAt: null }];
+}
+function privateOrder() {
+  const accepted = offers.find((offer) => offer.status === "ACCEPTED" && offer.orderId === orderId);
+  if (accepted) return { amount: accepted.amount, currency: accepted.currency, dueAt: accepted.paymentDueAt };
+  if (own.won && detail.orderId === orderId) return { amount: detail.finalPrice, currency: detail.currency, dueAt: detail.paymentDueAt };
+  return null;
+}
+function publicAuction(auction) {
+  const { orderId: privateOrderId, paymentDueAt: privateDueAt, finalPrice: privatePrice, ...snapshot } = auction;
+  void privateOrderId; void privateDueAt; void privatePrice;
+  return snapshot;
+}
 function reset() {
   const now = Date.now();
   detail = {
@@ -47,6 +92,10 @@ function reset() {
   own = { auctionId, title, amount: 9850, placedAt: bids[0].placedAt, auctionStatus: "ACTIVE", leading: true, won: false, orderId: null, paymentDueAt: null, finalPrice: null };
   attempts = {};
   frozenBids = null;
+  listMode = false;
+  listings = [];
+  mineRows = [];
+  offers = [];
   frozenState = null;
   mineOverride = null;
   pushSequence = 0;
@@ -127,6 +176,15 @@ http.createServer(async (req, res) => {
   if (path === "/test/control") {
     const changes = typeof req.body === "object" && req.body ? req.body : {};
     if (changes.mode) mode = changes.mode;
+    if (changes.listMode === true) { listMode = true; seedLists(); }
+    if (changes.sellerOffers === true) createSellerOffer();
+    if (typeof changes.offerRemainingMs === "number" && offers[0]) {
+      offers[0].expiresAt = new Date(Date.now() + changes.offerRemainingMs).toISOString();
+      offers[0].offeredAt = new Date(Date.parse(offers[0].expiresAt) - 86400000).toISOString();
+    }
+    if (changes.offerStatus && offers[0]) offers[0].status = changes.offerStatus;
+    if (Object.hasOwn(changes, "offerPaymentDueAt") && offers[0]) offers[0].paymentDueAt = changes.offerPaymentDueAt;
+    if (changes.secondAcceptedOffer && offers[0]?.status === "ACCEPTED" && offers.length === 1) offers.push({ ...offers[0], id: "00000093-1111-4111-8111-111111111111", auctionId: listId(1), title: "Rolex Datejust 36mm, Jubilee Bracelet", orderId: "00000082-1111-4111-8111-111111111111" });
     if (changes.currency) detail.currency = changes.currency;
     if (changes.failures && typeof changes.failures === "object") failures = changes.failures;
     if (changes.disconnect) { streams.forEach((stream) => stream.end()); streams.clear(); }
@@ -195,6 +253,43 @@ http.createServer(async (req, res) => {
   if (["/v1/notifications", "/v1/notifications/unread-count"].includes(path)) return json(res, path.endsWith("unread-count") ? success({ count: 0 }) : success([], page(0, 10, 0)));
   if (path === "/v1/carts/me") return json(res, success({ id: "auction-cart", userId: buyerId, status: "ACTIVE", items: [] }));
   if (path === "/v1/users/me") return json(res, success({ id: buyerId, email: "buyer@nexus.local", fullName: "Fixture Buyer", phone: "0901234567", gender: "OTHER", address: "Ho Chi Minh City", dateOfBirth: "2000-01-01", roles: ["BUYER"], status: "ACTIVE", createdAt: "2026-11-13T00:00:00Z" }));
+  if (path === `/v1/reputations/${sellerId}`) {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view seller reputation.");
+    return json(res, success({ userId: sellerId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2 }));
+  }
+  if (path === "/v1/auctions" && req.method === "GET") {
+    if (mode === "list-unavailable") return problem(res, 503, "AUCTION_UNAVAILABLE", "Auctions are temporarily unavailable.");
+    const status = url.searchParams.get("status") || "ACTIVE";
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 8;
+    const rows = (listMode ? listings : [detail]).filter((row) => row.status === status);
+    return json(res, success(rows.slice(number * size, (number + 1) * size).map(publicAuction), page(number, size, rows.length)));
+  }
+  if (path === "/v1/auctions/offers/me" && req.method === "GET") {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your offers.");
+    if (mode === "offers-unavailable") return problem(res, 404, "NOT_FOUND", "Offers are not available yet.");
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 10;
+    for (const offer of offers) if (offer.status === "OFFERED" && Date.parse(offer.expiresAt) <= Date.now()) offer.status = "EXPIRED";
+    return json(res, success(offers.slice(number * size, (number + 1) * size), page(number, size, offers.length)));
+  }
+  if (path === `/v1/auctions/offers/${offerId}/accept` || path === `/v1/auctions/offers/${offerId}/decline`) {
+    if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to respond to the offer.");
+    if (req.method !== "POST") return problem(res, 405, "METHOD_NOT_ALLOWED", "Use POST.");
+    const action = path.endsWith("/accept") ? "accept" : "decline";
+    evidence.offerRequests.push({ action, authorized: authenticated, at: Date.now(), path, body: req.body ?? null });
+    const offer = offers[0];
+    if (!offer) return problem(res, 404, "OFFER_NOT_FOUND", "There is no seller offer.");
+    if (offer.status === "ACCEPTED" && action === "accept") return json(res, success(offer));
+    if (offer.status !== "OFFERED" || Date.parse(offer.expiresAt) <= Date.now()) return problem(res, 409, "OFFER_EXPIRED", "This offer is no longer available.");
+    if (mode === "offer-slow") await new Promise((resolve) => setTimeout(resolve, 800));
+    if (action === "accept") {
+      offer.status = "ACCEPTED"; offer.orderId = orderId;
+      offer.paymentDueAt = new Date(Date.now() + 86400000).toISOString(); evidence.offerOrders += 1;
+    } else offer.status = "DECLINED";
+    if (mode === "offer-lost-response") return problem(res, 503, "OFFER_UNAVAILABLE", "The offer response was interrupted.");
+    return json(res, success(offer));
+  }
   if (path === `/v1/products/${productId}`) return json(res, success({
     id: productId, name: title, slug: `rolex-submariner-${productId}`, categoryId: "00000010-1111-4111-8111-111111111111", sellerId, status: "ACTIVE", auctionEnable: true,
     description: "Pre-owned — excellent, serviced 2025. Submariner Date, 41 mm, two-tone. Box & papers: 2022 warranty card. Ships from District 1, Ho Chi Minh City.", minPrice: 6000, maxPrice: 6000,
@@ -203,26 +298,32 @@ http.createServer(async (req, res) => {
   }));
   if (path === "/v1/bids/mine") {
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view your bids.");
+    const number = Number(url.searchParams.get("page")) || 0;
+    const size = Number(url.searchParams.get("size")) || 100;
     const mine = mineOverride ?? own;
     const winner = mine.won && ["WON", "SETTLED", "PAYMENT_TIMEOUT"].includes(mine.auctionStatus);
-    return json(res, success([{ ...mine, orderId: winner ? detail.orderId : null, paymentDueAt: winner ? detail.paymentDueAt : null, finalPrice: winner ? detail.finalPrice : null }], page(0, Number(url.searchParams.get("size")) || 100, 1)));
+    const rows = listMode ? mineRows : [{ ...mine, orderId: winner ? detail.orderId : null, paymentDueAt: winner ? detail.paymentDueAt : null, finalPrice: winner ? detail.finalPrice : null }];
+    return json(res, success(rows.slice(number * size, (number + 1) * size), page(number, size, rows.length)));
   }
   if (path === "/v1/shipping/provinces") return json(res, success([{ code: "202", name: "Ho Chi Minh City" }], page(0, 1, 1)));
   if (path === "/v1/shipping/wards") return json(res, success(url.searchParams.get("provinceCode") === "202" ? [{ code: "20308", name: "Ben Nghe Ward" }] : [], page(0, 1, url.searchParams.get("provinceCode") === "202" ? 1 : 0)));
+  if (listMode && req.method === "GET" && listings.some((row) => path === `/v1/auctions/${row.id}`)) return json(res, success(publicAuction(listings.find((row) => path === `/v1/auctions/${row.id}`))));
   if (path === `/v1/orders/${orderId}/shipping-confirmation` && req.method === "POST") {
     const body = req.body;
     evidence.shippingRequests.push({ body, authorized: authenticated });
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to confirm shipping.");
-    if (!own.won || detail.orderId !== orderId) return problem(res, 403, "COMMERCE_ORDER_FORBIDDEN", "Only the winner can confirm shipping.");
-    if (Date.parse(detail.paymentDueAt) <= Date.now()) return problem(res, 409, "COMMERCE_PAYMENT_DEADLINE_PASSED", "The auction payment deadline has passed.");
+    const order = privateOrder();
+    if (!order) return problem(res, 403, "COMMERCE_ORDER_FORBIDDEN", "Only the order buyer can confirm shipping.");
+    if (Date.parse(order.dueAt) <= Date.now()) return problem(res, 409, "COMMERCE_PAYMENT_DEADLINE_PASSED", "The auction payment deadline has passed.");
     if (!body || !["recipientName", "phoneNumber", "addressLine", "wardCode", "provinceCode"].every((key) => typeof body[key] === "string" && body[key].trim()) || body.countryCode !== "VN")
       return problem(res, 400, "VALIDATION_FAILED", "Complete the shipping address.");
     if (confirmedShipping) {
       if (JSON.stringify(body) !== JSON.stringify(confirmedShipping.body)) return problem(res, 409, "COMMERCE_SHIPPING_ALREADY_CONFIRMED", "The shipping address was already confirmed.");
       return json(res, success(confirmedShipping.result));
     }
-    const shippingFee = detail.currency === "VND" ? 490 : 4.9;
-    const result = { orderGroupId, shippingFee, totalAmount: detail.finalPrice + shippingFee, dueAt: detail.paymentDueAt };
+    if (mode === "shipping-slow") await new Promise((resolve) => setTimeout(resolve, 800));
+    const shippingFee = order.currency === "VND" ? 490 : 4.9;
+    const result = { orderGroupId, shippingFee, totalAmount: order.amount + shippingFee, dueAt: order.dueAt };
     confirmedShipping = { body: structuredClone(body), result };
     evidence.shippingWrites += 1;
     if (mode === "shipping-lost-response") { mode = "normal"; return problem(res, 503, "COMMERCE_UNAVAILABLE", "The shipping confirmation response was lost."); }
@@ -231,11 +332,12 @@ http.createServer(async (req, res) => {
   if (path === "/v1/payments" && req.method === "POST") {
     evidence.paymentRequests.push({ body: req.body, authorized: authenticated });
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to prepare payment.");
-    if (!own.won || detail.orderId !== orderId) return problem(res, 403, "FORBIDDEN", "Only the winning order buyer can prepare payment.");
+    const order = privateOrder();
+    if (!order) return problem(res, 403, "FORBIDDEN", "Only the order buyer can prepare payment.");
     if (Object.keys(req.body || {}).length !== 1) return problem(res, 400, "VALIDATION_FAILED", "Only orderGroupId is accepted.");
     if (!confirmedShipping || req.body?.orderGroupId !== confirmedShipping.result.orderGroupId) return problem(res, 404, "PAYMENT_SESSION_NOT_FOUND", "Confirm shipping before preparing payment.");
     if (Date.parse(confirmedShipping.result.dueAt) <= Date.now()) return problem(res, 409, "PAYMENT_SESSION_NOT_PAYABLE", "The auction payment deadline has passed.");
-    if (detail.currency !== "VND" || !Number.isSafeInteger(confirmedShipping.result.totalAmount)) return problem(res, 400, "VALIDATION_FAILED", "The local payment contract requires whole VND.");
+    if (order.currency !== "VND" || !Number.isSafeInteger(confirmedShipping.result.totalAmount)) return problem(res, 400, "VALIDATION_FAILED", "The local payment contract requires whole VND.");
     return json(res, success({
       sessionId: "ec2a083f-868b-4d3e-9dda-1904a9c7bbdd", qrImageUrl: `${origin}/api/test/qr.svg`, bankAccount: "0000000002",
       amount: confirmedShipping.result.totalAmount, memoCode: "NX20261114001", transferContent: "SEVQR NX20261114001",
@@ -248,13 +350,11 @@ http.createServer(async (req, res) => {
     return json(res, success({
       orderGroupId, status: "PENDING", totalAmount: confirmedShipping.result.totalAmount, currency: "VND", dueAt: confirmedShipping.result.dueAt,
       orders: [{ orderId, orderGroupId, orderNumber: "NX-AUC-20261114-0001", orderType: "AUCTION", status: "PENDING", createdAt: detail.startAt,
-        userId: buyerId, sellerId, totalAmount: confirmedShipping.result.totalAmount, subtotal: detail.finalPrice, shippingFee: confirmedShipping.result.shippingFee, discountAmount: 0, taxAmount: 0, items: [] }],
+        userId: buyerId, sellerId, totalAmount: confirmedShipping.result.totalAmount, subtotal: privateOrder()?.amount, shippingFee: confirmedShipping.result.shippingFee, discountAmount: 0, taxAmount: 0, items: [] }],
     }));
   }
   if (path === `/v1/auctions/${auctionId}` && req.method === "GET") {
-    const { orderId: privateOrderId, paymentDueAt: privateDueAt, finalPrice: privatePrice, ...publicDetail } = detail;
-    void privateOrderId; void privateDueAt; void privatePrice;
-    return json(res, success(publicDetail));
+    return json(res, success(publicAuction(detail)));
   }
   if (path === `/v1/auctions/${auctionId}/state`) {
     if (mode === "missing-read") return problem(res, 404, "NOT_FOUND", "Auction state endpoint is not available.");

@@ -13,6 +13,7 @@
     "generate:types": "node scripts/generate-types.mjs",
     "generate:types:check": "node scripts/generate-types.mjs --check",
     "test:unit": "node scripts/test-auth.mjs",
+    "test:admin": "node scripts/test-browser.mjs --config playwright.admin.config.ts",
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:cart": "node scripts/test-browser.mjs --config playwright.cart.config.ts",
@@ -21,7 +22,8 @@
     "test:auth:browser": "node scripts/test-browser.mjs --config playwright.auth.config.ts",
     "test:checkout": "node scripts/test-browser.mjs --config playwright.checkout.config.ts",
     "test:payment": "node scripts/test-browser.mjs --config playwright.payment.config.ts",
-    "test:auction": "node scripts/test-browser.mjs --config playwright.auction.config.ts"
+    "test:auction": "node scripts/test-browser.mjs --config playwright.auction.config.ts",
+    "test:auction-list": "node scripts/test-browser.mjs --config playwright.auction-list.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

@@ -94,7 +94,7 @@ async function issueToken(res, session, nonce) {
     id_token: jwt({ ...claims, aud: "nexus-web", nonce, email: "buyer@nexus.local", name: "Fixture Buyer" }),
   });
 }
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   if (appOrigins.has(req.headers.origin)) res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -117,6 +117,12 @@ const server = http.createServer(async (req, res) => {
       const roles = url.searchParams.get("roles").split(",");
       if (!roles.every((role) => ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"].includes(role))) return json(res, { error: "invalid_roles" }, 400);
       fixtureIdentity = { roles, subject: url.searchParams.get("subject") || subject, email: url.searchParams.get("email") || "buyer@nexus.local", privileges: ["PROFILE.VIEW", "ORDER.LIST"] };
+    }
+    // Opt-in signed permissions for the live buyer suite; ordinary fixtures keep their existing defaults.
+    if (url.searchParams.has("privileges")) {
+      const privileges = url.searchParams.get("privileges").split(",");
+      if (!privileges.every((privilege) => ["PROFILE.VIEW", "ORDER.LIST", "ORDER.VIEW", "REPUTATION.VIEW", "REPUTATION.RATE"].includes(privilege))) return json(res, { error: "invalid_privileges" }, 400);
+      fixtureIdentity = { ...fixtureIdentity, privileges };
     }
     if (url.searchParams.has("mode")) mode = url.searchParams.get("mode");
     if (url.searchParams.has("ttl")) {
@@ -242,5 +248,13 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, target.href);
   }
   return json(res, { error: "Fixture endpoint not implemented", path: url.pathname }, 501);
+}
+// pm.state reads return snapshots. Serialize read/modify/write operations so
+// concurrent browser sessions cannot overwrite each other's rotated tokens.
+let requestQueue = Promise.resolve();
+const server = http.createServer((req, res) => {
+  const pending = requestQueue.then(() => handleRequest(req, res));
+  requestQueue = pending.catch(() => {});
+  return pending;
 });
 server.listen(process.env.PORT);

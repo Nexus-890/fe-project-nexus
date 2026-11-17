@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/compone
 const accountLinks = [
   { href: ROUTES.profile, label: "My profile" },
   { href: ROUTES.orders, label: "My orders" },
+  { href: "/my-bids", label: "My Bids" },
 ];
 
 function MobileAccountNavigation({ savedCount = 0 }: { savedCount?: number }) {
@@ -49,7 +50,7 @@ function MobileAccountNavigation({ savedCount = 0 }: { savedCount?: number }) {
             <span>Saved items</span>
             {savedCount > 0 ? <span className="rounded-full bg-muted px-2 text-xs tabular-nums">{savedCount}</span> : null}
           </Link>
-          <Link href="/#live-auctions" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Explore auctions</Link>
+          <Link href="/auctions" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Explore auctions</Link>
           <h3 className="mt-2 border-t border-border px-3 pt-3 pb-1 text-xs font-semibold text-muted-foreground">Shopping</h3>
           <Link href="/checkout" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Ship to HCMC</Link>
           <Link href={ROUTES.sell} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Sell</Link>

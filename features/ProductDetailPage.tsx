@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, House, MapPin, ShoppingCart, ShieldCheck, Truck, Zap } from "lucide-react";
+import { ChevronRight, House, MapPin, ShoppingCart, Truck, Zap } from "lucide-react";
 import { isApiError } from "@/configs/api";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiQuery } from "@/hooks/useApi";
@@ -22,6 +22,7 @@ import type { ProductSku } from "@/types/catalogResponseType";
 import SKUSelector from "@/components/SKUSelector";
 import QuantityPicker from "@/components/QuantityPicker";
 import ProductGallery from "@/components/ProductGallery";
+import SellerReputation from "./SellerReputation";
 
 interface ProductDetailPageProps {
   slug: string;
@@ -270,7 +271,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
           ) : null}
 
           <div className="space-y-3 border-t border-border pt-5 text-sm"><p className="flex items-center gap-2"><MapPin size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />Choose your delivery address at checkout</p><p className="flex items-center gap-2"><Truck size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />Shipping options and fees are confirmed before payment.</p></div>
-          <div className="space-y-4 rounded-sm border border-border p-4"><div className="flex items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold" aria-hidden="true">NS</span><div><h2 className="text-sm font-semibold">Nexus Demo Store</h2><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><ShieldCheck size={13} className="text-info" aria-hidden="true" />Sample seller profile</p></div><Link href="/search" className="ml-auto inline-flex min-h-11 items-center rounded-sm border border-border px-3 text-xs">Visit shop</Link></div><dl className="grid grid-cols-3 gap-3 text-xs"><div><dd className="font-semibold">3,410</dd><dt className="mt-1 text-muted-foreground">Sample sales</dt></div><div><dd className="font-semibold">99%</dd><dt className="mt-1 text-muted-foreground">Sample positive ratings</dt></div><div><dd className="font-semibold">&lt; 1h</dd><dt className="mt-1 text-muted-foreground">Sample response time</dt></div></dl></div>
+          <SellerReputation sellerId={detail.sellerId} />
         </section>
       </section>
       <ProductInformationTabs product={detail} />

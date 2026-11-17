@@ -6,6 +6,10 @@ Before push, develop advanced to `a686c099` and was merged without conflicts.
 Its unrelated commerce/inventory/payment DTO additions were regenerated; the
 auction implementation and frontend runtime source did not change in that merge.
 
+## Buyer #220 integration
+
+The develop merge at `aa238638` keeps this canonical auction room, including private winner handoff and the updated heartbeat/polling rules. The #220 seller reputation component remains in its Auction seller section and reads protected `GET /api/v1/reputations/{sellerId}`. Its returned score/trust appear beside the existing bid, history and winner controls. Missing aggregates remain unavailable. The bid browser scenario checks the seller score/trust before submitting a bid on this same route.
+
 ## UI and behavior
 
 The shop header/footer wrap the desktop columns and mobile stack: product gallery, item details, title/status, countdown, bid panel and masked paginated history. Product and auction responses supply content. No Figma example prices, seller ratings, watcher counts or trust scores are synthesized. Money uses decimal strings and exact-cent arithmetic; V2's `numeric(19,2)` supersedes the attached V1 diagram's `bigint` columns.
@@ -46,11 +50,13 @@ The room consumes public `GET /api/v1/auctions/{id}`, private numeric bid POST w
 
 Still pending for live integration:
 
-- #168 state and #169 public history exist in draft `docs/api/auction-service.yaml`, without implementation/public gateway policy on this baseline.
+- The merged develop controllers/OpenAPI now deliver public `GET /api/v1/auctions/{id}/state` and `GET /api/v1/auctions/{id}/bids`. The existing runtime parsers validate these delivered DTOs.
 - #253 `/stream`, named `state`, 15-second named transport `heartbeat` and 30-second silence fallback are the reviewer-specified target. No SSE implementation was found in inspected develop/integration refs. Real reconnect/replay, two real users seeing changes in under one second, and 1,000 concurrent connections remain unverified.
 - Real #170/#171 settlement and #172 order/shipping/payment integration must be delivered together. The private read now exposes actual stored order data, but it does not create it.
 - No hardcoded trust threshold is enforced by this frontend.
 
-## Verification
+## Historical canonical verification
 
-Current frontend unit/auth/service tests pass 289, and the auction browser suite passes 26/26 in 3.2 minutes. Actual local heartbeat spacing on one connection was 15,012ms; the unchanged stream stayed healthy for 32,041ms and silence beyond 30 seconds restored two-second polling. The additive private projection passed 23 focused PostgreSQL integration tests; expanded selected Maven verify passed 268 Surefire + 10 Failsafe tests with exactly two Docker-only fixtures excluded. Delivered inventory (100 operations), OpenAPI lint, frontend lint/typecheck/generated drift and production build passed. Catalog regression passed 55 with 38 existing skips. See [auction-verification.md](auction-verification.md) for timing evidence and limits. The prior 25-browser/283-unit checkpoint is historical. Fixtures establish caller behavior against local HTTP dependencies, not live #180/#267 acceptance.
+The pre-merge canonical checkpoint recorded 289 frontend unit/auth/service tests, and the auction browser suite passes 26/26 in 3.2 minutes. Actual local heartbeat spacing on one connection was 15,012ms; the unchanged stream stayed healthy for 32,041ms and silence beyond 30 seconds restored two-second polling. The additive private projection passed 23 focused PostgreSQL integration tests; expanded selected Maven verify passed 268 Surefire + 10 Failsafe tests with exactly two Docker-only fixtures excluded. Delivered inventory (100 operations), OpenAPI lint, frontend lint/typecheck/generated drift and production build passed. Catalog regression passed 55 with 38 existing skips. See [auction-verification.md](auction-verification.md) for timing evidence and limits. The prior 25-browser/283-unit checkpoint is historical. Fixtures establish caller behavior against local HTTP dependencies, not live #180/#267 acceptance.
+
+The parent #220 handoff records verification rerun after conflict resolution; historical figures above do not claim a pass for the current merged worktree.

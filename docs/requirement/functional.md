@@ -15,7 +15,7 @@ This is the source-backed frontend scope. The owning feature and delivered API d
 | CAT-02 | Resolve category slug or id on the server; unknown category gives 404 | Implemented: CategoryPage, findCategory, route boundary |
 | CAT-03 | List products by category with loading/error/empty states and paging | Implemented frontend; delivered API supports categoryId/page/size |
 | CAT-04 | Preserve query/category/sort/page in search URL and navigation history | Implemented UI state/helper behavior |
-| CAT-05 | Execute real free-text search and newest/price sorting | Backend contract gap: delivered ProductController does not accept q/sort |
+| CAT-05 | Execute real free-text search and newest/price sorting | Implemented #220: PostgreSQL title matching, stable sorting, listing type and price ceiling before paging; unsupported trust/condition/rating controls disabled |
 | CAT-06 | Display product detail, images, SKU options and selected price | Implemented: ProductDetailPage and gallery/SKU components |
 | CAT-07 | Keep product link resolution and quantity integer/minimum rules | Implemented: detail helpers and QuantityPicker |
 | CAT-08 | Show all product images in sortOrder with selectable thumbnails and wrapping/keyboard navigation | ProductGallery; detail API supplies images; see [gallery scope and evidence](../features/product-image-gallery.md) |

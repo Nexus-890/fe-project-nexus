@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, createWriteStream } from "node:fs";
 mkdirSync("test-results", { recursive: true });
-const simulation = spawn("postman", ["simulation", "run", "postman/simulations/backoffice.sim.yaml", "--port", "3920", "--no-history", "--output", "ndjson"], {
+const apiPort = process.env.NEXUS_BACKOFFICE_API_PORT || "3920";
+const appPort = process.env.NEXUS_BACKOFFICE_APP_PORT || "3110";
+const simulation = spawn("postman", ["simulation", "run", "postman/simulations/backoffice.sim.yaml", "--port", apiPort, "--no-history", "--output", "ndjson"], {
   stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
-  env: { ...process.env, NEXUS_TEST_PROVIDER_PORT: "3920", NEXUS_TEST_APP_PORT: "3110" },
+  env: { ...process.env, NEXUS_TEST_PROVIDER_PORT: apiPort, NEXUS_TEST_APP_PORT: appPort },
 });
 simulation.stdout.pipe(createWriteStream("test-results/backoffice-simulation.ndjson"));
 simulation.stderr.pipe(createWriteStream("test-results/backoffice-simulation.err"));

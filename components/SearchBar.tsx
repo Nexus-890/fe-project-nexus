@@ -9,10 +9,11 @@ import {
   SelectValue,
 } from "./select";
 import { type FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Input } from "./input";
 import type { CategoryNode } from "@/types/catalogResponseType";
 import { flattenCategories, searchHref } from "@/features/catalogUtils";
+import { readSearchState } from "@/features/searchUtils";
 
 export interface SearchBarProps {
   categories: CategoryNode[];
@@ -27,12 +28,13 @@ function SearchBar({
 }: SearchBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const routeState = `${pathname}?${searchParams.toString()}`;
   const routeQuery = searchParams.get("q") ?? "";
-  const [draft, setDraft] = useState<string | null>(null);
-  const query = draft ?? routeQuery;
+  const [draft, setDraft] = useState<{ routeState: string; value: string } | null>(null);
+  const query = draft?.routeState === routeState ? draft.value : routeQuery;
   const categoryOptions = flattenCategories(categories);
   const routeCategory = searchParams.get("category") ?? "";
-  const routeState = searchParams.toString();
   const [categoryDraft, setCategoryDraft] = useState<{
     routeState: string;
     value: string;
@@ -43,13 +45,18 @@ function SearchBar({
       : categoryOptions.some((item) => item.slug === routeCategory)
         ? routeCategory
         : "";
+  const currentFilters = pathname === "/search" ? readSearchState(
+    Object.fromEntries(Array.from(new Set(searchParams.keys()), (key) => [
+      key, ["trust", "condition"].includes(key) ? searchParams.getAll(key) : searchParams.get(key) ?? "",
+    ])),
+  ) : {};
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
     setDraft(null);
     setCategoryDraft(null);
-    router.push(searchHref({ q: value, category }));
+    router.push(searchHref({ ...currentFilters, q: value, category, page: 1 }));
   }
 
   return (
@@ -71,7 +78,7 @@ function SearchBar({
           type="text"
           name="q"
           value={query}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => setDraft({ routeState, value: event.target.value })}
           placeholder="Search for anything"
           aria-label="Search for anything"
           className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus-visible:border-0 focus-visible:ring-0"
@@ -118,7 +125,7 @@ function SearchBar({
 
       <button
         type="button"
-        onClick={() => router.push(`${searchHref({ q: query.trim(), category })}#catalog-filters`)}
+        onClick={() => router.push(`${searchHref({ ...currentFilters, q: query.trim(), category, page: 1 })}#catalog-filters`)}
         className="min-h-11 min-w-11 whitespace-nowrap px-2 text-xs text-neutral-600 hover:text-black"
       >
         Advanced
