@@ -71,17 +71,18 @@ Config keys: none.
 2. Run `npm run test:promotions`, `npm run test:checkout`, `npm run test:unit`, `npm run generate:types:check`, `npm run lint`, `npm run typecheck`, then `npm run build` after browser runners finish.
 3.
    ```
-   Promotions: 2 Playwright scenarios pass; checkout/place-order: 24 pass; unit/HTTP: 427 pass.
+   Promotions: 2 Playwright scenarios pass; checkout/place-order: 24 pass; latest unit/HTTP suite: 434 pass.
+   Operations after integrating develop #208/#230: 17 pass.
    Generated types check, lint, typecheck and production build pass.
-   Backend API contract inventory: 175 operations documented.
-   Catalog/browser regression: 57 pass, 74 skipped by existing environment guards, one notification sign-in timeout; the notification case passes on isolated rerun. Changed mobile/menu/cart cases also pass targeted reruns.
+   Backend API contract inventory: 180 operations documented.
+   Catalog/browser regression after #230 integration: 58 pass, 81 skipped by existing environment guards.
    ```
 
 - [ ] .\mvnw.cmd verify passes in every service touched — N/A: no backend service changed relative to develop; Maven not run.
 - [ ] The service starts against PostgreSQL with ddl-auto: validate — not run: Docker unavailable; live checks remain #256/#269 integration QA.
 - [x] No secret, .env, .idea/ or log file in the diff.
 - [x] New endpoints added to docs/api/gateway-permissions.md and to the service's public-endpoints when public — N/A: consumes existing endpoints; no backend endpoint added.
-- [x] Branch is up to date with develop and has no conflict markers — develop merged without conflicts; diff checked.
+- [x] Branch is up to date with develop and has no conflict markers — resolved queryKeys and role-menu test conflicts from #230, then merged #208; both feature sets retained and diff checked.
 
 - Live concurrency, SQL allocations, payment/refund lifecycle and deployed permissions are deliberately left to #256/#269 integration QA. Simulation results do not establish those invariants.
 

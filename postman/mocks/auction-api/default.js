@@ -255,7 +255,7 @@ http.createServer(async (req, res) => {
   if (path === "/v1/users/me") return json(res, success({ id: buyerId, email: "buyer@nexus.local", fullName: "Fixture Buyer", phone: "0901234567", gender: "OTHER", address: "Ho Chi Minh City", dateOfBirth: "2000-01-01", roles: ["BUYER"], status: "ACTIVE", createdAt: "2026-11-13T00:00:00Z" }));
   if (path === `/v1/reputations/${sellerId}`) {
     if (!authenticated) return problem(res, 401, "UNAUTHENTICATED", "Sign in to view seller reputation.");
-    return json(res, success({ userId: sellerId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2 }));
+    return json(res, success({ userId: sellerId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42, successfulTransaction: 40, failedTransaction: 2, ratingCount: 0, policyVersion: "reputation-policy-1" }));
   }
   if (path === "/v1/auctions" && req.method === "GET") {
     if (mode === "list-unavailable") return problem(res, 503, "AUCTION_UNAVAILABLE", "Auctions are temporarily unavailable.");

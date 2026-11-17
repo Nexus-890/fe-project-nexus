@@ -1,4 +1,4 @@
-/** Normalized UI models for the proposed #208 contract in docs/api/seller-offers.openapi.yaml. */
+/** Normalized UI models for delivered #208. Accepted orderId is null until Commerce projects the order. */
 export type SellerOfferStatus = "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED";
 export type SellerOfferCandidate = {
   bidderId: string;
@@ -17,6 +17,7 @@ export type SellerOffer = SellerOfferCandidate & {
 export type SellerOfferState = {
   auctionId: string;
   canOffer: boolean;
+  eligibilityUnavailable: boolean;
   candidate: SellerOfferCandidate | null;
   offers: SellerOffer[];
 };

@@ -47,3 +47,10 @@ The delivered API has no seller-own registration/participation read. Registratio
 - Merged develop at `e4cb53cb` without conflicts and regenerated the delivered user DTO. The application profile model preserves its existing optional verification metadata, matching its parser; the generated wire field remains required/nullable.
 - After that integration, generated types check, lint, typecheck and all 427 unit tests passed. `node be-project-nexus/docs/api/check-contract.mjs` covers all 175 delivered operations. No backend source/spec changes are introduced relative to develop.
 - The installed Next.js 16.4.0 emitted a security upgrade reminder and required command retries; dependency upgrades are outside #269.
+
+## Conflict resolution against newer develop — 2026-11-17
+
+- Integrated `dfdc69c0` (#230 support operations) and retained both `promotions` and `operations` cache-key namespaces. Resolved the role-menu test to keep Seller vouchers and the new Support payments/refunds/shipments entries together.
+- On that merge: generated-types check, lint, typecheck, 433 unit tests, 2 promotion scenarios, 14 operation scenarios and production build passed. Catalog regression passed 58 scenarios; 81 were skipped by the suite's environment guards.
+- Integrated the subsequently published `9e140179` (#208 second-chance offers) without further conflicts. Generated-types check, lint, typecheck, all 434 unit tests and 17 operation scenarios passed; contract inventory covers 180 delivered operations.
+- Browser checks use explicit local HTTP/OIDC simulations. Existing live database/payment/refund limitations still apply.

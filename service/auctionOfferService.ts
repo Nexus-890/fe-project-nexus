@@ -19,7 +19,7 @@ export const parseAuctionOffer = (value: unknown): AuctionOffer => {
     (value.paymentDueAt !== null && !isInstant(value.paymentDueAt)))
     throw createInvalidResponseError("Invalid second chance offer");
   const amount = parseAuctionMoney(value.amount);
-  if (Number(amount) <= 0 || (value.status === "ACCEPTED" && (!value.orderId || !value.paymentDueAt)))
+  if (Number(amount) <= 0 || (value.status === "ACCEPTED" && !value.paymentDueAt))
     throw createInvalidResponseError("Invalid accepted offer or amount");
   return {
     id: value.id, auctionId: value.auctionId, title: value.title, imageUrl: value.imageUrl,
