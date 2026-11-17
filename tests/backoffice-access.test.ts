@@ -13,7 +13,7 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
   assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Vouchers", "Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
-  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Auctions", "Event Logs", "System Health"]);
+  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Payments", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/promotions", ["SELLER"]), false);

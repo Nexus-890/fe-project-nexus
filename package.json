@@ -13,6 +13,7 @@
     "generate:types": "node scripts/generate-types.mjs",
     "generate:types:check": "node scripts/generate-types.mjs --check",
     "test:unit": "node scripts/test-auth.mjs",
+    "test:operations": "node scripts/test-browser.mjs --config playwright.operations.config.ts",
     "test:admin": "node scripts/test-browser.mjs --config playwright.admin.config.ts",
     "test:admin-catalog": "node scripts/test-browser.mjs --config playwright.admin-catalog.config.ts",
     "test:admin-config-live": "node tests/admin-config-live.mjs",

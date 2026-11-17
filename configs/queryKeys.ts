@@ -16,6 +16,10 @@ export const queryKeys = {
     public: (filters: object) => ["claimable-vouchers", filters] as const,
     selection: (sessionId: number) => ["voucher-selection", sessionId] as const,
   },
+  operations: {
+    root: (sessionId: number) => ["order-operations", sessionId] as const,
+    list: (sessionId: number, area: string, filters: object) => ["order-operations", sessionId, area, filters] as const,
+  },
   admin: {
     root: (sessionId: number) => ["admin", sessionId] as const,
     users: (sessionId: number, filters: object) => ["admin", sessionId, "users", filters] as const,

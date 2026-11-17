@@ -48,7 +48,10 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
   if (roles.includes("ADMIN")) items.push({ label: "Categories", href: "/backoffice/categories" }, { label: "Warehouses", href: "/backoffice/warehouses" }, { label: "Stock", href: "/backoffice/stock" });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users" },
-    { label: "Orders", href: "/backoffice/orders", placeholder: true },
+    { label: "Orders", href: "/backoffice/orders" },
+    { label: "Payments", href: "/backoffice/payments" },
+    { label: "Refunds", href: "/backoffice/refunds" },
+    { label: "Shipments", href: "/backoffice/shipments" },
     { label: "Auctions", href: "/backoffice/auctions" },
     { label: "Event Logs", href: "/backoffice/event-logs" },
     { label: "System Health", href: "/backoffice/health" },
