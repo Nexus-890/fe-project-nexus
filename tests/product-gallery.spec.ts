@@ -60,7 +60,7 @@ const expectNoOverflow = async (page: Page) =>
   ).toBe(true);
 
 const installList = async (page: Page, products: unknown[]) => {
-  await page.route("**/api/v1/products?*", (route) =>
+  await page.route("**/api/v1/products/search?*", (route) =>
     fulfillJson(route, {
       ...envelope(products),
       page: {
@@ -125,7 +125,8 @@ test("cards use the first sorted image and retain placeholders for empty or abse
 }) => {
   const detailRequests: string[] = [];
   page.on("request", (request) => {
-    if (/\/api\/v1\/products\//.test(new URL(request.url()).pathname))
+    if (/\/api\/v1\/products\//.test(new URL(request.url()).pathname)
+      && new URL(request.url()).pathname !== "/api/v1/products/search")
       detailRequests.push(request.url());
   });
   // Optional listing media models the #122 response, which is not delivered by

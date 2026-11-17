@@ -1,5 +1,8 @@
 # Catalog browsing and product detail
 
+Search keeps earlier words as an adjacent phrase and treats the last normalized word as a prefix: `iph` finds `iPhone`, `ao th` finds `Áo thun`, and `Product 1` finds `Product 100`. Punctuation is literal input. `ShopSort`, the typed API sort map and URL validation share `catalogRequestType.ts`; no legacy listProducts type supplies the sort.
+
+
 ## Routes and responsibilities
 
 | Route | Behavior |
@@ -34,11 +37,11 @@ Services call public category/product endpoints and validate returned data befor
 
 Page-out-of-range, empty results, malformed response and API failure have distinct UI states. Catalog data stays API backed; a failed catalog call never falls back to fake products. The buyer shop design task explicitly authorizes hardcoded presentation for APIs that are not delivered: campaigns, sample vouchers, sample seller profile and sample ratings/reviews. Those previews are labeled and do not change checkout prices or claim a real discount.
 
-Search #220 uses the public products API for trimmed, case-insensitive literal title matching, relevance/newest/price ordering, category, listing type and maximum SKU price. Filtering and ordering run in PostgreSQL before pagination, so page totals and unmatched queries describe the complete result set. Relevance ranks exact title, prefix and substring, then newest first. Every order uses UUID ascending as a final tie-breaker; price sorting uses the minimum SKU price with missing prices last. The API keeps each matching product's full variant price range.
+Search uses the canonical public `GET /api/v1/products/search` endpoint from #215: accent-insensitive phrase matching in the name or description, category/listing-type filters, and any ACTIVE SKU satisfying all price bounds. Sorting still uses the lowest ACTIVE SKU price; displayed prices retain the complete ACTIVE variant range. The service maps existing URL sort values to `relevance`, `newest`, `price_asc` or `price_desc`. The legacy `GET /products` preserves title-substring matching for older clients.
 
 The URL retains query/category/sort/page, listing type and maximum price. Category changes, pagination, header searches and Advanced preserve independent selections and reset the page when a selection changes. Reload and history restore controls from the URL; removing a chip affects only that selection. Feature-owned optimistic state merges rapid changes while URL transitions settle. Invalid values fall back to safe defaults. Listing type follows persisted `auctionEnable`: auction means enabled and Buy Now means disabled; it does not claim a currently active auction. Seller trust, condition and seller rating have no catalog search data, so those controls are disabled and labeled “Not available yet”. Old links containing these unsupported fields are canonicalized without them. Category pages retain their existing separate preview controls.
 
-The delivered `listProducts` OpenAPI and controller accept `q`, `sort`, `listingType` and `maxPrice` alongside categoryId/page/size. Empty successful searches render “No products found” without an API error; malformed responses and failed HTTP requests remain errors. No client filtering of the current page or fallback products substitute for backend search.
+The canonical `searchProducts` OpenAPI and controller accept `q`, `sort`, `listingType` and `maxPrice` alongside categoryId/page/size. Empty successful searches render “No products found” without an API error; malformed responses and failed HTTP requests remain errors. No client filtering of the current page or fallback products substitute for backend search.
 
 On 2026-11-14, `ProductSearchTest` passed four Spring/HTTP/database scenarios against PostgreSQL 18.6 with Flyway migrations and `ddl-auto=validate`. These exercise literal/case-insensitive matching, visibility, combined filters, stable ordering, paging/counts, full variant ranges, unmatched queries and invalid parameters. Unit tests verify exact public service request serialization and URL normalization. Browser fixtures now apply search filters instead of returning a preselected empty response, while live browser evidence is recorded in the MR validation.
 

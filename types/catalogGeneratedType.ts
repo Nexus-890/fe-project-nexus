@@ -7,7 +7,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List categories as a flat page
+         * @description Filter nondeleted categories by accent-insensitive and case-insensitive name or slug, direct parent and exact level. SQL wildcard characters in q are literal.
+         */
+        get: operations["listFlatCategories"];
         put?: never;
         /**
          * Create a category
@@ -77,7 +81,7 @@ export interface paths {
         };
         /**
          * Search visible products with filters and stable ordering
-         * @description Only ACTIVE/nondeleted products. q is a trimmed case-insensitive literal product-title substring (SQL wildcard characters are literal). Filters combine with AND before pagination. Relevance ranks exact title, title prefix, then substring, newest first within each rank. Every ordering ends with UUID ascending. Price ordering uses the lowest SKU price, null prices last. maxPrice requires at least one SKU at or below the ceiling and retains the full min/max response range. listingType maps to persisted auctionEnable, not active auction state. An unmatched search returns empty data[] and zero totals. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
+         * @description Legacy compatibility endpoint for existing title-substring clients. Buyer frontend search and browsing use GET /api/v1/products/search for accent-insensitive full-text name/description matching. This endpoint retains its original matching and sort parameters. Only ACTIVE/nondeleted products. q is a trimmed case-insensitive literal product-title substring (SQL wildcard characters are literal). Filters combine with AND before pagination. Relevance ranks exact title, title prefix, then substring, newest first within each rank. Every ordering ends with UUID ascending. Price ordering uses the lowest SKU price, null prices last. maxPrice requires at least one SKU at or below the ceiling and retains the full min/max response range. listingType maps to persisted auctionEnable, not active auction state. An unmatched search returns empty data[] and zero totals. Access: public (a supplied invalid bearer token is rejected). Ownership/business restriction: None.
          */
         get: operations["listProducts"];
         put?: never;
@@ -115,6 +119,26 @@ export interface paths {
          * @description Sets deletedAt. Product order references cause409 unless allow-product-delete-with-order is enabled. A second delete returns404. Access: requires PRODUCT.DELETE. Additional role requirement: SELLER OR ADMIN. Ownership/business restriction: Owner required, including ADMIN; ADMIN does not bypass ownership for delete.
          */
         delete: operations["deleteProduct"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search public products
+         * @description Canonical buyer frontend search and browsing endpoint. Find a phrase in the name or description of nondeleted ACTIVE products, ignoring accents and case. The final normalized word is a prefix, so iph matches iPhone and ao th matches Áo thun. Earlier words remain complete and adjacent in the same field. Query operators are treated as literal input, and punctuation-only queries return no matches. An empty q browses the filtered catalog. Price filters require the same ACTIVE SKU to satisfy every supplied bound (inclusive); inactive variants do not match. Displayed minPrice/maxPrice retain the full ACTIVE variant range. Price sort uses the lowest ACTIVE SKU price, with unpriced products last. listingType filters persisted auctionEnable, not live auction state. The legacy GET /api/v1/products retains literal title-substring matching for compatibility; new clients use this endpoint. Relevance weights name matches above description matches. Remaining ties use newest and ID.
+         */
+        get: operations["searchProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -579,6 +603,16 @@ export interface components {
             data: components["schemas"]["Product"][];
             page: components["schemas"]["PageInfo"];
         };
+        FlatCategoryPage: {
+            code: number;
+            message: string;
+            data: components["schemas"]["Category"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        OwnerProduct: components["schemas"]["Product"] & {
+            description: string | null;
+            auctionEnable: boolean;
+        };
         ListOwnProductsResponse: {
             /**
              * @description Numeric success code; omitted or null values default to 0 during response construction. Explicit values are preserved.
@@ -590,7 +624,7 @@ export interface components {
              * @default response success
              */
             message: string;
-            data: components["schemas"]["Product"][];
+            data: components["schemas"]["OwnerProduct"][];
             page: components["schemas"]["PageInfo"];
         };
         ChangeProductStatusResponse: {
@@ -681,13 +715,51 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        CatalogSearchPage: number;
+        CatalogSearchSize: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listFlatCategories: {
+        parameters: {
+            query?: {
+                q?: string;
+                parentId?: string;
+                level?: number;
+                page?: components["parameters"]["CatalogSearchPage"];
+                size?: components["parameters"]["CatalogSearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category page ordered by name and ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlatCategoryPage"];
+                };
+            };
+            /** @description Invalid query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     createCategory: {
         parameters: {
             query?: never;
@@ -2470,6 +2542,44 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    searchProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+                categoryId?: string;
+                listingType?: "all" | "buy-now" | "auction";
+                minPrice?: number;
+                maxPrice?: number;
+                sort?: "relevance" | "price_asc" | "price_desc" | "newest";
+                page?: components["parameters"]["CatalogSearchPage"];
+                size?: components["parameters"]["CatalogSearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product search page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListProductsResponse"];
+                };
+            };
+            /** @description Invalid parameters or minimum price above maximum price */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

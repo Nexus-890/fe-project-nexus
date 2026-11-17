@@ -9,7 +9,7 @@ export const getCatalogMockFetch = (path: string): typeof globalThis.fetch | und
   if ((productMock || cartMock) && process.env.NODE_ENV === "production") {
     throw new Error("Catalog and cart mocks are disabled in production.");
   }
-  if (!(productMock && /^\/api\/v1\/products\/[^/]+$/.test(path))
+  if (!(productMock && /^\/api\/v1\/products\/(?!search$|mine$)[^/]+$/.test(path))
     && !(cartMock && path === "/api/v1/carts/me/items")) return undefined;
   return async (input, init) => {
     if (init?.signal?.aborted) throw new DOMException("Request canceled", "AbortError");

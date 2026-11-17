@@ -241,7 +241,7 @@ const server = createServer(async (req, res) => {
       },
     });
   }
-  if (url.pathname === "/api/v1/products") {
+  if (url.pathname === "/api/v1/products/search") {
     const categoryId = url.searchParams.get("categoryId");
     const page = Number(url.searchParams.get("page") || 0);
     const size = Number(url.searchParams.get("size") || 20);
@@ -255,13 +255,21 @@ const server = createServer(async (req, res) => {
         : backendProducts.filter(
             (entry) => !categoryId || entry.categoryId === categoryId,
           );
-    const filtered = candidates.filter((entry) => entry.name.toLowerCase().includes(keyword)
+    // UI fixture only; PostgreSQL integration tests establish the full-text contract.
+    const words = (value) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+    const phrase = words(keyword);
+    const matches = (value) => {
+      const tokens = words(value ?? "");
+      return phrase.length === 0 ? !keyword : tokens.some((_, index) => phrase.every((word, offset) =>
+        offset === phrase.length - 1 ? tokens[index + offset]?.startsWith(word) : tokens[index + offset] === word));
+    };
+    const filtered = candidates.filter((entry) => (matches(entry.name) || matches(entry.description))
       && (listingType === "all" || entry.auctionEnable === (listingType === "auction"))
       && (ceiling === Infinity || (entry.minPrice !== null && entry.minPrice <= ceiling)));
     filtered.sort((a, b) => {
-      if (sort.startsWith("price,")) {
+      if (sort.startsWith("price_")) {
         if (a.minPrice === null || b.minPrice === null) return a.minPrice === b.minPrice ? a.id.localeCompare(b.id) : a.minPrice === null ? 1 : -1;
-        return (sort === "price,asc" ? a.minPrice - b.minPrice : b.minPrice - a.minPrice) || a.id.localeCompare(b.id);
+        return (sort === "price_asc" ? a.minPrice - b.minPrice : b.minPrice - a.minPrice) || a.id.localeCompare(b.id);
       }
       const rank = (entry) => entry.name.toLowerCase() === keyword ? 0 : entry.name.toLowerCase().startsWith(keyword) ? 1 : 2;
       return (sort === "relevance" && keyword ? rank(a) - rank(b) : 0)
