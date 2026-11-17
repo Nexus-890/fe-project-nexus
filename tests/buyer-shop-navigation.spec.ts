@@ -29,6 +29,8 @@ for (const width of [375, 768]) {
     await page.keyboard.press("Tab");
     await expect(navigation.getByRole("link", { name: "My orders", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(navigation.getByRole("link", { name: "My vouchers", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(navigation.getByRole("link", { name: "My Bids", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(navigation).toHaveCount(0);

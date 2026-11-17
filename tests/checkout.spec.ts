@@ -104,6 +104,7 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
       provinceCode: "202", wardCode: "20308", countryCode: "VN",
     },
     paymentMethod: "SEPAY",
+    voucherCodes: [],
   });
   expect(actual.requests.filter((entry) => /\/shipping\/|\/checkout\/|\/carts\/|\/users\/me/.test(entry.path)).every((entry) => entry.authorized)).toBe(true);
   expect(actual.rejectedAuth).toBe(0);

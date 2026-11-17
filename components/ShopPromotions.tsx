@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Truck, Zap } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Truck, Zap } from "lucide-react";
 import ProductImage from "@/components/ProductImage";
 import { sortProductImages } from "@/components/productImageUtils";
 import type { ProductSummary } from "@/types/catalogResponseType";
@@ -12,16 +12,9 @@ const campaigns = [
   { eyebrow: "THE TECH EDIT", title: "Upgrade time.", text: "Explore phones, audio and everyday essentials from the Nexus community." },
   { eyebrow: "FIND SOMETHING YOU LOVE", title: "Made for you.", text: "From timeless classics to this season’s picks. Your next discovery starts here." },
 ];
-const vouchers = [
-  { value: "50K", detail: "Min. spend 500.000 ₫", code: "NEXUS50" },
-  { value: "25K", detail: "Min. spend 250.000 ₫", code: "WELCOME25" },
-  { value: "15%", detail: "Audio · max 100.000 ₫", code: "AUDIO15" },
-  { value: "FREE", detail: "Shipping voucher", code: "FREESHIP" },
-];
 
 function ShopPromotions({ products }: { products: ProductSummary[] }) {
   const [slide, setSlide] = useState(0);
-  const [claimed, setClaimed] = useState<string[]>([]);
   const campaign = campaigns[slide];
   return (
     <>
@@ -61,18 +54,6 @@ function ShopPromotions({ products }: { products: ProductSummary[] }) {
             <a href="#vouchers" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary">Discover vouchers <ArrowRight size={15} className="ml-2" /></a>
           </div>
         </div>
-      </section>
-      <section id="vouchers" aria-label="Shop vouchers" className="space-y-2">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {vouchers.map((voucher) => {
-            const saved = claimed.includes(voucher.code);
-            return <div key={voucher.code} className="flex min-w-0 overflow-hidden rounded-sm border border-orange-200">
-              <div className="flex w-20 shrink-0 flex-col items-center justify-center border-r-2 border-dashed border-orange-100 bg-primary p-3 text-primary-foreground"><strong className="text-xl">{voucher.value}</strong><span className="text-[10px]">{voucher.value === "FREE" ? "SHIP" : "OFF"}</span></div>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-1 p-2"><div className="min-w-0 text-[11px] leading-4"><p>{voucher.detail}</p><p className="text-muted-foreground">{voucher.code}</p></div><button type="button" aria-label={`${saved ? "Remove" : "Save"} ${voucher.code} sample voucher`} aria-pressed={saved} onClick={() => setClaimed((current) => saved ? current.filter((code) => code !== voucher.code) : [...current, voucher.code])} className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm px-2 text-xs font-semibold ${saved ? "bg-muted text-primary" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}>{saved ? <Check size={17} aria-hidden="true" /> : "Claim"}</button></div>
-            </div>;
-          })}
-        </div>
-        <p className="text-[11px] text-muted-foreground" role="status">Sample offers · saved for this visit. Voucher discounts are not applied at checkout.</p>
       </section>
     </>
   );

@@ -70,11 +70,10 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await page.getByRole("button", { name: "Next campaign", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Upgrade time.", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Previous campaign", exact: true }).click();
-  await page.getByRole("button", { name: "Save NEXUS50 sample voucher", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Remove NEXUS50 sample voucher", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("region", { name: "Available vouchers", exact: true })).toContainText("No claimable vouchers right now");
   expect(
     apiRequests.every(
-      (url) => ["/api/v1/categories/tree", "/api/v1/products/search", "/api/v1/auctions"].includes(new URL(url).pathname),
+      (url) => ["/api/v1/categories/tree", "/api/v1/products/search", "/api/v1/auctions", "/api/v1/vouchers"].includes(new URL(url).pathname),
     ),
   ).toBe(true);
   const initialApiRequests = [...apiRequests];

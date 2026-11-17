@@ -49,6 +49,7 @@ function OrderReceipt({ order, showProgress }: { order: OrderDetail; showProgres
     <dl className="mt-4 border-t border-border pt-4 text-sm">
       <div data-testid="order-receipt-total" className="flex justify-between gap-5 font-semibold"><dt>Total</dt><dd className="font-mono tabular-nums text-primary">{formatVND(order.totalAmount)}</dd></div>
       {order.breakdown && <OrderPriceRows breakdown={order.breakdown} muted />}
+      {order.vouchers?.map((v) => <div key={v.code} className="mt-2 flex flex-wrap justify-between gap-2 text-xs"><dt className="break-all font-mono">{v.code}</dt><dd>−{formatVND(String(v.discountAmount))}</dd></div>)}
     </dl>
     {showProgress && <OrderProgress status={order.status} />}
   </aside>;

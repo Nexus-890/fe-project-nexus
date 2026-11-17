@@ -6,6 +6,7 @@ import {
   requestApi,
 } from "../configs/api";
 import { multiplyCartMoney, sumCartMoney } from "../features/cartUtils";
+import { parseVoucherQuotes } from "./promotionService";
 import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { ApiResponse } from "../types/commonResponseType";
@@ -132,6 +133,7 @@ export const parseCheckoutPreview = (value: unknown): CheckoutPreview => {
     discountAmount: parseMoney(value.discountAmount),
     total: parseMoney(value.total),
     issues: value.issues.map(parseCheckoutIssue),
+    ...(value.vouchers === undefined ? {} : { vouchers: parseVoucherQuotes(value.vouchers) }),
   };
   if (
     new Set(preview.items.map((item) => item.itemId)).size !== preview.items.length ||
@@ -170,6 +172,7 @@ const createOrderBody = (
       countryCode,
     },
     paymentMethod: "SEPAY",
+    ...(destination.voucherCodes === undefined ? {} : { voucherCodes: [...destination.voucherCodes] }),
   };
 };
 

@@ -35,6 +35,8 @@ export function sellerAuctionHref(roles: readonly BackofficeRole[], reference?: 
 
 export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenuItem[] {
   const items: BackofficeMenuItem[] = [];
+  if (roles.includes("ADMIN")) items.push({ label: "Promotions", href: "/backoffice/promotions" });
+  if (roles.includes("ADMIN") || roles.includes("SELLER")) items.push({ label: "Vouchers", href: "/backoffice/vouchers" });
   if (roles.includes("SELLER")) items.push(
     { label: "Products", href: "/backoffice/products" },
     ...(resolveAuctionWorkspace(roles) === "seller" ? [{ label: "Auctions", href: "/backoffice/auctions" }] : []),

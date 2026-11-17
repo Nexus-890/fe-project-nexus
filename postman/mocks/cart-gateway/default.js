@@ -204,6 +204,8 @@ const server = http.createServer(async (req, res) => {
   if ((path === "/v1/users/me" || path.startsWith(cartPath)) && !authenticated) {
     return json(res, { title: "Unauthorized", status: 401 }, 401);
   }
+  if (path === "/v1/vouchers/me") return cartResponse(res, [], 200, { number: 0, size: 10, totalElements: 0, totalPages: 0 });
+  if (path === "/v1/carts/me/pricing") { const current = await pm.state.get(stateKey("cart")) || cart(); const subtotal = current.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return cartResponse(res, { subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] }); }
   // @endpoint GET /v1/users/me
   if (path === "/v1/users/me" && req.method === "GET") return cartResponse(res, user);
   if (path === "/v1/categories/tree") {

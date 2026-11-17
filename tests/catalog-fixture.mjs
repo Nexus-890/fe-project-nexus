@@ -117,6 +117,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith("/api/v1/auth/"))
     return forwardSession(req, res, url).catch(() => json(res, { title: "Bad gateway", status: 502 }, 502));
   if (req.method === "OPTIONS") return json(res, {});
+  if (url.pathname === "/api/v1/vouchers") return json(res, { ...success([]), page: { number: 0, size: 4, totalElements: 0, totalPages: 0 } });
   if (url.pathname === "/health") return json(res, {});
   if (url.pathname === "/api/v1/auctions") return json(res, {
     ...success([{ id: "auction-1", productId: "1", title: "Vintage watch", imageUrl: null, currentPrice: 250000, bidCount: 12, currency: "VND", endAt: new Date(Date.now() + 7200000).toISOString() }]),

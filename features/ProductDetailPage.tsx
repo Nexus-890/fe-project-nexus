@@ -22,6 +22,7 @@ import type { ProductSku } from "@/types/catalogResponseType";
 import SKUSelector from "@/components/SKUSelector";
 import QuantityPicker from "@/components/QuantityPicker";
 import ProductGallery from "@/components/ProductGallery";
+import ClaimableVouchers from "./ClaimableVouchers";
 import SellerReputation from "./SellerReputation";
 
 interface ProductDetailPageProps {
@@ -274,6 +275,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
           <SellerReputation sellerId={detail.sellerId} />
         </section>
       </section>
+      <ClaimableVouchers key={`${sessionId}-${detail.id}`} productId={detail.id} />
       <ProductInformationTabs product={detail} />
       <section aria-label="You might also like" className="mt-8 space-y-5"><h2 className="text-heading-24">You might also like</h2>{recommendations.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading recommendations…</p> : recommendations.isError ? <div role="alert" className="space-y-3 rounded-sm border border-border p-4 text-sm"><p>Unable to load recommendations.</p><button type="button" onClick={() => void recommendations.refetch()} disabled={recommendations.isFetching} className="min-h-11 rounded-sm border border-border px-3">Retry recommendations</button></div> : recommendations.data?.content.some((item) => item.id !== detail.id) ? <ul className="grid list-none grid-cols-1 gap-4 p-0 min-[480px]:grid-cols-2 lg:grid-cols-4">{recommendations.data.content.filter((item) => item.id !== detail.id).slice(0, 4).map((item) => <li key={item.id} className="min-w-0"><ProductCard product={item} /></li>)}</ul> : <p className="text-sm text-muted-foreground">More finds are on the way. <Link href="/search" className="inline-flex min-h-11 items-center text-primary">Browse all products</Link></p>}</section>
     </div>

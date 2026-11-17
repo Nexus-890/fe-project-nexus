@@ -208,6 +208,8 @@ const server = http.createServer(async (req, res) => {
     await save();
     return problem(res, 401, "UNAUTHENTICATED", "A valid access token is required.");
   }
+  if (url.pathname === "/v1/vouchers/me") return json(res, list([]));
+  if (url.pathname === "/v1/carts/me/pricing") { const subtotal = (await currentItems()).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return json(res, envelope({ subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] })); }
   if (url.pathname === "/v1/users/me") {
     await save();
     return json(res, envelope(options.emptyProfile ? { ...user, fullName: "", phone: "", address: null } : user));

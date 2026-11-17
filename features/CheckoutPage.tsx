@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, LockKeyhole, QrCode, Truck } from "lucide-react";
 import AddressForm from "../components/AddressForm";
 import SavedAddressPicker from "../components/SavedAddressPicker";
+import VoucherPicker, { VoucherQuoteResults } from "./VoucherPicker";
+import { useVoucherSelection } from "./useVoucherSelection";
 import CheckoutSummary from "./CheckoutSummary";
 import CheckoutOrderFeedback from "./CheckoutOrderFeedback";
 import { formatVND } from "../components/formatPrice";
@@ -101,9 +103,11 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     service: (signal) => getWards(values.provinceCode, { context: requestContext, signal }),
   }, { enabled: Boolean(values.provinceCode), retry: false });
 
-  const destination = getCheckoutDestination(values,
+  const { codes } = useVoucherSelection();
+  const shippingDestination = getCheckoutDestination(values,
     provinces.isError ? [] : provinces.data ?? [],
     wards.isError ? [] : wards.data ?? []);
+  const destination = shippingDestination ? { ...shippingDestination, voucherCodes: codes } : null;
   const cartSignature = JSON.stringify(items);
   const preview = useApiQuery({
     queryKey: queryKeys.checkout.preview(sessionId, cartSignature, destination), meta,
@@ -121,7 +125,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   });
   const quote = destination && !preview.isFetching && !preview.isError ? preview.data : undefined;
   const addressReady = destination !== null;
-  const canContinue = Boolean(quote && quote.shippingFee !== null && !quote.issues.length);
+  const canContinue = Boolean(quote && quote.shippingFee !== null && !quote.issues.length && !(quote.vouchers?.some((v) => !v.applied)));
   const ready = reviewedAddress === JSON.stringify(destination) && addressReady;
   const order = useCheckout(destination, ready && canContinue, onAttemptStart);
   const saving = useRef<{ sessionId: number; controller: AbortController; input: AddressBookInput } | null>(null);
@@ -215,6 +219,8 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
             {saveMutation.error && saveMutation.error.kind !== "aborted" && <p role="alert" className="mt-2 break-words text-danger">{saveMutation.error.detail || saveMutation.error.title}</p>}
           </div>}
           {ready && <p role="status" className="rounded-sm border border-border bg-muted p-4 text-sm">Address ready. Review the delivery fee and order total below.</p>}
+          <VoucherPicker disabled={order.addressLocked} cartSignature={cartSignature} onChange={() => { order.resetAfterEdit(); setReviewedAddress(null); }} />
+          {quote?.vouchers && <VoucherQuoteResults quotes={quote.vouchers} />}
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="delivery-title">
             <h2 id="delivery-title" className="text-sm font-semibold">2. Delivery</h2>
             <div className={`mt-4 flex items-start gap-3 rounded-sm border p-4 ${canContinue ? "border-primary" : "border-border"}`}>

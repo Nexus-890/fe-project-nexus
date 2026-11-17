@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, Heart, ShoppingBag, Store } from "lucide-react";
 import CartLine from "../components/CartLine";
-import CartSummary from "../components/CartSummary";
+import CartPromotionSummary from "./CartPromotionSummary";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
@@ -154,7 +154,8 @@ function CartContents() {
               <ArrowLeft size={16} aria-hidden="true" />Continue shopping
             </Link>
           </div>
-          <CartSummary
+          <CartPromotionSummary
+            cartSignature={JSON.stringify(items)}
             quantity={quantity}
             subtotal={getCartSubtotal(items)}
             pending={pending}
