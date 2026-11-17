@@ -260,7 +260,8 @@ const server = createServer(async (req, res) => {
     const phrase = words(keyword);
     const matches = (value) => {
       const tokens = words(value ?? "");
-      return phrase.length === 0 ? !keyword : tokens.some((_, index) => phrase.every((word, offset) => tokens[index + offset] === word));
+      return phrase.length === 0 ? !keyword : tokens.some((_, index) => phrase.every((word, offset) =>
+        offset === phrase.length - 1 ? tokens[index + offset]?.startsWith(word) : tokens[index + offset] === word));
     };
     const filtered = candidates.filter((entry) => (matches(entry.name) || matches(entry.description))
       && (listingType === "all" || entry.auctionEnable === (listingType === "auction"))

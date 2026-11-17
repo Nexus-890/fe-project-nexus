@@ -250,6 +250,7 @@ test("catalog/cart dev transports model numeric wire money and honor abort", asy
     process.env.NEXT_PUBLIC_PRODUCT_DETAIL_MOCK = "true";
     process.env.NEXT_PUBLIC_CART_MOCK = "true";
     assert.equal(getCatalogMockFetch("/api/v1/products/search"), undefined);
+    assert.equal(getCatalogMockFetch("/api/v1/products/mine"), undefined);
     const productFetch = getCatalogMockFetch("/api/v1/products/mock-id");
     assert.ok(productFetch);
     const productResponse = await productFetch(

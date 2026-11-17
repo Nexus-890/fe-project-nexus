@@ -361,14 +361,14 @@ test("header category selection reaches the product API and All Categories clear
   const categoryPicker = page.getByRole("combobox", { name: "Search category" });
   await categoryPicker.click();
   await page.getByRole("option", { name: "Headphones", exact: true }).click();
-  await page.getByRole("textbox", { name: "Search for anything" }).fill("Product");
+  await page.getByRole("textbox", { name: "Search for anything" }).fill("Product 1");
   const categoryRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return url.pathname === "/api/v1/products/search" && url.searchParams.get("categoryId") === "headphones";
   });
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await categoryRequest;
-  await expect(page).toHaveURL(/\/search\?q=Product&category=headphones$/);
+  await expect(page).toHaveURL(/\/search\?q=Product\+1&category=headphones$/);
   await expect(page.getByRole("article")).toHaveCount(12);
   await page.reload();
   await expect(categoryPicker).toContainText("Headphones");

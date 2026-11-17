@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { searchHref } from "../features/catalogUtils";
 import { readSearchState, searchFilterChips, SEARCH_MAX_PRICE } from "../features/searchUtils";
+import { SEARCH_SORT, isShopSort } from "../types/catalogRequestType";
+
+test("URL sort validation shares the complete typed search sort mapping", () => {
+  for (const value of Object.keys(SEARCH_SORT)) {
+    assert.equal(isShopSort(value), true);
+    assert.equal(readSearchState({ sort: value }).sort, value);
+  }
+  for (const value of ["unknown", "toString", "__proto__"]) {
+    assert.equal(isShopSort(value), false);
+    assert.equal(readSearchState({ sort: value }).sort, "relevance");
+  }
+});
 
 test("search state round-trips all filters and safely normalizes untrusted URL values", () => {
   const state = readSearchState({

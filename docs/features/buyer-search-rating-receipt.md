@@ -1,5 +1,8 @@
 # Buyer search, ratings and receipt confirmation — #220 review
 
+Search keeps earlier words as an adjacent phrase and treats the last normalized word as a prefix: `iph` finds `iPhone`, `ao th` finds `Áo thun`, and `Product 1` finds `Product 100`. Punctuation is literal input. `ShopSort`, the typed API sort map and URL validation share `catalogRequestType.ts`; no legacy listProducts type supplies the sort.
+
+
 Buyer search now uses `/api/v1/products/search` from #215, including listingType. Existing URL sort choices are mapped by catalogService; `/api/v1/products` is a legacy compatibility endpoint. Full-text ignores accents and searches name or description.
 
 The review of `0174be82` found that URL state and fixtures did not establish real

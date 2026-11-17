@@ -1,5 +1,8 @@
 # Catalog browsing and product detail
 
+Search keeps earlier words as an adjacent phrase and treats the last normalized word as a prefix: `iph` finds `iPhone`, `ao th` finds `Áo thun`, and `Product 1` finds `Product 100`. Punctuation is literal input. `ShopSort`, the typed API sort map and URL validation share `catalogRequestType.ts`; no legacy listProducts type supplies the sort.
+
+
 ## Routes and responsibilities
 
 | Route | Behavior |

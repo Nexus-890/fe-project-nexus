@@ -14,6 +14,7 @@ import type {
   ShippingParcel,
 } from "../types/catalogResponseType";
 import type { ProductFilters } from "../types/catalogRequestType";
+import { SEARCH_SORT } from "../types/catalogRequestType";
 
 export const normalizeMoney = (value: unknown): string | null => {
   if (typeof value === "string")
@@ -196,9 +197,7 @@ export const getProducts = async (
       ...options,
       params: {
         ...filters,
-        sort: filters.sort === "price,asc" ? "price_asc"
-          : filters.sort === "price,desc" ? "price_desc"
-            : filters.sort === "createdAt,desc" ? "newest" : "relevance",
+        sort: SEARCH_SORT[filters.sort ?? "relevance"],
       },
       auth: false,
     }),
