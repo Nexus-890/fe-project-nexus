@@ -27,13 +27,57 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List and filter seller applications for Admin
+         * @description Issue-defined ADMIN operation. This proposal uses the same complete application DTO as the buyer own read, inside the Nexus data[] and sibling page envelope. Backend must enforce ADMIN independently of the UI. No owner or buyer-wide list is exposed to buyers or Support Staff.
+         */
+        get: operations["listSellerApplications"];
         put?: never;
         /**
          * Submit or resubmit the buyer’s seller application
          * @description Issue-defined BUYER operation. Persist by JWT subject; if current record is REJECTED, update that record with the supplied values, set PENDING, clear reason and retain id. PENDING or ACTIVE returns SELLER_APPLICATION_EXISTS (409). Successful response uses the same full DTO as the own read. Admin list/approve/reject remain defined by issue #210 and #227.
          */
         post: operations["submitSellerApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/applications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a pending application and grant SELLER
+         * @description ADMIN only. Set ACTIVE and assign SELLER in Keycloak, retaining existing roles. Buyer needs a new sign-in to receive seller access. Return the full updated resource. No longer PENDING returns SELLER_APPLICATION_NOT_PENDING (409). The POST has no request body.
+         */
+        post: operations["approveSellerApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/applications/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a pending application with buyer-visible feedback
+         * @description ADMIN only. Persist nonblank reason, set REJECTED and return the full updated resource. A REJECTED applicant may resubmit. No longer PENDING returns SELLER_APPLICATION_NOT_PENDING (409).
+         */
+        post: operations["rejectSellerApplication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -80,6 +124,23 @@ export interface components {
             detail?: string;
         } & {
             [key: string]: unknown;
+        };
+        RejectSellerApplicationInput: {
+            reason: string;
+        };
+        PageInfo: {
+            number: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        SellerApplicationListResponse: {
+            /** @example 0 */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["SellerApplication"][];
+            page: components["schemas"]["PageInfo"];
         };
     };
     responses: never;
@@ -129,6 +190,66 @@ export interface operations {
             };
             /** @description INTERNAL_ERROR */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSellerApplications: {
+        parameters: {
+            query?: {
+                status?: "PENDING" | "ACTIVE" | "REJECTED";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of applications, filtered before pagination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerApplicationListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description UNAUTHENTICATED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description FORBIDDEN: ADMIN role required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -197,6 +318,162 @@ export interface operations {
                 };
             };
             /** @description SELLER_APPLICATION_EXISTS */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    approveSellerApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete persisted application after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerApplicationResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description UNAUTHENTICATED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description FORBIDDEN: ADMIN role required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SELLER_APPLICATION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SELLER_APPLICATION_NOT_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    rejectSellerApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectSellerApplicationInput"];
+            };
+        };
+        responses: {
+            /** @description Complete persisted application after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerApplicationResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description UNAUTHENTICATED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description FORBIDDEN: ADMIN role required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SELLER_APPLICATION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SELLER_APPLICATION_NOT_PENDING */
             409: {
                 headers: {
                     [name: string]: unknown;

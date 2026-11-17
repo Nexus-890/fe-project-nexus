@@ -5,6 +5,7 @@ import openapiTS, { astToString } from "openapi-typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const integrationSpecs = {
+  "admin-user-211-snapshot": { path: "../docs/api/admin-user-211.openapi.yaml", status: "the unmerged #211 snapshot, not develop" },
   "account-210-snapshot": { path: "../docs/api/account-210.openapi.json", status: "the unmerged #210 snapshot, not develop" },
   "seller-application-210-proposal": { path: "../docs/api/seller-application-210.openapi.json", status: "the proposed #210 seller contract, not a delivered API" },
 };
@@ -23,6 +24,7 @@ for (const [name, output] of [
   ["rating-service", "ratingGeneratedType.ts"],
   ["account-210-snapshot", "account210GeneratedType.ts"],
   ["seller-application-210-proposal", "sellerApplication210GeneratedType.ts"],
+  ["admin-user-211-snapshot", "adminUser211GeneratedType.ts"],
 ]) {
   const integration = integrationSpecs[name];
   const spec = new URL(
