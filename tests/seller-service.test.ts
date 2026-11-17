@@ -15,7 +15,7 @@ test("seller listing, draft creation and publication use protected methods and e
     const data = url.pathname.endsWith("mine") ? [product] : product;
     return Response.json({ code: 0, message: "response success", data, ...(Array.isArray(data) ? { page: { number: 2, size: 10, totalElements: 21, totalPages: 3 } } : {}) }, { status: init?.method === "POST" ? 201 : 200 });
   } };
-  const list = await getSellerProducts(2, undefined, { context });
+  const list = await getSellerProducts(2, {}, { context });
   assert.equal(list.page, 2); assert.equal(list.content[0].minPrice, null);
   await createSellerProduct({ name: "Sample", description: "Text", categoryId: "category-1", auctionEnable: true }, { context });
   await changeSellerProductStatus(product.id, "ACTIVE", { context });

@@ -41,7 +41,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
-  const own = useApiQuery({ queryKey: queryKeys.seller.auctionProducts(auth.sessionId, page), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, "ACTIVE", { context: auth.requestContext, signal }) }, { enabled: !initial, retry: false });
+  const own = useApiQuery({ queryKey: queryKeys.seller.auctionProducts(auth.sessionId, page), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, { status: "ACTIVE", auctionEnable: true }, { context: auth.requestContext, signal }) }, { enabled: !initial, retry: false });
   const product = useApiQuery({ queryKey: queryKeys.seller.auctionProduct(auth.sessionId, productId), meta: { requiresAuth: true }, service: (signal) => getSellerProduct(productId, { context: auth.requestContext, signal }) }, { enabled: Boolean(productId), retry: false });
   const choices = (own.data?.content ?? []).filter((row) => row.status === "ACTIVE" && row.auctionEnable && row.skus.some((sku) => sku.status === "ACTIVE"));
   const selected = product.data;

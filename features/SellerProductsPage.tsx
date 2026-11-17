@@ -35,7 +35,7 @@ function SellerProductsPage() {
   const [tab, setTab] = useState("All");
   const [page, setPage] = useState(0);
   const status = statuses[tab];
-  const result = useApiQuery({ queryKey: queryKeys.seller.listings(auth.sessionId, page, status), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, status, { context: auth.requestContext, signal }) }, { retry: false });
+  const result = useApiQuery({ queryKey: queryKeys.seller.listings(auth.sessionId, page, status), meta: { requiresAuth: true }, service: (signal) => getSellerProductListings(page, { status }, { context: auth.requestContext, signal }) }, { retry: false });
   const rows = result.data?.content ?? [];
   const hrefFor = (id: string) => `/backoffice/products/${encodeURIComponent(id)}`;
   return <>
