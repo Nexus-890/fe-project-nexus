@@ -17,6 +17,7 @@ export type SellerOffer = SellerOfferCandidate & {
 export type SellerOfferState = {
   auctionId: string;
   canOffer: boolean;
+  eligibilityUnavailable: boolean;
   candidate: SellerOfferCandidate | null;
   offers: SellerOffer[];
 };

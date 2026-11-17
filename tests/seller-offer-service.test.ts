@@ -11,8 +11,8 @@ const auctionId = "a2250000-0000-4000-8000-000000000099";
 const bidderId = "b2250000-0000-4000-8000-000000000002";
 const candidate = { bidderId, displayName: "B***B", amount: 4800000 };
 const offer = { ...candidate, id: "c2250000-0000-4000-8000-000000000001", status: "OFFERED", offeredAt: "2026-11-14T03:00:00Z", expiresAt: "2026-11-15T03:00:00Z", respondedAt: null, orderId: null, paymentDueAt: null };
-const initial = { auctionId, canOffer: true, candidate, offers: [] };
-const opened = { auctionId, canOffer: false, candidate: null, offers: [offer] };
+const initial = { auctionId, canOffer: true, eligibilityUnavailable: false, candidate, offers: [] };
+const opened = { auctionId, canOffer: false, eligibilityUnavailable: false, candidate: null, offers: [offer] };
 const envelope = (data: unknown) => ({ code: 0, message: "response success", data });
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
 const listen = async (server: Server) => {
@@ -58,7 +58,22 @@ test("offer parsing rejects mismatched auctions, repeated bidders, wrong prices/
     { ...opened, offers: [{ ...offer, status: "OPEN" }] },
     { ...opened, offers: [{ ...offer, status: ["OFFERED"] }] },
     { ...opened, offers: [{ ...offer, respondedAt: offer.offeredAt }] },
+    { ...opened, eligibilityUnavailable: undefined }, { ...opened, eligibilityUnavailable: "true" },
+    { ...initial, eligibilityUnavailable: true },
   ]) assert.throws(() => parseSellerOfferState(value, auctionId), invalid);
+});
+
+test("seller offer state distinguishes eligibility outage from exhausted bidders and retains history", () => {
+  const expired = { ...offer, status: "EXPIRED" };
+  for (const history of [[], [expired]]) {
+    const outage = parseSellerOfferState({ ...opened, eligibilityUnavailable: true, offers: history }, auctionId);
+    assert.equal(outage.eligibilityUnavailable, true);
+    assert.equal(outage.canOffer, false); assert.equal(outage.candidate, null);
+    assert.equal(outage.offers.length, history.length);
+    const exhausted = parseSellerOfferState({ ...opened, offers: history }, auctionId);
+    assert.equal(exhausted.eligibilityUnavailable, false);
+  }
+  assert.equal(parseSellerOfferState(initial, auctionId).eligibilityUnavailable, false);
 });
 
 test("closed history allows only a different next bidder and accepted history preserves its new order/payment deadline", () => {
@@ -99,6 +114,7 @@ type FixtureEvidence = {
   penalties: { bidderId: string; reason: string }[];
   available: number;
   canOffer: boolean;
+  eligibilityUnavailable: boolean;
   originalWinnerId: string;
   auctionStatus: string;
 };

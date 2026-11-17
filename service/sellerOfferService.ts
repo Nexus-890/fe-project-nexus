@@ -32,6 +32,7 @@ const parseOffer = (value: unknown): SellerOffer => {
 
 export const parseSellerOfferState = (value: unknown, auctionId: string): SellerOfferState => {
   if (!validId(auctionId) || !isRecord(value) || value.auctionId !== auctionId || typeof value.canOffer !== "boolean" ||
+    typeof value.eligibilityUnavailable !== "boolean" ||
     !(value.candidate === null || isRecord(value.candidate)) || !Array.isArray(value.offers)) throw invalid();
   const offers = value.offers.map(parseOffer);
   const candidate = value.candidate === null ? null : parseCandidate(value.candidate);
@@ -40,10 +41,12 @@ export const parseSellerOfferState = (value: unknown, auctionId: string): Seller
     new Set(orderIds).size !== orderIds.length ||
     offers.filter((offer) => offer.status === "OFFERED").length > 1 ||
     value.canOffer !== (candidate !== null) || (value.canOffer && offers.some((offer) => offer.status === "OFFERED")) ||
+    (value.eligibilityUnavailable && (value.canOffer || candidate !== null)) ||
     (candidate && offers.some((offer) => offer.bidderId.toLowerCase() === candidate.bidderId.toLowerCase()))) throw invalid();
   // ACCEPTED describes history. The server can offer again after that order times out;
   // current auction/order eligibility belongs to canOffer, not to a previous response.
-  return { auctionId, canOffer: value.canOffer, candidate, offers: offers.sort((a, b) => Date.parse(b.offeredAt) - Date.parse(a.offeredAt)) };
+  return { auctionId, canOffer: value.canOffer, eligibilityUnavailable: value.eligibilityUnavailable, candidate,
+    offers: offers.sort((a, b) => Date.parse(b.offeredAt) - Date.parse(a.offeredAt)) };
 };
 
 /** Delivered #208 endpoint; current candidacy and stock are always decided by the backend. */
