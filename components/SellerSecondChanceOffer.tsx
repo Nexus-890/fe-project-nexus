@@ -32,7 +32,8 @@ function SellerSecondChanceOffer({ auctionId, auctionTitle, triggerLabel = "Offe
   const key = queryKeys.seller.offers(auth.sessionId, auctionId);
   const state = useApiQuery({ queryKey: key, meta: { requiresAuth: true },
     service: (signal) => getSellerOffers(auctionId, { context: auth.requestContext, signal }),
-  }, { enabled: open && auth.status === "authenticated", retry: false, staleTime: 0, refetchOnMount: "always", refetchOnWindowFocus: false });
+  }, { enabled: auth.status === "authenticated", retry: false, staleTime: 0, refetchOnMount: "always", refetchOnWindowFocus: false,
+    refetchInterval: open ? 5000 : 15000 });
   const mutation = useApiMutation<SellerOfferState, { sessionId: number; controller: AbortController }>({
     mutationKey: ["seller", auth.sessionId, "send-offer", auctionId],
     isCurrent: (variables) => auth.isSessionCurrent(variables.sessionId) && !variables.controller.signal.aborted,
@@ -61,6 +62,8 @@ function SellerSecondChanceOffer({ auctionId, auctionTitle, triggerLabel = "Offe
   const historyOnly = Boolean(current && !current.candidate);
   const canConfirm = current?.canOffer && current.candidate && !state.isFetching && !mutation.isPending && !activeOffer;
   const close = () => { if (!mutation.isPending) { setOpen(false); setConfirmedCandidate(null); } };
+
+  if (current && !current.canOffer && current.offers.length === 0) return null;
 
   return <>
     <button type="button" className={sellerButton} onClick={() => { mutation.reset(); setSent(false); setConfirmedCandidate(null); setOpen(true); }} aria-haspopup="dialog">

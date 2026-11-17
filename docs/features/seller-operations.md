@@ -1,5 +1,11 @@
 # Seller operations (#225)
 
+## Backend #208 integration
+
+The #208 branch delivers the canonical offer operations in `be-project-nexus/docs/api/openapi/auction-service.yaml`; the earlier seller-offers proposal is historical. Seller preview reads candidacy before displaying the action: no eligible bidder and no offer history means no offer button. Preview is read only. Sending asks Inventory to reserve stock before the bidder invitation is delivered. History preserves every accepted/declined/expired round.
+
+Accept uses the buyer endpoints and creates an order asynchronously. An ACCEPTED response has a fresh paymentDueAt but can still have null orderId; both seller and buyer parsers accept this defined state. Buyer shows “Preparing your order” and refreshes offers. Address/payment controls appear only once a real orderId is projected. No order ID is guessed from auctionId or offerId.
+
 The seller auction/sales screens use delivered APIs. Shop profiles, bank accounts and automatic payouts follow the 2026-11-16 versions of issues #257/#261 supplied by the user; second-chance progression follows #208. Those backend implementations are still missing from develop. Production sends real requests and shows unavailable/errors; no fixture is imported by production.
 
 ## Routes and access

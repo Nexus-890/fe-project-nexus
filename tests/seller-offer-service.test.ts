@@ -62,6 +62,9 @@ test("offer parsing rejects mismatched auctions, repeated bidders, wrong prices/
 });
 
 test("closed history allows only a different next bidder and accepted history preserves its new order/payment deadline", () => {
+  assert.equal(parseSellerOfferState({ ...initial, candidate: { ...candidate, amount: 99999999999999 } }, auctionId).candidate?.amount, "99999999999999.00");
+  const pending = parseSellerOfferState({ ...opened, offers: [{ ...offer, status: "ACCEPTED", respondedAt: "2026-11-14T04:00:00Z", paymentDueAt: "2026-11-15T04:00:00Z" }] }, auctionId);
+  assert.equal(pending.offers[0].orderId, null, "order projection can arrive after accept");
   const declined = { ...offer, status: "DECLINED", respondedAt: "2026-11-14T04:00:00Z" };
   const expired = { ...offer, status: "EXPIRED" };
   for (const closed of [declined, expired]) {

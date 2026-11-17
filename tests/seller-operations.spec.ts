@@ -154,6 +154,22 @@ test("accepted offer history survives payment timeout and the seller can offer t
   expect(state.auctionStatus).toBe("SETTLED");
 });
 
+test("seller has no offer button when the timed-out auction has no next bidder", async ({ page, request }) => {
+  let previews = 0;
+  await page.route("**/api/v1/auctions/*/second-chance-offers", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    previews++;
+    await route.fulfill({ response, json: { ...body, data: { ...body.data, canOffer: false, candidate: null, offers: [] } } });
+  });
+  await signIn(page, request, "SELLER", "/backoffice/auctions");
+  await page.getByRole("button", { name: "Payment timeout", exact: true }).click();
+  await expect.poll(() => previews).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Offer to next bidder", exact: true })).toHaveCount(0);
+  const state = await (await request.get(`${api}/test/offers/evidence`)).json();
+  expect(state.data.emails).toHaveLength(0);
+});
+
 test("shop profile and masked default bank release automatic payouts after verification", async ({ page, browser, request }) => {
   await signIn(page, request, "SELLER", "/backoffice/payouts");
   await page.getByLabel("Company name", { exact: true }).fill("Chung Audio Shop");

@@ -146,6 +146,9 @@ test("offer parser rejects incomplete accepted orders and invalid price/window d
     assert.throws(() => parseAuctionOffer({ ...offer, ...changed }));
   }
   assert.equal(parseAuctionOffer({ ...offer, status: "EXPIRED" }).status, "EXPIRED");
+  const pending = parseAuctionOffer({ ...offer, status: "ACCEPTED", paymentDueAt: "2026-11-15T11:00:00Z" });
+  assert.equal(pending.orderId, null, "accepted intent waits for the asynchronously created order");
+  assert.equal(pending.paymentDueAt, "2026-11-15T11:00:00Z");
 });
 
 test("offer action rejects mismatched resource/status and preserves cancellation", async () => {

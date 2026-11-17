@@ -10,7 +10,7 @@ const invalid = () => createInvalidResponseError("Invalid second-chance offer re
 
 const parseCandidate = (value: unknown): SellerOfferCandidate => {
   if (!isRecord(value) || !validId(value.bidderId) || typeof value.displayName !== "string" || !value.displayName.trim() ||
-    typeof value.amount !== "number" || !Number.isFinite(value.amount) || value.amount <= 0 || value.amount >= 1e13 || Number(value.amount.toFixed(2)) !== value.amount) throw invalid();
+    typeof value.amount !== "number" || !Number.isFinite(value.amount) || value.amount <= 0 || value.amount >= 1e17 || Number(value.amount.toFixed(2)) !== value.amount) throw invalid();
   const amount = normalizeMoney(value.amount);
   if (amount === null) throw invalid();
   return { bidderId: value.bidderId, displayName: value.displayName.trim(), amount };
@@ -25,7 +25,7 @@ const parseOffer = (value: unknown): SellerOffer => {
   const responded = value.respondedAt;
   if ((responded !== null && (Date.parse(responded) < Date.parse(value.offeredAt) || Date.parse(responded) > Date.parse(value.expiresAt))) ||
     (["ACCEPTED", "DECLINED"].includes(String(value.status)) !== (responded !== null)) ||
-    (value.status === "ACCEPTED" ? value.orderId === null || value.paymentDueAt === null || Date.parse(value.paymentDueAt) <= Date.parse(responded as string) : value.orderId !== null || value.paymentDueAt !== null)) throw invalid();
+    (value.status === "ACCEPTED" ? value.paymentDueAt === null || Date.parse(value.paymentDueAt) <= Date.parse(responded as string) : value.orderId !== null || value.paymentDueAt !== null)) throw invalid();
   return { ...candidate, id: value.id, status: value.status as SellerOfferStatus, offeredAt: value.offeredAt, expiresAt: value.expiresAt,
     respondedAt: responded, orderId: value.orderId, paymentDueAt: value.paymentDueAt };
 };
@@ -46,7 +46,7 @@ export const parseSellerOfferState = (value: unknown, auctionId: string): Seller
   return { auctionId, canOffer: value.canOffer, candidate, offers: offers.sort((a, b) => Date.parse(b.offeredAt) - Date.parse(a.offeredAt)) };
 };
 
-/** Proposed endpoint: absence/failure remains an API error; there is no production fixture fallback. */
+/** Delivered #208 endpoint; current candidacy and stock are always decided by the backend. */
 export const getSellerOffers = async (auctionId: string, options: ServiceRequestOptions = {}): Promise<SellerOfferState> => {
   if (!validId(auctionId)) throw createInvalidResponseError("A valid auction id is required");
   const { data } = await requestApi("GET", `/api/v1/auctions/${encodeURIComponent(auctionId)}/second-chance-offers`, undefined, { ...options, auth: true });

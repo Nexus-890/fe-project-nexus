@@ -1,5 +1,89 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
+    "/api/v1/auctions/{id}/second-chance-offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview next eligible bidder and read offer history
+         * @description Read only. Never sends an offer/email. Candidate exists only in PAYMENT_TIMEOUT without an OFFERED row. History can contain earlier ACCEPTED offers whose orders later timed out.
+         */
+        get: operations["getSellerSecondChanceOffers"];
+        put?: never;
+        /**
+         * Offer the item to the next eligible bidder
+         * @description No body. Lock auction, select highest valid own bid per bidder, skip all timed-out winners/previously offered/ineligible bidders; stable earliest-bid tie break. One OFFERED per auction. Inventory asynchronously holds one unit; only then bidder email is sent. No eligible bidder returns 409.
+         */
+        post: operations["sendSecondChanceOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/offers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the buyer’s current and past offers
+         * @description JWT-scoped array with sibling page metadata. Sort offeredAt descending then id descending. Includes pending order projections.
+         */
+        get: operations["getMySecondChanceOffers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/offers/{offerId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an unexpired offer and create an auction order asynchronously
+         * @description No body. Requires OFFERED, before expiresAt and stockReady. Commits ACCEPTED/WON/AuctionWon together. Fresh paymentDueAt starts now; orderId remains null until OrderCreated returns. Refresh offers to get the real order ID, then confirm address and pay. A repeated accept returns 409.
+         */
+        post: operations["acceptSecondChanceOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auctions/offers/{offerId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline an unexpired offer without penalty
+         * @description No body. Serializes with accept and expiry. Releases this offer’s hold through the outbox and emails seller; never penalizes bidder. Repeated or late response returns 409.
+         */
+        post: operations["declineSecondChanceOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auctions/mine": {
         parameters: {
             query?: never;
@@ -276,6 +360,84 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PageInfo: {
+            number: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        SecondChanceCandidate: {
+            /** Format: uuid */
+            bidderId: string;
+            /** @description Masked bidder name, never an email. */
+            displayName: string;
+            /** @description Offered bidder’s highest valid bid; JSON number. */
+            amount: number;
+        };
+        SecondChanceOffer: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            auctionId: string;
+            /** Format: uuid */
+            bidderId: string;
+            displayName: string;
+            /** @description Offered bidder’s highest valid bid; JSON number. */
+            amount: number;
+            /** @enum {string} */
+            status: "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+            /** @description Accept is allowed after Inventory confirms the hold; otherwise OFFER_STOCK_PENDING. */
+            stockReady: boolean;
+            /** Format: date-time */
+            offeredAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            respondedAt: string | null;
+            /**
+             * Format: uuid
+             * @description Null until Commerce has created and projected the order. Read the offers again; never infer this ID.
+             */
+            orderId: string | null;
+            /**
+             * Format: date-time
+             * @description Accept time plus configured payment deadline hours. Present even while order creation is pending.
+             */
+            paymentDueAt: string | null;
+            title: string;
+            imageUrl: string | null;
+            /** @enum {string} */
+            currency: "VND";
+        };
+        SecondChanceSellerState: {
+            /** Format: uuid */
+            auctionId: string;
+            canOffer: boolean;
+            candidate: components["schemas"]["SecondChanceCandidate"] | null;
+            offers: components["schemas"]["SecondChanceOffer"][];
+        };
+        SecondChanceSellerResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SecondChanceSellerState"];
+        };
+        SecondChanceOfferResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SecondChanceOffer"];
+        };
+        SecondChanceListResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["SecondChanceOffer"][];
+            page: components["schemas"]["PageInfo"];
+        };
         AuctionState: {
             /** Format: uuid */
             auctionId: string;
@@ -602,6 +764,597 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSellerSecondChanceOffers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current offer state; accepted order creation can still be pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondChanceSellerResponse"];
+                };
+            };
+            /** @description Invalid UUID or page query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_YOURS or AUCTION_FORBIDDEN; missing role/privilege */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_FOUND or AUCTION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description AUCTION_REPUTATION_UNAVAILABLE or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    sendSecondChanceOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current offer state; accepted order creation can still be pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondChanceSellerResponse"];
+                };
+            };
+            /** @description Invalid UUID or page query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_YOURS or AUCTION_FORBIDDEN; missing role/privilege */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_FOUND or AUCTION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description AUCTION_REPUTATION_UNAVAILABLE or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    getMySecondChanceOffers: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current offer state; accepted order creation can still be pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondChanceListResponse"];
+                };
+            };
+            /** @description Invalid UUID or page query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_YOURS or AUCTION_FORBIDDEN; missing role/privilege */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_FOUND or AUCTION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description AUCTION_REPUTATION_UNAVAILABLE or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    acceptSecondChanceOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current offer state; accepted order creation can still be pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondChanceOfferResponse"];
+                };
+            };
+            /** @description Invalid UUID or page query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_YOURS or AUCTION_FORBIDDEN; missing role/privilege */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_FOUND or AUCTION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description AUCTION_REPUTATION_UNAVAILABLE or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    declineSecondChanceOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current offer state; accepted order creation can still be pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondChanceOfferResponse"];
+                };
+            };
+            /** @description Invalid UUID or page query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_YOURS or AUCTION_FORBIDDEN; missing role/privilege */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_NOT_FOUND or AUCTION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description OFFER_AUCTION_NOT_TIMED_OUT, OFFER_ALREADY_OPEN, OFFER_NO_ELIGIBLE_BIDDER, OFFER_EXPIRED, OFFER_ALREADY_RESPONDED or OFFER_STOCK_PENDING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+            /** @description AUCTION_REPUTATION_UNAVAILABLE or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        type: string;
+                        title: string;
+                        status: number;
+                        detail: string;
+                        instance: string;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
     listMyAuctions: {
         parameters: {
             query?: {
