@@ -154,6 +154,64 @@ test("accepted offer history survives payment timeout and the seller can offer t
   expect(state.auctionStatus).toBe("SETTLED");
 });
 
+test("seller has no offer button when the timed-out auction has no next bidder", async ({ page, request }) => {
+  let previews = 0;
+  await page.route("**/api/v1/auctions/*/second-chance-offers", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    previews++;
+    await route.fulfill({ response, json: { ...body, data: { ...body.data, canOffer: false, eligibilityUnavailable: false, candidate: null, offers: [] } } });
+  });
+  await signIn(page, request, "SELLER", "/backoffice/auctions");
+  await page.getByRole("button", { name: "Payment timeout", exact: true }).click();
+  await expect.poll(() => previews).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Offer to next bidder", exact: true })).toHaveCount(0);
+  const state = await (await request.get(`${api}/test/offers/evidence`)).json();
+  expect(state.data.emails).toHaveLength(0);
+});
+
+for (const withHistory of [false, true]) {
+  test(`seller can retry eligibility outage ${withHistory ? "with preserved history" : "before any offer"}`, async ({ page, request }) => {
+    await signIn(page, request, "SELLER", "/backoffice/auctions");
+    await page.getByRole("button", { name: "Payment timeout", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Second-chance offer", exact: true });
+    if (withHistory) {
+      await page.getByRole("button", { name: "Offer to next bidder", exact: true }).click();
+      await expect(dialog.getByRole("region", { name: "Next eligible bidder", exact: true })).toContainText("B***B");
+      await dialog.getByRole("checkbox").check();
+      await dialog.getByRole("button", { name: "Confirm and send offer", exact: true }).click();
+      await expect(dialog.getByText("Awaiting response", { exact: true })).toBeVisible();
+      await request.post(`${api}/test/offer-response`, { data: { status: "DECLINED" } });
+      await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    }
+    expect((await request.post(`${api}/test/offers/eligibility`, { data: { unavailable: true } })).ok()).toBe(true);
+    await page.reload();
+    await page.getByRole("button", { name: "Payment timeout", exact: true }).click();
+    await page.getByRole("button", { name: "Check bidder availability", exact: true }).click();
+    await expect(dialog.getByRole("status").filter({ hasText: "Bidder eligibility could not be checked. Please try again." })).toBeVisible();
+    await expect(dialog.getByText(/No next bidder is currently eligible/)).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Confirm and send offer", exact: true })).toHaveCount(0);
+    if (withHistory) await expect(dialog.getByText("Declined", { exact: true })).toBeVisible();
+    else await expect(dialog.getByText("No offers have been sent.", { exact: true })).toBeVisible();
+    let attempts = 0;
+    await page.route("**/api/v1/auctions/*/second-chance-offers", async (route) => {
+      if (route.request().method() === "GET") attempts++;
+      await route.continue();
+    });
+    await dialog.getByRole("button", { name: "Retry eligibility check", exact: true }).click();
+    await expect.poll(() => attempts).toBeGreaterThan(0);
+    await expect(dialog.getByRole("button", { name: "Retry eligibility check", exact: true })).toBeEnabled();
+    expect((await request.post(`${api}/test/offers/eligibility`, { data: { unavailable: false } })).ok()).toBe(true);
+    await dialog.getByRole("button", { name: "Retry eligibility check", exact: true }).click();
+    await expect(dialog.getByRole("region", { name: "Next eligible bidder", exact: true })).toContainText(withHistory ? "C***C" : "B***B");
+    await expect(dialog.getByRole("button", { name: "Confirm and send offer", exact: true })).toBeDisabled();
+    const state = await (await request.get(`${api}/test/offers/evidence`)).json();
+    expect(state.data.offers).toHaveLength(withHistory ? 1 : 0);
+    expect(state.data.emails).toHaveLength(withHistory ? 1 : 0);
+    expect(state.data.orders).toHaveLength(0);
+  });
+}
+
 test("shop profile and masked default bank release automatic payouts after verification", async ({ page, browser, request }) => {
   await signIn(page, request, "SELLER", "/backoffice/payouts");
   await page.getByLabel("Company name", { exact: true }).fill("Chung Audio Shop");

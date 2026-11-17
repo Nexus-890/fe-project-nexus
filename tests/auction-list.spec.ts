@@ -303,6 +303,32 @@ test("expired offers cannot be accepted and unavailable offer endpoints can be r
   await expect(card.getByText("This offer has expired. There is no penalty.", { exact: true })).toBeVisible();
 });
 
+test("accepted offer waits for its real order projection before showing address/payment", async ({ page, request }) => {
+  await control(request, { sellerOffers: true });
+  let projectOrder = false;
+  let accepted = false;
+  await page.route("**/api/v1/auctions/offers/**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (route.request().method() === "POST" && route.request().url().endsWith("/accept")) accepted = true;
+    if (accepted && !projectOrder) {
+      const rows = Array.isArray(body.data) ? body.data : [body.data];
+      for (const offer of rows) if (offer?.status === "ACCEPTED") offer.orderId = null;
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await signIn(page);
+  const card = page.getByRole("article", { name: offerLabel, exact: true });
+  await card.getByRole("button", { name: "Accept offer", exact: true }).click();
+  await expect(card.getByText("Offer accepted. Preparing your order…", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Confirm address and pay", exact: true })).toHaveCount(0);
+  await expect(card.getByRole("link", { name: "View order", exact: true })).toHaveCount(0);
+  projectOrder = true;
+  await expect(card.getByRole("button", { name: "Confirm address and pay", exact: true })).toBeVisible({ timeout: 22000 });
+  await expect(card.getByRole("link", { name: "View order", exact: true })).toHaveAttribute("href", `/order/${orderId}`);
+  expect((await evidence(request)).offerRequests.filter((call) => call.action === "accept")).toHaveLength(1);
+});
+
 test("list, my bids and offer controls fit the mobile viewport", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/auctions");

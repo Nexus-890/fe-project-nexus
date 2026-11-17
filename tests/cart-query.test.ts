@@ -49,6 +49,7 @@ function mountCart(
     requestContext, accessToken: "test-token", sessionId: 1, isSessionCurrent,
     status: "authenticated", error: null,
     user: {
+      phoneVerifiedAt: null,
       id: "buyer-1", email: "buyer@example.com", fullName: "Buyer", phone: "0900000000",
       roles: ["BUYER"], status: "ACTIVE", gender: null, address: null, dateOfBirth: null,
       createdAt: "2026-10-20T00:00:00Z",

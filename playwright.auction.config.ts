@@ -22,7 +22,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3118",
+      command: "node node_modules/next/dist/bin/next dev --webpack --hostname 127.0.0.1 --port 3118",
       url: "http://127.0.0.1:3118/sign-in",
       reuseExistingServer: false,
       timeout: 120_000,
