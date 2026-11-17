@@ -616,7 +616,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm receipt of a delivered order
-         * @description Requires BUYER and ORDER.VIEW plus buyer ownership, including for callers who also have ADMIN. ShipmentDelivered leaves the order DELIVERED and persists deliveredAt/autoCompleteAt. Confirming locks the order row and moves DELIVERED to COMPLETED, inserts one history row and one OrderCompleted outbox event in the same transaction. Repeating confirmation of an owned COMPLETED order returns it without another history/event. Other statuses return 409 COMMERCE_ORDER_NOT_DELIVERED; another buyer receives 403 before the status check. The automatic job uses the same lock and completion transaction when autoCompleteAt is due. Receipt email, rating and payout consumers remain gated on OrderCompleted. No request body.
+         * @description Requires BUYER and ORDER.VIEW plus buyer ownership, including for callers who also have ADMIN. ShipmentDelivered leaves the order DELIVERED and persists deliveredAt/autoCompleteAt. Confirming locks the order row and moves DELIVERED to COMPLETED with reason 'Buyer confirmed receipt', inserts one history row and one OrderCompleted outbox event in the same transaction. Any status other than DELIVERED, including a repeated confirmation of a COMPLETED order, returns 409 COMMERCE_ORDER_NOT_DELIVERED without another history/event; another buyer receives 403 before the status check. A receipt issue blocks completion with 409 COMMERCE_RECEIPT_ISSUE_OPEN. Every 10 minutes by default, the automatic job uses the same lock and completion transaction when autoCompleteAt is due, with a default waiting period of 3 days. Both completion paths include orderAmount and shippingFee in OrderCompleted. Receipt email, rating and payout consumers remain gated on that event. No request body.
          */
         post: operations["confirmReceipt"];
         delete?: never;
@@ -1368,7 +1368,7 @@ export interface components {
             deliveredAt?: string | null;
             /**
              * Format: date-time
-             * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 7); the scheduler completes due DELIVERED orders. Existing COMPLETED orders are not reopened.
+             * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 3); the scheduler checks every 10 minutes by default and completes due DELIVERED orders without an open receipt issue. Changing the setting affects newly delivered orders; existing persisted deadlines remain unchanged. Existing COMPLETED orders are not reopened.
              */
             autoCompleteAt?: string | null;
             /** @description Buyer-readable reason set from PaymentUnreconciled (#157) when a transfer for this order's checkout could not be applied, for example a payment after the deadline. It never changes status. Null when there is nothing to report. */
@@ -6642,13 +6642,61 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Completed order, including an idempotent replay. */
+            /** @description Updated order in COMPLETED status after the buyer confirms receipt. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "orderId": "68000000-0000-4000-8000-000000000002",
+                     *         "orderGroupId": "68000000-0000-4000-8000-000000000001",
+                     *         "orderNumber": "NX-20261120-00000002",
+                     *         "userId": "68000000-0000-4000-8000-000000000003",
+                     *         "sellerId": "68000000-0000-4000-8000-000000000004",
+                     *         "orderType": "STANDARD",
+                     *         "status": "COMPLETED",
+                     *         "canCancel": false,
+                     *         "createdAt": "2026-11-20T08:00:00Z",
+                     *         "deliveredAt": "2026-11-22T10:00:00Z",
+                     *         "autoCompleteAt": "2026-11-25T10:00:00Z",
+                     *         "subtotal": 300000,
+                     *         "shippingFee": 25000,
+                     *         "discountAmount": 0,
+                     *         "taxAmount": 0,
+                     *         "totalAmount": 325000,
+                     *         "receiptIssueReason": null,
+                     *         "receiptIssueReportedAt": null,
+                     *         "items": [
+                     *           {
+                     *             "orderItemId": "68000000-0000-4000-8000-000000000005",
+                     *             "productId": "68000000-0000-4000-8000-000000000006",
+                     *             "skuId": "68000000-0000-4000-8000-000000000007",
+                     *             "productName": "Phone case",
+                     *             "skuCode": "CASE-BLACK",
+                     *             "imageUrl": null,
+                     *             "quantity": 2,
+                     *             "unitPrice": 150000,
+                     *             "totalPrice": 300000
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["GetOrderResponse"];
+                };
+            };
+            /** @description INVALID_PARAMETER when the order identifier is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Authentication is required. */
@@ -6678,7 +6726,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description COMMERCE_ORDER_NOT_DELIVERED or COMMERCE_RECEIPT_ISSUE_OPEN. */
+            /** @description COMMERCE_ORDER_NOT_DELIVERED (including repeated confirmation) or COMMERCE_RECEIPT_ISSUE_OPEN. */
             409: {
                 headers: {
                     [name: string]: unknown;
