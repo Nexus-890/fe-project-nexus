@@ -10,13 +10,15 @@ import { useAuth } from "../hooks/useAuth";
 import { getCategoryTree } from "../service/catalogService";
 import { createAdminCategory, deleteAdminCategory, getAdminCategory, updateAdminCategory } from "../service/adminCatalogService";
 import type { AdminCategory, CategoryInput } from "../types/adminCatalogType";
-import { flattenAdminCategories, type CategoryChoice } from "./adminCategoryUtils";
+import { CategoryParentPicker } from "../components/CategoryParentPicker";
+import { categorySlug, flattenAdminCategories, type CategoryChoice } from "./adminCategoryUtils";
 import { useAdminAction } from "./useAdminAction";
 
 function CategoryForm({ category, choices, close, created }: { category?: AdminCategory; choices: CategoryChoice[]; close: () => void; created?: (id: string) => void }) {
   const auth = useAuth();
   const [name, setName] = useState(category?.name ?? "");
   const [slug, setSlug] = useState(category?.slug ?? "");
+  const [slugEdited, setSlugEdited] = useState(Boolean(category));
   const [description, setDescription] = useState(category?.description ?? "");
   const [parentId, setParentId] = useState(category?.parentId ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -33,11 +35,9 @@ function CategoryForm({ category, choices, close, created }: { category?: AdminC
       save.run({ name: name.trim(), slug: slug.trim(), description: description.trim() || null, parentId: parentId || null });
     }}>
       <fieldset disabled={busy} className="space-y-5">
-        <label className="block text-sm">Name<input aria-label="Name" className={`${adminInputClass} mt-2`} required maxLength={150} pattern=".*\S.*" value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label className="block text-sm">Slug<input aria-label="Slug" className={`${adminInputClass} mt-2 font-mono`} required maxLength={100} pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers and single hyphens" value={slug} onChange={(event) => setSlug(event.target.value)} /><span className="mt-1 block text-xs text-muted-foreground">Lowercase letters, numbers and hyphens.</span></label>
-        <label className="block text-sm">Parent category<select aria-label="Parent category" className={`${adminInputClass} mt-2`} value={parentId} onChange={(event) => setParentId(event.target.value)}>
-          <option value="">None · top level</option>{choices.filter((choice) => choice.id !== category?.id && !choice.ancestors.includes(category?.id ?? "")).map((choice) => <option key={choice.id} value={choice.id}>{"— ".repeat(choice.depth)}{choice.name}</option>)}
-        </select><span className="mt-1 block text-xs text-muted-foreground">Change the parent to move this category and its children.</span></label>
+        <label className="block text-sm">Name<input aria-label="Name" className={`${adminInputClass} mt-2`} required maxLength={150} pattern=".*\S.*" value={name} onChange={(event) => { setName(event.target.value); if (!slugEdited) setSlug(categorySlug(event.target.value)); }} /></label>
+        <label className="block text-sm">Slug<input aria-label="Slug" className={`${adminInputClass} mt-2 font-mono`} required maxLength={100} pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers and single hyphens" value={slug} onChange={(event) => { setSlug(event.target.value); setSlugEdited(true); }} /><span className="mt-1 block text-xs text-muted-foreground">{category ? "Changing the slug changes the category URL." : "Generated from the name. Edit it only if you need a different URL."}</span></label>
+        <div className="block text-sm"><span>Parent category</span><CategoryParentPicker label="Parent category" value={parentId} onChange={setParentId} choices={choices.filter((choice) => choice.id !== category?.id && !choice.ancestors.includes(category?.id ?? ""))} /><span className="mt-1 block text-xs text-muted-foreground">Change the parent to move this category and its children.</span></div>
         <label className="block text-sm">Description<textarea aria-label="Description" rows={4} maxLength={1000} className={`${adminInputClass} mt-2 resize-y`} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
         {category && <dl className="grid gap-1 text-xs text-muted-foreground"><dt>Category path</dt><dd className="break-all font-mono">{category.path}</dd></dl>}
         <div className="flex flex-wrap justify-between gap-3 border-t border-border pt-5">

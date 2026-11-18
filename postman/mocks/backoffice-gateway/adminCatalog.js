@@ -77,10 +77,10 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
       else { Object.assign(row, body); ok(res, row); }
       return true;
     }
-    if (path === "/v1/products" || path === `/v1/products/${id(30)}`) {
+    if (path === "/v1/products" || path === "/v1/products/search" || path === `/v1/products/${id(30)}`) {
       const product = { id: id(30), name: "Studio headphones", slug: "studio-headphones", categoryId: id(3), sellerId: id(50), status: "ACTIVE", auctionEnable: false, minPrice: 200000, maxPrice: 200000, images: [],
         skus: [{ id: id(31), productId: id(30), skuCode: "AUDIO-BLK", color: "Black", size: "Standard", price: 200000, status: "ACTIVE" }] };
-      if (path === "/v1/products") list(res, [product], url); else ok(res, product);
+      if (path === "/v1/products" || path === "/v1/products/search") list(res, [product], url); else ok(res, product);
       return true;
     }
     if (path === "/v1/inventory/intake") {

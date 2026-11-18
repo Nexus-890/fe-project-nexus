@@ -24,22 +24,27 @@ test.beforeEach(async ({ request }) => {
   await request.post(`${api}/api/test/catalog-admin/reset`);
 });
 
+const pickParent = async (page: Page, value: string) => {
+  await page.getByRole("button", { name: "Parent category", exact: true }).click();
+  await page.locator(`[role="option"][data-value="${value}"]`).click();
+};
+
 test("category create, description round trip, move to root, and bodyless delete", async ({ page, request }) => {
   await signIn(page, request, "/backoffice/categories");
   await page.getByRole("button", { name: "New category", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Speakers");
   await page.getByLabel("Slug", { exact: true }).fill("speakers");
   await page.getByLabel("Description", { exact: true }).fill("Wireless speakers");
-  await page.getByLabel("Parent category", { exact: true }).selectOption(id(2));
+  await pickParent(page, id(2));
   await page.getByRole("button", { name: "Save category", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Edit category", exact: true })).toBeVisible();
   await expect(page.getByLabel("Description", { exact: true })).toHaveValue("Wireless speakers");
-  await page.getByLabel("Parent category", { exact: true }).selectOption("");
+  await pickParent(page, "");
   await page.getByRole("button", { name: "Save category", exact: true }).click();
   await expect(page.getByText("Category saved.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Books", exact: true }).click();
   await page.getByRole("button", { name: "Speakers", exact: true }).click();
-  await expect(page.getByLabel("Parent category", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Parent category", exact: true })).toHaveAttribute("data-value", "");
   await screenshot(page, "categories");
   await page.getByRole("button", { name: "Delete category", exact: true }).click();
   await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
@@ -49,8 +54,10 @@ test("category create, description round trip, move to root, and bodyless delete
 test("category conflicts and invalid move are visible backend messages", async ({ page, request }) => {
   await signIn(page, request, "/backoffice/categories");
   await page.getByRole("button", { name: "Electronics", exact: true }).click();
-  await expect(page.getByLabel("Parent category", { exact: true }).getByRole("option", { name: /Headphones/ })).toHaveCount(0);
-  await page.getByLabel("Parent category", { exact: true }).selectOption(id(4));
+  await page.getByRole("button", { name: "Parent category", exact: true }).click();
+  await expect(page.getByRole("listbox", { name: "Parent category", exact: true }).getByRole("option", { name: /Headphones/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await pickParent(page, id(4));
   await page.getByRole("button", { name: "Save category", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Category tree exceeds maximum depth");
   await page.getByRole("button", { name: "Delete category", exact: true }).click();
@@ -104,14 +111,14 @@ test("configuration uses delivered GET rows and short PUT response, refetches, a
   await signIn(page, request, "/backoffice/configuration");
   const input = page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true });
   await input.fill("wrong-type");
-  await input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
+  await input.locator("xpath=ancestor::li").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Configuration value has the wrong type");
   await expect(input).toHaveValue("wrong-type");
   await input.fill("120");
-  await input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
+  await input.locator("xpath=ancestor::li").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Configuration saved.", { exact: true })).toBeVisible();
-  await expect(input.locator("xpath=ancestor::tr")).toContainText("Configured: 120");
-  await expect(input.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await expect(input.locator("xpath=ancestor::li")).toContainText("Configured 120");
+  await expect(input.locator("xpath=ancestor::li").getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   const body = await (await request.get(`${api}/api/test/catalog-admin/evidence`)).json();
   const writes = body.data.requests.filter((row: { method: string; path: string }) => row.method === "PUT" && row.path.includes("system/configs"));
   expect(writes.map((row: { body: unknown }) => row.body)).toEqual([{ value: "wrong-type" }, { value: 120 }]);
@@ -126,7 +133,7 @@ test("configuration groups by delivered service, keeps drafts across refetch, an
   const navigation = page.getByRole("navigation", { name: "Configuration services", exact: true });
   const managed = page.getByLabel("Value for MAX_LOGIN_ATTEMPTS", { exact: true });
   await expect(managed).toBeDisabled();
-  await expect(managed.locator("xpath=ancestor::tr").getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await expect(managed.locator("xpath=ancestor::li").getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await navigation.getByRole("button", { name: "auction-service", exact: true }).click();
   await expect(page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true })).toHaveValue("60");
   await expect(managed).toHaveCount(0);
@@ -135,11 +142,11 @@ test("configuration groups by delivered service, keeps drafts across refetch, an
   await numeric.fill("unsaved");
   const flag = page.getByLabel("Value for ALLOW_GUEST_CART", { exact: true });
   await flag.uncheck();
-  await flag.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
+  await flag.locator("xpath=ancestor::li").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Configuration saved.", { exact: true })).toBeVisible();
   await expect(flag).not.toBeChecked();
   await expect(numeric).toHaveValue("unsaved");
-  await numeric.locator("xpath=ancestor::form").getByRole("button", { name: "Discard", exact: true }).click();
+  await numeric.locator("xpath=ancestor::li").getByRole("button", { name: "Discard", exact: true }).click();
   await expect(numeric).toHaveValue("60");
   const body = await (await request.get(`${api}/api/test/catalog-admin/evidence`)).json();
   expect(body.data.requests.some((row: { method: string; path: string }) => row.method === "PUT" && row.path.endsWith("MAX_LOGIN_ATTEMPTS"))).toBe(false);
