@@ -20,6 +20,7 @@
     "test:browser": "node scripts/test-browser.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:promotions": "node scripts/test-browser.mjs --config playwright.promotions.config.ts",
+    "test:manual-payouts": "node scripts/test-browser.mjs --config playwright.manual-payouts.config.ts",
     "test:cart": "node scripts/test-browser.mjs --config playwright.cart.config.ts",
     "test:profile": "node scripts/test-browser.mjs --config playwright.profile.config.ts",
     "test:account": "node scripts/test-browser.mjs --config playwright.account.config.ts",
