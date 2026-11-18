@@ -27,6 +27,12 @@ export function resolveAuctionWorkspace(roles: readonly BackofficeRole[], view?:
   return roles.includes("SELLER") ? "seller" : null;
 }
 
+export function resolvePromotionWorkspace(roles: readonly BackofficeRole[], view?: string | null): "admin" | "seller" | null {
+  if (view === "seller" && roles.includes("SELLER")) return "seller";
+  if (roles.includes("ADMIN")) return "admin";
+  return roles.includes("SELLER") ? "seller" : null;
+}
+
 /** Mixed-role sellers retain their own workflow after navigating through the shared URLs. */
 export function sellerAuctionHref(roles: readonly BackofficeRole[], reference?: string): string {
   const path = `/backoffice/auctions${reference ? `/${encodeURIComponent(reference)}` : ""}`;
