@@ -26,7 +26,7 @@ const outcomeLabels: Record<string, string> = {
   CONFIRMATION_RECORDED_IN_ERROR: "Staff recorded Completed without a transfer (correction)",
 };
 const outcomesFor = (payout: ManualPayoutDetail) => payout.attempt?.state === "UNKNOWN" ? ["CONFIRMED_SENT", "CONFIRMED_NOT_SENT"] :
-  payout.attempt?.state === "SUCCEEDED" ? ["CONFIRMED_RETURNED", ...(payout.hasOpenDispute ? ["CONFIRMATION_RECORDED_IN_ERROR"] : [])] : [];
+  payout.attempt?.state === "SUCCEEDED" ? [...(payout.needsReview && !payout.hasOpenDispute ? ["CONFIRMED_SENT"] : []), "CONFIRMED_RETURNED", ...(payout.hasOpenDispute ? ["CONFIRMATION_RECORDED_IN_ERROR"] : [])] : [];
 
 function ManualPayoutReconciliationPanel({ payout, canReconcile, pending, error, resolve, review, retry, dialog, setDialog }: Props) {
   const [outcome, setOutcome] = useState("");
@@ -53,7 +53,7 @@ function ManualPayoutReconciliationPanel({ payout, canReconcile, pending, error,
     {canReconcile && dialog === "resolve" && <ManualPayoutDialog title="Record reconciled outcome" submitLabel="Record outcome" pending={pending} error={localError || error} onClose={() => setDialog(null)}
       description={<>Choose what the bank app shows for reference <span className="font-mono text-foreground">{payout.attempt?.reference ?? "not issued"}</span>. A sent outcome keeps the original payment; a not-sent outcome needs a separate retry.</>}
       onSubmit={() => { const parsed = parseResolutionForm(outcome, reason, proof, payout.dispute); if (!parsed.ok) { setLocalError(parsed.error); return; } setLocalError(""); resolve(parsed.value); }}>
-      <label className="grid gap-2 text-xs">Outcome<select className={sellerInput} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Choose an outcome</option>{outcomesFor(payout).map((value) => <option key={value} value={value}>{outcomeLabels[value]}</option>)}</select></label>
+      <label className="grid gap-2 text-xs">Outcome<select className={sellerInput} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Choose an outcome</option>{outcomesFor(payout).map((value) => <option key={value} value={value}>{value === "CONFIRMED_SENT" && payout.attempt?.state === "SUCCEEDED" ? "Bank app shows the recorded transfer was correct (close the exception)" : outcomeLabels[value]}</option>)}</select></label>
       <label className="grid gap-2 text-xs">Reason<textarea className={sellerInput} rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Proof from this attempt {resolutionNeedsProof(outcome) ? "(required)" : "(optional)"}</legend>{evidence.length ? evidence.map((file) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={proof.includes(file.id)} onChange={(event) => setProof((value) => event.target.checked ? [...value, file.id] : value.filter((id) => id !== file.id))} />{file.fileName}</label>) : <p className="text-muted-foreground">Upload proof to this attempt first.</p>}</fieldset>
     </ManualPayoutDialog>}

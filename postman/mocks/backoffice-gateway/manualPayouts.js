@@ -352,6 +352,8 @@ function createManualPayoutFixture({ ok, problem, list, bodyOf, randomUUID, sell
         Object.assign(row, { status: "SUCCEEDED", confirmationSource: "MANUAL_STAFF_CONFIRMED", providerReference: attempt.reference, recipientAccountLast4: row.manual.recipient.accountLast4 });
         transactions.push({ payoutId: row.id, attemptNo: attempt.attemptNo, type: "PAYOUT", amount: row.netAmount, reference: attempt.reference, confirmationSource: "MANUAL_STAFF_CONFIRMED", simulated: true });
         log(row, "RESOLVED_SENT", before, actor, { reason, confirmationSource: "MANUAL_STAFF_CONFIRMED" });
+      } else if (body.outcome === "CONFIRMED_SENT" && attempt.state === "SUCCEEDED" && row.manual.exception && !openDispute(row)) {
+        row.manual.exception = null; log(row, "RESOLVED_SENT", before, actor, { reason, confirmationSource: "MANUAL_STAFF_CONFIRMED" });
       } else if (body.outcome === "CONFIRMED_NOT_SENT" && attempt.state === "UNKNOWN") {
         attempt.state = "NOT_SENT"; row.status = "FAILED"; log(row, "RESOLVED_NOT_SENT", before, actor, { reason });
       } else if (body.outcome === "CONFIRMED_RETURNED" && attempt.state === "SUCCEEDED") {

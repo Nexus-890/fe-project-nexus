@@ -229,3 +229,47 @@ test("an expired QR becomes uncertain, paused new work hides claim and QR, readi
   expect(state.requests.some((entry) => entry.path.endsWith(`${held.id}/claims`))).toBe(false);
   await layouts(admin, "admin-paused");
 });
+
+test("Admin closes a post-success staff exception as sent without a second payment", async ({ browser, request }) => {
+  const payout = await seed(request);
+  const support = await staff(browser, request, "SUPPORT_STAFF");
+  const panel = await open(support, payout.id, "Ready to claim");
+  await panel.getByRole("button", { name: "Claim this payout", exact: true }).click();
+  await panel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
+  await panel.getByLabel(/Add evidence/).setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
+  await expect(panel.getByRole("button", { name: "Open receipt.png", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Record completed transfer", exact: true }).click();
+  const confirm = support.getByRole("dialog", { name: "Record completed transfer" });
+  await confirm.getByLabel("Platform source account").selectOption({ label: "Nexus payout account VCB 8899" });
+  await confirm.getByLabel(/Transferred amount/).fill("95000.00");
+  await confirm.getByLabel("Bank transfer reference").fill("FT26322002");
+  await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(2));
+  await confirm.getByRole("checkbox", { name: "receipt.png" }).check();
+  await confirm.getByRole("checkbox", { name: /I checked in the banking app/ }).check();
+  await confirm.getByRole("button", { name: "Record completed transfer", exact: true }).click();
+  await expect(confirm).toHaveCount(0);
+  await panel.getByRole("button", { name: "Report a problem", exact: true }).click();
+  const problem = support.getByRole("dialog", { name: "Report a problem" });
+  await problem.getByLabel("What went wrong").selectOption("SUSPECTED_DUPLICATE");
+  await problem.getByLabel("Explanation").fill("The banking app showed two pending lines for a moment.");
+  await problem.getByRole("button", { name: "Report problem", exact: true }).click();
+  await expect(problem).toHaveCount(0);
+
+  const admin = await staff(browser, request, "ADMIN");
+  const review = await open(admin, payout.id, "Needs review");
+  const reconcile = review.getByRole("region", { name: "Reconciliation", exact: true });
+  await reconcile.getByRole("button", { name: "Record reconciled outcome", exact: true }).click();
+  const resolve = admin.getByRole("dialog", { name: "Record reconciled outcome" });
+  await expect(resolve.getByRole("option", { name: "Staff recorded Completed without a transfer (correction)" })).toHaveCount(0);
+  await resolve.getByLabel("Outcome").selectOption("CONFIRMED_SENT");
+  await resolve.getByLabel("Reason").fill("Bank statement shows one outgoing transfer FT26322002 only.");
+  await resolve.getByRole("button", { name: "Record outcome", exact: true }).click();
+  await expect(resolve).toHaveCount(0);
+  await expect(review.getByText("The reconciled outcome was recorded.", { exact: false })).toBeVisible();
+  await expect(review.getByRole("region", { name: "Reconciliation", exact: true })).toHaveCount(0);
+  const state = await evidence(request);
+  expect(state.payouts.find((entry) => entry.id === payout.id)?.status).toBe("SUCCEEDED");
+  expect(state.transactions.filter((entry) => entry.payoutId === payout.id).map((entry) => entry.type)).toEqual(["PAYOUT"]);
+  await admin.getByLabel("Queue views").getByRole("button", { name: "Needs review", exact: true }).click();
+  await expect(admin.getByRole("button", { name: `Open payout ${payout.id.slice(0, 8)}`, exact: true })).toHaveCount(0);
+});
