@@ -20,7 +20,7 @@ function SellerReputation({ sellerId, compact = false }: { sellerId?: string | n
   if (compact) {
     if (!sellerId || auth.status !== "authenticated" || !reputation.isSuccess) return null;
     const label = `${trustLabels[reputation.data.trustLevel]} · trust score ${reputation.data.score}/100`;
-    return <section aria-label="Seller reputation" title={label} className="inline-flex items-center gap-0.5 rounded-full bg-card/95 py-px pr-1.5 pl-px shadow-sm ring-1 ring-border">
+    return <section aria-label="Seller reputation" title={label} className="inline-flex items-center gap-1">
       <TrustScoreGauge score={reputation.data.score} size="sm" />
       <span aria-hidden="true" className="text-[7px] font-semibold uppercase leading-[1.1] tracking-wide text-foreground">Trust<br />score</span>
       <span className="sr-only">{trustLabels[reputation.data.trustLevel]}</span>
