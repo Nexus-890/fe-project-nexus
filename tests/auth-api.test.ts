@@ -561,6 +561,7 @@ test("stub emits delivered field/code/detail errors and malformed-body errors", 
 test("auth services expose no password login and reject malformed nested user data", async () => {
   assert.equal("login" in authService, false);
   const user: UserResponse = {
+    phoneVerifiedAt: null,
     id: "68000000-0000-4000-8000-000000000002",
     email: registerInput.email,
     phone: registerInput.phone,
@@ -595,6 +596,7 @@ test("auth services expose no password login and reject malformed nested user da
 test("auth services accept real HTTP 200 profile and 201 registration envelopes from develop", async () => {
   const { createServer } = await import("node:http");
   const user: UserResponse = {
+    phoneVerifiedAt: null,
     id: "68000000-0000-4000-8000-000000000002",
     email: registerInput.email,
     phone: registerInput.phone,

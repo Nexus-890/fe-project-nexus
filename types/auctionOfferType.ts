@@ -1,4 +1,4 @@
-/** Normalized #208 offer model. Routes follow review; the DTO awaits delivered OpenAPI. */
+/** Normalized UI model for the delivered #208 schema in auctionGeneratedType.ts. */
 export type AuctionOffer = {
   id: string;
   auctionId: string;

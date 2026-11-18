@@ -21,7 +21,7 @@ test("list service retains optional image media and keeps the delivered URL and 
     context: {
       getAccessToken: () => "must-not-send",
       fetch: async (input, init) => {
-        assert.equal(String(input), "/api/v1/products");
+        assert.equal(String(input), "/api/v1/products/search?sort=relevance");
         assert.equal(new Headers(init?.headers).has("Authorization"), false);
         return new Response(JSON.stringify(envelope([{ ...summary, images }])));
       },

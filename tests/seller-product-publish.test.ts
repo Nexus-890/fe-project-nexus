@@ -48,7 +48,7 @@ test("seller listings enrich each own row from its owner endpoint with SKU price
     if (url.pathname.endsWith("/mine")) return Response.json({ code: 0, message: "response success", data: [{ ...wire, minPrice: 100 }], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } });
     return Response.json({ code: 0, message: "response success", data: wire });
   } };
-  const result = await getSellerProductListings(0, undefined, { context });
+  const result = await getSellerProductListings(0, {}, { context });
   assert.equal(result.content[0].minPrice, "100.00"); assert.equal(result.content[0].maxPrice, "100.00");
   assert.equal(result.content[0].images[0].imageUrl, image.imageUrl);
   assert.deepEqual(calls, ["/api/v1/products/mine", "/api/v1/products/mine/product-1"]);

@@ -1,5 +1,6 @@
 import { parsePage, readQueryValue, SEARCH_MAX_PRICE, type SearchState } from "./catalogUtils";
 import { formatVND } from "../components/formatPrice";
+import { isShopSort } from "../types/catalogRequestType";
 
 export { SEARCH_MAX_PRICE } from "./catalogUtils";
 export const searchFilterGroups = [
@@ -33,7 +34,7 @@ export const readSearchState = (query: RawSearchQuery): SearchState => {
   return {
     q: readQueryValue(query.q),
     category: readQueryValue(query.category),
-    sort: sort === "createdAt,desc" || sort === "price,asc" || sort === "price,desc" ? sort : "relevance",
+    sort: isShopSort(sort) ? sort : "relevance",
     page: parsePage(query.page),
     listingType: listingType === "buy-now" || listingType === "auction" ? listingType : "all",
     trust: [],

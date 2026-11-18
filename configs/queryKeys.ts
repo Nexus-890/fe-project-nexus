@@ -9,6 +9,10 @@ import type { SellerBankFilters } from "../types/sellerBankType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
+  operations: {
+    root: (sessionId: number) => ["order-operations", sessionId] as const,
+    list: (sessionId: number, area: string, filters: object) => ["order-operations", sessionId, area, filters] as const,
+  },
   admin: {
     root: (sessionId: number) => ["admin", sessionId] as const,
     users: (sessionId: number, filters: object) => ["admin", sessionId, "users", filters] as const,
@@ -33,6 +37,12 @@ export const queryKeys = {
     phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
   },
   backoffice: {
+    categories: (sessionId: number) => ["admin-categories", sessionId] as const,
+    category: (sessionId: number, id: string) => ["admin-categories", sessionId, id] as const,
+    warehouses: (sessionId: number) => ["admin-warehouses", sessionId] as const,
+    warehouse: (sessionId: number, id: string) => ["admin-warehouses", sessionId, id] as const,
+    movements: (sessionId: number, skuId: string, warehouseId: string | undefined, page: number) => ["backoffice", sessionId, "movements", { skuId, warehouseId, page }] as const,
+    systemConfigs: (sessionId: number) => ["admin-system-configs", sessionId] as const,
     products: (sessionId: number, page: number) => ["backoffice", sessionId, "products", page] as const,
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
     balances: (sessionId: number, skuId: string, warehouseId?: string) => ["backoffice", sessionId, "balances", { skuId, warehouseId }] as const,

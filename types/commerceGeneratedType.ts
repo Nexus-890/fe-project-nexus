@@ -616,7 +616,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm receipt of a delivered order
-         * @description Requires BUYER and ORDER.VIEW plus buyer ownership, including for callers who also have ADMIN. ShipmentDelivered leaves the order DELIVERED and persists deliveredAt/autoCompleteAt. Confirming locks the order row and moves DELIVERED to COMPLETED, inserts one history row and one OrderCompleted outbox event in the same transaction. Repeating confirmation of an owned COMPLETED order returns it without another history/event. Other statuses return 409 COMMERCE_ORDER_NOT_DELIVERED; another buyer receives 403 before the status check. The automatic job uses the same lock and completion transaction when autoCompleteAt is due. Receipt email, rating and payout consumers remain gated on OrderCompleted. No request body.
+         * @description Requires BUYER and ORDER.VIEW plus buyer ownership, including for callers who also have ADMIN. ShipmentDelivered leaves the order DELIVERED and persists deliveredAt/autoCompleteAt. Confirming locks the order row and moves DELIVERED to COMPLETED with reason 'Buyer confirmed receipt', inserts one history row and one OrderCompleted outbox event in the same transaction. Any status other than DELIVERED, including a repeated confirmation of a COMPLETED order, returns 409 COMMERCE_ORDER_NOT_DELIVERED without another history/event; another buyer receives 403 before the status check. A receipt issue blocks completion with 409 COMMERCE_RECEIPT_ISSUE_OPEN. Every 10 minutes by default, the automatic job uses the same lock and completion transaction when autoCompleteAt is due, with a default waiting period of 3 days. Both completion paths include orderAmount and shippingFee in OrderCompleted. Receipt email, rating and payout consumers remain gated on that event. No request body.
          */
         post: operations["confirmReceipt"];
         delete?: never;
@@ -739,6 +739,26 @@ export interface paths {
          * @description After the Keycloak callback, the frontend submits its stored guestToken. Requires ALLOW_GUEST_CART and CART_MERGE_ON_LOGIN. Atomically lock the guest source and buyer destination, create destination if absent, sum duplicate SKU quantities and cap at 999 with QUANTITY_CAPPED in issues. SKU identity canonically determines its seller; no caller seller ID is accepted. Existing buyer line prices are retained; new lines keep guest prices. Retain missing/inactive catalog lines with PRODUCT_INACTIVE, self-purchase lines with SELF_PURCHASE and changed prices with PRICE_CHANGED. Catalog outages/malformed responses roll back all effects and allow retry. Retire source as MERGED; replay, expired and unknown tokens return the same 404. Cart quantity does not reserve stock or clamp to available inventory; actual stock checks await inventory integration and remain mandatory at checkout. Empty guest carts may merge. Concurrent guest writes and merges serialize on the same owner row.
          */
         post: operations["mergeGuestCart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/shipping-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the winning auction order's shipping address
+         * @description Requires CHECKOUT.START, BUYER and winner ownership. Only an unexpired PENDING AUCTION order can be confirmed. Reads the linked HELD reservation's warehouse through #170/#209; an empty/unlinked hold returns 409. No new reservation is made. Uses Catalog parcel measurements and Shipment quotes, preserving the AuctionWon price and payment deadline. The configured nexus.checkout.free-shipping-threshold (default 1000000 VND) applies to the winning final price. Saves the two-level address, warehouse, parcel, shipping fee, order/group totals and one CheckoutPaymentRequested atomically. Identical normalized address retries return the saved result without dependency calls or another manifest. A different address or non-PENDING/expired order returns 409.
+         */
+        post: operations["confirmAuctionShipping"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1348,7 +1368,7 @@ export interface components {
             deliveredAt?: string | null;
             /**
              * Format: date-time
-             * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 7); the scheduler completes due DELIVERED orders. Existing COMPLETED orders are not reopened.
+             * @description Persisted deliveredAt plus nexus.order.auto-complete-days (default 3); the scheduler checks every 10 minutes by default and completes due DELIVERED orders without an open receipt issue. Changing the setting affects newly delivered orders; existing persisted deadlines remain unchanged. Existing COMPLETED orders are not reopened.
              */
             autoCompleteAt?: string | null;
             /** @description Buyer-readable reason set from PaymentUnreconciled (#157) when a transfer for this order's checkout could not be applied, for example a payment after the deadline. It never changes status. Null when there is nothing to report. */
@@ -6622,13 +6642,61 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Completed order, including an idempotent replay. */
+            /** @description Updated order in COMPLETED status after the buyer confirms receipt. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "orderId": "68000000-0000-4000-8000-000000000002",
+                     *         "orderGroupId": "68000000-0000-4000-8000-000000000001",
+                     *         "orderNumber": "NX-20261120-00000002",
+                     *         "userId": "68000000-0000-4000-8000-000000000003",
+                     *         "sellerId": "68000000-0000-4000-8000-000000000004",
+                     *         "orderType": "STANDARD",
+                     *         "status": "COMPLETED",
+                     *         "canCancel": false,
+                     *         "createdAt": "2026-11-20T08:00:00Z",
+                     *         "deliveredAt": "2026-11-22T10:00:00Z",
+                     *         "autoCompleteAt": "2026-11-25T10:00:00Z",
+                     *         "subtotal": 300000,
+                     *         "shippingFee": 25000,
+                     *         "discountAmount": 0,
+                     *         "taxAmount": 0,
+                     *         "totalAmount": 325000,
+                     *         "receiptIssueReason": null,
+                     *         "receiptIssueReportedAt": null,
+                     *         "items": [
+                     *           {
+                     *             "orderItemId": "68000000-0000-4000-8000-000000000005",
+                     *             "productId": "68000000-0000-4000-8000-000000000006",
+                     *             "skuId": "68000000-0000-4000-8000-000000000007",
+                     *             "productName": "Phone case",
+                     *             "skuCode": "CASE-BLACK",
+                     *             "imageUrl": null,
+                     *             "quantity": 2,
+                     *             "unitPrice": 150000,
+                     *             "totalPrice": 300000
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["GetOrderResponse"];
+                };
+            };
+            /** @description INVALID_PARAMETER when the order identifier is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Authentication is required. */
@@ -6658,7 +6726,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description COMMERCE_ORDER_NOT_DELIVERED or COMMERCE_RECEIPT_ISSUE_OPEN. */
+            /** @description COMMERCE_ORDER_NOT_DELIVERED (including repeated confirmation) or COMMERCE_RECEIPT_ISSUE_OPEN. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7560,6 +7628,167 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    confirmAuctionShipping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "recipientName": "Winner",
+                 *       "phoneNumber": "0900000000",
+                 *       "addressLine": "1 Main Street",
+                 *       "wardCode": "1003646",
+                 *       "provinceCode": "1000001",
+                 *       "countryCode": "VN"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ShippingAddress"];
+            };
+        };
+        responses: {
+            /** @description Shipping confirmed, or the original stored confirmation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": {
+                     *         "orderGroupId": "c8000000-0000-4000-8000-000000000006",
+                     *         "shippingFee": 0,
+                     *         "totalAmount": 1500000,
+                     *         "dueAt": "2031-01-02T00:00:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        code: number;
+                        message: string;
+                        data: {
+                            /** Format: uuid */
+                            orderGroupId: string;
+                            shippingFee: number;
+                            totalAmount: number;
+                            /** Format: date-time */
+                            dueAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Codes: VALIDATION_FAILED, INVALID_REQUEST_BODY, INVALID_PARAMETER, COMMERCE_INVALID_SHIPPING_ADDRESS. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Bad Request",
+                     *       "status": 400,
+                     *       "detail": "The shipping address is invalid",
+                     *       "instance": "/api/v1/orders/id/shipping-confirmation",
+                     *       "code": "COMMERCE_INVALID_SHIPPING_ADDRESS"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: FORBIDDEN, COMMERCE_FORBIDDEN. Requires BUYER, CHECKOUT.START and winner ownership. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_ORDER_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: COMMERCE_AUCTION_SHIPPING_CONFLICT, COMMERCE_AUCTION_HOLD_NOT_LINKED, COMMERCE_INVALID_ORDER_AMOUNT, COMMERCE_SHIPPING_METADATA_REQUIRED, COMMERCE_INVALID_PARCEL. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_SHIPPING_NOT_AVAILABLE. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Code: COMMERCE_INVALID_CATALOG_RESPONSE. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Codes: COMMERCE_INVENTORY_UNAVAILABLE, COMMERCE_SHIPPING_UNAVAILABLE, COMMERCE_CATALOG_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Service Unavailable",
+                     *       "status": 503,
+                     *       "detail": "Inventory is unavailable; retry checkout later",
+                     *       "instance": "/api/v1/orders/id/shipping-confirmation",
+                     *       "code": "COMMERCE_INVENTORY_UNAVAILABLE"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

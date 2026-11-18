@@ -11,6 +11,7 @@ const integrationSpecs = {
 };
 let drift = false;
 for (const [name, output] of [
+  ["config-service", "configGeneratedType.ts"],
   ["user-service", "userGeneratedType.ts"],
   ["catalog-service", "catalogGeneratedType.ts"],
   ["inventory-service", "inventoryGeneratedType.ts"],

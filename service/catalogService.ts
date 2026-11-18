@@ -14,6 +14,7 @@ import type {
   ShippingParcel,
 } from "../types/catalogResponseType";
 import type { ProductFilters } from "../types/catalogRequestType";
+import { SEARCH_SORT } from "../types/catalogRequestType";
 
 export const normalizeMoney = (value: unknown): string | null => {
   if (typeof value === "string")
@@ -192,9 +193,12 @@ export const getProducts = async (
   options: ServiceRequestOptions = {},
 ): Promise<Page<ProductSummary>> =>
   parseProductPage(
-    await requestApi<unknown>("GET", "/api/v1/products", undefined, {
+    await requestApi<unknown>("GET", "/api/v1/products/search", undefined, {
       ...options,
-      params: { ...filters },
+      params: {
+        ...filters,
+        sort: SEARCH_SORT[filters.sort ?? "relevance"],
+      },
       auth: false,
     }),
   );

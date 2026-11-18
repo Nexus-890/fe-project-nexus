@@ -7,6 +7,7 @@ export type SellerProductInput = catalog["schemas"]["CreateProduct"];
 export type SellerProductUpdate = catalog["schemas"]["UpdateProduct"];
 export type SellerSkuInput = catalog["schemas"]["WriteSku"];
 export type SellerProductStatus = catalog["schemas"]["ChangeProductStatus"]["status"];
+export type SellerProductFilters = { status?: SellerProductStatus; auctionEnable?: boolean };
 export type SellerBalance = inventory["schemas"]["Balance"];
 export type SellerProductListing = ProductDetail;
 export type SellerSale = OrderSummary & {
