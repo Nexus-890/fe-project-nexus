@@ -85,6 +85,11 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await expect(adminPanel.getByText("huge.pdf is larger than 10 MiB.", { exact: true })).toBeVisible();
   await upload.setInputFiles({ name: "fake.png", mimeType: "image/png", buffer: Buffer.from("plain text pretending") });
   await expect(adminPanel.getByRole("alert").first()).toBeVisible();
+  await adminPanel.getByRole("button", { name: "Record completed transfer", exact: true }).click();
+  const fresh = admin.getByRole("dialog", { name: "Record completed transfer" });
+  await expect(fresh).toBeVisible();
+  await expect(fresh.getByRole("alert")).toHaveCount(0);
+  await fresh.getByRole("button", { name: "Cancel", exact: true }).click();
   await upload.setInputFiles({ name: "bank-app.png", mimeType: "image/png", buffer: png });
   await adminPanel.getByRole("button", { name: "Open bank-app.png", exact: true }).click();
   await expect(adminPanel.getByRole("link", { name: "Save bank-app.png", exact: true })).toBeVisible();

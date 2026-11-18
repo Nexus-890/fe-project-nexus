@@ -152,6 +152,7 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
   const newWork = capabilities.newWorkEnabled && !capabilities.automaticJobsEnabled;
   const pending = mutation.isPending;
   const closeDialog = () => { setDialog(null); setFormError(""); };
+  const openDialog = (next: typeof dialog) => { if (next !== null) mutation.reset(); setFormError(""); setDialog(next); };
   return <SellerPanel title="Manual payout">
     <div className="flex flex-wrap items-start justify-between gap-3"><p className="break-all font-mono text-xs text-muted-foreground">{id}</p><button type="button" className={sellerButton} disabled={pending} onClick={close}>Close payout</button></div>
     {detail.isPending ? <p role="status" className="mt-5 text-sm">Loading payout…</p> : detail.error && !payout ? <div className="mt-5"><p role="alert" className="text-sm text-danger">{manualPayoutErrorMessage(detail.error)}</p><button type="button" className={`${sellerButton} mt-3`} onClick={() => void detail.refetch()}>Retry payout</button></div> : payout && <>
@@ -174,8 +175,8 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
         {has("CLAIM") && newWork && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("CLAIM", null, "You own this payout now. Issue the QR when you are ready to transfer.", ({ idempotencyKey, signal }) => claimManualPayout(payout.id, cmd(idempotencyKey, payout.version), options(signal)))}>Claim this payout</button>}
         {has("ISSUE_QR") && newWork && attempt && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("ISSUE_QR", null, "The QR was issued for this attempt.", ({ idempotencyKey, signal }) => issueManualPayoutQr(payout.id, attempt.id, cmd(idempotencyKey, attempt.version), options(signal)))}>Issue transfer QR</button>}
         {has("RELEASE") && attempt && <button type="button" className={sellerButton} disabled={pending} onClick={() => run("RELEASE", { reason: "Released before QR issuance" }, "The claim was released. No QR was issued.", ({ idempotencyKey, signal }) => releaseManualPayoutClaim(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, { reason: "Released before QR issuance" }), options(signal)))}>Release claim</button>}
-        {has("CONFIRM") && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => { setFormError(""); setDialog("confirm"); }}>Record completed transfer</button>}
-        {has("REPORT_PROBLEM") && <button type="button" className={sellerButton} disabled={pending} onClick={() => { setFormError(""); setProblem({ kind: "", reason: "", evidenceIds: [] }); setDialog("problem"); }}>Report a problem</button>}
+        {has("CONFIRM") && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => openDialog("confirm")}>Record completed transfer</button>}
+        {has("REPORT_PROBLEM") && <button type="button" className={sellerButton} disabled={pending} onClick={() => { setProblem({ kind: "", reason: "", evidenceIds: [] }); openDialog("problem"); }}>Report a problem</button>}
         {canRetrySame && <button type="button" className={sellerButton} disabled={pending} onClick={() => last && dispatch(last)}>Retry same request</button>}
       </div>}
       {!capabilities.newWorkEnabled && (payout.status === "PENDING" || attempt?.state === "CLAIMED") && <p className="mt-3 text-xs text-muted-foreground">New claims and QR issuance are paused. Recording and reconciliation of issued attempts stay available.</p>}
@@ -188,7 +189,7 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
         {fileError && <p role="alert" className="mt-2 text-sm text-danger">{fileError}</p>}
       </section>}
       <ManualPayoutReconciliationPanel payout={payout} canReconcile={capabilities.canReconcile} pending={pending} error={lastError ? manualPayoutErrorMessage(lastError) : undefined}
-        dialog={dialog === "resolve" || dialog === "review" || dialog === "retry" ? dialog : null} setDialog={(next) => { setFormError(""); setDialog(next); }}
+        dialog={dialog === "resolve" || dialog === "review" || dialog === "retry" ? dialog : null} setDialog={openDialog}
         resolve={(input) => attempt && run("RESOLVE", input, "The reconciled outcome was recorded.", ({ idempotencyKey, signal }) => resolveManualPayout(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, input), options(signal)))}
         review={(input) => attempt && payout.dispute && run("REVIEW_DISPUTE", input, "The seller case review was saved.", ({ idempotencyKey, signal }) => reviewReceiptDispute(payout.id, attempt.id, payout.dispute!.id, cmd(idempotencyKey, attempt.version, input), options(signal)))}
         retry={(input) => run("RETRY", input, "Retry authorized. The payout is back in the queue for a new attempt.", ({ idempotencyKey, signal }) => retryManualPayout(payout.id, cmd(idempotencyKey, payout.version, input), options(signal)))} />
