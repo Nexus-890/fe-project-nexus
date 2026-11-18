@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2, LoaderCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/card";
 import { Input } from "@/components/input";
-import { Textarea } from "@/components/textarea";
+import { LocalityAddressInput } from "@/components/LocalityAddressInput";
 import { Label } from "@/components/label";
 import { Button } from "@/components/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/select";
@@ -38,7 +38,8 @@ function FieldError({ name, errors }: { name: keyof ProfileFormValues; errors: F
 
 function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps) {
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const { register, control, handleSubmit, reset, setError, clearErrors, formState: { errors, isSubmitting, isDirty, dirtyFields } } = useForm<ProfileFormValues>({
+  const [addressKey, setAddressKey] = useState(0);
+  const { register, control, handleSubmit, reset, setError, clearErrors, setValue, formState: { errors, isSubmitting, isDirty, dirtyFields } } = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema), defaultValues: profileFormValues(user), mode: "onBlur",
   });
 
@@ -56,6 +57,7 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
     const result = await onSave(profileUpdate(values, dirtyFields));
     if (result.ok) {
       reset(profileFormValues(result.data));
+      setAddressKey((key) => key + 1);
       setMessage({ kind: "success", text: "Your profile has been updated." });
       return;
     }
@@ -70,11 +72,20 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
       setError("email", { type: "server", message: "This email is already in use." }, { shouldFocus: true });
       mapped = true;
     }
+    if (result.error.status === 409 && result.error.code === "USER_IDENTITY_NUMBER_ALREADY_USED") {
+      setError("identityNumber", { type: "server", message: "This identity number is already used by another account." }, { shouldFocus: true });
+      mapped = true;
+    }
+    if (result.error.status === 409 && result.error.code === "USER_IDENTITY_NUMBER_LOCKED") {
+      setError("identityNumber", { type: "server", message: "Your identity number is already set and cannot be changed." });
+      mapped = true;
+    }
     setMessage({ kind: "error", text: mapped ? "Please check the highlighted fields." : result.error.detail || "Unable to save your profile. Please try again." });
   }
 
   function cancel() {
     reset(profileFormValues(user));
+    setAddressKey((key) => key + 1);
     setMessage(null);
   }
 
@@ -116,16 +127,32 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
               <FieldError name="gender" errors={errors} />
             </div>
             <div className="min-w-0 space-y-1.5">
-              <Label htmlFor="profile-identity" className="text-sm font-normal text-gray-900">Identity Number</Label>
-              <Input id="profile-identity" value="" placeholder="Kept private" readOnly aria-describedby="profile-identity-help" className="h-11 rounded-md bg-muted px-3 text-sm" />
-              <p id="profile-identity-help" className="text-xs leading-5 text-muted-foreground">Your identity number is kept private.</p>
+              <Label htmlFor="profile-identityNumber" className="text-sm font-normal text-gray-900">Identity Number</Label>
+              {user.identityNumberMasked ? (
+                <Input id="profile-identityNumber" value={user.identityNumberMasked} readOnly aria-readonly aria-describedby="profile-identityNumber-help" className="h-11 rounded-md bg-muted px-3 text-sm text-muted-foreground" />
+              ) : (
+                <Input id="profile-identityNumber" type="text" inputMode="numeric" autoComplete="off" maxLength={255} placeholder="Citizen ID number"
+                  aria-invalid={Boolean(errors.identityNumber)}
+                  aria-describedby={["profile-identityNumber-help", errors.identityNumber ? "profile-identityNumber-error" : undefined].filter(Boolean).join(" ")}
+                  {...register("identityNumber")} className="h-11 rounded-md px-3 text-sm" />
+              )}
+              <p id="profile-identityNumber-help" className="text-xs leading-5 text-muted-foreground">
+                {user.identityNumberMasked ? "Your identity number is set and cannot be changed." : "You can set this once. It cannot be changed after saving."}
+              </p>
+              <FieldError name="identityNumber" errors={errors} />
             </div>
-            <div className="min-w-0 space-y-1.5 sm:col-span-2">
-              <Label htmlFor="profile-address" className="text-sm font-normal text-gray-900">Address</Label>
-              <Textarea id="profile-address" autoComplete="street-address" rows={3} {...register("address")} aria-invalid={Boolean(errors.address)}
-                aria-describedby={errors.address ? "profile-address-error" : undefined} className="min-h-24 resize-y leading-6 sm:h-11 sm:min-h-11" />
+            <fieldset className="min-w-0 space-y-1.5 sm:col-span-2" aria-describedby="profile-address-current">
+              <legend className="mb-1.5 text-sm text-gray-900">Address</legend>
+              <input type="hidden" {...register("address")} />
+              <p id="profile-address-current" className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+                {user.address ? `Current: ${user.address}` : "No address saved yet."}
+              </p>
+              <LocalityAddressInput key={addressKey} idPrefix="profile-address" disabled={isSubmitting}
+                invalid={Boolean(errors.address)} describedBy={errors.address ? "profile-address-error" : undefined}
+                controlClassName="h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none aria-invalid:border-danger focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:bg-muted"
+                onChange={(address) => setValue("address", address ?? user.address ?? "", { shouldDirty: true })} />
               <FieldError name="address" errors={errors} />
-            </div>
+            </fieldset>
           </fieldset>
           {message && <p role={message.kind === "error" ? "alert" : "status"} className={`flex items-start gap-2 text-sm leading-5 ${message.kind === "error" ? "text-danger" : "text-success"}`}>
             {message.kind === "success" && <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />}{message.text}

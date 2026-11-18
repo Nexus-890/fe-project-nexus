@@ -506,6 +506,11 @@ export interface components {
              * @description When the current phone was verified; null until verified and after the phone changes.
              */
             phoneVerifiedAt: string | null;
+            /**
+             * @description The stored identity number with all but the last four characters replaced by '*'; null when no identity number is set. The full value is never returned.
+             * @example ********1234
+             */
+            identityNumberMasked?: string | null;
         };
         Register: {
             /**
@@ -531,7 +536,7 @@ export interface components {
              */
             dateOfBirth: string;
         };
-        /** @description Only listed editable fields are consumed. Unknown properties are ignored; callers cannot change roles, status or identity number through this API. */
+        /** @description Only listed editable fields are consumed. Unknown properties are ignored; callers cannot change roles or status through this API. */
         UpdateProfile: {
             /** @description Trimmed. Omitted/null retains current value. */
             fullName?: string | null;
@@ -551,6 +556,8 @@ export interface components {
             email?: string | null;
             /** @description Whitespace, parentheses and hyphens are removed before validation. A different phone clears phoneVerifiedAt. Omitted/null retains current value. */
             phone?: string | null;
+            /** @description Trimmed. Accepted only while the profile has no identity number; once set it cannot be changed (USER_IDENTITY_NUMBER_LOCKED). Sending the stored value again is accepted. Omitted/null retains current value. */
+            identityNumber?: string | null;
         };
         RegisterResponse: {
             /**
@@ -1375,7 +1382,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Conflict. Codes: `USER_EMAIL_ALREADY_USED`, `USER_PHONE_ALREADY_USED`, `USER_IDENTITY_NUMBER_ALREADY_USED`, `USER_PROFILE_CONFLICT`. */
+            /** @description Conflict. Codes: `USER_EMAIL_ALREADY_USED`, `USER_PHONE_ALREADY_USED`, `USER_IDENTITY_NUMBER_ALREADY_USED`, `USER_PROFILE_CONFLICT`, `USER_IDENTITY_NUMBER_LOCKED`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1385,7 +1392,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 409;
                         /** @enum {string} */
-                        code?: "USER_EMAIL_ALREADY_USED" | "USER_PHONE_ALREADY_USED" | "USER_IDENTITY_NUMBER_ALREADY_USED" | "USER_PROFILE_CONFLICT";
+                        code?: "USER_EMAIL_ALREADY_USED" | "USER_PHONE_ALREADY_USED" | "USER_IDENTITY_NUMBER_ALREADY_USED" | "USER_PROFILE_CONFLICT" | "USER_IDENTITY_NUMBER_LOCKED";
                     };
                 };
             };

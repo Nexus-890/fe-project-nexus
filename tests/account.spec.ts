@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { fillLocalityAddress, mockLocalities } from "./localityFixture";
 
 const api = "http://127.0.0.1:3921/api";
 const provider = "http://127.0.0.1:3921/keycloak";
@@ -297,12 +298,14 @@ test("check-email screen enforces a minute cooldown and sends a public resend", 
 });
 
 test("registration opens the check-email screen without creating a signed-in session", async ({ page, request }) => {
+  await mockLocalities(page);
   await page.goto("/sign-up");
   for (const [label, value] of [
     ["Full Name", "New Nexus Buyer"], ["Email", "new.buyer@example.test"], ["Phone Number", "0905555555"],
-    ["Identity Number", "079203004599"], ["Date of Birth", "2000-01-01"], ["Address", "12 Nguyen Hue"],
+    ["Identity Number", "079203004599"], ["Date of Birth", "2000-01-01"],
     ["Password", "Fixture-pass-123!"], ["Confirm Password", "Fixture-pass-123!"],
   ]) await page.getByLabel(label, { exact: true }).fill(value);
+  await fillLocalityAddress(page, "12 Nguyen Hue");
   await page.getByRole("combobox", { name: "Gender", exact: true }).selectOption("OTHER");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Create Account", exact: true }).click();
@@ -317,8 +320,10 @@ test("registration opens the check-email screen without creating a signed-in ses
 
 test("registration email-send failure keeps the account and offers resend without registering twice", async ({page,request}) => {
   await control(request,{registrationEmailFailure:true});
+  await mockLocalities(page);
   await page.goto("/sign-up");
-  for(const [label,value] of [["Full Name","New Nexus Buyer"],["Email","retry.buyer@example.test"],["Phone Number","0905555555"],["Identity Number","079203004599"],["Date of Birth","2000-01-01"],["Address","12 Nguyen Hue"],["Password","Fixture-pass-123!"],["Confirm Password","Fixture-pass-123!"]]) await page.getByLabel(label,{exact:true}).fill(value);
+  for(const [label,value] of [["Full Name","New Nexus Buyer"],["Email","retry.buyer@example.test"],["Phone Number","0905555555"],["Identity Number","079203004599"],["Date of Birth","2000-01-01"],["Password","Fixture-pass-123!"],["Confirm Password","Fixture-pass-123!"]]) await page.getByLabel(label,{exact:true}).fill(value);
+  await fillLocalityAddress(page, "12 Nguyen Hue");
   await page.getByRole("combobox",{name:"Gender",exact:true}).selectOption("OTHER");
   await page.getByRole("checkbox").check();
   await page.getByRole("button",{name:"Create Account",exact:true}).click();

@@ -62,6 +62,24 @@ export const getProvinces = async (
   return parseShippingLocalities(response);
 };
 
+export const getPublicProvinces = async (
+  options: ServiceRequestOptions = {},
+): Promise<ShippingLocality[]> =>
+  parseShippingLocalities(await requestApi<unknown>("GET", PROVINCES_PATH, undefined, {
+    ...options, auth: false, params: undefined,
+  }));
+
+export const getPublicWards = async (
+  provinceCode: string,
+  options: ServiceRequestOptions = {},
+): Promise<ShippingLocality[]> => {
+  if (!isNonBlankString(provinceCode))
+    throw createInvalidResponseError("provinceCode is required");
+  return parseShippingLocalities(await requestApi<unknown>("GET", WARDS_PATH, undefined, {
+    ...options, auth: false, params: { provinceCode },
+  }));
+};
+
 export const getWards = async (
   provinceCode: string,
   options: ServiceRequestOptions = {},

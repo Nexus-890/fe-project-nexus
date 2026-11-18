@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/checkbox";
 import { Label } from "@/components/label";
 import { Separator } from "@/components/separator";
 import Logo from "@/components/Logo";
+import { LocalityAddressInput } from "@/components/LocalityAddressInput";
 import { useAuth } from "@/hooks/useAuth";
 import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 import type { ApiError } from "@/types/commonResponseType";
@@ -159,6 +160,7 @@ function SignUpPage() {
     control,
     handleSubmit,
     setError,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SignUpFormValues>({
     resolver: zodResolver(signUpSchema),
@@ -294,16 +296,22 @@ function SignUpPage() {
                 errors={errors}
               />
 
-              <div className="sm:col-span-2">
-                <TextField
-                  name="address"
-                  label="Address"
-                  placeholder="227 Nguyễn Văn Cừ, Ward 4, District 5, Ho Chi Minh City"
-                  register={register}
-                  errors={errors}
-                  autoComplete="street-address"
+              <fieldset className="min-w-0 sm:col-span-2">
+                <legend className="mb-1.5 text-xs leading-4 text-foreground">Address</legend>
+                <input type="hidden" {...register("address")} />
+                <LocalityAddressInput
+                  idPrefix="address"
+                  invalid={Boolean(errors.address)}
+                  describedBy={errors.address ? "address-error" : undefined}
+                  controlClassName="h-12 w-full min-w-0 rounded-md border border-input bg-transparent px-3 text-sm outline-none aria-invalid:border-danger focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:bg-muted"
+                  onChange={(address) => setValue("address", address ?? "", { shouldValidate: Boolean(errors.address) })}
                 />
-              </div>
+                {errors.address?.message ? (
+                  <p id="address-error" role="alert" className="mt-1 text-xs leading-4 text-danger">
+                    {String(errors.address.message)}
+                  </p>
+                ) : null}
+              </fieldset>
               <TextField
                 name="password"
                 label="Password"

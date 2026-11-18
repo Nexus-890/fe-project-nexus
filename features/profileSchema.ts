@@ -21,6 +21,7 @@ export const profileSchema = z.object({
     .refine((value) => value === "" || value <= todayLocal(), "Date of birth must not be in the future"),
   gender: z.enum(["", "MALE", "FEMALE", "OTHER"]),
   address: z.string().trim(),
+  identityNumber: z.string().trim().max(255, "Identity number must contain at most 255 characters"),
 });
 
 export type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -29,6 +30,7 @@ export function profileFormValues(user: UserResponse): ProfileFormValues {
   return {
     fullName: user.fullName, email: user.email, phone: user.phone,
     dateOfBirth: user.dateOfBirth ?? "", gender: user.gender ?? "", address: user.address ?? "",
+    identityNumber: "",
   };
 }
 
@@ -39,5 +41,6 @@ export function profileUpdate(values: ProfileFormValues, edited: Partial<Record<
     ...(edited.address ? { address: values.address } : {}),
     ...(edited.dateOfBirth && values.dateOfBirth ? { dateOfBirth: values.dateOfBirth } : {}),
     ...(edited.gender && values.gender ? { gender: values.gender } : {}),
+    ...(edited.identityNumber && values.identityNumber ? { identityNumber: values.identityNumber } : {}),
   };
 }

@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { fillLocalityAddress, mockLocalities } from "./localityFixture";
 
 const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
 const app = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3103"}`;
@@ -238,6 +239,7 @@ test("a persistently rejected profile is renewed and retried once before clearin
 });
 
 test("develop registration accepts the backend 201 user envelope and continues to sign in", async ({ page, request }) => {
+  await mockLocalities(page);
   await page.goto("/sign-up");
   await page.getByLabel("Full Name", { exact: true }).fill("New Buyer");
   await page.getByLabel("Email", { exact: true }).fill("new-buyer@nexus.local");
@@ -245,7 +247,7 @@ test("develop registration accepts the backend 201 user envelope and continues t
   await page.getByLabel("Identity Number", { exact: true }).fill("079203004512");
   await page.getByRole("combobox", { name: "Gender", exact: true }).selectOption("OTHER");
   await page.getByLabel("Date of Birth", { exact: true }).fill("2000-01-01");
-  await page.getByLabel("Address", { exact: true }).fill("Ho Chi Minh City");
+  await fillLocalityAddress(page, "12 Nguyen Hue");
   await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
   await page.getByLabel("Confirm Password", { exact: true }).fill("Fixture-pass-123!");
   await page.getByRole("checkbox").check();

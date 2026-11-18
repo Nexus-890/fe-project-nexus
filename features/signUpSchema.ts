@@ -18,7 +18,7 @@ export const signUpSchema = z
       error: "Gender is required",
     }),
     dateOfBirth: z.string().min(1, "Date of birth is required"),
-    address: z.string().trim().min(1, "Address is required"),
+    address: z.string().trim().min(1, "Choose a province and ward, then enter your house number and street"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")

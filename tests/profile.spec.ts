@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { fillLocalityAddress, fixtureAddress, mockLocalities } from "./localityFixture";
 
 const simulation = "http://127.0.0.1:3913";
 const fixtureUrl = `${simulation}/api`;
@@ -52,7 +53,7 @@ async function populatedForm(page: Page) {
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue(originalName);
   await expect(page.getByLabel("Email", { exact: true })).toHaveValue("lan.nguyen@example.com");
   await expect(page.getByLabel("Phone Number", { exact: true })).toHaveValue("+84912345678");
-  await expect(page.getByLabel("Address", { exact: true })).toHaveValue(originalAddress);
+  await expect(page.locator("#profile-address-current")).toHaveText(`Current: ${originalAddress}`);
   await expect(page.getByLabel("Date of Birth", { exact: true })).toHaveValue("2001-05-12");
 }
 
@@ -65,7 +66,8 @@ async function responsiveChecks(page: Page) {
   expect(clipped).toEqual([]);
 }
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ page, request }) => {
+  await mockLocalities(page);
   expect((await request.get(`${simulation}/keycloak/test/reset`)).ok()).toBe(true);
   expect((await request.post(`${fixtureUrl}/__test/reset`, { data: {} })).ok()).toBe(true);
 });
@@ -90,7 +92,7 @@ test("header links to profile, GET populates, PUT updates the form and header, c
 
   await page.getByLabel("Full Name", { exact: true }).fill("Lan Nguyễn Updated");
   await page.getByLabel("Email", { exact: true }).fill("lan.updated@example.com");
-  await page.getByLabel("Address", { exact: true }).fill("123 Nguyễn Huệ, Hồ Chí Minh City");
+  await fillLocalityAddress(page, "123 Nguyễn Huệ");
   const saved = page.waitForResponse(response => response.request().method() === "PUT" && new URL(response.url()).pathname === "/api/v1/users/me");
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   const savedResponse = await saved;
@@ -106,14 +108,15 @@ test("header links to profile, GET populates, PUT updates the form and header, c
   expect(puts[0].body).toEqual({
     fullName: "Lan Nguyễn Updated",
     email: "lan.updated@example.com",
-    address: "123 Nguyễn Huệ, Hồ Chí Minh City",
+    address: fixtureAddress("123 Nguyễn Huệ"),
   });
 
   await page.getByLabel("Full Name", { exact: true }).fill("Unsaved name");
-  await page.getByLabel("Address", { exact: true }).fill("Unsaved address");
+  await fillLocalityAddress(page, "Unsaved street");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan Nguyễn Updated");
-  await expect(page.getByLabel("Address", { exact: true })).toHaveValue("123 Nguyễn Huệ, Hồ Chí Minh City");
+  await expect(page.locator("#profile-address-current")).toHaveText(`Current: ${fixtureAddress("123 Nguyễn Huệ")}`);
+  await expect(page.getByLabel("House number and street", { exact: true })).toHaveValue("");
   expect((await history(request)).filter(entry => entry.method === "PUT")).toHaveLength(1);
 });
 
@@ -231,13 +234,13 @@ test("token renewal preserves dirty profile fields without starting another prof
   await signIn(page);
   await openProfile(page);
   await populatedForm(page);
+  await fillLocalityAddress(page, "Unsaved street during renewal");
   const pausedAt = await page.evaluate(() => Date.now() + 1_000);
   await page.clock.pauseAt(pausedAt);
   await clockTime(request, pausedAt);
   const before = await keycloakEvidence(request);
   const profileReads = (await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me").length;
   await page.getByLabel("Full Name", { exact: true }).fill("Unsaved name during renewal");
-  await page.getByLabel("Address", { exact: true }).fill("Unsaved address during renewal");
   // If token rotation accidentally refetches /me, the failure would replace the
   // dirty form. A normal proactive refresh should leave that form untouched.
   await control(request, { getStatus: 503 });
@@ -251,7 +254,7 @@ test("token renewal preserves dirty profile fields without starting another prof
   await expect.poll(async () => (await keycloakEvidence(request)).refreshRequests).toBe(before.refreshRequests + 1);
   await page.clock.runFor(250);
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
-  await expect(page.getByLabel("Address", { exact: true })).toHaveValue("Unsaved address during renewal");
+  await expect(page.getByLabel("House number and street", { exact: true })).toHaveValue("Unsaved street during renewal");
   await expect(page.getByRole("heading", { name: "Unable to load your profile", exact: true })).toHaveCount(0);
   await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
   expect((await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me")).toHaveLength(profileReads);
@@ -267,12 +270,12 @@ test("token renewal preserves dirty profile fields without starting another prof
   expect((await saved).status()).toBe(200);
   await expect(page.locator("header").getByRole("link", { name: "Hi Unsaved name during renewal" })).toBeVisible();
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
-  await expect(page.getByLabel("Address", { exact: true })).toHaveValue("Unsaved address during renewal");
+  await expect(page.locator("#profile-address-current")).toHaveText(`Current: ${fixtureAddress("Unsaved street during renewal")}`);
   const puts = (await history(request)).filter(entry => entry.method === "PUT");
   expect(puts).toHaveLength(1);
   expect(puts[0].authenticated).toBe(true);
   expect(puts[0].body).toEqual({
-    fullName: "Unsaved name during renewal", address: "Unsaved address during renewal",
+    fullName: "Unsaved name during renewal", address: fixtureAddress("Unsaved street during renewal"),
   });
 });
 
