@@ -4,7 +4,7 @@
 function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, getBankAccounts = () => [] }) {
   const system = "00000000-0000-0000-0000-000000000000";
   const statuses = ["ON_HOLD", "PENDING", "PROCESSING", "UNKNOWN", "SUCCEEDED", "FAILED", "RETURNED"];
-  let payouts, attempts, requests, transactions, counter;
+  let payouts, attempts, requests, transactions, counter, manualView = () => null;
   const money = (value) => typeof value === "string" && /^\d{1,17}\.\d{2}$/.test(value);
   const minor = (value) => BigInt(value.replace(".", ""));
   const decimal = (value) => `${value / 100n}.${String(value % 100n).padStart(2, "0")}`;
@@ -12,7 +12,8 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
   const publicRow = (row) => ({ id: row.id, orderId: row.orderId, sellerId: row.sellerId, orderAmount: row.orderAmount,
     shippingFee: row.shippingFee, platformFeeRate: row.platformFeeRate, platformFee: row.platformFee, netAmount: row.netAmount,
     currency: row.currency, status: row.status, attemptCount: row.attemptCount, recipientAccountLast4: row.recipientAccountLast4,
-    providerReference: row.providerReference, createdAt: row.createdAt, simulated: true });
+    providerReference: row.providerReference, createdAt: row.createdAt, simulated: true, executionMode: row.executionMode || "AUTO",
+    confirmationSource: row.confirmationSource ?? null, manualAttempt: manualView(row) });
   const snapshot = (row) => ({ ...publicRow(row), history: row.history.map((step) => ({ ...step })).reverse() });
   const verifiedBank = (sellerId) => getBankAccounts().find((bank) => bank.sellerId === sellerId && bank.active && bank.isDefault && bank.verificationStatus === "VERIFIED");
   const record = (row, event, fromStatus, actorId = system, extra = {}) => row.history.push({ id: randomUUID(), event, fromStatus, toStatus: row.status,
@@ -26,7 +27,7 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
     const sellerId = typeof account === "string" ? account : account.sellerId;
     const bank = verifiedBank(sellerId);
     if (!bank) return;
-    for (const row of payouts.filter((payout) => payout.sellerId === sellerId && payout.status === "ON_HOLD")) {
+    for (const row of payouts.filter((payout) => payout.sellerId === sellerId && payout.status === "ON_HOLD" && payout.executionMode !== "MANUAL")) {
       row.status = "PENDING"; row.sellerBankId = bank.id; record(row, "RELEASED", "ON_HOLD");
     }
   }
@@ -50,6 +51,7 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
     payouts.push(row); return row;
   }
   function providerStep(row, outcome) {
+    if (row.executionMode === "MANUAL") return false;
     if (row.status === "PENDING") {
       const bank = verifiedBank(row.sellerId);
       if (!bank) return false;
@@ -107,6 +109,7 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
       if (typeof key !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key) || Object.keys(bodyOf(req)).length) return reject(res, 400, "A UUID Idempotency-Key and no body are required", "INVALID_PARAMETER");
       const previous = attempts.get(key.toLowerCase());
       if (previous) return previous.payoutId === row.id && previous.actorId === claims.sub ? respond(res, snapshot(row)) : reject(res, 409, "Retry key belongs to another request", "PAYOUT_NOT_RETRYABLE");
+      if (row.executionMode === "MANUAL") return reject(res, 409, "Manual payouts are retried from the manual payout workspace", "PAYOUT_NOT_RETRYABLE");
       if (!["FAILED", "RETURNED"].includes(row.status) || !verifiedBank(row.sellerId)) return reject(res, 409, "Only failed or returned payouts with a verified default account may retry", "PAYOUT_NOT_RETRYABLE");
       const before = row.status; row.status = "PENDING"; record(row, "RETRIED", before, claims.sub); attempts.set(key.toLowerCase(), { payoutId: row.id, actorId: claims.sub });
       return respond(res, snapshot(row));
@@ -114,6 +117,6 @@ function createPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, ge
     return reject(res, 501, "No manual payout creation endpoint exists", "NOT_IMPLEMENTED");
   }
   reset();
-  return { reset, handle, releaseHeld };
+  return { reset, handle, releaseHeld, rows: () => payouts, snapshot, setManualView: (view) => { manualView = view; } };
 }
 module.exports = { createPayoutFixture };

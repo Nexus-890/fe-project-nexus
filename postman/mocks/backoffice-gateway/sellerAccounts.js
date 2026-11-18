@@ -94,6 +94,7 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
     return reject(res, 501, "Seller account endpoint is not modelled", "NOT_IMPLEMENTED");
   }
   reset();
-  return { reset, handle, get accounts() { return accounts.map(safe); }, getSellerAccounts: (sellerId) => accounts.filter((row) => row.sellerId === sellerId).map(safe) };
+  return { reset, handle, get accounts() { return accounts.map(safe); }, getSellerAccounts: (sellerId) => accounts.filter((row) => row.sellerId === sellerId).map(safe),
+    verifyDefault: (sellerId) => accounts.filter((row) => row.sellerId === sellerId && row.isDefault).forEach((row) => { row.verificationStatus = "VERIFIED"; row.version++; }) };
 }
 module.exports = { createSellerAccountsFixture };

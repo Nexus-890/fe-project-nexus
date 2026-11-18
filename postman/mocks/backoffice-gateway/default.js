@@ -27,13 +27,14 @@ const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key])
 const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus,
-  getBankAccounts: () => sellerAccountsFixture.accounts, onVerified: (account) => payoutFixture.releaseHeld(account) };
+  getBankAccounts: () => sellerAccountsFixture.accounts, verifyBank: (sellerId) => sellerAccountsFixture.verifyDefault(sellerId), onVerified: (account) => payoutFixture.releaseHeld(account) };
 const auctionFixture = require("./auctions.js").createAuctionFixture(fixtureOptions);
 const offerFixture = require("./offers.js").createOfferFixture(fixtureOptions);
 const sellerAccountsFixture = require("./sellerAccounts.js").createSellerAccountsFixture(fixtureOptions);
 const payoutFixture = require("./payouts.js").createPayoutFixture(fixtureOptions);
+const manualPayoutFixture = require("./manualPayouts.js").createManualPayoutFixture({ ...fixtureOptions, payouts: payoutFixture });
 const promotionsFixture = require("./promotions.js").createPromotionFixture(fixtureOptions);
-const sellerFixtures = [promotionsFixture, auctionFixture, offerFixture, sellerAccountsFixture, payoutFixture];
+const sellerFixtures = [promotionsFixture, auctionFixture, offerFixture, sellerAccountsFixture, manualPayoutFixture, payoutFixture];
 const adminFixture = require("./admin.js").createAdminFixture(fixtureOptions);
 const adminCatalogFixture = require("./adminCatalog.js").createAdminCatalogFixture(fixtureOptions);
 const operationsFixture = require("./operations.js").createOperationsFixture(fixtureOptions);
