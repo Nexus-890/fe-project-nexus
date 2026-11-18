@@ -10,6 +10,7 @@ import { getAdminPayouts, getPayoutDetail, getSellerPayouts, payoutErrorMessage,
 import { payoutNeedsActionStatuses, payoutStatuses, type PayoutDetail, type PayoutFilters, type PayoutStatus } from "../types/payoutType";
 import { formatVND } from "../components/formatPrice";
 import { SellerHeading, SellerPanel, SellerStatus, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
+import SellerPayoutReceiptPanel from "../components/SellerPayoutReceiptPanel";
 import { readBackofficeRoles } from "./backofficeAccess";
 import { sellerSalesDates } from "./sellerSalesFilters";
 
@@ -17,7 +18,7 @@ const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: 
 const mask = (last4: string | null) => last4 ? `•••• ${last4}` : "No receiving account yet";
 const statusLabel = (status: PayoutStatus) => status === "ON_HOLD" ? "On hold" : status.charAt(0) + status.slice(1).toLowerCase();
 
-function PayoutDetailPanel({ id, managed, close, retryKeys }: { id: string; managed: boolean; close: () => void; retryKeys: Map<string, string> }) {
+function PayoutDetailPanel({ id, managed, close, retryKeys, receiptKeys }: { id: string; managed: boolean; close: () => void; retryKeys: Map<string, string>; receiptKeys: Map<string, { key: string; payload: string }> }) {
   const auth = useAuth();
   const client = useQueryClient();
   const active = useRef<AbortController | null>(null);
@@ -45,7 +46,7 @@ function PayoutDetailPanel({ id, managed, close, retryKeys }: { id: string; mana
   useEffect(() => {
     if (detail.isSuccess && !detail.isFetching && payout && !["FAILED", "RETURNED"].includes(payout.status)) retryKeys.delete(id);
   }, [detail.isSuccess, detail.isFetching, payout, id, retryKeys]);
-  const canRetry = managed && payout && ["FAILED", "RETURNED"].includes(payout.status) && !detail.isError && !detail.isFetching;
+  const canRetry = managed && payout && payout.executionMode === "AUTO" && ["FAILED", "RETURNED"].includes(payout.status) && !detail.isError && !detail.isFetching;
   return <SellerPanel title="Payout detail"><div className="flex flex-wrap items-start justify-between gap-3"><p className="break-all font-mono text-xs text-muted-foreground">{id}</p><button type="button" className={sellerButton} disabled={retry.isPending} onClick={close}>Close detail</button></div>
     {detail.isPending ? <p role="status" className="mt-5 text-sm">Loading payout detail…</p> : detail.error ? <div className="mt-5"><p role="alert" className="text-sm text-danger">{payoutErrorMessage(detail.error)}</p><button type="button" className={`${sellerButton} mt-3`} onClick={() => void detail.refetch()}>Retry payout detail</button></div> : payout && <>
       <div className="mt-5 flex flex-wrap items-center gap-2"><SellerStatus>{statusLabel(payout.status)}</SellerStatus>{payout.simulated && <span className="rounded-full bg-info/10 px-2 py-1 text-xs text-info">Simulated</span>}</div>
@@ -61,6 +62,8 @@ function PayoutDetailPanel({ id, managed, close, retryKeys }: { id: string; mana
         setMessage(""); retry.mutate({ key, sessionId: auth.sessionId, controller });
       }}>{retry.isPending ? "Requesting retry…" : retry.isError && retryKeys.has(id) ? "Retry same request" : "Retry payout"}</button>}</div>
       {message && <p role="status" className="mt-3 text-sm text-success">{message}</p>}{retry.error && retry.error.kind !== "aborted" && <p role="alert" className="mt-3 text-sm text-danger">{payoutErrorMessage(retry.error)} {canRetry ? "Retrying this request reuses its captured key." : "Check the updated status and history before taking another action."}</p>}
+      {managed && payout.executionMode === "MANUAL" && <p className="mt-3 text-sm text-muted-foreground">This payout is executed manually. Claim, record and reconcile it in <Link className="underline" href="/backoffice/manual-payouts">Manual payouts</Link>.</p>}
+      {!managed && <SellerPayoutReceiptPanel payout={payout} keys={receiptKeys} reload={() => detail.refetch()} updated={(result) => client.setQueryData(queryKeys.seller.payoutDetail(auth.sessionId, id), result)} />}
       <section aria-label="Payout step history" className="mt-6"><h3 className="text-sm font-semibold">History · newest first</h3>{payout.history.length ? <ol className="mt-4 space-y-4">{payout.history.map((step) => <li key={step.id} className="rounded-sm border border-border p-4 text-sm"><div className="flex flex-wrap items-start justify-between gap-3"><p className="font-medium">{step.event.replaceAll("_", " ")}{step.simulated && <span className="ml-2 rounded-full bg-info/10 px-2 py-1 text-xs text-info">Simulated</span>}</p><time className="text-xs text-muted-foreground" dateTime={step.occurredAt}>{date.format(new Date(step.occurredAt))}</time></div><p className="mt-3 text-xs text-muted-foreground">{step.fromStatus ? `${statusLabel(step.fromStatus)} → ` : ""}{statusLabel(step.toStatus)} · Attempt {step.attemptNo}</p><p className="mt-2 font-mono text-xs">{formatVND(step.amount)} · {mask(step.recipientAccountLast4)}</p>{step.provider && <p className="mt-2 text-xs">Provider: {step.provider}{step.providerStatus ? ` · ${step.providerStatus}` : ""}</p>}{step.providerReference && <p className="mt-2 break-words font-mono text-xs">Reference: {step.providerReference}</p>}{step.errorCode && <p className="mt-2 break-words text-xs text-danger">{step.errorCode}{step.errorMessage ? ` · ${step.errorMessage}` : ""}</p>}{!step.errorCode && step.errorMessage && <p className="mt-2 break-words text-xs text-danger">{step.errorMessage}</p>}<p className="mt-2 break-all text-xs text-muted-foreground">Actor <span className="font-mono">{step.actorId}</span>{step.sellerBankId && <> · Bank <span className="font-mono">{step.sellerBankId}</span></>}</p></li>)}</ol> : <p className="mt-3 text-sm text-muted-foreground">No history steps are available.</p>}</section>
     </>}
   </SellerPanel>;
@@ -76,6 +79,7 @@ export function PayoutHistory({ managed = false }: { managed?: boolean }) {
   const [applied, setApplied] = useState<PayoutFilters>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [retryKeys] = useState(() => new Map<string, string>());
+  const [receiptKeys] = useState(() => new Map<string, { key: string; payload: string }>());
   const statuses: readonly PayoutStatus[] | undefined = tab === "NEEDS_ACTION" ? payoutNeedsActionStatuses : tab === "ALL" ? undefined : [tab as PayoutStatus];
   const filters: PayoutFilters = { ...applied, status: statuses, page, size: 10 };
   const result = useApiQuery({ queryKey: managed ? queryKeys.backoffice.payouts(auth.sessionId, filters) : queryKeys.seller.payouts(auth.sessionId, page), meta: { requiresAuth: true },
@@ -93,7 +97,7 @@ export function PayoutHistory({ managed = false }: { managed?: boolean }) {
       <div className="overflow-x-auto rounded-sm border border-border"><table className="w-full min-w-[980px] text-left text-sm"><caption className="sr-only">{managed ? "Seller payouts" : "Your payout history"}</caption><thead className="bg-muted text-xs text-muted-foreground"><tr>{["Order / payout", ...(managed ? ["Seller"] : []), "Created", "Order amount", "Shipping fee", "Platform fee", "Net amount", "Status", "Details"].map((title) => <th key={title} scope="col" className="px-4 py-3 font-normal">{title}</th>)}</tr></thead><tbody>{result.data?.content.map((payout) => <tr key={payout.id} className="border-t border-border"><th scope="row" className="px-4 py-5 font-mono text-xs font-normal"><span title={payout.orderId}>Order {payout.orderId.slice(0, 8)}</span><span title={payout.id} className="mt-2 block text-muted-foreground">Payout {payout.id.slice(0, 8)}</span></th>{managed && <td title={payout.sellerId} className="px-4 py-5 font-mono text-xs">{payout.sellerId.slice(0, 8)}</td>}<td className="px-4 py-5 text-xs text-muted-foreground"><time dateTime={payout.createdAt}>{date.format(new Date(payout.createdAt))}</time></td>{[payout.orderAmount, payout.shippingFee, payout.platformFee, payout.netAmount].map((amount, index) => <td key={index} className={`px-4 py-5 font-mono text-xs ${index === 3 ? "text-primary" : ""}`}>{formatVND(amount)}</td>)}<td className="px-4 py-5"><SellerStatus>{statusLabel(payout.status)}</SellerStatus>{payout.simulated && <p className="mt-2 text-xs text-info">Simulated</p>}<p className="mt-2 whitespace-nowrap font-mono text-xs text-muted-foreground">{mask(payout.recipientAccountLast4)}</p></td><td className="px-4 py-5"><button type="button" className={sellerButton} onClick={() => setSelected(payout.id)} aria-expanded={selected === payout.id}>View payout</button></td></tr>)}</tbody></table>{!result.data?.content.length && <p role="status" className="p-10 text-center text-sm text-muted-foreground">No payouts match this view.</p>}</div>
       <div className="flex flex-wrap items-center justify-between gap-4 text-sm"><p className="text-muted-foreground">Page {page + 1} · {result.data?.totalElements ?? 0} payouts</p><nav aria-label="Payout pagination" className="flex gap-2"><button type="button" className={sellerButton} disabled={page === 0 || result.isFetching} onClick={() => setPage((value) => value - 1)}>Previous</button><button type="button" className={sellerButton} disabled={result.isFetching || page + 1 >= (result.data?.totalPages ?? 0)} onClick={() => setPage((value) => value + 1)}>Next</button></nav></div>
     </>}
-    {selected && <PayoutDetailPanel key={`${auth.sessionId}:${selected}`} id={selected} managed={managed} retryKeys={retryKeys} close={() => setSelected(null)} />}
+    {selected && <PayoutDetailPanel key={`${auth.sessionId}:${selected}`} id={selected} managed={managed} retryKeys={retryKeys} receiptKeys={receiptKeys} close={() => setSelected(null)} />}
   </>;
 }
 
