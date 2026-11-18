@@ -59,8 +59,9 @@ const parseTransferFacts = (form: TransferFacts, netAmount: string, sourceIds: r
   const transferredAt = offsetLocal(form.transferredAt);
   const reference = form.reference.trim();
   if (!sourceIds.includes(form.sourceAccountId)) return failure("Choose the platform source account the transfer was sent from.");
-  if (!/^\d{1,17}\.\d{2}$/.test(form.amount)) return failure("Enter the transferred amount exactly with two decimals, for example 95000.00.");
-  if (form.amount !== netAmount) return failure(`The transferred amount must equal the frozen net amount ${netAmount}. Report a problem instead if a different amount was sent.`);
+  const amount = /^\d{1,17}$/.test(form.amount) ? `${form.amount}.00` : /^\d{1,17}\.\d$/.test(form.amount) ? `${form.amount}0` : form.amount;
+  if (!/^\d{1,17}\.\d{2}$/.test(amount)) return failure("Enter the transferred amount in VND, for example 95.000.");
+  if (amount !== netAmount) return failure(`The transferred amount must equal the frozen net amount ${netAmount}. Report a problem instead if a different amount was sent.`);
   if (!bankReferencePattern.test(reference)) return failure("Enter the bank transfer reference from the banking app (up to 120 letters, digits, dot, slash, dash or underscore).");
   if (!transferredAt || !Number.isFinite(Date.parse(transferredAt))) return failure("Enter when the transfer was made.");
   if (Date.parse(transferredAt) > serverNow + 60_000) return failure("The transfer time cannot be in the future.");
@@ -68,7 +69,7 @@ const parseTransferFacts = (form: TransferFacts, netAmount: string, sourceIds: r
   const issuedMinute = issued - issued % 60_000;
   if (Number.isFinite(issued) && Date.parse(transferredAt) < issuedMinute) return failure("The transfer time cannot be before the QR was issued.");
   const sent = Number.isFinite(issued) && Date.parse(transferredAt) < issued ? Math.min(issuedMinute + 59_999, serverNow + 30_000) : Date.parse(transferredAt);
-  return success({ sourceAccountId: form.sourceAccountId, amount: form.amount, bankTransferReference: reference, transferredAt: new Date(sent).toISOString() });
+  return success({ sourceAccountId: form.sourceAccountId, amount, bankTransferReference: reference, transferredAt: new Date(sent).toISOString() });
 };
 
 export type ConfirmationForm = TransferFacts & { evidenceIds: string[]; attested: boolean };

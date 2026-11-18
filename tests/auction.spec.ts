@@ -122,7 +122,7 @@ test("signed-in buyer starts at the minimum, submits numeric money once and sees
   await expect(seller.getByRole("region", { name: "Seller reputation", exact: true })).toContainText("78/100");
   await expect(seller).toContainText("Trusted");
   const amount = page.getByLabel("Bid amount", { exact: true });
-  await expect(amount).toHaveValue("9900.00");
+  await expect(amount).toHaveValue("9.900");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
   await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
   await expect(page.getByText("$9,900.00", { exact: true }).first()).toBeVisible();
@@ -144,7 +144,7 @@ test("a rejected bid shows the server minimum and lets the buyer submit the corr
   await control(request, { mode: "low" });
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert").filter({ hasText: /minimum|9,950|9950/i })).toBeVisible();
-  await expect(page.getByLabel("Bid amount", { exact: true })).toHaveValue("9950.00");
+  await expect(page.getByLabel("Bid amount", { exact: true })).toHaveValue("9.950");
   await control(request, { mode: "normal" });
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
   await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
@@ -292,12 +292,12 @@ test("an SSE burst coalesces market refreshes and preserves the detail/private r
 test("unsafe large money fails locally and leaves the amount editable for correction", async ({ page, request }) => {
   await signIn(page);
   const amount = page.getByLabel("Bid amount", { exact: true });
-  await amount.fill("90071992547410.00");
+  await amount.fill("90071992547410,00");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "This amount is too large to submit safely." })).toBeVisible();
   await expect(amount).toBeEditable();
   expect((await evidence(request)).bidRequests).toHaveLength(0);
-  await amount.fill("9900.00");
+  await amount.fill("9.900");
   await page.getByRole("button", { name: "Place Bid", exact: true }).click();
   await expect(page.getByText("Your bid was accepted.", { exact: true })).toBeVisible();
   await expect(page.getByText("$9,900.00", { exact: true }).first()).toBeVisible();

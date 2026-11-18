@@ -15,6 +15,7 @@ import { SellerError, SellerHeading, SellerPanel, SellerStatus, sellerButton, se
 import SellerSecondChanceOffer from "../components/SellerSecondChanceOffer";
 import type { SellerAuction, SellerAuctionUpdate } from "../types/sellerAuctionType";
 import { readBackofficeRoles, sellerAuctionHref } from "./backofficeAccess";
+import { MoneyInput, initialVnd } from "../components/moneyInput";
 
 const toLocalInput = (value: string) => {
   const date = new Date(value);
@@ -30,8 +31,8 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
   const [productId, setProductId] = useState(initial?.productId ?? "");
   const [skuId, setSkuId] = useState(initial?.skuId ?? "");
   const [page, setPage] = useState(0);
-  const [startingPrice, setStartingPrice] = useState(initial?.startingPrice ?? "100000");
-  const [increment, setIncrement] = useState(initial?.bidIncrement ?? "10000");
+  const [startingPrice, setStartingPrice] = useState(initialVnd(initial?.startingPrice ?? "100000"));
+  const [increment, setIncrement] = useState(initialVnd(initial?.bidIncrement ?? "10000"));
   const [start, setStart] = useState(() => toLocalInput(initial?.startAt ?? new Date(Date.now() + 5 * 60_000).toISOString()));
   const [duration, setDuration] = useState(initial ? String((Date.parse(initial.endAt) - Date.parse(initial.startAt)) / 60_000) : "4320");
   const [validation, setValidation] = useState("");
@@ -94,7 +95,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
           <label className="mt-4 block text-sm">SKU<select required value={skuId} onChange={(event) => setSkuId(event.target.value)} className={`${sellerInput} mt-2`}><option value="">Select a SKU</option>{skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.skuCode} · {sku.color} · {sku.size}</option>)}</select></label>
           {product.isPending && productId && <p role="status" className="mt-3 text-sm">Loading SKUs…</p>}{product.error && <div className="mt-3"><SellerError error={product.error} retry={() => void product.refetch()} /></div>}
         </>}<p className="mt-4 text-xs leading-5 text-muted-foreground">Each SKU can have one live auction at a time.</p></SellerPanel>
-        <SellerPanel title="Pricing"><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm">Starting Price (VND)<input required inputMode="decimal" value={startingPrice} onChange={(event) => setStartingPrice(event.target.value)} className={`${sellerInput} mt-2 font-mono`} /></label><label className="block text-sm">Bid Increment (VND)<input required inputMode="decimal" value={increment} onChange={(event) => setIncrement(event.target.value)} className={`${sellerInput} mt-2 font-mono`} /></label></div></SellerPanel>
+        <SellerPanel title="Pricing"><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm">Starting Price (VND)<MoneyInput required value={startingPrice} onValueChange={setStartingPrice} className={`${sellerInput} mt-2 font-mono`} /></label><label className="block text-sm">Bid Increment (VND)<MoneyInput required value={increment} onValueChange={setIncrement} className={`${sellerInput} mt-2 font-mono`} /></label></div></SellerPanel>
         <SellerPanel title="Schedule"><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm">Start (local time)<input required type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} className={`${sellerInput} mt-2`} /></label><label className="block text-sm">Duration<select value={duration} onChange={(event) => setDuration(event.target.value)} className={`${sellerInput} mt-2`}>{!['3','60','1440','4320','10080'].includes(duration) && <option value={duration}>{duration} minutes</option>}<option value="3">3 minutes · demo</option><option value="60">1 hour</option><option value="1440">1 day</option><option value="4320">3 days</option><option value="10080">7 days</option></select></label></div><p className="mt-3 text-xs text-muted-foreground">Ends {endAt ? dateLabel(endAt) : "—"} (UTC+7)</p><button type="button" className={`${sellerButton} mt-4`} onClick={() => { setStart(toLocalInput(new Date(Date.now() + 90_000).toISOString())); setDuration("3"); }}>Use 3-minute demo</button><p className="mt-3 text-xs leading-5 text-muted-foreground">The selected duration must be allowed by this environment.</p></SellerPanel>
         <SellerPanel title="Rules"><div className="flex items-center gap-3 text-sm"><Gavel size={16} className="text-primary" aria-hidden="true" />{initial ? "Bidding access follows this auction’s policy" : "Public — anyone can bid"}</div><p className="mt-4 text-sm">Anti-sniping follows the auction policy.</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Bids close to the end may extend the deadline. The current deadline is shown in your auctions list.</p></SellerPanel>
       </fieldset>

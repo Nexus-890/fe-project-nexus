@@ -5,6 +5,7 @@ import ManualPayoutDialog from "./ManualPayoutDialog";
 import { sellerButton, sellerInput } from "./SellerUi";
 import { emptyTransferFacts, evidenceLabel, parseResolutionForm, parseRetryForm, parseReviewForm, qrIssuedAt, resolutionNeedsFacts, resolutionOutcomes, type TransferFacts } from "../features/manualPayoutSchema";
 import type { DisputeReviewInput, ManualCase, ManualPayout, ManualResolutionInput, SourceAccount } from "../types/manualPayoutType";
+import { MoneyInput, groupedVnd } from "./moneyInput";
 
 type Dialog = "resolve" | "review" | "retry" | null;
 type Props = {
@@ -66,7 +67,7 @@ function ManualPayoutReconciliationPanel({ payout, canReconcile, sourceAccounts,
       <label className="grid gap-2 text-xs">Outcome<select className={sellerInput} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Choose an outcome</option>{outcomes.map((value) => <option key={value} value={value}>{value === "CONFIRMED_SENT" && attempt.state === "SUCCEEDED" ? "The recorded transfer was correct (close this exception only)" : outcomeLabels[value]}</option>)}</select></label>
       {resolutionNeedsFacts(outcome, attempt.state) && <>
         <label className="grid gap-2 text-xs">Platform source account<select className={sellerInput} value={facts.sourceAccountId} onChange={(event) => setFacts((value) => ({ ...value, sourceAccountId: event.target.value }))}><option value="">Choose the account it was sent from</option>{sourceAccounts.map((account) => <option key={account.id} value={account.id}>{account.alias}</option>)}</select></label>
-        <label className="grid gap-2 text-xs">Transferred amount (VND, two decimals)<input className={sellerInput} inputMode="decimal" value={facts.amount} placeholder={payout.netAmount} onChange={(event) => setFacts((value) => ({ ...value, amount: event.target.value.trim() }))} /></label>
+        <label className="grid gap-2 text-xs">Transferred amount (VND)<MoneyInput className={sellerInput} value={facts.amount} placeholder={groupedVnd(payout.netAmount)} onValueChange={(amount) => setFacts((value) => ({ ...value, amount }))} /></label>
         <label className="grid gap-2 text-xs">Bank transfer reference<input className={sellerInput} value={facts.reference} maxLength={120} onChange={(event) => setFacts((value) => ({ ...value, reference: event.target.value }))} /></label>
         <label className="grid gap-2 text-xs">Transferred at (Vietnam time)<input type="datetime-local" className={sellerInput} value={facts.transferredAt} onChange={(event) => setFacts((value) => ({ ...value, transferredAt: event.target.value }))} /></label>
       </>}

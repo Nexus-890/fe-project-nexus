@@ -16,6 +16,7 @@ import { formatVND } from "../components/formatPrice";
 import { SellerError, SellerHeading, SellerPanel, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import type { ProductDetail, ProductImage as ProductImageModel, ProductSku } from "../types/catalogResponseType";
 import type { SellerProductStatus, SellerProductUpdate, SellerSkuInput } from "../types/sellerType";
+import { MoneyInput, initialVnd } from "../components/moneyInput";
 
 const parcelFields = [
   { key: "weightGrams", label: "Weight (g)", max: 50000 },
@@ -37,7 +38,7 @@ const moneyOf = (text: string): number | null =>
 function SkuEditor({ productId, sku, onSaved, onRemove }: { productId: string; sku?: ProductSku; onSaved: (sku: ProductSku) => void; onRemove: () => void }) {
   const auth = useAuth();
   const [input, setInput] = useState({
-    color: sku?.color ?? "", size: sku?.size ?? "Standard", price: sku?.price ?? "", costPrice: sku?.costPrice ?? "",
+    color: sku?.color ?? "", size: sku?.size ?? "Standard", price: initialVnd(sku?.price), costPrice: initialVnd(sku?.costPrice),
     weightGrams: sku?.shippingParcel?.weightGrams.toString() ?? "",
     lengthCm: sku?.shippingParcel?.lengthCm.toString() ?? "",
     widthCm: sku?.shippingParcel?.widthCm.toString() ?? "",
@@ -73,7 +74,7 @@ function SkuEditor({ productId, sku, onSaved, onRemove }: { productId: string; s
   }}>
     <fieldset disabled={save.isPending} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-xs text-muted-foreground">SKU code<input aria-label={`SKU code ${labelSuffix}`} readOnly value={sku?.skuCode ?? "Generated when saved"} className={`${sellerInput} mt-2 bg-muted font-mono text-xs`} /></label>
-      {skuFields.map(({ key, label, aria, money }) => <label key={key} className="text-xs text-muted-foreground">{label}<input aria-label={`${aria} ${labelSuffix}`} required maxLength={money ? 17 : 50} value={input[key]} inputMode={money ? "decimal" : undefined} onChange={(event) => setInput({ ...input, [key]: event.target.value })} className={`${sellerInput} mt-2`} /></label>)}
+      {skuFields.map(({ key, label, aria, money }) => <label key={key} className="text-xs text-muted-foreground">{label}{money ? <MoneyInput aria-label={`${aria} ${labelSuffix}`} required maxLength={24} value={input[key]} onValueChange={(raw) => setInput({ ...input, [key]: raw })} className={`${sellerInput} mt-2`} /> : <input aria-label={`${aria} ${labelSuffix}`} required maxLength={50} value={input[key]} onChange={(event) => setInput({ ...input, [key]: event.target.value })} className={`${sellerInput} mt-2`} />}</label>)}
     </fieldset>
     <fieldset disabled={save.isPending} className="space-y-3">
       <legend className="text-sm font-medium">Shipping measurements per SKU unit</legend>

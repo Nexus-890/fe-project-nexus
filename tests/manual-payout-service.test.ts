@@ -213,8 +213,9 @@ test("workspace forms validate exact values locally before any command is sent",
   const form = { sourceAccountId: sourceId, amount: "95000.00", reference: "FT2611180001", transferredAt: "2026-11-18T09:30", evidenceIds: [evidenceId], attested: true };
   const serverNow = Date.parse("2026-11-18T03:00:00Z");
   assert.deepEqual(parseConfirmationForm(form, "95000.00", [sourceId], serverNow), { ok: true, value: { sourceAccountId: sourceId, amount: "95000.00", bankTransferReference: "FT2611180001", transferredAt: "2026-11-18T02:30:00.000Z", evidenceIds: [evidenceId] } });
-  for (const bad of [{ amount: "95000" }, { amount: "94999.99" }, { reference: "a b" }, { reference: "x".repeat(121) }, { transferredAt: "2026-11-18T11:00" }, { evidenceIds: [] }, { attested: false }, { sourceAccountId: "other" }])
+  for (const bad of [{ amount: "95000.001" }, { amount: "94999.99" }, { reference: "a b" }, { reference: "x".repeat(121) }, { transferredAt: "2026-11-18T11:00" }, { evidenceIds: [] }, { attested: false }, { sourceAccountId: "other" }])
     assert.equal(parseConfirmationForm({ ...form, ...bad }, "95000.00", [sourceId], serverNow).ok, false);
+  assert.equal(parseConfirmationForm({ ...form, amount: "95000" }, "95000.00", [sourceId], serverNow).ok, true);
   const sameMinute = parseConfirmationForm(form, "95000.00", [sourceId], serverNow, "2026-11-18T02:30:42.000Z");
   assert.equal(sameMinute.ok && sameMinute.value.transferredAt, "2026-11-18T02:30:59.999Z");
   assert.equal(parseConfirmationForm(form, "95000.00", [sourceId], serverNow, "2026-11-18T02:31:05.000Z").ok, false);
