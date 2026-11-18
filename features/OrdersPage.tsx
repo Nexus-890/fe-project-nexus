@@ -32,7 +32,7 @@ function OrderRow({ order }: { order: OrderSummary }) {
       </td>
       <td className="col-span-2 min-w-0 text-sm sm:col-span-1 font-medium xl:w-[22%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs font-normal text-muted-foreground xl:hidden">Total</span>
-        <OrderTotalPill total={order.totalAmount} breakdown={order.breakdown} testId={`order-total-${order.orderId}`} />
+        <OrderTotalPill total={order.totalAmount} vouchers={order.vouchers} breakdown={order.breakdown} testId={`order-total-${order.orderId}`} />
       </td>
       <td className="col-span-2 min-w-0 xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Status</span>

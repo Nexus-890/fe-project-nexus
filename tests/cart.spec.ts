@@ -122,6 +122,7 @@ async function installCart(page: Page, title = productName) {
     const buyer = state.account.id;
     expect(token).toBe(state.account.authorization);
     const currentCart = state.carts.get(buyer)!;
+    if (method === "GET" && path === `${cartPath}/pricing`) { const subtotal = currentCart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return json(route, envelope({ subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] })); }
     if (method === "GET" && path === cartPath) {
       state.reads.push(buyer);
       try {
@@ -263,7 +264,8 @@ test("quantity changes subtotal before the response and rejection restores the s
     await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
     await expect(line.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
     expect(state.writes).toHaveLength(1);
-    expect(pricingRequests).toEqual([]);
+    expect(pricingRequests.length).toBeGreaterThan(0);
+    for (const request of pricingRequests) expect(new URL(request).searchParams.getAll("voucherCodes")).toEqual([""]);
   } finally {
     gate.resolve();
   }

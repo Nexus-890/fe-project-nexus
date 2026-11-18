@@ -96,7 +96,7 @@ function HeaderTopBar({
             </details>
             <details name="header-account-navigation" className="relative hidden lg:block">
               <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm px-2 hover:text-primary">My Nexus <ChevronDown size={13} aria-hidden="true" /></summary>
-              <div className="absolute right-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">{[{href: ROUTES.profile,label: "My profile"},{href: ROUTES.orders,label: "My orders"},{href: "/my-bids",label: "My Bids"},{href: "/saved",label: "Saved items"}].map(({href,label})=><Link key={href} href={href} className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">{label}</Link>)}</div>
+              <div className="absolute right-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">{[{href: ROUTES.profile,label: "My profile"},{href: ROUTES.orders,label: "My orders"},{href: "/vouchers",label: "My vouchers"},{href: "/my-bids",label: "My Bids"},{href: "/saved",label: "Saved items"}].map(({href,label})=><Link key={href} href={href} className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">{label}</Link>)}</div>
             </details>
           </nav>
           <MobileAccountNavigation savedCount={watchlist?.products.length} />

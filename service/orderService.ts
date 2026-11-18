@@ -1,3 +1,4 @@
+import { parseOrderVouchers } from "./promotionService";
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
 import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
@@ -48,6 +49,7 @@ export const parseOrderSummary = (value: unknown): OrderSummary => {
   return {
     orderId: value.orderId, orderNumber: value.orderNumber,
     createdAt: value.createdAt, status: value.status, totalAmount, breakdown: parseBreakdown(value),
+    ...(value.vouchers === undefined ? {} : { vouchers: parseOrderVouchers(value.vouchers) }),
     orderGroupId: value.orderGroupId == null ? null : value.orderGroupId as string,
   };
 };

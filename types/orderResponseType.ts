@@ -16,6 +16,7 @@ export type OrderSummary = Pick<
 > & {
   totalAmount: string;
   breakdown: OrderPriceBreakdown | null;
+  vouchers?: components["schemas"]["OrderVoucher"][];
   /** Older order responses can predate the group identifier added in #138. */
   orderGroupId: string | null;
 };

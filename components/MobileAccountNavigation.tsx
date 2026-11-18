@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/compone
 const accountLinks = [
   { href: ROUTES.profile, label: "My profile" },
   { href: ROUTES.orders, label: "My orders" },
+  { href: "/vouchers", label: "My vouchers" },
   { href: "/my-bids", label: "My Bids" },
 ];
 

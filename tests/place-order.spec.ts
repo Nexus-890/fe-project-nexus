@@ -94,6 +94,7 @@ test("double-click sends one purchase and opens one payment page for two seller 
       provinceCode: "202", wardCode: "20308", countryCode: "VN",
     },
     paymentMethod: "SEPAY",
+    voucherCodes: [],
   });
   expect(actual.requests.filter((entry) => entry.path === "/v1/orders").every((entry) => entry.authorized)).toBe(true);
   expect(actual.rejectedAuth).toBe(0);

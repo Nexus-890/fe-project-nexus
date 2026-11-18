@@ -16,6 +16,7 @@ import { getCategoryTree, getProducts } from "@/service/catalogService";
 import { getActiveAuctions } from "@/service/auctionService";
 import { flattenCategories } from "@/features/catalogUtils";
 import SellerReputation from "./SellerReputation";
+import ClaimableVouchers from "./ClaimableVouchers";
 import AuctionCountdown from "../components/AuctionCardCountdown";
 
 const homeFilters = { page: 0, size: 10 };
@@ -32,6 +33,7 @@ function HomePage() {
   return (
     <div className="mx-auto w-full max-w-[1248px] space-y-8 px-4 py-6 sm:px-6">
       <ShopPromotions products={products.data?.content ?? []} />
+      <ClaimableVouchers />
       <CategoryNavigation categories={tree.data ?? []} loading={tree.isPending} error={tree.isError} retrying={tree.isFetching} onRetry={() => void tree.refetch()} />
       <section id="deals" aria-label="Flash Sale" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-4"><h2 className="flex items-center gap-2 text-heading-20 text-primary"><Zap size={23} aria-hidden="true" />FLASH SALE</h2><SampleSaleCountdown /></div><Link href="/search" className="inline-flex min-h-11 items-center gap-1 text-sm text-primary">View all <ArrowRight size={15} /></Link></div>

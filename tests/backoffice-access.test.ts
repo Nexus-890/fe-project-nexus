@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { backofficeMenu, canAccessBackofficePath, hasBackofficeAccess, readBackofficeRoles, resolveAuctionWorkspace, resolveRoleLanding, sellerAuctionHref } from "../features/backofficeAccess";
+import { backofficeMenu, canAccessBackofficePath, hasBackofficeAccess, readBackofficeRoles, resolveAuctionWorkspace, resolvePromotionWorkspace, resolveRoleLanding, sellerAuctionHref } from "../features/backofficeAccess";
 
 const token = (claims: unknown) => `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
@@ -12,10 +12,14 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 });
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
-  assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
+  assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Vouchers", "Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
   assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Payments", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
+  assert.equal(canAccessBackofficePath("/backoffice/promotions", ["SELLER"]), false);
+  assert.equal(canAccessBackofficePath("/backoffice/promotions", ["ADMIN"]), true);
+  assert.equal(canAccessBackofficePath("/backoffice/vouchers", ["SELLER"]), true);
+  assert.equal(canAccessBackofficePath("/backoffice/vouchers", ["SUPPORT_STAFF"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products/new", ["ADMIN"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/products/id?tab=images", ["BUYER", "SELLER"]), true);
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER", "ADMIN"]), true);
@@ -131,4 +135,15 @@ test("event logs, legacy event alias and health share Admin/Support direct-route
     assert.equal(backofficeMenu(selected).some((item) => item.href === "/backoffice/event-log"), false, "legacy alias is not a duplicate menu item");
     assert.equal(backofficeMenu(selected).filter((item) => item.href === "/backoffice/health").length, allowed ? 1 : 0);
   }
+});
+
+test("a mixed ADMIN and SELLER account can open the seller voucher workspace without granting a role", () => {
+  assert.equal(resolvePromotionWorkspace(["ADMIN", "SELLER"]), "admin");
+  assert.equal(resolvePromotionWorkspace(["SELLER", "ADMIN"], "seller"), "seller");
+  assert.equal(canAccessBackofficePath("/backoffice/vouchers?view=seller", ["ADMIN", "SELLER"]), true);
+  assert.equal(resolvePromotionWorkspace(["SELLER"]), "seller");
+  assert.equal(resolvePromotionWorkspace(["SELLER"], "admin"), "seller", "a query parameter cannot add the Admin role");
+  assert.equal(resolvePromotionWorkspace(["ADMIN"], "seller"), "admin", "a query parameter cannot add the Seller role");
+  assert.equal(resolvePromotionWorkspace(["BUYER"], "seller"), null);
+  assert.equal(resolvePromotionWorkspace(["SUPPORT_STAFF"]), null);
 });

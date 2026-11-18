@@ -57,6 +57,8 @@ export function useCheckout(destination: CheckoutDestination | null, ready: bool
       if (!current(operation)) return;
       completed.current = true;
       setPlaced(true);
+      client.setQueryData(queryKeys.promotions.selection(operation.sessionId), []);
+      void client.invalidateQueries({ queryKey: queryKeys.promotions.root(operation.sessionId), refetchType: "none" });
       client.setQueryDefaults(["checkout", operation.sessionId, "group"], { meta: { requiresAuth: true } });
       client.setQueryData(queryKeys.checkout.group(operation.sessionId, group.orderGroupId), group);
       // The cart is emptied on creation. Defer its refresh until checkout has
@@ -95,7 +97,7 @@ export function useCheckout(destination: CheckoutDestination | null, ready: bool
     if (confirmPrice && conflict?.kind !== "price-changed") return;
     if (!attempt.current || confirmPrice) {
       if (!destination) return;
-      attempt.current = { key: crypto.randomUUID(), destination: { ...destination }, sessionId };
+      attempt.current = { key: crypto.randomUUID(), destination: { ...destination, ...(destination.voucherCodes ? { voucherCodes: [...destination.voucherCodes] } : {}) }, sessionId };
     }
     const operation = { ...attempt.current, controller: new AbortController() };
     // Set synchronously: a second click can arrive before React renders pending.
