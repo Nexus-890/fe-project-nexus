@@ -41,11 +41,12 @@ async function signIn(page: Page) {
   await page.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
   await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
 }
 
 async function openProfile(page: Page) {
-  await page.locator("header").getByRole("link", { name: `Hi ${originalName}` }).click();
+  await page.locator("header summary", { hasText: `Hi ${originalName}` }).click();
+  await page.locator("header").getByRole("link", { name: "My profile", exact: true }).click();
   await expect(page).toHaveURL(/\/profile$/);
 }
 
@@ -101,7 +102,7 @@ test("header links to profile, GET populates, PUT updates the form and header, c
     code: 0, message: "response success", data: { fullName: "Lan Nguyễn Updated" },
   });
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan Nguyễn Updated");
-  await expect(page.locator("header").getByRole("link", { name: "Hi Lan Nguyễn Updated" })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Lan Nguyễn Updated" })).toBeVisible();
   const puts = (await history(request)).filter(entry => entry.method === "PUT" && entry.path === "/v1/users/me");
   expect(puts).toHaveLength(1);
   expect(puts[0].authenticated).toBe(true);
@@ -133,7 +134,7 @@ test("400 phone validation is attached to the phone input", async ({ page, reque
   expect(describedBy).toBeTruthy();
   const describedText = await page.evaluate(ids => ids!.split(/\s+/).map(id => document.getElementById(id)?.textContent).join(" "), describedBy);
   expect(describedText).toContain("Phone number is invalid");
-  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
 });
 
 test("blank name and future birth date are rejected before PUT", async ({ page, request }) => {
@@ -194,10 +195,10 @@ test("a session refresh the gateway cannot serve keeps the user signed in and th
   await expect(page.getByRole("form", { name: "Personal information", exact: true }).getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan after the outage");
-  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
   await control(request, { putStatus: 0, refreshStatus: 0 });
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
-  await expect(page.locator("header").getByRole("link", { name: "Hi Lan after the outage" })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Lan after the outage" })).toBeVisible();
 });
 
 test("GET failure shows a retry and recovers the real form", async ({ page, request }) => {
@@ -220,10 +221,10 @@ test("failed PUT keeps edits and retries without changing the header early", asy
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   await expect(page.getByRole("form", { name: "Personal information", exact: true }).getByRole("alert")).toContainText("Unable to update your profile.");
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan retry update");
-  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
   await control(request, { putStatus: 0 });
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
-  await expect(page.locator("header").getByRole("link", { name: "Hi Lan retry update" })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Lan retry update" })).toBeVisible();
 });
 
 test("token renewal preserves dirty profile fields without starting another profile read", async ({ page, request }) => {
@@ -256,7 +257,7 @@ test("token renewal preserves dirty profile fields without starting another prof
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
   await expect(page.getByLabel("House number and street", { exact: true })).toHaveValue("Unsaved street during renewal");
   await expect(page.getByRole("heading", { name: "Unable to load your profile", exact: true })).toHaveCount(0);
-  await expect(page.locator("header").getByRole("link", { name: `Hi ${originalName}` })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
   expect((await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/users/me")).toHaveLength(profileReads);
   expect((await history(request)).filter(entry => entry.method === "PUT")).toEqual([]);
 
@@ -268,7 +269,7 @@ test("token renewal preserves dirty profile fields without starting another prof
     response.request().method() === "PUT" && new URL(response.url()).pathname === "/api/v1/users/me");
   await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   expect((await saved).status()).toBe(200);
-  await expect(page.locator("header").getByRole("link", { name: "Hi Unsaved name during renewal" })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Unsaved name during renewal" })).toBeVisible();
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Unsaved name during renewal");
   await expect(page.locator("#profile-address-current")).toHaveText(`Current: ${fixtureAddress("Unsaved street during renewal")}`);
   const puts = (await history(request)).filter(entry => entry.method === "PUT");

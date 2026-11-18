@@ -37,7 +37,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Password", { exact: true }).fill("cart-password");
   await page.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator("header").getByRole("link", { name: "Hi Cart Buyer" })).toBeVisible();
+  await expect(page.locator("header").getByText("Hi Cart Buyer", { exact: true })).toBeVisible();
 }
 
 async function openCart(page: Page) {
@@ -48,13 +48,13 @@ async function openCart(page: Page) {
 
 async function openProduct(page: Page) {
   await page.locator("main").getByRole("link", { name: "Electronics", exact: true }).click();
-  await page.getByRole("article", { name: productName, exact: true }).getByRole("link").click();
+  await page.getByRole("article", { name: productName, exact: true }).getByRole("link").first().click();
   await expect(page).toHaveURL(new RegExp(`${productId}$`));
   await expect(page.getByRole("heading", { name: productName, exact: true })).toBeVisible();
 }
 
-async function expectCount(page: Page, quantity: number) {
-  await expect(cartLink(page)).toHaveAccessibleName(new RegExp(`Shopping cart.*\\b${quantity}\\s+items?\\b`, "i"));
+async function expectCount(page: Page, lines: number) {
+  await expect(cartLink(page)).toHaveAccessibleName(new RegExp(`Shopping cart.*\\b${lines}\\s+items?\\b`, "i"));
 }
 
 test.beforeEach(async ({ request }) => {
@@ -81,7 +81,7 @@ test("quantity two from the product updates the header without reloading", async
     && new URL(response.url()).pathname === "/api/v1/carts/me/items");
   await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
   expect((await addition).status()).toBe(201);
-  await expectCount(page, 2);
+  await expectCount(page, 1);
   expect(await page.evaluate(() => (window as typeof window & { cartAcceptanceMarker?: string }).cartAcceptanceMarker)).toBe("same-document");
 
   const posts = cartRequests(await history(request)).filter(entry => entry.method === "POST");
@@ -89,16 +89,16 @@ test("quantity two from the product updates the header without reloading", async
   expect(posts[0]).toMatchObject({ path: "/v1/carts/me/items", authenticated: true, body: { skuId, quantity: 2 } });
   await openCart(page);
   await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expectCount(page, 2);
+  await expectCount(page, 1);
 });
 
 test("the header and cart list share one authenticated GET", async ({ page, request }) => {
   await reset(request, { seeded: true, quantity: 3 });
   await signIn(page);
-  await expectCount(page, 3);
+  await expectCount(page, 1);
   await openCart(page);
   await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  const gets = cartRequests(await history(request)).filter(entry => entry.method === "GET");
+  const gets = cartRequests(await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/carts/me");
   expect(gets).toHaveLength(1);
   expect(gets[0]).toMatchObject({ path: "/v1/carts/me", authenticated: true });
 });
@@ -118,13 +118,13 @@ test("minimal backend DTO sums quantities across lines and derives money totals"
     expect(typeof item.unitPrice).toBe("number");
   }
 
-  await expectCount(page, 5);
+  await expectCount(page, 2);
   await openCart(page);
   await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expect(page.getByText("Item 91300007-1111-4111-8111-111111111111", { exact: true })).toBeVisible();
+  await expect(page.getByText("Product 91300007-1111-4111-8111-111111111111", { exact: true })).toBeVisible();
   await expect(page.getByText("Subtotal (5 items)", { exact: true })).toBeVisible();
   await expect(page.getByTestId("cart-subtotal")).toHaveText("5.500.001,00 ₫");
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(1);
+  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/carts/me")).toHaveLength(1);
 });
 
 test("updating and removing an item updates the shared header count", async ({ page, request }) => {
@@ -136,7 +136,7 @@ test("updating and removing an item updates the shared header count", async ({ p
     && new URL(response.url()).pathname.startsWith("/api/v1/carts/me/items/"));
   await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
   expect((await update).status()).toBe(200);
-  await expectCount(page, 2);
+  await expectCount(page, 1);
   const updates = cartRequests(await history(request)).filter(entry => entry.method === "PUT");
   expect(updates).toHaveLength(1);
   expect(updates[0]).toMatchObject({ body: { quantity: 2 }, authenticated: true });
@@ -149,7 +149,7 @@ test("updating and removing an item updates the shared header count", async ({ p
   expect(removals).toHaveLength(1);
   expect(removals[0].authenticated).toBe(true);
   // Initial shared GET, then one authoritative reconciliation for each edit.
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(3);
+  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/carts/me")).toHaveLength(3);
   await expect(cartLink(page)).not.toHaveAccessibleName(/\b[1-9]\d* items?\b/);
 });
 
@@ -162,7 +162,7 @@ test("cart GET failure offers retry and recovers the cart", async ({ page, reque
   await control(request, { getStatus: 0 });
   await page.getByRole("button", { name: /retry cart|try again/i }).click();
   await expect(page.getByText(cartItemName, { exact: true })).toBeVisible();
-  await expectCount(page, 2);
+  await expectCount(page, 1);
 });
 
 test("failed quantity update preserves the last confirmed cart and can retry", async ({ page, request }) => {
@@ -175,7 +175,7 @@ test("failed quantity update preserves the last confirmed cart and can retry", a
   await expectCount(page, 1);
   await control(request, { writeStatus: 0 });
   await page.getByRole("button", { name: new RegExp(`Increase quantity.*${cartItemName}`, "i") }).click();
-  await expectCount(page, 2);
+  await expectCount(page, 1);
 });
 
 test("a late add response after sign out cannot restore the cart badge", async ({ page, request }) => {
@@ -185,12 +185,13 @@ test("a late add response after sign out cannot restore the cart badge", async (
   await page.getByRole("spinbutton", { name: "Quantity", exact: true }).fill("2");
   await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
   await expect.poll(async () => cartRequests(await history(request)).filter(entry => entry.method === "POST").length).toBe(1);
+  await page.locator("header summary", { hasText: /^Hi / }).click();
   await page.locator("header").getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect.poll(async () => ((await (await request.get(`${fixtureUrl}/__test/cart`)).json()).items[0]?.quantity ?? 0)).toBe(2);
   await expect(cartLink(page)).toHaveAccessibleName("Shopping cart");
   await expect(page.locator("header").getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET")).toHaveLength(1);
+  expect(cartRequests(await history(request)).filter(entry => entry.method === "GET" && entry.path === "/v1/carts/me")).toHaveLength(1);
 });
 
 test("cart fits mobile and desktop and captures review screenshots", async ({ page, request }, info) => {

@@ -297,6 +297,7 @@ test("successful quantity edit survives navigation, session restoration and expl
   await expect(line.getByRole("spinbutton")).toHaveValue("3");
   await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
   expect(state.reads.length).toBeGreaterThan(readsBeforeRestore);
+  await page.locator("header summary", { hasText: /^Hi / }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   // Wait for the Keycloak end-session redirect to land back on the home page before navigating.
   await expect(page).toHaveURL(`${appOrigin}/`);
@@ -402,6 +403,7 @@ test("a pending old-account edit cannot restore private cart data after account 
     await page.getByTestId(`cart-line-${lineId}`).getByRole("button", { name: /Increase quantity/ }).click();
     await expect(page.getByTestId("cart-subtotal")).toHaveText("450.000,00 ₫");
     await expect.poll(() => state.writes.length).toBe(1);
+    await page.locator("header summary", { hasText: /^Hi / }).click();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL((url) => url.origin === appOrigin && url.pathname === "/");
     await page.waitForLoadState("load");

@@ -407,6 +407,7 @@ test("logout during a pending cart request keeps the next account free of stale 
     await expect(
       page.getByRole("button", { name: "Adding…", exact: true }),
     ).toBeDisabled();
+    await page.locator("header summary", { hasText: /^Hi / }).click();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL((url) => url.origin === appOrigin && url.pathname === "/");
     await page.waitForLoadState("load");

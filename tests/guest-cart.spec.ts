@@ -122,6 +122,8 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
   await expect(badge(page, 1)).toBeVisible();
   expect(await evidence(request)).toMatchObject({ mergeRequests: 1, mergesApplied: 1 });
 
+  await page.locator("header summary", { hasText: /^Hi / }).click();
+
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   // Wait for the Keycloak end-session redirect to land back on the shop before reloading.
   await expect.poll(async () => (await evidence(request, "keycloak")).logouts).toBe(1);

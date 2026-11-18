@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { ROUTES } from "@/configs/routes";
+import { useSellHref } from "@/hooks/useSellHref";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/popover";
 
 const accountLinks = [
@@ -15,6 +16,7 @@ const accountLinks = [
 
 function MobileAccountNavigation({ savedCount = 0 }: { savedCount?: number }) {
   const [open, setOpen] = useState(false);
+  const sellHref = useSellHref();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -54,7 +56,7 @@ function MobileAccountNavigation({ savedCount = 0 }: { savedCount?: number }) {
           <Link href="/auctions" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Explore auctions</Link>
           <h3 className="mt-2 border-t border-border px-3 pt-3 pb-1 text-xs font-semibold text-muted-foreground">Shopping</h3>
           <Link href="/checkout" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Ship to HCMC</Link>
-          <Link href={ROUTES.sell} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Sell</Link>
+          <Link href={sellHref} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-sm px-3 text-sm hover:bg-muted">Sell</Link>
         </nav>
       </PopoverContent>
     </Popover>

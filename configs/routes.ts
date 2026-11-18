@@ -13,7 +13,7 @@ export const ROUTES = {
   myBids: "/my-bids",
   reputation: "/profile#reputation",
   security: "/profile#security",
-  sell: "/sell/images",
+  sellerProducts: "/backoffice/products",
 } as const;
 
 export const HEADER_UTILITY_NAVIGATION = [

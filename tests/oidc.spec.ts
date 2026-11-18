@@ -104,6 +104,8 @@ test("code + PKCE accepts the backend 200 profile envelope, returns to the reque
   }
   expect(await sessionCookie(page)).toMatchObject({ httpOnly: true, path: "/api/v1/auth", sameSite: "Lax" });
 
+  await page.locator("header summary", { hasText: /^Hi / }).click();
+
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect.poll(async () => (await evidence(request, "keycloak")).logouts).toBe(1);
   await expect(page).toHaveURL(new RegExp(`^${app}/`));
@@ -277,9 +279,9 @@ test("develop disables undelivered account operations and leaves a sign-in path"
   await expect(page.getByRole("button", { name: "Send verification code", exact: true })).toHaveCount(0);
   await page.goto("/addresses");
   await expect(page.getByText("Saved addresses are not available yet.", { exact: false })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Hi Fixture Buyer", exact: true })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Fixture Buyer" })).toBeVisible();
   await page.goto("/become-a-seller");
-  await expect(page.getByRole("link", { name: "Hi Fixture Buyer", exact: true })).toBeVisible();
+  await expect(page.locator("header summary", { hasText: "Hi Fixture Buyer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit application", exact: true })).toHaveCount(0);
   expect(requests).toEqual([]);
 });

@@ -62,6 +62,7 @@ async function signOutAndVerifyCleanup(page: Page, verifyCleanup: () => Promise<
   const logoutFailed = page.waitForEvent("requestfailed", (request) =>
     new URL(request.url()).pathname === "/keycloak/realms/nexus/protocol/openid-connect/logout",
   );
+  await page.locator("header summary", { hasText: /^Hi / }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click({ noWaitAfter: true });
   await logoutFailed;
   await expect(page.getByRole("dialog", { name: "Notifications", exact: true })).toHaveCount(0);

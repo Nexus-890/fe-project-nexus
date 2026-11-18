@@ -7,6 +7,7 @@ import type { HeaderProps } from "@/types/uiType";
 import { HEADER_UTILITY_NAVIGATION, ROUTES } from "@/configs/routes";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import MobileAccountNavigation from "@/components/MobileAccountNavigation";
+import { useSellHref } from "@/hooks/useSellHref";
 
 function HeaderTopBar({
   user,
@@ -19,6 +20,7 @@ function HeaderTopBar({
 }: HeaderProps) {
   const router = useRouter();
   const watchlist = useWatchlist();
+  const sellHref = useSellHref();
   function signOut() {
     onSignOut();
   }
@@ -28,10 +30,16 @@ function HeaderTopBar({
       <div className="mx-auto flex min-h-11 lg:min-h-9 max-w-[1248px] items-center justify-between gap-3 px-4 py-1 lg:py-0 text-xs text-gray-900 sm:px-6">
         <nav aria-label="Nexus utility links" className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
           {user ? (
-            <Link href={ROUTES.profile} className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[9rem] sm:max-w-[13rem] items-center gap-1 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
-              Hi {user.fullName}
-              <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
-            </Link>
+            <details name="header-account-navigation" className="relative min-w-0">
+              <summary className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[9rem] sm:max-w-[13rem] cursor-pointer list-none items-center gap-1 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
+                Hi {user.fullName}
+                <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
+              </summary>
+              <div className="absolute left-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">
+                <Link href={ROUTES.profile} className="flex min-h-11 items-center rounded-sm px-3 hover:bg-muted">My profile</Link>
+                <button type="button" onClick={signOut} className="flex min-h-11 w-full items-center rounded-sm px-3 text-left hover:bg-muted">Sign out</button>
+              </div>
+            </details>
           ) : authenticating ? (
             <span
               className="inline-flex min-h-11 lg:min-h-9 items-center px-2"
@@ -65,11 +73,6 @@ function HeaderTopBar({
             <Link key={href} href={href} className={`hidden min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary ${visibility}`}>{label}</Link>
           ))}
           {canAccessBackoffice && <Link href="/backoffice" className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">Back office</Link>}
-          {user && (
-            <button type="button" onClick={signOut} className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary">
-              Sign out
-            </button>
-          )}
         </nav>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -85,7 +88,7 @@ function HeaderTopBar({
               <span className="hidden md:inline">Ship to HCMC</span>
             </Link>
             <Link
-              href={ROUTES.sell}
+              href={sellHref}
               className="inline-flex min-h-11 lg:min-h-9 items-center rounded-sm px-2 hover:text-primary"
             >
               Sell
