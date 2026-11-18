@@ -97,7 +97,7 @@ export interface paths {
         };
         /**
          * List seller bank accounts for administrator review
-         * @description ADMIN only; SELLER and SUPPORT_STAFF receive 403. Optional filters are combined with AND before counting and pagination. UNVERIFIED accounts come first, oldest createdAt first, then id ascending for ties; remaining accounts follow in the same chronological order. Only accountLast4 is returned, never the full number or ciphertext. This read does not verify accounts, release held payouts or create transfers. Own seller reads remain at /me. Verification uses the displayed version as expectedVersion.
+         * @description ADMIN only; SELLER and SUPPORT_STAFF receive 403. Optional filters are combined with AND before counting and pagination. Active UNVERIFIED accounts come first, oldest createdAt first, then id ascending for ties; remaining accounts follow in the same chronological order. Only accountLast4 is returned, never the full number or ciphertext. This read does not verify accounts, release held payouts or create transfers. Own seller reads remain at /me. Verification uses the displayed version as expectedVersion.
          */
         get: operations["listAdminSellerBankAccounts"];
         put?: never;
@@ -283,6 +283,346 @@ export interface paths {
          * @description Public to JWT authentication; authenticates the raw bytes using X-Payout-Timestamp and X-Payout-Signature. HMAC-SHA256 signs epoch seconds, one dot and the exact UTF-8 request body; maximum clock skew is 300 seconds. The payout, provider, attempt and idempotency key must match the persisted send. Duplicate callbacks create no additional money movement. ACCEPTED is PROCESSING; only confirmed SUCCEEDED writes PAYOUT evidence. Provider acknowledgement uses @ProtocolResponse, outside ApiResponse.
          */
         post: operations["receivePayoutCallback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read executor capabilities and rollout state
+         * @description Reports server time, authorized platform source-account aliases, immutable-mode rollout settings and role-scoped actions. Does not enable manual processing.
+         */
+        get: operations["getManualPayoutCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the manual execution and review queue
+         * @description Returns a lightweight MANUAL queue projection, with filters applied before count/paging. Repeated status values use OR; other filters use AND. Inclusive createdAt bounds, createdAt DESC and id DESC. Each row includes masked payout/recipient data, current attempt/receipt state, versions, readiness and allowedActions. Cases contain current-attempt summaries only, with explanation empty; history and evidence are empty arrays and must be loaded from the detail endpoint when authorized. Open cases on SUCCEEDED rows remain in needsReview; hasOpenDispute means unresolved OPEN/UNDER_REVIEW/WAITING_SELLER seller disputes. REVIEW_DISPUTE is offered only for an open SELLER_DISPUTE on the current attempt, not for a STAFF_EXCEPTION alone. Reads never claim, release, issue QR or settle money.
+         */
+        get: operations["listManualPayouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read masked manual payout detail
+         * @description Returns independent payout, attempt, receipt and dispute state plus current versions and allowedActions. Unlike the lightweight queue, detail includes history and the evidence metadata visible to this actor. A role does not bypass live QR/proof ownership. REVIEW_DISPUTE requires an open SELLER_DISPUTE on the current attempt; a staff exception alone does not grant that action.
+         */
+        get: operations["getManualPayout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/readiness-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explicitly recheck an on-hold or pending manual payout
+         * @description Rechecks full funding/refund/bank/amount readiness for ON_HOLD/PENDING. Releases an eligible ON_HOLD payout to PENDING, or safely holds a PENDING payout whose readiness was lost. Creates no attempt, QR or payment; works without the automatic reconciliation sweep. GET may report a newly blocked reason and suppress CLAIM but never performs this write. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["checkManualPayoutReadiness"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exclusively claim one manual payout
+         * @description ADMIN/SUPPORT_STAFF can claim another seller payout once while manual intake is enabled. Default unissued lease is five minutes. Concurrent competing claims conflict; the owner and frozen bank/amount snapshot are durable. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["claimManualPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/qr-issuances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit one frozen QR issuance
+         * @description Owning executor only. Rechecks current full reviewed bank and funding/refund state, commits one immutable reference/snapshot and exposes server deadline (default ten minutes). An issued QR may remain payable after the platform deadline; expiry never authorizes a second transfer. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["issueManualPayoutQr"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/qr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the issued private receiving-bank QR
+         * @description Owning ADMIN/SUPPORT_STAFF executor only; even another Admin cannot use this endpoint to bypass ownership. PNG generated locally from the previously committed VietQR NAPAS account-transfer instruction. Browser clients fetch with Authorization Bearer, check the status, read blob(), and display an object URL that is revoked on replacement or screen cleanup; a direct API img src cannot attach the required Bearer header. No account, payload or token in public URLs or external QR services; reads never issue or refresh transfer instructions.
+         */
+        get: operations["getManualPayoutQr"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release an unissued claim safely
+         * @description Owner may release CLAIMED before QR issuance. Explicit ADMIN intervention requires a reason. Requeues/holds according to current readiness with NOT_SENT audit; issued/uncertain attempts cannot be released for another transfer. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["releaseManualPayoutClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload private transfer evidence
+         * @description Bound to payout/attempt/uploader; private JPEG/PNG/PDF only. Browser clients send FormData with file and expectedAttemptVersion, Authorization Bearer and UUID Idempotency-Key; the browser supplies the multipart boundary. FE needs no Supabase key or bucket URL. Backend validates signature, MIME, 10 MiB per file and three files per attempt, uploads to private storage and returns authoritative payout detail without a storage URL. Upload alone never settles money; orphan files are cleaned on DB failure. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["uploadManualPayoutEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/evidence/{evidenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download private evidence through Payment
+         * @description Owning executor or authorized ADMIN reconciliation access only. Staff queue access grants no right to another executor proof. Payment validates matching resource IDs and streams bytes from private storage; no public/signed Supabase URL or server key is exposed. Browser clients fetch with Authorization Bearer, check the status, read blob() and use URL.createObjectURL; revoke the object URL when replaced or the view closes/unmounts. Direct API img src does not attach the required Bearer header.
+         */
+        get: operations["downloadManualPayoutEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an external transfer attestation
+         * @description Owning executor with valid QR_ISSUED attempt only. Requires exact frozen amount, configured source account, bank reference/time and bound proof. Atomically records one PAYOUT, history and outbox event, SUCCEEDED and AWAITING_CONFIRMATION. Confirmation source is MANUAL_STAFF_CONFIRMED, never BANK_VERIFIED. Bank-reference uniqueness is scoped by source account, bank business date and bank reference. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["confirmManualPayoutTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/problems": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report uncertainty or an external payment problem
+         * @description Owning executor supplies reason/evidence. An uncertain issued attempt becomes UNKNOWN with no ordinary retry. One successful new report creates one STAFF_EXCEPTION and one MANUAL_PROBLEM audit linked to that case, including the original financial status; an exact replay adds neither. A suspected wrong/duplicate external payment after SUCCEEDED opens an audited exception without erasing success or authorizing another payment. If the staff report was mistaken, ADMIN may close that specific STAFF_EXCEPTION with CONFIRMED_SENT while retaining the successful payout and its accounting. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["reportManualPayoutProblem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a manual exception or dismiss a mistaken staff report
+         * @description ADMIN only, including when the reporting executor is SUPPORT_STAFF; self-seller reconciliation denied. CONFIRMED_SENT has two guarded effects: for UNKNOWN it settles once with the required transfer facts; when both payout and attempt are already SUCCEEDED and the selected open case is STAFF_EXCEPTION, it only resolves that specific mistaken staff report and appends audit. The latter preserves payout/attempt success, original PAYOUT, receipt state and any other case, including seller disputes; it creates no movement or success outbox event and needs no new transfer facts. A SUCCEEDED seller dispute alone cannot use this nonfinancial closure. CONFIRMED_NOT_SENT leaves FAILED pending explicit retry, and CONFIRMED_RETURNED adds a genuine PAYOUT_RETURN. CONFIRMATION_RECORDED_IN_ERROR requires an open reviewed case and non-execution proof, links one PAYOUT_CORRECTION and corrective event, preserves the original history and leaves the same payout FAILED. Seller acknowledgement/correction/retry serialize; a closed case needs a new explicit review. Every resolution still requires reason, bound evidence, UUID Idempotency-Key and the relevant expected versions. Exact replay returns 200 with the original result and creates no duplicate audit or financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["resolveManualPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/attempts/{attemptId}/receipt-disputes/{disputeId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a seller dispute without certifying receipt
+         * @description ADMIN-only REQUEST_INFORMATION or TRANSFER_EVIDENCE_PROVIDED with audit. Evidence may move a case to WAITING_SELLER but never confirms seller receipt or creates/requeues a payment. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["reviewManualPayoutReceiptDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/manual-payouts/{payoutId}/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explicitly requeue a reconciled manual payout
+         * @description ADMIN only after reconciled FAILED/RETURNED; UNKNOWN/PROCESSING/SUCCEEDED never ordinary-retry. Rechecks funding/refund/bank/amount and keeps the same payout/order, requeuing it as PENDING or ON_HOLD. The subsequent exclusive claim assigns the actual executor and creates the next attempt with a new reference/QR and NOT_REQUESTED receipt state. The retry command itself does not issue a transfer instruction. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["retryManualPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/{payoutId}/manual-attempts/{attemptId}/receipt-confirmations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge actual receipt as the owning seller
+         * @description SELLER identity and payout ownership required, including mixed-role owners using this seller operation. Server records acknowledgement time; no caller sellerId, bank verification, order change or financial posting. Applies only to the current settled MANUAL attempt; superseded/corrected attempts conflict. May close a live non-receipt case before a correction supersedes it. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["confirmSellerPayoutReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts/{payoutId}/manual-attempts/{attemptId}/receipt-disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report non-receipt or a receipt mistake
+         * @description Owning SELLER only. Accepts NOT_RECEIVED, INCORRECT_AMOUNT or CONFIRMATION_MISTAKE plus trimmed 1–1000 explanation. Creates/reuses one active case per attempt and preserves audit. Does not send money, reset SUCCEEDED, refund a buyer or requeue/issue another QR. Seller projection omits staff-private proof and notes. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         */
+        post: operations["disputeSellerPayoutReceipt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -570,12 +910,34 @@ export interface components {
              * @description Last persisted payout update, including automatic dispatch, reconciliation or retry.
              */
             updatedAt: string;
+            /** @enum {string} */
+            executionMode: "AUTO" | "MANUAL";
+            /** @description MANUAL_STAFF_CONFIRMED records staff attestation, not bank credit. */
+            confirmationSource: string | null;
+            /** @description Sanitized current manual attempt receipt/dispute actions; null for AUTO payouts. */
+            manual?: {
+                /** Format: uuid */
+                attemptId: string;
+                attemptState: components["schemas"]["ManualPayoutAttemptState"];
+                receiptStatus: components["schemas"]["PayoutReceiptStatus"];
+                /** Format: int64 */
+                receiptVersion: number;
+                hasOpenDispute: boolean;
+                allowedActions: ("CONFIRM_RECEIPT" | "OPEN_DISPUTE")[];
+                /** @description Sanitized current seller dispute summary; active case preferred, otherwise latest resolved case. Contains no staff exception notes or private proof. */
+                dispute?: {
+                    /** Format: uuid */
+                    id: string;
+                    status: components["schemas"]["PayoutReviewStatus"];
+                    reason: string;
+                } | null;
+            } | null;
         };
         PayoutHistory: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            event: "CREATED" | "HELD" | "RELEASED" | "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "RECONCILED" | "RETRIED" | "RETURNED";
+            event: "CREATED" | "HELD" | "RELEASED" | "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "RECONCILED" | "RETRIED" | "RETURNED" | "MANUAL_CLAIMED" | "QR_ISSUED" | "CLAIM_RELEASED" | "MANUAL_CONFIRMED" | "MANUAL_PROBLEM" | "MANUAL_RESOLVED" | "RECEIPT_CONFIRMED" | "RECEIPT_DISPUTED" | "DISPUTE_REVIEWED" | "CONFIRMATION_CORRECTED" | "READINESS_CHECKED" | "EVIDENCE_UPLOADED";
             /** Format: int64 */
             eventSeq: number;
             /** @enum {string|null} */
@@ -638,6 +1000,286 @@ export interface components {
         PayoutCallbackAcknowledgement: {
             /** @enum {string} */
             status: "ok";
+        };
+        /**
+         * @description Authoritative current-actor/current-attempt actions. REVIEW_DISPUTE requires an unresolved SELLER_DISPUTE on the current attempt; STAFF_EXCEPTION alone can allow ADMIN RESOLVE but never REVIEW_DISPUTE.
+         * @enum {string}
+         */
+        ManualPayoutAction: "CLAIM" | "ISSUE_QR" | "READ_QR" | "RELEASE" | "UPLOAD_EVIDENCE" | "CONFIRM_TRANSFER" | "REPORT_PROBLEM" | "RESOLVE" | "RETRY" | "REVIEW_DISPUTE" | "READINESS_CHECK" | "CONFIRM_RECEIPT" | "OPEN_DISPUTE";
+        /** @enum {string} */
+        ManualPayoutAttemptState: "CLAIMED" | "QR_ISSUED" | "SUCCEEDED" | "NOT_SENT" | "UNKNOWN" | "RETURNED" | "CONFIRMATION_CORRECTED";
+        /** @enum {string} */
+        PayoutReceiptStatus: "NOT_REQUESTED" | "AWAITING_CONFIRMATION" | "CONFIRMED" | "DISPUTED";
+        /** @enum {string} */
+        PayoutReviewStatus: "OPEN" | "UNDER_REVIEW" | "WAITING_SELLER" | "RESOLVED";
+        ManualPayoutAttemptView: {
+            /** Format: uuid */
+            id: string;
+            attemptNo: number;
+            state: components["schemas"]["ManualPayoutAttemptState"];
+            /** Format: int64 */
+            version: number;
+            /** Format: uuid */
+            claimedBy: string;
+            /** Format: date-time */
+            claimExpiresAt: string;
+            /** Format: date-time */
+            qrExpiresAt: string | null;
+            reference: string | null;
+            receiptStatus: components["schemas"]["PayoutReceiptStatus"];
+            /** Format: int64 */
+            receiptVersion: number;
+            /** Format: date-time */
+            sellerConfirmedAt: string | null;
+        } | null;
+        /** @description Sanitized private-file metadata. No public URL, signed URL, storage object key, bank account or secret is returned. */
+        ManualPayoutEvidenceView: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            contentType: "image/jpeg" | "image/png" | "application/pdf";
+            /** Format: int64 */
+            size: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ManualPayoutCaseView: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "SELLER_DISPUTE" | "STAFF_EXCEPTION";
+            status: components["schemas"]["PayoutReviewStatus"];
+            reason: string;
+            /** @description Empty in queue summaries; detail applies actor-specific access to the private explanation. */
+            explanation: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ManualPayoutHistoryView: {
+            /** Format: uuid */
+            id: string;
+            event: string;
+            /** Format: uuid */
+            attemptId: string | null;
+            /** Format: uuid */
+            caseId: string | null;
+            /** Format: uuid */
+            actorId: string;
+            actorRole: string | null;
+            reason: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        /** @description Authoritative MANUAL state. Payout, attempt and seller receipt/dispute states are independent. A staff attestation does not certify bank credit. All ordinary bank data stays masked. */
+        ManualPayoutView: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderId: string;
+            /** Format: uuid */
+            sellerId: string;
+            status: components["schemas"]["PayoutStatus"];
+            /** @enum {string} */
+            executionMode: "MANUAL";
+            /** @enum {string|null} */
+            confirmationSource: "MANUAL_STAFF_CONFIRMED" | null;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            orderAmount: string;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            shippingFee: string;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            platformFee: string;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            netAmount: string;
+            /** @description Only VND is executable. Any unsupported currency remains blocked without changing the original liability. */
+            currency: string;
+            /** Format: int64 */
+            version: number;
+            blockedReason: string | null;
+            allowedActions: components["schemas"]["ManualPayoutAction"][];
+            /** Format: date-time */
+            serverTime: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            currentAttempt: components["schemas"]["ManualPayoutAttemptView"];
+            /** @description Empty in queue rows. Detail returns only the private-file metadata the actor may access. */
+            evidence: components["schemas"]["ManualPayoutEvidenceView"][];
+            /** @description Queue rows contain current-attempt summaries with empty explanations; detail returns the permitted case history and notes. */
+            cases: components["schemas"]["ManualPayoutCaseView"][];
+            /** @description Empty in queue rows; immutable history is loaded by the detail endpoint and filtered for the current actor. */
+            history: components["schemas"]["ManualPayoutHistoryView"][];
+            /** @description Masked recipient: current attempt frozen destination when an attempt exists; otherwise the currently reviewed bank, or null. Bank changes do not silently replace an issued destination. No full account number or ciphertext. */
+            recipient?: {
+                bankCode: string;
+                accountLast4: string;
+                holderName: string;
+            } | null;
+        };
+        ManualPayoutCapabilities: {
+            enabled: boolean;
+            /** @enum {string} */
+            executionMode: "AUTO" | "MANUAL";
+            automaticJobsEnabled: boolean;
+            /** Format: date-time */
+            serverTime: string;
+            sourceAccounts: {
+                id: string;
+                alias: string;
+            }[];
+            allowedActions: ("EXECUTE" | "RECONCILE")[];
+        };
+        ManualReceiptView: {
+            /** Format: uuid */
+            attemptId: string;
+            attemptState: components["schemas"]["ManualPayoutAttemptState"];
+            receiptStatus: components["schemas"]["PayoutReceiptStatus"];
+            /** Format: int64 */
+            receiptVersion: number;
+            hasOpenDispute: boolean;
+            allowedActions: ("CONFIRM_RECEIPT" | "OPEN_DISPUTE")[];
+            /** @description Sanitized current seller dispute summary; active case preferred, otherwise latest resolved case. Contains no staff exception notes or private proof. */
+            dispute?: {
+                /** Format: uuid */
+                id: string;
+                status: components["schemas"]["PayoutReviewStatus"];
+                reason: string;
+            } | null;
+        };
+        ManualPayoutClaimRequest: {
+            /** Format: int64 */
+            expectedPayoutVersion: number;
+        };
+        ManualPayoutVersionRequest: {
+            /** Format: int64 */
+            expectedAttemptVersion: number;
+            reason?: string | null;
+        };
+        ManualPayoutReadinessRequest: {
+            /** Format: int64 */
+            expectedPayoutVersion: number;
+            reason?: string | null;
+        };
+        ManualPayoutConfirmationRequest: {
+            /** Format: int64 */
+            expectedAttemptVersion: number;
+            sourceAccountId: string;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            amount: string;
+            bankTransferReference: string;
+            /** Format: date-time */
+            transferredAt: string;
+            evidenceIds: string[];
+        };
+        ManualPayoutProblemRequest: {
+            /** Format: int64 */
+            expectedAttemptVersion: number;
+            reason: string;
+            evidenceIds?: string[];
+        };
+        ManualPayoutResolutionRequest: {
+            /** Format: int64 */
+            expectedPayoutVersion: number;
+            /** Format: int64 */
+            expectedAttemptVersion: number;
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            /** Format: uuid */
+            caseId: string;
+            /**
+             * @description CONFIRMED_SENT settles UNKNOWN with transfer facts, or only closes the selected open STAFF_EXCEPTION when payout and attempt are already SUCCEEDED. That nonfinancial closure does not close seller disputes or change accounting/receipt state.
+             * @enum {string}
+             */
+            outcome: "CONFIRMED_SENT" | "CONFIRMED_NOT_SENT" | "CONFIRMED_RETURNED" | "CONFIRMATION_RECORDED_IN_ERROR";
+            reason: string;
+            evidenceIds: string[];
+            /** @description Required for CONFIRMED_SENT settlement of UNKNOWN; omitted when merely closing a STAFF_EXCEPTION on an already successful attempt. */
+            sourceAccountId?: string | null;
+            /**
+             * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
+             * @example 95000.00
+             */
+            amount?: string | null;
+            /** @description Required for CONFIRMED_SENT settlement of UNKNOWN; do not replace the original reference for nonfinancial closure on SUCCEEDED. */
+            bankTransferReference?: string | null;
+            /** Format: date-time */
+            transferredAt?: string | null;
+        };
+        ManualPayoutReviewRequest: {
+            /** Format: int64 */
+            expectedAttemptVersion: number;
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            /** @enum {string} */
+            action: "REQUEST_INFORMATION" | "TRANSFER_EVIDENCE_PROVIDED";
+            reason: string;
+            evidenceIds?: string[];
+        };
+        SellerPayoutReceiptRequest: {
+            /** Format: int64 */
+            expectedReceiptVersion: number;
+        };
+        /** @description Explanation is trimmed and must contain 1–1000 characters. Seller identity is exclusively derived from JWT ownership. */
+        SellerPayoutDisputeRequest: {
+            /** Format: int64 */
+            expectedReceiptVersion: number;
+            /** @enum {string} */
+            reason: "NOT_RECEIVED" | "INCORRECT_AMOUNT" | "CONFIRMATION_MISTAKE";
+            explanation: string;
+        };
+        ManualPayoutApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["ManualPayoutView"];
+        };
+        ManualPayoutCapabilitiesApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["ManualPayoutCapabilities"];
+        };
+        ManualReceiptApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["ManualReceiptView"];
+        };
+        /** @description Lightweight queue page: bounded summary reads, no full history or evidence fetch per row. Rows retain the ManualPayoutView wire shape with history/evidence empty and current-attempt case explanations empty. */
+        ManualPayoutPageApiResponse: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["ManualPayoutView"][];
+            page: {
+                number: number;
+                size: number;
+                /** Format: int64 */
+                totalElements: number;
+                totalPages: number;
+            };
         };
     };
     responses: {
@@ -718,6 +1360,159 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description Malformed parameter, JSON body, bean-validation input, missing/negative version or invalid command maps to PAYMENT_MANUAL_PAYOUT_INVALID_REQUEST at the manual controller boundary. Invalid uploaded evidence content uses PAYMENT_MANUAL_PAYOUT_EVIDENCE_INVALID. */
+        ManualInvalidRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Bad Request",
+                 *       "status": 400,
+                 *       "detail": "Manual payout request is invalid",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_INVALID_REQUEST"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Missing, invalid or expired bearer JWT; no protected operation executes. */
+        ManualUnauthorized: {
+            headers: {
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Unauthorized",
+                 *       "status": 401,
+                 *       "detail": "Missing, invalid or expired bearer JWT; no protected operation executes.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "UNAUTHENTICATED"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Missing required role, executor authority or forbidden self-seller execution/reconciliation; a privilege alone does not supply a missing role. */
+        ManualForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Forbidden",
+                 *       "status": 403,
+                 *       "detail": "Missing required role, executor authority or forbidden self-seller execution/reconciliation; a privilege alone does not supply a missing role.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_FORBIDDEN"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Payout, attempt, case or evidence does not exist or IDs/owning seller do not match. */
+        ManualNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Not Found",
+                 *       "status": 404,
+                 *       "detail": "Payout, attempt, case or evidence does not exist or IDs/owning seller do not match.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_NOT_FOUND"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Ownership, expected version, immutable state or bank reference conflicts. Unsupported encoder data is PAYMENT_MANUAL_PAYOUT_INVALID_QR_DATA. Changed idempotency actor/operation/resource/payload returns PAYMENT_MANUAL_PAYOUT_IDEMPOTENCY_CONFLICT. Reload authorized state/allowedActions before a new command. */
+        ManualConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Conflict",
+                 *       "status": 409,
+                 *       "detail": "Ownership, expected version, immutable state or bank reference conflicts. Unsupported encoder data is PAYMENT_MANUAL_PAYOUT_INVALID_QR_DATA. Changed idempotency actor/operation/resource/payload returns PAYMENT_MANUAL_PAYOUT_IDEMPOTENCY_CONFLICT. Reload authorized state/allowedActions before a new command.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_CONFLICT"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Evidence exceeds 10 MiB; multipart ingress limits can also reject oversized requests. */
+        ManualEvidenceTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Content Too Large",
+                 *       "status": 413,
+                 *       "detail": "Evidence exceeds 10 MiB; multipart ingress limits can also reject oversized requests.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_EVIDENCE_TOO_LARGE"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Evidence is not a signature-validated JPEG, PNG or PDF. */
+        ManualEvidenceUnsupported: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Unsupported Media Type",
+                 *       "status": 415,
+                 *       "detail": "Evidence is not a signature-validated JPEG, PNG or PDF.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_EVIDENCE_UNSUPPORTED"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Manual dependency is unavailable. QR/rendering and private evidence storage use PAYMENT_MANUAL_PAYOUT_QR_UNAVAILABLE and PAYMENT_MANUAL_PAYOUT_EVIDENCE_UNAVAILABLE respectively. No provider transfer or partial accounting is committed. */
+        ManualUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Service Unavailable",
+                 *       "status": 503,
+                 *       "detail": "Manual dependency is unavailable. QR/rendering and private evidence storage use PAYMENT_MANUAL_PAYOUT_QR_UNAVAILABLE and PAYMENT_MANUAL_PAYOUT_EVIDENCE_UNAVAILABLE respectively. No provider transfer or partial accounting is committed.",
+                 *       "instance": "/api/v1/payments/manual-payouts",
+                 *       "code": "PAYMENT_MANUAL_PAYOUT_UNAVAILABLE"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description Restrict the administrator list to one seller UUID. */
@@ -726,6 +1521,12 @@ export interface components {
         AdminPage: number;
         /** @description Maximum rows per page. */
         AdminSize: number;
+        ManualPayoutId: string;
+        ManualAttemptId: string;
+        ManualEvidenceId: string;
+        ManualDisputeId: string;
+        /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+        ManualIdempotencyKey: string;
     };
     requestBodies: never;
     headers: never;
@@ -1212,7 +2013,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Masked bank-account page with unverified accounts first */
+            /** @description Masked bank-account page with active unverified accounts first, then creation time and ID ascending */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1788,6 +2589,8 @@ export interface operations {
                      *           "recipientAccountLast4": null,
                      *           "providerReference": null,
                      *           "simulated": true,
+                     *           "executionMode": "AUTO",
+                     *           "confirmationSource": null,
                      *           "createdAt": "2026-11-16T05:00:00Z",
                      *           "updatedAt": "2026-11-16T05:00:00Z"
                      *         }
@@ -1847,6 +2650,8 @@ export interface operations {
                      *           "recipientAccountLast4": null,
                      *           "providerReference": null,
                      *           "simulated": true,
+                     *           "executionMode": "AUTO",
+                     *           "confirmationSource": null,
                      *           "createdAt": "2026-11-16T05:00:00Z",
                      *           "updatedAt": "2026-11-16T05:00:00Z"
                      *         }
@@ -2235,6 +3040,649 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    getManualPayoutCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutCapabilitiesApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    listManualPayouts: {
+        parameters: {
+            query?: {
+                sellerId?: string;
+                status?: components["schemas"]["PayoutStatus"][];
+                /** @description Executor UUID or literal me. */
+                claimedBy?: string;
+                receiptStatus?: components["schemas"]["PayoutReceiptStatus"];
+                hasOpenDispute?: boolean;
+                needsReview?: boolean;
+                from?: string;
+                to?: string;
+                /** @description Zero-based page number; an out-of-range page returns an empty data array. */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Maximum rows per page. */
+                size?: components["parameters"]["AdminSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutPageApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    getManualPayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    checkManualPayoutReadiness: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutReadinessRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    claimManualPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact replay of the original successful command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            /** @description Resource or issuance created for the first time */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    issueManualPayoutQr: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact replay of the original successful command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            /** @description Resource or issuance created for the first time */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    getManualPayoutQr: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated read-only PNG of the frozen instruction */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    releaseManualPayoutClaim: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    uploadManualPayoutEvidence: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: int64 */
+                    expectedAttemptVersion: number;
+                    /**
+                     * Format: binary
+                     * @description Signature-validated JPEG/PNG/PDF, max 10485760 bytes; at most three files per attempt.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Exact replay of the original successful command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            /** @description Resource or issuance created for the first time */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            413: components["responses"]["ManualEvidenceTooLarge"];
+            415: components["responses"]["ManualEvidenceUnsupported"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    downloadManualPayoutEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+                evidenceId: components["parameters"]["ManualEvidenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private evidence bytes streamed by Payment after authorization */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    confirmManualPayoutTransfer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    reportManualPayoutProblem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutProblemRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact replay of the original problem report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            /** @description One staff exception and its problem audit created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    resolveManualPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    reviewManualPayoutReceiptDispute: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+                disputeId: components["parameters"]["ManualDisputeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    retryManualPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualPayoutReadinessRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualPayoutApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    confirmSellerPayoutReceipt: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerPayoutReceiptRequest"];
+            };
+        };
+        responses: {
+            /** @description Authoritative result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualReceiptApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
+        };
+    };
+    disputeSellerPayoutReceipt: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description UUID bound to authenticated actor, operation, resource and canonical payload. Exact replay returns the originally committed result with 200 before rejecting its old version; a changed context returns 409. */
+                "Idempotency-Key": components["parameters"]["ManualIdempotencyKey"];
+            };
+            path: {
+                payoutId: components["parameters"]["ManualPayoutId"];
+                attemptId: components["parameters"]["ManualAttemptId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerPayoutDisputeRequest"];
+            };
+        };
+        responses: {
+            /** @description Exact replay of the original successful command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualReceiptApiResponse"];
+                };
+            };
+            /** @description Resource or issuance created for the first time */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualReceiptApiResponse"];
+                };
+            };
+            400: components["responses"]["ManualInvalidRequest"];
+            401: components["responses"]["ManualUnauthorized"];
+            403: components["responses"]["ManualForbidden"];
+            404: components["responses"]["ManualNotFound"];
+            409: components["responses"]["ManualConflict"];
+            503: components["responses"]["ManualUnavailable"];
         };
     };
 }

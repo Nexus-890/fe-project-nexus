@@ -12,7 +12,7 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const bearer = new WeakMap<Page, string>();
 type Seeded = { id: string; orderId: string; sellerId: string };
 type Evidence = { requests: { method: string; path: string; actor: string | null; idempotencyKey: string | null; body?: Record<string, unknown> }[]; transactions: { payoutId: string; type: string }[];
-  payouts: { id: string; status: string; attempt: { id: string; state: string; ownerId: string; version: number; receiptStatus: string | null } | null }[] };
+  payouts: { id: string; status: string; version: number; currentAttempt: { id: string; state: string; claimedBy: string | null; version: number; receiptStatus: string | null } | null }[] };
 
 async function signIn(page: Page, request: APIRequestContext, role: string, returnTo: string) {
   const primary = role.split(",").find((entry) => entry !== "SELLER") || "SELLER";
@@ -73,7 +73,7 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   const claims = state.requests.filter((entry) => entry.path.endsWith(`${payout.id}/claims`));
   expect(claims.map((entry) => entry.actor)).toEqual([identities.ADMIN, identities.SUPPORT_STAFF]);
   expect(claims.every((entry) => /^[0-9a-f-]{36}$/.test(entry.idempotencyKey || ""))).toBe(true);
-  expect(state.payouts.find((entry) => entry.id === payout.id)?.attempt?.ownerId).toBe(identities.ADMIN);
+  expect(state.payouts.find((entry) => entry.id === payout.id)?.currentAttempt?.claimedBy).toBe(identities.ADMIN);
 
   await adminPanel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
   await expect(adminPanel.getByRole("img", { name: /Transfer QR for reference/ })).toBeVisible();
@@ -91,8 +91,8 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await expect(fresh.getByRole("alert")).toHaveCount(0);
   await fresh.getByRole("button", { name: "Cancel", exact: true }).click();
   await upload.setInputFiles({ name: "bank-app.png", mimeType: "image/png", buffer: png });
-  await adminPanel.getByRole("button", { name: "Open bank-app.png", exact: true }).click();
-  await expect(adminPanel.getByRole("link", { name: "Save bank-app.png", exact: true })).toBeVisible();
+  await adminPanel.getByRole("button", { name: "Open evidence 1", exact: true }).click();
+  await expect(adminPanel.getByRole("link", { name: "Save evidence 1", exact: true })).toBeVisible();
   state = await evidence(request);
   expect(state.requests.filter((entry) => entry.path.endsWith("/evidence") && entry.method === "POST")).toHaveLength(2);
 
@@ -101,8 +101,8 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await confirm.getByLabel("Platform source account").selectOption({ label: "Nexus payout account VCB 8899" });
   await confirm.getByLabel(/Transferred amount/).fill("95000.00");
   await confirm.getByLabel("Bank transfer reference").fill("FT26322001");
-  await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(2));
-  await confirm.getByRole("checkbox", { name: "bank-app.png" }).check();
+  await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(0));
+  await confirm.getByRole("checkbox", { name: /^Evidence 1/ }).check();
   await confirm.getByRole("button", { name: "Record completed transfer", exact: true }).click();
   await expect(confirm.getByRole("alert")).toHaveText("Confirm that you checked the recipient and the amount in the banking app.");
   await confirm.getByRole("checkbox", { name: /I checked in the banking app/ }).check();
@@ -112,7 +112,7 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await layouts(admin, "admin-confirmed");
   state = await evidence(request);
   expect(state.transactions.filter((entry) => entry.payoutId === payout.id)).toHaveLength(1);
-  expect(state.requests.find((entry) => entry.path.endsWith("/confirmation"))?.body).toMatchObject({ amount: "95000.00", bankTransferReference: "FT26322001", sourceAccountId: "9a000000-0000-4000-8000-000000000001" });
+  expect(state.requests.find((entry) => entry.path.endsWith("/confirmation"))?.body).toMatchObject({ amount: "95000.00", bankTransferReference: "FT26322001", sourceAccountId: "platform-main" });
 
   const sellerContext = await browser.newContext(); const seller = await sellerContext.newPage();
   await signIn(seller, request, "SELLER", "/backoffice/payouts");
@@ -144,7 +144,7 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await resolve.getByLabel("Reason").fill("Bank app shows no outgoing transfer for FT26322001.");
   await resolve.getByRole("button", { name: "Record outcome", exact: true }).click();
   await expect(resolve.getByRole("alert")).toBeVisible();
-  await resolve.getByRole("checkbox", { name: "bank-app.png" }).check();
+  await resolve.getByRole("checkbox", { name: /^Evidence 1/ }).check();
   await resolve.getByRole("button", { name: "Record outcome", exact: true }).click();
   await expect(resolve).toHaveCount(0);
   await expect(reconcile.getByText(/Staff confirmation corrected — awaiting authorized retry/)).toBeVisible();
@@ -168,8 +168,7 @@ test("Support cannot reconcile, sellers cannot open the workspace and staff cann
   await adminPanel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
   await adminPanel.getByRole("button", { name: "Report a problem", exact: true }).click();
   const problem = admin.getByRole("dialog", { name: "Report a problem" });
-  await problem.getByLabel("What went wrong").selectOption("UNCERTAIN_OUTCOME");
-  await problem.getByLabel("Explanation").fill("The banking app froze after I pressed send.");
+  await problem.getByLabel("What went wrong in the banking app").fill("The banking app froze after I pressed send.");
   await problem.getByRole("button", { name: "Report problem", exact: true }).click();
   await expect(problem).toHaveCount(0);
 
@@ -178,12 +177,13 @@ test("Support cannot reconcile, sellers cannot open the workspace and staff cann
   const reconcile = supportPanel.getByRole("region", { name: "Reconciliation", exact: true });
   await expect(reconcile.getByText(/Only an administrator can resolve, correct or authorize a retry/)).toBeVisible();
   await expect(reconcile.getByRole("button")).toHaveCount(0);
-  const attempt = (await evidence(request)).payouts.find((entry) => entry.id === payout.id)?.attempt;
+  const current = (await evidence(request)).payouts.find((entry) => entry.id === payout.id);
+  const attempt = current?.currentAttempt;
   expect(attempt?.state).toBe("UNKNOWN");
   const direct = await request.post(`${api}/api/v1/payments/manual-payouts/${payout.id}/attempts/${attempt?.id}/resolution`, {
-    headers: { Authorization: bearer.get(support) || "", "Idempotency-Key": randomUUID() }, data: { outcome: "CONFIRMED_SENT", reason: "Support should not decide this.", evidenceIds: [], expectedAttemptVersion: attempt?.version } });
+    headers: { Authorization: bearer.get(support) || "", "Idempotency-Key": randomUUID() }, data: { caseId: randomUUID(), outcome: "CONFIRMED_NOT_SENT", reason: "Support should not decide this.", evidenceIds: [randomUUID()], expectedPayoutVersion: current?.version, expectedAttemptVersion: attempt?.version, expectedCaseVersion: 0 } });
   expect(direct.status()).toBe(403);
-  expect((await direct.json()).code ?? JSON.stringify(await direct.json())).toContain("PAYMENT_MANUAL_PAYOUT_ADMIN_REQUIRED");
+  expect((await direct.json()).code ?? JSON.stringify(await direct.json())).toContain("FORBIDDEN");
   expect((await evidence(request)).payouts.find((entry) => entry.id === payout.id)?.status).toBe("UNKNOWN");
 
   const own = await seed(request, { sellerId: identities.ADMIN, bankVerified: false });
@@ -221,8 +221,8 @@ test("an expired QR becomes uncertain, paused new work hides claim and QR, readi
 
   await panel.getByRole("button", { name: "Close payout", exact: true }).click();
   panel = await open(admin, held.id, "On hold");
-  await expect(panel.getByText(/Blocked: The seller has no verified default bank account/)).toBeVisible();
-  await request.post(`${api}/api/test/manual-payouts/config`, { data: { newWorkEnabled: false } });
+  await expect(panel.getByText(/Blocked: BANK_NOT_READY/)).toBeVisible();
+  await request.post(`${api}/api/test/manual-payouts/config`, { data: { enabled: false } });
   await admin.reload();
   panel = await open(admin, held.id, "All manual payouts");
   await panel.getByRole("button", { name: "Recheck readiness", exact: true }).click();
@@ -242,21 +242,20 @@ test("Admin closes a post-success staff exception as sent without a second payme
   await panel.getByRole("button", { name: "Claim this payout", exact: true }).click();
   await panel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
   await panel.getByLabel(/Add evidence/).setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
-  await expect(panel.getByRole("button", { name: "Open receipt.png", exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Open evidence 1", exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "Record completed transfer", exact: true }).click();
   const confirm = support.getByRole("dialog", { name: "Record completed transfer" });
   await confirm.getByLabel("Platform source account").selectOption({ label: "Nexus payout account VCB 8899" });
   await confirm.getByLabel(/Transferred amount/).fill("95000.00");
   await confirm.getByLabel("Bank transfer reference").fill("FT26322002");
-  await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(2));
-  await confirm.getByRole("checkbox", { name: "receipt.png" }).check();
+  await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(0));
+  await confirm.getByRole("checkbox", { name: /^Evidence 1/ }).check();
   await confirm.getByRole("checkbox", { name: /I checked in the banking app/ }).check();
   await confirm.getByRole("button", { name: "Record completed transfer", exact: true }).click();
   await expect(confirm).toHaveCount(0);
   await panel.getByRole("button", { name: "Report a problem", exact: true }).click();
   const problem = support.getByRole("dialog", { name: "Report a problem" });
-  await problem.getByLabel("What went wrong").selectOption("SUSPECTED_DUPLICATE");
-  await problem.getByLabel("Explanation").fill("The banking app showed two pending lines for a moment.");
+  await problem.getByLabel("What went wrong in the banking app").fill("The banking app showed two pending lines for a moment.");
   await problem.getByRole("button", { name: "Report problem", exact: true }).click();
   await expect(problem).toHaveCount(0);
 
@@ -265,9 +264,10 @@ test("Admin closes a post-success staff exception as sent without a second payme
   const reconcile = review.getByRole("region", { name: "Reconciliation", exact: true });
   await reconcile.getByRole("button", { name: "Record reconciled outcome", exact: true }).click();
   const resolve = admin.getByRole("dialog", { name: "Record reconciled outcome" });
-  await expect(resolve.getByRole("option", { name: "Staff recorded Completed without a transfer (correction)" })).toHaveCount(0);
+  await expect(resolve.getByRole("option", { name: "Bank app shows no transfer was sent" })).toHaveCount(0);
   await resolve.getByLabel("Outcome").selectOption("CONFIRMED_SENT");
   await resolve.getByLabel("Reason").fill("Bank statement shows one outgoing transfer FT26322002 only.");
+  await resolve.getByRole("checkbox", { name: /^Evidence 1/ }).check();
   await resolve.getByRole("button", { name: "Record outcome", exact: true }).click();
   await expect(resolve).toHaveCount(0);
   await expect(review.getByText("The reconciled outcome was recorded.", { exact: false })).toBeVisible();

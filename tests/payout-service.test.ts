@@ -59,7 +59,8 @@ test("delivered numeric payout money and rate normalize without rounding or losi
 test("detail history validates statuses, masked snapshots and newest-first steps without losing sandbox labels", () => {
   const value = parsePayoutDetail({ ...row, history: [step] });
   assert.equal(value.history[0].simulated, true); assert.equal(value.history[0].amount, "4770000.00");
-  for (const history of [[{ ...step, simulated: undefined }], [{ ...step, recipientAccountLast4: "123456" }], [{ ...step, event: "REVERSED" }], [{ ...step, actorId: "system" }], [step, step], [step, { ...step, id: orderId, occurredAt: "2026-11-17T00:00:00Z" }]]) assert.throws(() => parsePayoutDetail({ ...row, history }), invalid);
+  for (const history of [[{ ...step, simulated: undefined }], [{ ...step, recipientAccountLast4: "123456" }], [{ ...step, event: "REVERSED" }], [{ ...step, actorId: "system" }], [step, step]]) assert.throws(() => parsePayoutDetail({ ...row, history }), invalid);
+  assert.deepEqual(parsePayoutDetail({ ...row, history: [step, { ...step, id: orderId, occurredAt: "2026-11-17T00:00:00Z" }] }).history.map((entry) => entry.id), [bankId, orderId]);
 });
 
 test("admin repeated status and date filters serialize on the canonical route while seller reads only me", async () => {

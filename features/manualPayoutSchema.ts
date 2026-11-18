@@ -1,8 +1,8 @@
 import { sellerSalesDates } from "./sellerSalesFilters";
-import { isUuid } from "../service/manualPayoutService";
-import { evidenceContentTypes, manualProblemKinds, manualResolutionOutcomes, disputeReviewDecisions, maxEvidenceBytes, maxEvidenceFiles,
-  type DisputeReviewInput, type ManualConfirmationInput, type ManualPayoutFilters, type ManualProblemInput, type ManualResolutionInput } from "../types/manualPayoutType";
-import { disputeReasons, receiptStatuses, unresolvedDisputeStatuses, type ReceiptDispute, type ReceiptDisputeInput } from "../types/payoutReceiptType";
+import { bankReferencePattern, isUuid } from "../service/manualPayoutService";
+import { disputeReviewActions, evidenceContentTypes, manualResolutionOutcomes, maxEvidenceBytes, maxEvidenceFiles,
+  type DisputeReviewInput, type ManualCase, type ManualConfirmationInput, type ManualPayoutFilters, type ManualProblemInput, type ManualResolutionInput, type ManualResolutionOutcome } from "../types/manualPayoutType";
+import { disputeReasons, receiptStatuses, type ReceiptDisputeInput } from "../types/payoutReceiptType";
 import { payoutStatuses, type PayoutStatus } from "../types/payoutType";
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -53,44 +53,68 @@ const reasonText = (value: string, label: string): Result<string> => {
   return !trimmed ? failure(`${label} is required.`) : trimmed.length > 1000 ? failure(`${label} must be 1000 characters or fewer.`) : success(trimmed);
 };
 
-export type ConfirmationForm = { sourceAccountId: string; amount: string; reference: string; transferredAt: string; evidenceIds: string[]; attested: boolean };
-export const parseConfirmationForm = (form: ConfirmationForm, netAmount: string, sourceIds: readonly string[], serverNow: number): Result<ManualConfirmationInput> => {
+export type TransferFacts = { sourceAccountId: string; amount: string; reference: string; transferredAt: string };
+export const emptyTransferFacts: TransferFacts = { sourceAccountId: "", amount: "", reference: "", transferredAt: "" };
+const parseTransferFacts = (form: TransferFacts, netAmount: string, sourceIds: readonly string[], serverNow: number, issuedAt: string | null): Result<Omit<ManualConfirmationInput, "evidenceIds">> => {
   const transferredAt = offsetLocal(form.transferredAt);
   const reference = form.reference.trim();
   if (!sourceIds.includes(form.sourceAccountId)) return failure("Choose the platform source account the transfer was sent from.");
   if (!/^\d{1,17}\.\d{2}$/.test(form.amount)) return failure("Enter the transferred amount exactly with two decimals, for example 95000.00.");
   if (form.amount !== netAmount) return failure(`The transferred amount must equal the frozen net amount ${netAmount}. Report a problem instead if a different amount was sent.`);
-  if (!/^[A-Za-z0-9._-]{4,64}$/.test(reference)) return failure("Enter the bank transfer reference from the banking app (4-64 letters, digits, dot, dash or underscore).");
+  if (!bankReferencePattern.test(reference)) return failure("Enter the bank transfer reference from the banking app (up to 120 letters, digits, dot, slash, dash or underscore).");
   if (!transferredAt || !Number.isFinite(Date.parse(transferredAt))) return failure("Enter when the transfer was made.");
   if (Date.parse(transferredAt) > serverNow + 60_000) return failure("The transfer time cannot be in the future.");
+  const issued = issuedAt ? Date.parse(issuedAt) : Number.NaN;
+  const issuedMinute = issued - issued % 60_000;
+  if (Number.isFinite(issued) && Date.parse(transferredAt) < issuedMinute) return failure("The transfer time cannot be before the QR was issued.");
+  const sent = Number.isFinite(issued) && Date.parse(transferredAt) < issued ? Math.min(issuedMinute + 59_999, serverNow + 30_000) : Date.parse(transferredAt);
+  return success({ sourceAccountId: form.sourceAccountId, amount: form.amount, bankTransferReference: reference, transferredAt: new Date(sent).toISOString() });
+};
+
+export type ConfirmationForm = TransferFacts & { evidenceIds: string[]; attested: boolean };
+export const parseConfirmationForm = (form: ConfirmationForm, netAmount: string, sourceIds: readonly string[], serverNow: number, issuedAt: string | null = null): Result<ManualConfirmationInput> => {
+  const facts = parseTransferFacts(form, netAmount, sourceIds, serverNow, issuedAt);
+  if (!facts.ok) return failure(facts.error);
   if (form.evidenceIds.length < 1 || form.evidenceIds.length > maxEvidenceFiles) return failure("Attach 1-3 evidence files uploaded for this attempt.");
   if (!form.attested) return failure("Confirm that you checked the recipient and the amount in the banking app.");
-  return success({ sourceAccountId: form.sourceAccountId, amount: form.amount, bankTransferReference: reference, transferredAt: new Date(transferredAt).toISOString(), evidenceIds: [...form.evidenceIds] });
+  return success({ ...facts.value, evidenceIds: [...form.evidenceIds] });
 };
 
-export const parseProblemForm = (kind: string, reason: string, evidenceIds: string[]): Result<ManualProblemInput> => {
-  if (!manualProblemKinds.some((entry) => entry === kind)) return failure("Choose what went wrong.");
+export const parseProblemForm = (reason: string, evidenceIds: string[]): Result<ManualProblemInput> => {
   const text = reasonText(reason, "An explanation");
-  return text.ok ? success({ kind: kind as ManualProblemInput["kind"], reason: text.value, evidenceIds: [...evidenceIds] }) : failure(text.error);
-};
-
-export const resolutionNeedsProof = (outcome: string) => outcome !== "" && outcome !== "CONFIRMED_SENT";
-export const parseResolutionForm = (outcome: string, reason: string, evidenceIds: string[], dispute: ReceiptDispute | null): Result<ManualResolutionInput> => {
-  if (!manualResolutionOutcomes.some((entry) => entry === outcome)) return failure("Choose the reconciled outcome.");
-  const text = reasonText(reason, "A reconciliation reason");
   if (!text.ok) return failure(text.error);
-  if (resolutionNeedsProof(outcome) && !evidenceIds.length) return failure("This outcome needs proof attached to the attempt.");
-  if (outcome === "CONFIRMATION_RECORDED_IN_ERROR") {
-    if (!dispute || !unresolvedDisputeStatuses.some((status) => status === dispute.status)) return failure("A correction needs the seller's open case.");
-    return success({ outcome, reason: text.value, evidenceIds: [...evidenceIds], disputeId: dispute.id, expectedDisputeVersion: dispute.version });
-  }
-  return success({ outcome: outcome as ManualResolutionInput["outcome"], reason: text.value, evidenceIds: [...evidenceIds] });
+  if (evidenceIds.length > maxEvidenceFiles) return failure("Choose at most 3 evidence files.");
+  return success({ reason: text.value, evidenceIds: [...evidenceIds] });
 };
 
-export const parseReviewForm = (decision: string, note: string, dispute: ReceiptDispute): Result<DisputeReviewInput> => {
-  if (!disputeReviewDecisions.some((entry) => entry === decision)) return failure("Choose a review decision.");
-  const text = reasonText(note, "A review note");
-  return text.ok ? success({ decision: decision as DisputeReviewInput["decision"], note: text.value, expectedDisputeVersion: dispute.version }) : failure(text.error);
+export const resolutionOutcomes = (attemptState: string | undefined, payoutStatus: PayoutStatus, selected: ManualCase | null): ManualResolutionOutcome[] =>
+  attemptState === "UNKNOWN" ? ["CONFIRMED_SENT", "CONFIRMED_NOT_SENT"] :
+  attemptState === "SUCCEEDED" && payoutStatus === "SUCCEEDED" ? [...(selected?.kind === "STAFF_EXCEPTION" ? ["CONFIRMED_SENT" as const] : []), "CONFIRMED_RETURNED", "CONFIRMATION_RECORDED_IN_ERROR"] : [];
+export const resolutionNeedsFacts = (outcome: string, attemptState: string | undefined) => outcome === "CONFIRMED_SENT" && attemptState === "UNKNOWN";
+
+export type ResolutionForm = { caseId: string; outcome: string; reason: string; evidenceIds: string[]; facts: TransferFacts };
+export const parseResolutionForm = (form: ResolutionForm, context: { attemptState: string | undefined; payoutStatus: PayoutStatus; openCases: readonly ManualCase[]; netAmount: string; sourceIds: readonly string[]; serverNow: number; issuedAt?: string | null }): Result<ManualResolutionInput> => {
+  const selected = context.openCases.find((entry) => entry.id === form.caseId) ?? null;
+  if (!selected) return failure("Choose the open case this outcome resolves.");
+  if (!manualResolutionOutcomes.some((entry) => entry === form.outcome) || !resolutionOutcomes(context.attemptState, context.payoutStatus, selected).some((entry) => entry === form.outcome))
+    return failure("Choose an outcome that fits this attempt.");
+  const outcome = form.outcome as ManualResolutionOutcome;
+  const text = reasonText(form.reason, "A reconciliation reason");
+  if (!text.ok) return failure(text.error);
+  if (form.evidenceIds.length < 1 || form.evidenceIds.length > maxEvidenceFiles) return failure("Attach 1-3 proof files from this attempt.");
+  const base = { caseId: selected.id, expectedCaseVersion: selected.version, outcome, reason: text.value, evidenceIds: [...form.evidenceIds] };
+  if (!resolutionNeedsFacts(outcome, context.attemptState)) return success(base);
+  const facts = parseTransferFacts(form.facts, context.netAmount, context.sourceIds, context.serverNow, context.issuedAt ?? null);
+  return facts.ok ? success({ ...base, ...facts.value }) : failure(facts.error);
+};
+
+export const parseReviewForm = (action: string, reason: string, evidenceIds: string[], dispute: ManualCase): Result<DisputeReviewInput> => {
+  if (!disputeReviewActions.some((entry) => entry === action)) return failure("Choose a review decision.");
+  const text = reasonText(reason, "A review note");
+  if (!text.ok) return failure(text.error);
+  if (action === "TRANSFER_EVIDENCE_PROVIDED" && evidenceIds.length < 1) return failure("Attach the transfer evidence you are pointing the seller to.");
+  if (evidenceIds.length > maxEvidenceFiles) return failure("Choose at most 3 evidence files.");
+  return success({ action: action as DisputeReviewInput["action"], reason: text.value, evidenceIds: [...evidenceIds], expectedCaseVersion: dispute.version });
 };
 
 export const parseRetryForm = (reason: string): Result<{ reason: string }> => {
@@ -107,3 +131,11 @@ export const parseSellerDisputeForm = (reason: string, explanation: string): Res
 export const serverOffset = (serverTime: string, receivedAt: number) => Date.parse(serverTime) - receivedAt;
 export const secondsUntil = (deadline: string | null, offset: number, now: number) => deadline === null ? null : Math.max(0, Math.floor((Date.parse(deadline) - (now + offset)) / 1000));
 export const formatCountdown = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+const evidenceKinds: Record<string, string> = { "image/jpeg": "JPEG", "image/png": "PNG", "application/pdf": "PDF" };
+export const attemptOwner = (payout: { status: string; currentAttempt: { claimedBy: string } | null }) =>
+  payout.currentAttempt && !["PENDING", "ON_HOLD"].includes(payout.status) ? payout.currentAttempt.claimedBy : null;
+export const qrIssuedAt = (payout: { history: readonly { event: string; attemptId: string | null; occurredAt: string }[] }, attemptId: string | undefined) =>
+  [...payout.history].reverse().find((entry) => entry.event === "QR_ISSUED" && entry.attemptId === attemptId)?.occurredAt ?? null;
+export const evidenceLabel = (file: { contentType: string; size: number }, index: number) => `Evidence ${index + 1} · ${evidenceKinds[file.contentType] ?? file.contentType} · ${(file.size / 1024).toFixed(1)} KiB`;
+export const evidenceFileName = (file: { id: string; contentType: string }) => `payout-evidence-${file.id.slice(0, 8)}.${file.contentType === "application/pdf" ? "pdf" : file.contentType === "image/png" ? "png" : "jpg"}`;

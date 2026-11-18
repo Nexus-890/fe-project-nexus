@@ -19,22 +19,21 @@ import ManualPayoutTable, { manualStatusLabel, receiptLabel } from "../component
 import { SellerHeading, SellerPanel, SellerStatus, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import { readBackofficeRoles, readBackofficeSubject } from "./backofficeAccess";
 import {
-  combineQueueFilters, emptyQueueForm, evidenceFileError, formatCountdown, manualQueueViews, parseConfirmationForm, parseProblemForm, parseQueueForm, secondsUntil, serverOffset,
-  type ConfirmationForm, type ManualQueueForm, type ManualQueueView,
+  combineQueueFilters, emptyQueueForm, emptyTransferFacts, evidenceFileError, evidenceFileName, evidenceLabel, formatCountdown, manualQueueViews, parseConfirmationForm, parseProblemForm, parseQueueForm, qrIssuedAt, attemptOwner,
+  secondsUntil, serverOffset, type ConfirmationForm, type ManualQueueForm, type ManualQueueView,
 } from "./manualPayoutSchema";
-import { manualProblemKinds, type ManualCommand, type ManualEvidence, type ManualPayoutCapabilities, type ManualPayoutDetail, type ManualPayoutFilters } from "../types/manualPayoutType";
+import type { ManualCommand, ManualEvidence, ManualPayout, ManualPayoutCapabilities, ManualPayoutFilters } from "../types/manualPayoutType";
 import { payoutStatuses } from "../types/payoutType";
 import { receiptStatuses } from "../types/payoutReceiptType";
 import type { ApiError } from "../types/commonResponseType";
 
 const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 const asApiError = (error: unknown): ApiError => isApiError(error) ? error : { kind: "network", status: 0, title: "The request failed" };
-const sourceLabel = (source: string | null) => source === "MANUAL_STAFF_CONFIRMED" ? "Staff-confirmed manual transfer" : source === "PROVIDER_CONFIRMED" ? "Provider confirmed" : source === "SIMULATED" ? "Simulated" : "Not confirmed";
-const problemLabels: Record<string, string> = { UNCERTAIN_OUTCOME: "I am not sure whether the transfer went through", WRONG_AMOUNT: "A different amount was transferred",
-  WRONG_RECIPIENT: "The transfer went to a different recipient", SUSPECTED_DUPLICATE: "This payout may have been paid twice" };
+const sourceLabel = (source: string | null) => source === "MANUAL_STAFF_CONFIRMED" ? "Staff-confirmed manual transfer" : "Not confirmed";
+const words = (value: string) => value.replaceAll("_", " ").toLowerCase();
 
 type PendingKey = { key: string; payload: string };
-type Send = (command: { idempotencyKey: string; signal: AbortSignal }) => Promise<ManualPayoutDetail>;
+type Send = (command: { idempotencyKey: string; signal: AbortSignal }) => Promise<ManualPayout>;
 type Run = { scope: string; key: string; sessionId: number; controller: AbortController; success: string; send: Send };
 type DialogKind = "confirm" | "problem" | "resolve" | "review" | "retry" | null;
 
@@ -58,7 +57,8 @@ function QrImage({ payoutId, attemptId, reference, amount, last4 }: { payoutId: 
   </figure>;
 }
 
-function EvidenceFile({ payoutId, attemptId, file }: { payoutId: string; attemptId: string; file: ManualEvidence }) {
+function EvidenceFile({ payoutId, attemptId, file, index }: { payoutId: string; attemptId: string; file: ManualEvidence; index: number }) {
+  const name = evidenceFileName(file);
   const auth = useAuth();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -76,8 +76,8 @@ function EvidenceFile({ payoutId, attemptId, file }: { payoutId: string; attempt
       .finally(() => { if (!next.signal.aborted) setLoading(false); });
   };
   return <li className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border p-3 text-xs">
-    <span className="min-w-0 break-all">{file.fileName} · {file.contentType} · {(file.size / 1024).toFixed(1)} KiB</span>
-    {url ? <a className={sellerButton} href={url} download={file.fileName}>Save {file.fileName}</a> : <button type="button" className={sellerButton} disabled={loading} onClick={load}>{loading ? "Loading…" : `Open ${file.fileName}`}</button>}
+    <span className="min-w-0 break-all">{evidenceLabel(file, index)}</span>
+    {url ? <a className={sellerButton} href={url} download={name}>Save evidence {index + 1}</a> : <button type="button" className={sellerButton} disabled={loading} onClick={load}>{loading ? "Loading…" : `Open evidence ${index + 1}`}</button>}
     {error && <p role="alert" className="basis-full text-danger">{error}</p>}
   </li>;
 }
@@ -92,13 +92,13 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [now, setNow] = useState(() => Date.now());
   const [fileError, setFileError] = useState("");
-  const [confirmation, setConfirmation] = useState<ConfirmationForm>({ sourceAccountId: "", amount: "", reference: "", transferredAt: "", evidenceIds: [], attested: false });
-  const [problem, setProblem] = useState({ kind: "", reason: "", evidenceIds: [] as string[] });
+  const [confirmation, setConfirmation] = useState<ConfirmationForm>({ ...emptyTransferFacts, evidenceIds: [], attested: false });
+  const [problem, setProblem] = useState({ reason: "", evidenceIds: [] as string[] });
   const [formError, setFormError] = useState("");
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => { window.clearInterval(timer); active.current?.abort(); }; }, []);
   const detail = useApiQuery({ queryKey: queryKeys.backoffice.manualPayout(auth.sessionId, id), meta: { requiresAuth: true },
     service: (signal) => getManualPayoutDetail(id, { context: auth.requestContext, signal }) }, { retry: false, staleTime: 0, refetchOnMount: "always" });
-  const mutation = useApiMutation<ManualPayoutDetail, Run>({
+  const mutation = useApiMutation<ManualPayout, Run>({
     mutationKey: ["manual-payouts", auth.sessionId, id, "command"],
     execute: ({ key, controller, send }) => send({ idempotencyKey: key, signal: controller.signal }),
     isCurrent: ({ sessionId, controller }) => auth.isSessionCurrent(sessionId) && !controller.signal.aborted,
@@ -113,9 +113,9 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
     onSettled: (_result, _error, run) => { if (active.current === run.controller) active.current = null; },
   });
   const payout = detail.data;
-  const attempt = payout?.attempt ?? null;
+  const attempt = payout?.currentAttempt ?? null;
   const offset = payout ? serverOffset(payout.serverTime, detail.dataUpdatedAt) : 0;
-  const deadline = attempt?.state === "QR_ISSUED" ? attempt.qrDeadline : attempt?.state === "CLAIMED" ? attempt.leaseExpiresAt : null;
+  const deadline = attempt?.state === "QR_ISSUED" ? attempt.qrExpiresAt : attempt?.state === "CLAIMED" ? attempt.claimExpiresAt : null;
   const remaining = secondsUntil(deadline, offset, now);
   useEffect(() => {
     if (remaining === 0 && deadline && expired.current !== deadline && !detail.isFetching) { expired.current = deadline; void detail.refetch(); }
@@ -139,7 +139,7 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
   const upload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; event.target.value = "";
     if (!file || !payout || !attempt) return;
-    const problemText = evidenceFileError(file, attempt.evidence.length);
+    const problemText = evidenceFileError(file, payout.evidence.length);
     setFileError(problemText ?? "");
     if (problemText) return;
     const version = attempt.version, attemptId = attempt.id;
@@ -149,79 +149,76 @@ function ManualPayoutDetailPanel({ id, capabilities, keys, subject, close }: { i
   const lastError = mutation.error && mutation.error.kind !== "aborted" ? mutation.error : null;
   const canRetrySame = lastError?.kind === "network" && last !== null && last.scope.startsWith(`${id}:`) && last.scope.endsWith(`:${payout?.version}:${attempt?.version ?? "-"}`);
   const ownPayout = !!payout && subject === payout.sellerId;
-  const newWork = capabilities.newWorkEnabled && !capabilities.automaticJobsEnabled;
   const pending = mutation.isPending;
   const closeDialog = () => { setDialog(null); setFormError(""); };
   const openDialog = (next: typeof dialog) => { if (next !== null) mutation.reset(); setFormError(""); setDialog(next); };
   return <SellerPanel title="Manual payout">
     <div className="flex flex-wrap items-start justify-between gap-3"><p className="break-all font-mono text-xs text-muted-foreground">{id}</p><button type="button" className={sellerButton} disabled={pending} onClick={close}>Close payout</button></div>
     {detail.isPending ? <p role="status" className="mt-5 text-sm">Loading payout…</p> : detail.error && !payout ? <div className="mt-5"><p role="alert" className="text-sm text-danger">{manualPayoutErrorMessage(detail.error)}</p><button type="button" className={`${sellerButton} mt-3`} onClick={() => void detail.refetch()}>Retry payout</button></div> : payout && <>
-      <div className="mt-5 flex flex-wrap items-center gap-2"><SellerStatus>{manualStatusLabel(payout.status)}</SellerStatus><span className="rounded-full bg-secondary px-2 py-1 text-xs">{payout.executionMode === "MANUAL" ? "Manual" : "Automatic"}</span>{attempt && <span className="rounded-full bg-secondary px-2 py-1 text-xs">Attempt {attempt.attemptNo} · {attempt.state.replaceAll("_", " ").toLowerCase()}</span>}{payout.history.some((step) => step.simulated) && <span className="rounded-full bg-info/10 px-2 py-1 text-xs text-info">Simulated fixture</span>}</div>
+      <div className="mt-5 flex flex-wrap items-center gap-2"><SellerStatus>{manualStatusLabel(payout.status)}</SellerStatus><span className="rounded-full bg-secondary px-2 py-1 text-xs">{payout.executionMode === "MANUAL" ? "Manual" : "Automatic"}</span>{attempt && <span className="rounded-full bg-secondary px-2 py-1 text-xs">Attempt {attempt.attemptNo} · {attempt.state.replaceAll("_", " ").toLowerCase()}</span>}</div>
       {detail.error && <p role="alert" className="mt-3 text-sm text-danger">{manualPayoutErrorMessage(detail.error)} Showing the last loaded state.</p>}
       {ownPayout && <p role="status" className="mt-4 rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">This is your own seller payout. Staff execution and reconciliation are blocked; use My payouts for receipt actions.</p>}
       {payout.blockedReason && <p role="status" className="mt-4 rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">Blocked: {payout.blockedReason}</p>}
-      {payout.status === "SUCCEEDED" && payout.confirmationSource === "MANUAL_STAFF_CONFIRMED" && <p role="status" className="mt-4 rounded-sm border border-success/30 bg-success/10 p-4 text-sm">{sourceLabel(payout.confirmationSource)}. {attempt?.receiptStatus === "CONFIRMED" ? "The seller confirmed receipt." : attempt?.receiptStatus === "DISPUTED" ? "The seller requested a review." : "Staff confirmed transfer — awaiting seller confirmation."} This is not a bank verification.</p>}
+      {payout.status === "SUCCEEDED" && payout.confirmationSource === "MANUAL_STAFF_CONFIRMED" && <p role="status" className="mt-4 rounded-sm border border-success/30 bg-success/10 p-4 text-sm">{attempt?.receiptStatus === "CONFIRMED" ? "Staff confirmed transfer. The seller confirmed receipt." : attempt?.receiptStatus === "DISPUTED" ? "Staff confirmed transfer. The seller requested a review." : "Staff confirmed transfer — awaiting seller confirmation."} This is not a bank verification.</p>}
       <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-        {[["Order", payout.orderId], ["Seller", payout.sellerId], ["Owner", attempt ? attempt.ownedByMe ? "You" : attempt.ownerId : "Unclaimed"], ["Confirmation source", sourceLabel(payout.confirmationSource)],
-          ["Transfer reference", attempt?.reference ?? "Issued with the QR"], ["Seller receipt", receiptLabel(attempt?.receiptStatus ?? null)]].map(([label, value]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-all font-mono text-xs">{value}</dd></div>)}
+        {[["Order", payout.orderId], ["Seller", payout.sellerId], ["Owner", (() => { const owner = attemptOwner(payout); return owner === null ? "Unclaimed" : owner === subject ? "You" : owner; })()], ["Confirmation source", sourceLabel(payout.confirmationSource)],
+          ["Transfer reference", (attemptOwner(payout) && attempt?.reference) || "Issued when claimed"], ["Seller receipt", receiptLabel(attempt?.receiptStatus ?? null)]].map(([label, value]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-all font-mono text-xs">{value}</dd></div>)}
         {deadline && remaining !== null && <div><dt className="text-xs text-muted-foreground">{attempt?.state === "QR_ISSUED" ? "QR deadline (server time)" : "Claim lease (server time)"}</dt><dd className="mt-1 font-mono text-xs"><time dateTime={deadline}>{date.format(new Date(deadline))}</time> · <span aria-live="off">{remaining > 0 ? `${formatCountdown(remaining)} left` : "Expired — refresh to reconcile"}</span></dd></div>}
       </dl>
       {attempt?.state === "QR_ISSUED" && <p className="mt-3 text-xs text-muted-foreground">The deadline belongs to the platform, not the bank: a saved QR can still work in a banking app after it. After expiry this attempt needs reconciliation and is never requeued automatically.</p>}
-      <section aria-label="Receiving account" className="mt-5 rounded-sm border border-border p-4 text-sm"><h3 className="text-xs text-muted-foreground">Receiving account</h3>{payout.recipient ? <p className="mt-2">{payout.recipient.bankName} · {payout.recipient.holderName} · <span className="font-mono">•••• {payout.recipient.accountLast4}</span></p> : <p className="mt-2 text-muted-foreground">No verified receiving account.</p>}</section>
-      <dl aria-label="Payout amount breakdown" className="mt-5 space-y-3 border-y border-border py-5 text-sm">{[["Order amount", payout.orderAmount], ["Shipping fee", payout.shippingFee], ["Platform fee", payout.platformFee], ["Net amount to transfer", payout.netAmount]].map(([label, amount]) => <div key={label} className="flex flex-wrap justify-between gap-3"><dt className={label.startsWith("Net") ? "font-semibold" : "text-muted-foreground"}>{label}</dt><dd className={`font-mono ${label.startsWith("Net") ? "font-semibold text-primary" : ""}`}>{formatVND(amount)} <span className="text-xs text-muted-foreground">({amount})</span></dd></div>)}<div className="flex justify-between gap-3 text-xs text-muted-foreground"><dt>Platform fee rate snapshot</dt><dd className="font-mono">{payout.platformFeeRate}</dd></div></dl>
+      <section aria-label="Receiving account" className="mt-5 rounded-sm border border-border p-4 text-sm"><h3 className="text-xs text-muted-foreground">Receiving account</h3>{payout.recipient ? <p className="mt-2">{payout.recipient.bankCode} · {payout.recipient.holderName} · <span className="font-mono">•••• {payout.recipient.accountLast4}</span></p> : <p className="mt-2 text-muted-foreground">No verified receiving account.</p>}</section>
+      <dl aria-label="Payout amount breakdown" className="mt-5 space-y-3 border-y border-border py-5 text-sm">{[["Order amount", payout.orderAmount], ["Shipping fee", payout.shippingFee], ["Platform fee", payout.platformFee], ["Net amount to transfer", payout.netAmount]].map(([label, amount]) => <div key={label} className="flex flex-wrap justify-between gap-3"><dt className={label.startsWith("Net") ? "font-semibold" : "text-muted-foreground"}>{label}</dt><dd className={`font-mono ${label.startsWith("Net") ? "font-semibold text-primary" : ""}`}>{formatVND(amount)} <span className="text-xs text-muted-foreground">({amount})</span></dd></div>)}</dl>
       {!ownPayout && <div className="mt-5 flex flex-wrap gap-3">
         <button type="button" className={sellerButton} disabled={detail.isFetching || pending} onClick={() => { setMessage(""); void detail.refetch(); }}>Refresh payout</button>
         {has("READINESS_CHECK") && <button type="button" className={sellerButton} disabled={pending} onClick={() => run("READINESS_CHECK", null, "Readiness was rechecked. Review the status and blocked reason.", ({ idempotencyKey, signal }) => checkManualPayoutReadiness(payout.id, cmd(idempotencyKey, payout.version), options(signal)))}>Recheck readiness</button>}
-        {has("CLAIM") && newWork && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("CLAIM", null, "You own this payout now. Issue the QR when you are ready to transfer.", ({ idempotencyKey, signal }) => claimManualPayout(payout.id, cmd(idempotencyKey, payout.version), options(signal)))}>Claim this payout</button>}
-        {has("ISSUE_QR") && newWork && attempt && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("ISSUE_QR", null, "The QR was issued for this attempt.", ({ idempotencyKey, signal }) => issueManualPayoutQr(payout.id, attempt.id, cmd(idempotencyKey, attempt.version), options(signal)))}>Issue transfer QR</button>}
+        {has("CLAIM") && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("CLAIM", null, "You own this payout now. Issue the QR when you are ready to transfer.", ({ idempotencyKey, signal }) => claimManualPayout(payout.id, cmd(idempotencyKey, payout.version), options(signal)))}>Claim this payout</button>}
+        {has("ISSUE_QR") && attempt && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => run("ISSUE_QR", null, "The QR was issued for this attempt.", ({ idempotencyKey, signal }) => issueManualPayoutQr(payout.id, attempt.id, cmd(idempotencyKey, attempt.version), options(signal)))}>Issue transfer QR</button>}
         {has("RELEASE") && attempt && <button type="button" className={sellerButton} disabled={pending} onClick={() => run("RELEASE", { reason: "Released before QR issuance" }, "The claim was released. No QR was issued.", ({ idempotencyKey, signal }) => releaseManualPayoutClaim(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, { reason: "Released before QR issuance" }), options(signal)))}>Release claim</button>}
-        {has("CONFIRM") && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => openDialog("confirm")}>Record completed transfer</button>}
-        {has("REPORT_PROBLEM") && <button type="button" className={sellerButton} disabled={pending} onClick={() => { setProblem({ kind: "", reason: "", evidenceIds: [] }); openDialog("problem"); }}>Report a problem</button>}
+        {has("CONFIRM_TRANSFER") && <button type="button" className={sellerPrimary} disabled={pending} onClick={() => openDialog("confirm")}>Record completed transfer</button>}
+        {has("REPORT_PROBLEM") && <button type="button" className={sellerButton} disabled={pending} onClick={() => { setProblem({ reason: "", evidenceIds: [] }); openDialog("problem"); }}>Report a problem</button>}
         {canRetrySame && <button type="button" className={sellerButton} disabled={pending} onClick={() => last && dispatch(last)}>Retry same request</button>}
       </div>}
-      {!capabilities.newWorkEnabled && (payout.status === "PENDING" || attempt?.state === "CLAIMED") && <p className="mt-3 text-xs text-muted-foreground">New claims and QR issuance are paused. Recording and reconciliation of issued attempts stay available.</p>}
+      {!capabilities.enabled && (payout.status === "PENDING" || attempt?.state === "CLAIMED") && <p className="mt-3 text-xs text-muted-foreground">New claims and QR issuance are paused. Recording and reconciliation of issued attempts stay available.</p>}
       {message && <p role="status" className="mt-3 text-sm text-success">{message}</p>}
       {lastError && dialog === null && <p role="alert" className="mt-3 break-words text-sm text-danger">{manualPayoutErrorMessage(lastError)}</p>}
-      {has("VIEW_QR") && attempt?.reference && payout.recipient && <QrImage key={`${auth.sessionId}:${attempt.id}`} payoutId={payout.id} attemptId={attempt.id} reference={attempt.reference} amount={payout.netAmount} last4={payout.recipient.accountLast4} />}
-      {attempt && (attempt.evidence.length > 0 || has("UPLOAD_EVIDENCE")) && <section aria-label="Transfer evidence" className="mt-6"><h3 className="text-sm font-semibold">Evidence for attempt {attempt.attemptNo}</h3>
-        {attempt.evidence.length ? <ul className="mt-3 grid gap-2">{attempt.evidence.map((file) => <EvidenceFile key={`${auth.sessionId}:${file.id}`} payoutId={payout.id} attemptId={attempt.id} file={file} />)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No evidence uploaded yet.</p>}
+      {has("READ_QR") && attempt?.reference && payout.recipient && <QrImage key={`${auth.sessionId}:${attempt.id}`} payoutId={payout.id} attemptId={attempt.id} reference={attempt.reference} amount={payout.netAmount} last4={payout.recipient.accountLast4} />}
+      {attempt && (payout.evidence.length > 0 || has("UPLOAD_EVIDENCE")) && <section aria-label="Transfer evidence" className="mt-6"><h3 className="text-sm font-semibold">Evidence for attempt {attempt.attemptNo}</h3>
+        {payout.evidence.length ? <ul className="mt-3 grid gap-2">{payout.evidence.map((file, index) => <EvidenceFile key={`${auth.sessionId}:${file.id}`} payoutId={payout.id} attemptId={attempt.id} file={file} index={index} />)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No evidence uploaded yet.</p>}
         {has("UPLOAD_EVIDENCE") && <label className="mt-3 grid max-w-md gap-2 text-xs">Add evidence (JPEG, PNG or PDF, up to 10 MiB, at most 3)<input type="file" accept="image/jpeg,image/png,application/pdf" className={sellerInput} disabled={pending} onChange={upload} /></label>}
         {fileError && <p role="alert" className="mt-2 text-sm text-danger">{fileError}</p>}
       </section>}
-      <ManualPayoutReconciliationPanel payout={payout} canReconcile={capabilities.canReconcile} pending={pending} error={lastError ? manualPayoutErrorMessage(lastError) : undefined}
+      <ManualPayoutReconciliationPanel payout={payout} canReconcile={capabilities.canReconcile} sourceAccounts={capabilities.sourceAccounts} serverNow={() => Date.now() + offset} pending={pending} error={lastError ? manualPayoutErrorMessage(lastError) : undefined}
         dialog={dialog === "resolve" || dialog === "review" || dialog === "retry" ? dialog : null} setDialog={openDialog}
-        resolve={(input) => attempt && run("RESOLVE", input, "The reconciled outcome was recorded.", ({ idempotencyKey, signal }) => resolveManualPayout(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, input), options(signal)))}
-        review={(input) => attempt && payout.dispute && run("REVIEW_DISPUTE", input, "The seller case review was saved.", ({ idempotencyKey, signal }) => reviewReceiptDispute(payout.id, attempt.id, payout.dispute!.id, cmd(idempotencyKey, attempt.version, input), options(signal)))}
+        resolve={(input) => attempt && run("RESOLVE", input, "The reconciled outcome was recorded.", ({ idempotencyKey, signal }) => resolveManualPayout(payout.id, attempt.id, { idempotencyKey, expectedPayoutVersion: payout.version, expectedAttemptVersion: attempt.version, body: input }, options(signal)))}
+        review={(dispute, input) => attempt && run("REVIEW_DISPUTE", { disputeId: dispute.id, ...input }, "The seller case review was saved.", ({ idempotencyKey, signal }) => reviewReceiptDispute(payout.id, attempt.id, dispute.id, cmd(idempotencyKey, attempt.version, input), options(signal)))}
         retry={(input) => run("RETRY", input, "Retry authorized. The payout is back in the queue for a new attempt.", ({ idempotencyKey, signal }) => retryManualPayout(payout.id, cmd(idempotencyKey, payout.version, input), options(signal)))} />
       {dialog === "confirm" && attempt && <ManualPayoutDialog title="Record completed transfer" submitLabel="Record completed transfer" pending={pending} error={formError || (lastError ? manualPayoutErrorMessage(lastError) : undefined)} onClose={closeDialog}
         description={<>Record a transfer you already made in the banking app for reference <span className="font-mono text-foreground">{attempt.reference}</span>. Nexus does not send money. This records a staff confirmation, not a bank verification.</>}
-        onSubmit={() => { const parsed = parseConfirmationForm(confirmation, payout.netAmount, capabilities.sourceAccounts.map((account) => account.id), Date.now() + offset); if (!parsed.ok) { setFormError(parsed.error); return; } setFormError(""); run("CONFIRM", parsed.value, "Staff confirmed transfer — awaiting seller confirmation.", ({ idempotencyKey, signal }) => confirmManualPayout(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, parsed.value), options(signal))); }}>
+        onSubmit={() => { const parsed = parseConfirmationForm(confirmation, payout.netAmount, capabilities.sourceAccounts.map((account) => account.id), Date.now() + offset, qrIssuedAt(payout, attempt.id)); if (!parsed.ok) { setFormError(parsed.error); return; } setFormError(""); run("CONFIRM_TRANSFER", parsed.value, "The completed transfer was recorded.", ({ idempotencyKey, signal }) => confirmManualPayout(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, parsed.value), options(signal))); }}>
         <label className="grid gap-2 text-xs">Platform source account<select className={sellerInput} value={confirmation.sourceAccountId} onChange={(event) => setConfirmation((value) => ({ ...value, sourceAccountId: event.target.value }))}><option value="">Choose the account you sent from</option>{capabilities.sourceAccounts.map((account) => <option key={account.id} value={account.id}>{account.alias}</option>)}</select></label>
         <label className="grid gap-2 text-xs">Transferred amount (VND, two decimals)<input className={sellerInput} inputMode="decimal" value={confirmation.amount} placeholder={payout.netAmount} onChange={(event) => setConfirmation((value) => ({ ...value, amount: event.target.value.trim() }))} /></label>
-        <label className="grid gap-2 text-xs">Bank transfer reference<input className={sellerInput} value={confirmation.reference} maxLength={64} onChange={(event) => setConfirmation((value) => ({ ...value, reference: event.target.value }))} /></label>
+        <label className="grid gap-2 text-xs">Bank transfer reference<input className={sellerInput} value={confirmation.reference} maxLength={120} onChange={(event) => setConfirmation((value) => ({ ...value, reference: event.target.value }))} /></label>
         <label className="grid gap-2 text-xs">Transferred at (Vietnam time)<input type="datetime-local" className={sellerInput} value={confirmation.transferredAt} onChange={(event) => setConfirmation((value) => ({ ...value, transferredAt: event.target.value }))} /></label>
-        <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Evidence from this attempt (1-3)</legend>{attempt.evidence.length ? attempt.evidence.map((file) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={confirmation.evidenceIds.includes(file.id)} onChange={(event) => setConfirmation((value) => ({ ...value, evidenceIds: event.target.checked ? [...value.evidenceIds, file.id] : value.evidenceIds.filter((entry) => entry !== file.id) }))} />{file.fileName}</label>) : <p className="text-danger">Upload evidence to this attempt first.</p>}</fieldset>
+        <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Evidence from this attempt (1-3)</legend>{payout.evidence.length ? payout.evidence.map((file, index) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={confirmation.evidenceIds.includes(file.id)} onChange={(event) => setConfirmation((value) => ({ ...value, evidenceIds: event.target.checked ? [...value.evidenceIds, file.id] : value.evidenceIds.filter((entry) => entry !== file.id) }))} />{evidenceLabel(file, index)}</label>) : <p className="text-danger">Upload evidence to this attempt first.</p>}</fieldset>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={confirmation.attested} onChange={(event) => setConfirmation((value) => ({ ...value, attested: event.target.checked }))} />I checked in the banking app that the recipient is {payout.recipient ? `${payout.recipient.holderName} (•••• ${payout.recipient.accountLast4})` : "the verified account"} and the amount is exactly {formatVND(payout.netAmount)}.</label>
       </ManualPayoutDialog>}
       {dialog === "problem" && attempt && <ManualPayoutDialog title="Report a problem" submitLabel="Report problem" pending={pending} error={formError || (lastError ? manualPayoutErrorMessage(lastError) : undefined)} onClose={closeDialog}
         description="Report what you saw in the banking app. An administrator reconciles the attempt. Do not transfer again to fix it."
-        onSubmit={() => { const parsed = parseProblemForm(problem.kind, problem.reason, problem.evidenceIds); if (!parsed.ok) { setFormError(parsed.error); return; } setFormError(""); run("REPORT_PROBLEM", parsed.value, "The problem was reported. This attempt now needs reconciliation.", ({ idempotencyKey, signal }) => reportManualPayoutProblem(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, parsed.value), options(signal))); }}>
-        <label className="grid gap-2 text-xs">What went wrong<select className={sellerInput} value={problem.kind} onChange={(event) => setProblem((value) => ({ ...value, kind: event.target.value }))}><option value="">Choose a problem</option>{manualProblemKinds.map((kind) => <option key={kind} value={kind}>{problemLabels[kind]}</option>)}</select></label>
-        <label className="grid gap-2 text-xs">Explanation<textarea className={sellerInput} rows={3} maxLength={1000} value={problem.reason} onChange={(event) => setProblem((value) => ({ ...value, reason: event.target.value }))} /></label>
-        {attempt.evidence.length > 0 && <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Evidence (optional)</legend>{attempt.evidence.map((file) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={problem.evidenceIds.includes(file.id)} onChange={(event) => setProblem((value) => ({ ...value, evidenceIds: event.target.checked ? [...value.evidenceIds, file.id] : value.evidenceIds.filter((entry) => entry !== file.id) }))} />{file.fileName}</label>)}</fieldset>}
+        onSubmit={() => { const parsed = parseProblemForm(problem.reason, problem.evidenceIds); if (!parsed.ok) { setFormError(parsed.error); return; } setFormError(""); run("REPORT_PROBLEM", parsed.value, "The problem was reported. This attempt now needs reconciliation.", ({ idempotencyKey, signal }) => reportManualPayoutProblem(payout.id, attempt.id, cmd(idempotencyKey, attempt.version, parsed.value), options(signal))); }}>
+        <label className="grid gap-2 text-xs">What went wrong in the banking app<textarea className={sellerInput} rows={3} maxLength={1000} value={problem.reason} onChange={(event) => setProblem((value) => ({ ...value, reason: event.target.value }))} /></label>
+        {payout.evidence.length > 0 && <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Evidence (optional)</legend>{payout.evidence.map((file, index) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={problem.evidenceIds.includes(file.id)} onChange={(event) => setProblem((value) => ({ ...value, evidenceIds: event.target.checked ? [...value.evidenceIds, file.id] : value.evidenceIds.filter((entry) => entry !== file.id) }))} />{evidenceLabel(file, index)}</label>)}</fieldset>}
       </ManualPayoutDialog>}
       <section aria-label="Manual payout history" className="mt-6"><h3 className="text-sm font-semibold">History · newest first</h3>{payout.history.length ? <ol className="mt-4 space-y-3">{payout.history.map((step) => <li key={step.id} className="rounded-sm border border-border p-4 text-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3"><p className="font-medium">{step.event.replaceAll("_", " ")}{step.simulated && <span className="ml-2 rounded-full bg-info/10 px-2 py-1 text-xs text-info">Simulated</span>}{step.confirmationSource && <span className="ml-2 rounded-full bg-secondary px-2 py-1 text-xs">{sourceLabel(step.confirmationSource)}</span>}</p><time className="text-xs text-muted-foreground" dateTime={step.occurredAt}>{date.format(new Date(step.occurredAt))}</time></div>
-        <p className="mt-2 text-xs text-muted-foreground">{step.fromStatus ? `${manualStatusLabel(step.fromStatus)} → ` : ""}{manualStatusLabel(step.toStatus)} · Attempt {step.attemptNo}{step.attemptState ? ` · ${step.attemptState.replaceAll("_", " ").toLowerCase()}` : ""}</p>
-        <p className="mt-2 font-mono text-xs">{formatVND(step.amount)}{step.reference ? ` · ${step.reference}` : ""}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3"><p className="font-medium">{words(step.event)}</p><time className="text-xs text-muted-foreground" dateTime={step.occurredAt}>{date.format(new Date(step.occurredAt))}</time></div>
+        {(step.attemptId || step.caseId) && <p className="mt-2 font-mono text-xs text-muted-foreground">{[step.attemptId && `Attempt ${step.attemptId.slice(0, 8)}`, step.caseId && `Case ${step.caseId.slice(0, 8)}`].filter(Boolean).join(" · ")}</p>}
         {step.reason && <p className="mt-2 break-words text-xs">{step.reason}</p>}
-        <p className="mt-2 break-all text-xs text-muted-foreground">{step.actorRole.replaceAll("_", " ").toLowerCase()} <span className="font-mono">{step.actorId}</span></p>
+        <p className="mt-2 break-all text-xs text-muted-foreground">{step.actorRole ? words(step.actorRole) : "system"} <span className="font-mono">{step.actorId}</span></p>
       </li>)}</ol> : <p className="mt-3 text-sm text-muted-foreground">No history steps are available.</p>}</section>
     </>}
   </SellerPanel>;
 }
 
-function ManualQueue({ selected, select }: { selected: string | null; select: (id: string) => void }) {
+function ManualQueue({ selected, select, subject }: { selected: string | null; select: (id: string) => void; subject: string | null }) {
   const auth = useAuth();
   const [view, setView] = useState<ManualQueueView>("REVIEW");
   const [page, setPage] = useState(0);
@@ -244,7 +241,7 @@ function ManualQueue({ selected, select }: { selected: string | null; select: (i
     </form>
     {view === "REVIEW" && <p className="text-xs text-muted-foreground">Needs review includes uncertain transfers, open staff exceptions and unresolved seller cases, also on succeeded payouts.</p>}
     {result.isPending ? <p role="status">Loading manual payouts…</p> : result.error ? <SellerPanel title="Manual payout queue unavailable"><p role="alert" className="text-sm text-danger">{manualPayoutErrorMessage(result.error)}</p><button type="button" className={`${sellerButton} mt-4`} onClick={() => void result.refetch()}>Retry queue</button></SellerPanel> : <>
-      <ManualPayoutTable rows={result.data.content} selectedId={selected} select={select} />
+      <ManualPayoutTable rows={result.data.content} subject={subject} selectedId={selected} select={select} />
       <div className="flex flex-wrap items-center justify-between gap-4 text-sm"><p className="text-muted-foreground">Page {page + 1} · {result.data.totalElements} payouts</p><nav aria-label="Manual payout pagination" className="flex gap-2"><button type="button" className={sellerButton} disabled={page === 0 || result.isFetching} onClick={() => setPage((value) => value - 1)}>Previous</button><button type="button" className={sellerButton} disabled={result.isFetching || page + 1 >= result.data.totalPages} onClick={() => setPage((value) => value + 1)}>Next</button></nav></div>
     </>}
   </>;
@@ -261,9 +258,10 @@ function ManualWorkspace({ seller }: { seller: boolean }) {
     <SellerHeading title="Manual payouts" description="Claim one payout, transfer it in the platform banking app, then record the completed transfer with evidence. One QR covers exactly one payout and its frozen net amount.">{seller && <Link className={sellerButton} href="/backoffice/payouts?view=seller">My payouts</Link>}</SellerHeading>
     {capabilities.isPending ? <p role="status">Checking manual payout availability…</p> : capabilities.error ? <SellerPanel title="Manual payouts unavailable"><p role="alert" className="text-sm text-danger">{manualPayoutErrorMessage(capabilities.error)}</p><button type="button" className={`${sellerButton} mt-4`} onClick={() => void capabilities.refetch()}>Check again</button></SellerPanel> : <>
       {capabilities.data.automaticJobsEnabled && <p role="status" className="rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">Automatic payout jobs are still enabled on the server, so new manual work is unavailable. Recovery of issued attempts stays available.</p>}
-      {!capabilities.data.newWorkEnabled && <p role="status" className="rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">New claims and QR issuance are paused. You can still record or reconcile attempts that already have a QR.</p>}
+      {capabilities.data.executionMode === "AUTO" && <p role="status" className="rounded-sm border border-border p-4 text-sm">New payouts run automatically on this server. This workspace handles payouts created in manual mode.</p>}
+      {!capabilities.data.enabled && <p role="status" className="rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">New claims and QR issuance are paused. You can still record or reconcile attempts that already have a QR.</p>}
       {!capabilities.data.canReconcile && <p className="text-xs text-muted-foreground">You can execute transfers you own. Reconciliation, corrections and retries are handled by an administrator.</p>}
-      <ManualQueue selected={selected} select={setSelected} />
+      <ManualQueue selected={selected} select={setSelected} subject={subject} />
       {selected && <ManualPayoutDetailPanel key={`${auth.sessionId}:${selected}`} id={selected} capabilities={capabilities.data} keys={keys} subject={subject} close={() => setSelected(null)} />}
     </>}
   </>;

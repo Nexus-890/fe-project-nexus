@@ -4,8 +4,8 @@ import { normalizeMoney } from "./catalogService";
 import type { ApiError, ApiResponse, Page } from "../types/commonResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import { payoutHistoryEvents, payoutStatuses, type PayoutDetail, type PayoutFilters, type PayoutHistoryEntry, type PayoutStatus, type SellerPayout } from "../types/payoutType";
-import { receiptStatuses, sellerReceiptActions, type SellerManualAttempt } from "../types/payoutReceiptType";
-import { parseReceiptDispute } from "./manualPayoutService";
+import { disputeReasons, disputeStatuses, receiptStatuses, sellerReceiptActions, type ReceiptDispute, type SellerManualReceipt, type SellerReceiptAction } from "../types/payoutReceiptType";
+import { manualAttemptStates } from "../types/manualPayoutType";
 
 // API #257 đã triển khai; admin list vẫn thuộc #261.
 const path = "/api/v1/payments/payouts";
@@ -41,36 +41,40 @@ export const parseSellerPayout = (value: unknown): SellerPayout => {
   const platformFeeRate = feeRate(value.platformFeeRate);
   if (minor(netAmount) <= BigInt(0) || minor(orderAmount) - minor(shippingFee) - minor(platformFee) !== minor(netAmount))
     throw createInvalidResponseError("Payout amount breakdown does not balance");
-  if (["SUCCEEDED", "RETURNED"].includes(value.status) &&
-    (Number(value.attemptCount) < 1 || value.recipientAccountLast4 === null || !text(value.providerReference, 200)))
-    throw createInvalidResponseError("Confirmed payout requires an attempted transfer, receiving account and provider reference");
   const executionMode = value.executionMode === undefined ? "AUTO" : value.executionMode;
   const confirmationSource = value.confirmationSource ?? null;
   if (executionMode !== "AUTO" && executionMode !== "MANUAL" || ![null, "MANUAL_STAFF_CONFIRMED", "PROVIDER_CONFIRMED", "SIMULATED"].includes(confirmationSource as string | null))
     throw createInvalidResponseError("Invalid payout execution mode");
-  const manualAttempt = value.manualAttempt == null ? null : parseSellerManualAttempt(value.manualAttempt);
-  if (manualAttempt && executionMode !== "MANUAL") throw createInvalidResponseError("Receipt actions exist only for manual payouts");
+  if (["SUCCEEDED", "RETURNED"].includes(value.status) &&
+    (Number(value.attemptCount) < 1 || value.recipientAccountLast4 === null || executionMode === "AUTO" && !text(value.providerReference, 200)))
+    throw createInvalidResponseError("Confirmed payout requires an attempted transfer, receiving account and provider reference");
+  const manual = value.manual == null ? null : parseSellerManualReceipt(value.manual);
+  if (manual && executionMode !== "MANUAL") throw createInvalidResponseError("Receipt actions exist only for manual payouts");
   return { id: value.id, orderId: value.orderId, sellerId: value.sellerId, orderAmount, shippingFee, platformFeeRate,
     platformFee, netAmount, currency: "VND", status: value.status, attemptCount: Number(value.attemptCount), recipientAccountLast4: value.recipientAccountLast4,
     providerReference: value.providerReference == null ? null : value.providerReference, createdAt: value.createdAt, simulated: value.simulated,
-    executionMode, confirmationSource: confirmationSource as SellerPayout["confirmationSource"], manualAttempt };
+    executionMode, confirmationSource: confirmationSource as SellerPayout["confirmationSource"], manual };
 };
 
-const sellerAttemptStates = ["CLAIMED", "QR_ISSUED", "SUCCEEDED", "NOT_SENT", "UNKNOWN", "RETURNED", "CONFIRMATION_CORRECTED"] as const;
-export const parseSellerManualAttempt = (value: unknown): SellerManualAttempt => {
-  if (!isRecord(value) || !uuid(value.attemptId) || !Number.isSafeInteger(value.attemptNo) || Number(value.attemptNo) < 1 || !sellerAttemptStates.some((state) => state === value.state) ||
+export const parseSellerManualReceipt = (value: unknown): SellerManualReceipt => {
+  if (!isRecord(value) || !uuid(value.attemptId) || !manualAttemptStates.some((state) => state === value.attemptState) ||
     !receiptStatuses.some((state) => state === value.receiptStatus) || !Number.isSafeInteger(value.receiptVersion) || Number(value.receiptVersion) < 0 ||
-    !(value.staffConfirmedAt === null || instant(value.staffConfirmedAt)) || !(value.sellerConfirmedAt === null || instant(value.sellerConfirmedAt)) || !Array.isArray(value.allowedSellerActions) ||
-    ["evidence", "notes", "recipientAccountNumber", "accountNumber"].some((key) => Object.hasOwn(value, key)))
+    typeof value.hasOpenDispute !== "boolean" || !Array.isArray(value.allowedActions) ||
+    ["evidence", "notes", "explanation", "recipientAccountNumber", "accountNumber"].some((key) => Object.hasOwn(value, key)))
     throw createInvalidResponseError("Invalid seller receipt state");
-  const actions = value.allowedSellerActions.map((action) => { if (!sellerReceiptActions.some((entry) => entry === action)) throw createInvalidResponseError("Unknown seller receipt action"); return action as SellerManualAttempt["allowedSellerActions"][number]; });
+  const actions = value.allowedActions.map((action) => { if (!sellerReceiptActions.some((entry) => entry === action)) throw createInvalidResponseError("Unknown seller receipt action"); return action as SellerReceiptAction; });
   const dispute = value.dispute == null ? null : parseReceiptDispute(value.dispute);
-  if (new Set(actions).size !== actions.length || actions.length && (value.state !== "SUCCEEDED" || value.staffConfirmedAt === null) ||
-    actions.includes("CONFIRM_RECEIPT") && value.receiptStatus === "CONFIRMED" || value.receiptStatus === "CONFIRMED" && value.sellerConfirmedAt === null ||
-    value.receiptStatus === "DISPUTED" && !dispute)
+  if (new Set(actions).size !== actions.length || actions.length && value.attemptState !== "SUCCEEDED" || actions.includes("CONFIRM_RECEIPT") && value.receiptStatus === "CONFIRMED" ||
+    value.hasOpenDispute && (!dispute || dispute.status === "RESOLVED"))
     throw createInvalidResponseError("Seller receipt actions do not match the attempt");
-  return { attemptId: value.attemptId, attemptNo: Number(value.attemptNo), state: value.state as SellerManualAttempt["state"], receiptStatus: value.receiptStatus as SellerManualAttempt["receiptStatus"],
-    receiptVersion: Number(value.receiptVersion), staffConfirmedAt: value.staffConfirmedAt, sellerConfirmedAt: value.sellerConfirmedAt, dispute, allowedSellerActions: actions };
+  return { attemptId: value.attemptId, attemptState: value.attemptState as SellerManualReceipt["attemptState"], receiptStatus: value.receiptStatus as SellerManualReceipt["receiptStatus"],
+    receiptVersion: Number(value.receiptVersion), hasOpenDispute: value.hasOpenDispute, allowedActions: actions, dispute };
+};
+
+const parseReceiptDispute = (value: unknown): ReceiptDispute => {
+  if (!isRecord(value) || !uuid(value.id) || !disputeStatuses.some((entry) => entry === value.status) || !disputeReasons.some((entry) => entry === value.reason))
+    throw createInvalidResponseError("Invalid receipt dispute");
+  return { id: value.id, status: value.status as ReceiptDispute["status"], reason: value.reason as ReceiptDispute["reason"] };
 };
 
 export const parsePayoutHistoryEntry = (value: unknown): PayoutHistoryEntry => {
@@ -90,8 +94,8 @@ export const parsePayoutDetail = (value: unknown): PayoutDetail => {
   const payout = parseSellerPayout(value);
   if (!isRecord(value) || !Array.isArray(value.history)) throw createInvalidResponseError("Missing payout history");
   const history = value.history.map(parsePayoutHistoryEntry);
-  if (new Set(history.map((step) => step.id)).size !== history.length || history.some((step, index) => index > 0 && Date.parse(step.occurredAt) > Date.parse(history[index - 1].occurredAt)))
-    throw createInvalidResponseError("Payout history must be unique and newest first");
+  if (new Set(history.map((step) => step.id)).size !== history.length)
+    throw createInvalidResponseError("Payout history must be unique");
   return { ...payout, history };
 };
 

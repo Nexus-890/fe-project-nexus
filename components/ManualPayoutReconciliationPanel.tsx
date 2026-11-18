@@ -3,17 +3,19 @@
 import { useState } from "react";
 import ManualPayoutDialog from "./ManualPayoutDialog";
 import { sellerButton, sellerInput } from "./SellerUi";
-import { parseResolutionForm, parseRetryForm, parseReviewForm, resolutionNeedsProof } from "../features/manualPayoutSchema";
-import type { DisputeReviewInput, ManualPayoutDetail, ManualResolutionInput } from "../types/manualPayoutType";
+import { emptyTransferFacts, evidenceLabel, parseResolutionForm, parseRetryForm, parseReviewForm, qrIssuedAt, resolutionNeedsFacts, resolutionOutcomes, type TransferFacts } from "../features/manualPayoutSchema";
+import type { DisputeReviewInput, ManualCase, ManualPayout, ManualResolutionInput, SourceAccount } from "../types/manualPayoutType";
 
 type Dialog = "resolve" | "review" | "retry" | null;
 type Props = {
-  payout: ManualPayoutDetail;
+  payout: ManualPayout;
   canReconcile: boolean;
+  sourceAccounts: SourceAccount[];
+  serverNow: () => number;
   pending: boolean;
   error?: string;
   resolve: (input: ManualResolutionInput) => void;
-  review: (input: DisputeReviewInput) => void;
+  review: (dispute: ManualCase, input: DisputeReviewInput) => void;
   retry: (input: { reason: string }) => void;
   dialog: Dialog;
   setDialog: (dialog: Dialog) => void;
@@ -25,43 +27,58 @@ const outcomeLabels: Record<string, string> = {
   CONFIRMED_RETURNED: "The bank returned the transfer",
   CONFIRMATION_RECORDED_IN_ERROR: "Staff recorded Completed without a transfer (correction)",
 };
-const outcomesFor = (payout: ManualPayoutDetail) => payout.attempt?.state === "UNKNOWN" ? ["CONFIRMED_SENT", "CONFIRMED_NOT_SENT"] :
-  payout.attempt?.state === "SUCCEEDED" ? [...(payout.needsReview && !payout.hasOpenDispute ? ["CONFIRMED_SENT"] : []), "CONFIRMED_RETURNED", ...(payout.hasOpenDispute ? ["CONFIRMATION_RECORDED_IN_ERROR"] : [])] : [];
+const caseLabel = (entry: ManualCase) => `${entry.kind === "SELLER_DISPUTE" ? "Seller case" : "Staff exception"} ${entry.id.slice(0, 8)} · ${entry.status.replaceAll("_", " ").toLowerCase()} · ${entry.reason.replaceAll("_", " ").toLowerCase()}`;
 
-function ManualPayoutReconciliationPanel({ payout, canReconcile, pending, error, resolve, review, retry, dialog, setDialog }: Props) {
+function ManualPayoutReconciliationPanel({ payout, canReconcile, sourceAccounts, serverNow, pending, error, resolve, review, retry, dialog, setDialog }: Props) {
+  const [caseId, setCaseId] = useState("");
   const [outcome, setOutcome] = useState("");
   const [reason, setReason] = useState("");
   const [proof, setProof] = useState<string[]>([]);
+  const [facts, setFacts] = useState<TransferFacts>(emptyTransferFacts);
   const [decision, setDecision] = useState("");
   const [localError, setLocalError] = useState("");
   const has = (action: string) => payout.allowedActions.some((entry) => entry === action);
-  const open = (next: Dialog) => { setLocalError(""); setReason(""); setProof([]); setOutcome(""); setDecision(""); setDialog(next); };
-  const evidence = payout.attempt?.evidence ?? [];
-  const reviewNeeded = payout.needsReview || payout.hasOpenDispute || ["FAILED", "RETURNED"].includes(payout.status);
+  const attempt = payout.currentAttempt;
+  const open = (next: Dialog) => { setLocalError(""); setReason(""); setProof([]); setOutcome(""); setDecision(""); setFacts(emptyTransferFacts); setCaseId(payout.openCases[0]?.id ?? ""); setDialog(next); };
+  const selected = payout.openCases.find((entry) => entry.id === caseId) ?? null;
+  const outcomes = resolutionOutcomes(attempt?.state, payout.status, selected);
+  const reviewNeeded = payout.needsReview || ["FAILED", "RETURNED"].includes(payout.status);
   if (!reviewNeeded && !has("RESOLVE") && !has("REVIEW_DISPUTE") && !has("RETRY")) return null;
+  const proofPicker = (required: boolean) => <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Proof from this attempt {required ? "(1-3 required)" : "(optional)"}</legend>
+    {payout.evidence.length ? payout.evidence.map((file, index) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={proof.includes(file.id)} onChange={(event) => setProof((value) => event.target.checked ? [...value, file.id] : value.filter((id) => id !== file.id))} />{evidenceLabel(file, index)}</label>) :
+      <p className="text-muted-foreground">Upload proof to this attempt first.</p>}</fieldset>;
   return <section aria-label="Reconciliation" className="mt-6 rounded-sm border border-warning/30 bg-warning/5 p-4">
     <h3 className="text-sm font-semibold">Reconciliation</h3>
-    {payout.dispute && <div className="mt-3 text-sm"><p>Seller case <span className="font-mono text-xs">{payout.dispute.id.slice(0, 8)}</span> · {payout.dispute.status.replaceAll("_", " ").toLowerCase()} · {payout.dispute.reason.replaceAll("_", " ").toLowerCase()}</p><p className="mt-2 break-words text-muted-foreground">{payout.dispute.explanation}</p></div>}
+    {payout.openCases.length > 0 && <ul className="mt-3 grid gap-2 text-sm">{payout.openCases.map((entry) => <li key={entry.id}><p>{caseLabel(entry)}</p>{entry.explanation && <p className="mt-1 break-words text-xs text-muted-foreground">{entry.explanation}</p>}</li>)}</ul>}
     {payout.status === "UNKNOWN" && <p className="mt-3 text-sm">The transfer outcome is unknown. Check the bank app for this exact reference before choosing an outcome. Do not transfer again.</p>}
-    {payout.status === "FAILED" && payout.attempt?.state === "CONFIRMATION_CORRECTED" && <p role="status" className="mt-3 text-sm font-medium">Staff confirmation corrected — awaiting authorized retry. This is an accounting correction, not a bank return.</p>}
+    {payout.status === "FAILED" && attempt?.state === "CONFIRMATION_CORRECTED" && <p role="status" className="mt-3 text-sm font-medium">Staff confirmation corrected — awaiting authorized retry. This is an accounting correction, not a bank return.</p>}
     {!canReconcile ? <p className="mt-3 text-sm text-muted-foreground">Only an administrator can resolve, correct or authorize a retry. You can add information through a problem report on your own attempt.</p> :
       <div className="mt-4 flex flex-wrap gap-3">
         {has("RESOLVE") && <button type="button" className={sellerButton} disabled={pending} onClick={() => open("resolve")}>Record reconciled outcome</button>}
         {has("REVIEW_DISPUTE") && <button type="button" className={sellerButton} disabled={pending} onClick={() => open("review")}>Review seller case</button>}
         {has("RETRY") && <button type="button" className={sellerButton} disabled={pending} onClick={() => open("retry")}>Authorize retry on this payout</button>}
       </div>}
-    {canReconcile && dialog === "resolve" && <ManualPayoutDialog title="Record reconciled outcome" submitLabel="Record outcome" pending={pending} error={localError || error} onClose={() => setDialog(null)}
-      description={<>Choose what the bank app shows for reference <span className="font-mono text-foreground">{payout.attempt?.reference ?? "not issued"}</span>. A sent outcome keeps the original payment; a not-sent outcome needs a separate retry.</>}
-      onSubmit={() => { const parsed = parseResolutionForm(outcome, reason, proof, payout.dispute); if (!parsed.ok) { setLocalError(parsed.error); return; } setLocalError(""); resolve(parsed.value); }}>
-      <label className="grid gap-2 text-xs">Outcome<select className={sellerInput} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Choose an outcome</option>{outcomesFor(payout).map((value) => <option key={value} value={value}>{value === "CONFIRMED_SENT" && payout.attempt?.state === "SUCCEEDED" ? "Bank app shows the recorded transfer was correct (close the exception)" : outcomeLabels[value]}</option>)}</select></label>
+    {canReconcile && dialog === "resolve" && attempt && <ManualPayoutDialog title="Record reconciled outcome" submitLabel="Record outcome" pending={pending} error={localError || error} onClose={() => setDialog(null)}
+      description={<>Choose what the bank app shows for reference <span className="font-mono text-foreground">{attempt.reference ?? "not issued"}</span>. A sent outcome keeps the original payment; a not-sent outcome needs a separate retry.</>}
+      onSubmit={() => { const parsed = parseResolutionForm({ caseId, outcome, reason, evidenceIds: proof, facts }, { attemptState: attempt.state, payoutStatus: payout.status, openCases: payout.openCases, netAmount: payout.netAmount, sourceIds: sourceAccounts.map((account) => account.id), serverNow: serverNow(), issuedAt: qrIssuedAt(payout, attempt.id) });
+        if (!parsed.ok) { setLocalError(parsed.error); return; } setLocalError(""); resolve(parsed.value); }}>
+      <label className="grid gap-2 text-xs">Case<select className={sellerInput} value={caseId} onChange={(event) => { setCaseId(event.target.value); setOutcome(""); }}>{payout.openCases.map((entry) => <option key={entry.id} value={entry.id}>{caseLabel(entry)}</option>)}</select></label>
+      <label className="grid gap-2 text-xs">Outcome<select className={sellerInput} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Choose an outcome</option>{outcomes.map((value) => <option key={value} value={value}>{value === "CONFIRMED_SENT" && attempt.state === "SUCCEEDED" ? "The recorded transfer was correct (close this exception only)" : outcomeLabels[value]}</option>)}</select></label>
+      {resolutionNeedsFacts(outcome, attempt.state) && <>
+        <label className="grid gap-2 text-xs">Platform source account<select className={sellerInput} value={facts.sourceAccountId} onChange={(event) => setFacts((value) => ({ ...value, sourceAccountId: event.target.value }))}><option value="">Choose the account it was sent from</option>{sourceAccounts.map((account) => <option key={account.id} value={account.id}>{account.alias}</option>)}</select></label>
+        <label className="grid gap-2 text-xs">Transferred amount (VND, two decimals)<input className={sellerInput} inputMode="decimal" value={facts.amount} placeholder={payout.netAmount} onChange={(event) => setFacts((value) => ({ ...value, amount: event.target.value.trim() }))} /></label>
+        <label className="grid gap-2 text-xs">Bank transfer reference<input className={sellerInput} value={facts.reference} maxLength={120} onChange={(event) => setFacts((value) => ({ ...value, reference: event.target.value }))} /></label>
+        <label className="grid gap-2 text-xs">Transferred at (Vietnam time)<input type="datetime-local" className={sellerInput} value={facts.transferredAt} onChange={(event) => setFacts((value) => ({ ...value, transferredAt: event.target.value }))} /></label>
+      </>}
       <label className="grid gap-2 text-xs">Reason<textarea className={sellerInput} rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-      <fieldset className="grid gap-2 text-xs"><legend className="mb-2">Proof from this attempt {resolutionNeedsProof(outcome) ? "(required)" : "(optional)"}</legend>{evidence.length ? evidence.map((file) => <label key={file.id} className="flex items-center gap-2"><input type="checkbox" checked={proof.includes(file.id)} onChange={(event) => setProof((value) => event.target.checked ? [...value, file.id] : value.filter((id) => id !== file.id))} />{file.fileName}</label>) : <p className="text-muted-foreground">Upload proof to this attempt first.</p>}</fieldset>
+      {proofPicker(true)}
     </ManualPayoutDialog>}
-    {canReconcile && dialog === "review" && payout.dispute && <ManualPayoutDialog title="Review seller case" submitLabel="Save review" pending={pending} error={localError || error} onClose={() => setDialog(null)}
+    {canReconcile && dialog === "review" && payout.openSellerDispute && <ManualPayoutDialog title="Review seller case" submitLabel="Save review" pending={pending} error={localError || error} onClose={() => setDialog(null)}
       description="A review asks the seller for information or tells them transfer evidence exists. It never confirms receipt on the seller's behalf."
-      onSubmit={() => { const parsed = payout.dispute && parseReviewForm(decision, reason, payout.dispute); if (!parsed || !parsed.ok) { setLocalError(parsed ? parsed.error : "The seller case is no longer open."); return; } setLocalError(""); review(parsed.value); }}>
+      onSubmit={() => { const dispute = payout.openSellerDispute; if (!dispute) { setLocalError("The seller case is no longer open."); return; } const parsed = parseReviewForm(decision, reason, proof, dispute); if (!parsed.ok) { setLocalError(parsed.error); return; } setLocalError(""); review(dispute, parsed.value); }}>
       <label className="grid gap-2 text-xs">Decision<select className={sellerInput} value={decision} onChange={(event) => setDecision(event.target.value)}><option value="">Choose a decision</option><option value="REQUEST_INFORMATION">Request information from the seller</option><option value="TRANSFER_EVIDENCE_PROVIDED">Transfer evidence provided to the seller</option></select></label>
       <label className="grid gap-2 text-xs">Note to the case<textarea className={sellerInput} rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+      {proofPicker(decision === "TRANSFER_EVIDENCE_PROVIDED")}
     </ManualPayoutDialog>}
     {canReconcile && dialog === "retry" && <ManualPayoutDialog title="Authorize retry" submitLabel="Authorize retry" pending={pending} error={localError || error} onClose={() => setDialog(null)}
       description="The same payout returns to the queue and a new attempt gets a new reference. Authorize only after the earlier attempt is reconciled as not sent, returned or corrected."

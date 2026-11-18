@@ -13,7 +13,7 @@ const transitions = { DRAFT: ["ACTIVE"], ACTIVE: ["INACTIVE"], INACTIVE: ["ACTIV
 const envelope = (data) => ({ code: 0, message: "response success", data });
 function json(res, body, status = 200) { res.writeHead(status, { "Content-Type": status >= 400 ? "application/problem+json" : "application/json", "Cache-Control": "no-store" }); res.end(status === 204 ? undefined : JSON.stringify(body)); }
 const ok = (res, data, status = 200) => json(res, envelope(data), status);
-const problem = (res, status, detail, code = status === 409 ? "CATALOG_STATUS_CHANGE_INVALID" : status === 403 ? "FORBIDDEN" : "INVALID_PARAMETER") => json(res, { type: "urn:problem:backoffice-fixture", title: status === 403 ? "Forbidden" : "Request rejected", status, code, detail }, status);
+const problem = (res, status, detail, code = status === 409 ? "CATALOG_STATUS_CHANGE_INVALID" : status === 403 ? "FORBIDDEN" : "INVALID_PARAMETER", extra = {}) => json(res, { type: "urn:problem:backoffice-fixture", title: status === 403 ? "Forbidden" : "Request rejected", status, code, detail, ...extra }, status);
 function list(res, data, url) { const page = Number(url.searchParams.get("page") || 0), size = Number(url.searchParams.get("size") || 10); return json(res, { ...envelope(data.slice(page * size, (page + 1) * size)), page: { number: page, size, totalElements: data.length, totalPages: Math.ceil(data.length / size) } }); }
 const bodyOf = (req) => typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 const findSku = (id) => products.flatMap((product) => product.skus).find((sku) => sku.id === id);

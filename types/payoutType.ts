@@ -1,10 +1,11 @@
-import type { SellerManualAttempt } from "./payoutReceiptType";
+import type { SellerManualReceipt } from "./payoutReceiptType";
 /** Mô hình UI dùng chuỗi thập phân; API #257 trả tiền và tỷ lệ phí dạng số JSON. */
 export const payoutStatuses = ["ON_HOLD", "PENDING", "PROCESSING", "UNKNOWN", "SUCCEEDED", "FAILED", "RETURNED"] as const;
 export type PayoutStatus = typeof payoutStatuses[number];
 export const payoutNeedsActionStatuses = ["ON_HOLD", "UNKNOWN", "FAILED", "RETURNED"] as const satisfies readonly PayoutStatus[];
 export const payoutHistoryEvents = ["CREATED", "HELD", "RELEASED", "SENT", "SUCCEEDED", "FAILED", "TIMED_OUT", "RECONCILED", "RETRIED", "RETURNED",
-  "CLAIMED", "CLAIM_RELEASED", "QR_ISSUED", "STAFF_CONFIRMED", "PROBLEM_REPORTED", "CONFIRMATION_CORRECTED", "RECEIPT_CONFIRMED", "RECEIPT_DISPUTED", "DISPUTE_REVIEWED"] as const;
+  "MANUAL_CLAIMED", "QR_ISSUED", "CLAIM_RELEASED", "MANUAL_CONFIRMED", "MANUAL_PROBLEM", "MANUAL_RESOLVED", "RECEIPT_CONFIRMED", "RECEIPT_DISPUTED", "DISPUTE_REVIEWED",
+  "CONFIRMATION_CORRECTED", "READINESS_CHECKED", "EVIDENCE_UPLOADED"] as const;
 export type PayoutHistoryEvent = typeof payoutHistoryEvents[number];
 export type SellerPayout = {
   id: string;
@@ -24,7 +25,7 @@ export type SellerPayout = {
   simulated: boolean;
   executionMode: "AUTO" | "MANUAL";
   confirmationSource: "MANUAL_STAFF_CONFIRMED" | "PROVIDER_CONFIRMED" | "SIMULATED" | null;
-  manualAttempt: SellerManualAttempt | null;
+  manual: SellerManualReceipt | null;
 };
 export type PayoutHistoryEntry = {
   id: string;
