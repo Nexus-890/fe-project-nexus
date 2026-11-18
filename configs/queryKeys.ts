@@ -6,6 +6,7 @@ import type { SellerAuctionFilters } from "../types/sellerAuctionType";
 import type { AuctionStatus } from "../types/auctionRoomType";
 import type { PayoutFilters } from "../types/payoutType";
 import type { SellerBankFilters } from "../types/sellerBankType";
+import type { ManualPayoutFilters } from "../types/manualPayoutType";
 
 /** Shared cache-key registry; each feature supplies its own service to useApiQuery. */
 export const queryKeys = {
@@ -56,6 +57,9 @@ export const queryKeys = {
     intake: (sessionId: number) => ["backoffice", sessionId, "intake"] as const,
     payouts: (sessionId: number, filters?: PayoutFilters) => filters === undefined ? ["backoffice", sessionId, "payouts"] as const : ["backoffice", sessionId, "payouts", filters] as const,
     bankAccounts: (sessionId: number, filters?: SellerBankFilters) => filters === undefined ? ["backoffice", sessionId, "bank-accounts"] as const : ["backoffice", sessionId, "bank-accounts", filters] as const,
+    manualPayouts: (sessionId: number, filters?: ManualPayoutFilters) => filters === undefined ? ["manual-payouts", sessionId] as const : ["manual-payouts", sessionId, "queue", filters] as const,
+    manualPayoutCapabilities: (sessionId: number) => ["manual-payouts", sessionId, "capabilities"] as const,
+    manualPayout: (sessionId: number, id: string) => ["manual-payouts", sessionId, "detail", id] as const,
   },
   seller: {
     all: (sessionId: number) => ["seller", sessionId] as const,

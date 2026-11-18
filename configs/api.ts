@@ -151,13 +151,15 @@ const abortable = <T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> => 
   });
 };
 
-/** One HTTP boundary for browser and server services; preserves page metadata. */
-export const requestApi = async <T>(
+type RawResponse = { status: number; statusText: string; data: string | ArrayBuffer; contentType: string };
+
+const sendApi = async (
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
-  body?: unknown,
-  options: ServiceRequestOptions = {},
-): Promise<ApiResponse<T>> => {
+  body: unknown,
+  options: ServiceRequestOptions,
+  accept: string | null,
+): Promise<RawResponse> => {
   if (
     !path.startsWith("/") ||
     path.startsWith("//") ||
@@ -171,7 +173,7 @@ export const requestApi = async <T>(
   const baseURL = normalizeBaseUrl(context.baseUrl ?? API_BASE_URL);
   const headers = new AxiosHeaders(options.config?.headers);
   const multipart = typeof FormData !== "undefined" && body instanceof FormData;
-  headers.set("Accept", "application/json");
+  headers.set("Accept", accept ?? "application/json");
   headers.delete("Authorization");
   if (multipart) headers.delete("Content-Type");
   else if (method !== "GET" && body !== undefined)
@@ -208,11 +210,11 @@ export const requestApi = async <T>(
       : api.defaults.env,
     transformRequest: [],
     transformResponse: [],
-    responseType: "text",
+    responseType: accept ? "arraybuffer" : "text",
     validateStatus: () => true,
   };
   try {
-    let response = await api.request<string>(config);
+    let response = await api.request<string | ArrayBuffer>(config);
     throwIfAborted(options.signal);
     // A sibling renewal may already have cleared this session. Its late 401
     // remains an API failure, but must not start renewal for a newer session.
@@ -240,37 +242,14 @@ export const requestApi = async <T>(
           const retryHeaders = new AxiosHeaders(headers);
           retryHeaders.set("Authorization", `Bearer ${replacement}`);
           // Replay this captured request once; a second 401 cannot renew again.
-          response = await api.request<string>({ ...config, headers: retryHeaders });
+          response = await api.request<string | ArrayBuffer>({ ...config, headers: retryHeaders });
           ensureCurrent();
         }
       }
       // A failed renewal can clear the session and advance its generation.
       // Preserve the original 401; no stale success or replay is possible here.
     }
-    let value: unknown;
-    try {
-      value = response.data
-        ? (JSON.parse(response.data) as unknown)
-        : undefined;
-    } catch {
-      value = undefined;
-    }
-    if (response.status < 200 || response.status >= 300)
-      throw normalizeHttpError(response.status, response.statusText, value);
-    if (response.status === 204)
-      return { code: 0, message: "response success", data: undefined as T };
-    if (
-      !isRecord(value) ||
-      !Object.hasOwn(value, "data") ||
-      typeof value.code !== "number" ||
-      typeof value.message !== "string" ||
-      (value.page !== undefined && !isPageInfo(value.page))
-    ) {
-      throw createInvalidResponseError(
-        "Expected API envelope {code,message,data,page?}",
-      );
-    }
-    return value as ApiResponse<T>;
+    return { status: response.status, statusText: response.statusText, data: response.data, contentType: String(response.headers["content-type"] ?? "") };
   } catch (error) {
     if (
       axios.isCancel(error) ||
@@ -285,4 +264,55 @@ export const requestApi = async <T>(
       detail: error instanceof Error ? error.message : undefined,
     } satisfies ApiError;
   }
+};
+
+const parseJson = (data: string | ArrayBuffer): unknown => {
+  try {
+    const text = typeof data === "string" ? data : new TextDecoder().decode(data);
+    return text ? (JSON.parse(text) as unknown) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** One HTTP boundary for browser and server services; preserves page metadata. */
+export const requestApi = async <T>(
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+  options: ServiceRequestOptions = {},
+): Promise<ApiResponse<T>> => {
+  const response = await sendApi(method, path, body, options, null);
+  const value = parseJson(response.data);
+  if (response.status < 200 || response.status >= 300)
+    throw normalizeHttpError(response.status, response.statusText, value);
+  if (response.status === 204)
+    return { code: 0, message: "response success", data: undefined as T };
+  if (
+    !isRecord(value) ||
+    !Object.hasOwn(value, "data") ||
+    typeof value.code !== "number" ||
+    typeof value.message !== "string" ||
+    (value.page !== undefined && !isPageInfo(value.page))
+  ) {
+    throw createInvalidResponseError(
+      "Expected API envelope {code,message,data,page?}",
+    );
+  }
+  return value as ApiResponse<T>;
+};
+
+/** Authenticated binary read through the same session, renewal and cancellation rules. */
+export const requestApiBlob = async (
+  path: string,
+  accept: readonly string[],
+  options: ServiceRequestOptions = {},
+): Promise<Blob> => {
+  const response = await sendApi("GET", path, undefined, options, [...accept, "application/problem+json"].join(", "));
+  if (response.status < 200 || response.status >= 300)
+    throw normalizeHttpError(response.status, response.statusText, parseJson(response.data));
+  const type = response.contentType.split(";")[0].trim().toLowerCase();
+  if (!accept.includes(type) || typeof response.data === "string" || !response.data.byteLength)
+    throw createInvalidResponseError("Unexpected binary response type");
+  return new Blob([response.data], { type });
 };
