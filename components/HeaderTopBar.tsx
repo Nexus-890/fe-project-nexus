@@ -104,7 +104,7 @@ function HeaderTopBar({
           <nav aria-label="Shopping cart" className="flex">
             <Link
               href={ROUTES.cart}
-              aria-label={cartQuantity === undefined ? "Shopping cart" : `Shopping cart, ${cartQuantity} items`}
+              aria-label={cartQuantity === undefined ? "Shopping cart" : `Shopping cart, ${cartQuantity} ${cartQuantity === 1 ? "item" : "items"}`}
               className="relative inline-flex min-h-11 lg:min-h-9 min-w-11 items-center justify-center rounded-sm hover:text-primary"
             >
               <ShoppingCart size={19} aria-hidden="true" />

@@ -103,7 +103,7 @@ test("anonymous browsing sends no notification request", async ({ page, request 
 
 test("authenticated bell shows latest ten, marks opened notifications read and clears all unread", async ({ page, request }, info) => {
   const authorization = await signIn(page);
-  const cart = page.getByRole("link", { name: "Shopping cart, 2 items", exact: true });
+  const cart = page.getByRole("link", { name: "Shopping cart, 1 item", exact: true });
   await expect(cart).toBeVisible();
   await expect(cart).toHaveAttribute("href", "/cart");
   const trigger = page.getByRole("button", { name: /^Notifications/ });

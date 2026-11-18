@@ -31,7 +31,7 @@ export function readCart(value: unknown): CartSnapshot | null {
 }
 
 export function cartItemCount(cart: CartSnapshot): number {
-  return cart.items.reduce((total, item) => total + item.quantity, 0);
+  return cart.items.length;
 }
 
 export function isGuestToken(value: unknown): value is string {

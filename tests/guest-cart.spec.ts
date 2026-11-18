@@ -14,7 +14,7 @@ async function evidence(request: APIRequestContext, member: "api" | "keycloak" =
 }
 
 function badge(page: Page, quantity: number) {
-  return page.getByRole("link", { name: `Shopping cart, ${quantity} items`, exact: true });
+  return page.getByRole("link", { name: `Shopping cart, ${quantity} ${quantity === 1 ? "item" : "items"}`, exact: true });
 }
 
 async function guestSession(page: Page): Promise<{ token: string; mergeKey: string } | null> {
@@ -27,7 +27,7 @@ async function addGuest(page: Page, quantity = 2) {
   await page.getByRole("spinbutton", { name: "Quantity", exact: true }).fill(String(quantity));
   await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
   await expect(page.getByText("Added to cart.", { exact: true })).toBeVisible();
-  await expect(badge(page, quantity)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   const session = await guestSession(page);
   expect(session?.token).toBeTruthy();
   expect(session?.mergeKey).toBeTruthy();
@@ -75,11 +75,11 @@ test("signed-out additions create one guest cart and restore its quantity after 
     guestCreations: 1, guestAdds: 1, guestBearerLeaks: 0, mergeRequests: 0, cartAdds: 0,
   });
   await page.reload();
-  await expect(badge(page, 2)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   expect(await guestSession(page)).toEqual(session);
-  // Count quantities across additions, rather than the number of distinct SKUs.
   await page.getByRole("button", { name: "Add to Cart", exact: true }).click();
-  await expect(badge(page, 3)).toBeVisible();
+  await expect.poll(async () => (await evidence(request)).guestAdds).toBe(2);
+  await expect(badge(page, 1)).toBeVisible();
   expect(await evidence(request)).toMatchObject({ guestCreations: 1, guestAdds: 2, guestBearerLeaks: 0 });
   await assertOnlyGuestSessionPersisted(page);
 });
@@ -102,7 +102,7 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
       ?.localStorage.find((entry) => entry.name === storageKey)?.value;
     expect(saved && JSON.parse(saved)).toEqual(session);
   });
-  await expect(badge(page, 5)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   expect(mergeAt).toEqual(["/auth/callback"]);
   expect(mergedTokens).toEqual([session.token]);
   expect(await guestSession(page)).toBeNull();
@@ -116,10 +116,10 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
   // Client navigation keeps the same session and must not submit another merge.
   await page.getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(`${app}/`);
-  await expect(badge(page, 5)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(`${app}${productPath}`);
-  await expect(badge(page, 5)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   expect(await evidence(request)).toMatchObject({ mergeRequests: 1, mergesApplied: 1 });
 
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -153,7 +153,7 @@ test("a temporary profile failure keeps guest items until account retry then mer
 
   await retry.click();
   await expect(page).toHaveURL(`${app}${productPath}`);
-  await expect(badge(page, 5)).toBeVisible();
+  await expect(badge(page, 1)).toBeVisible();
   expect(await guestSession(page)).toBeNull();
   expect(await evidence(request)).toMatchObject({
     meRequests: 2, mergeRequests: 1, mergesApplied: 1, buyerQuantity: 5,
@@ -170,7 +170,7 @@ for (const mode of ["merge-503-once", "merge-committed-503-once"] as const) {
     await signIn(page);
     const retry = page.getByRole("button", { name: "Retry merging cart", exact: true });
     await expect(retry).toBeVisible();
-    await expect(badge(page, mode === "merge-503-once" ? 3 : 5)).toBeVisible();
+    await expect(badge(page, 1)).toBeVisible();
     expect(await guestSession(page)).toEqual(session);
     expect(await evidence(request)).toMatchObject({
       mergeRequests: 1, mergesApplied: mode === "merge-503-once" ? 0 : 1,
@@ -178,7 +178,7 @@ for (const mode of ["merge-503-once", "merge-committed-503-once"] as const) {
     });
     await retry.click();
     await expect(retry).toHaveCount(0);
-    await expect(badge(page, 5)).toBeVisible();
+    await expect(badge(page, 1)).toBeVisible();
     expect(await guestSession(page)).toBeNull();
     expect(await evidence(request)).toMatchObject({
       mergeRequests: 2, mergesApplied: 1, buyerQuantity: 5,

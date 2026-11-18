@@ -135,7 +135,7 @@ test("opening the cart keeps the account loading UI until session restoration se
     release();
   }
   await expect(page.getByText("Loading your account…", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Shopping cart, 3 items", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Shopping cart, 1 item", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in to view your cart", exact: true })).toHaveCount(0);
   expect(await evidence(request)).toMatchObject({ refreshRequests: before.refreshRequests + 1 });
 });

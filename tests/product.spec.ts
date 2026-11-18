@@ -355,7 +355,7 @@ test("navigation during a member add cannot replace its result with an older car
     releaseRead();
     await expect.poll(() => finishedReads).toBe(reads);
     await expect(line.getByRole("spinbutton")).toHaveValue("2");
-    await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 2 items");
+    await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 1 item");
   } finally {
     releaseAdd();
     releaseRead();

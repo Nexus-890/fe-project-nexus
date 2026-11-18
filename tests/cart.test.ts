@@ -16,7 +16,7 @@ const member: CartIdentity = { status: "authenticated", userId: "buyer-1", acces
 const initial: CartIdentity = { status: "initial", userId: null, accessToken: null };
 
 function cart(quantity = 0, id = "cart-1"): CartSnapshot {
-  return { id, status: "ACTIVE", items: quantity ? [{ id: "item-1", skuId: "sku-1", quantity }] : [] };
+  return { id, status: "ACTIVE", items: Array.from({ length: quantity }, (_, index) => ({ id: `item-${index + 1}`, skuId: `sku-${index + 1}`, quantity: 1 })) };
 }
 
 function ok<T>(data: T): ApiResult<T> { return { ok: true, data }; }
@@ -150,10 +150,12 @@ test("cart counts accept the delivered BE envelope and older draft fields withou
     ...delivered.data, subtotal: "300001.00", currency: "VND", updatedAt: "2026-11-03T08:00:00Z",
     items: [{ ...delivered.data.items[0], productName: "Example", unitPrice: "150000.50", lineTotal: "300001.00" }],
   };
-  assert.deepEqual(readCart(delivered), cart(2));
-  assert.deepEqual(readCart(draft), cart(2));
+  const expected: CartSnapshot = { id: "cart-1", status: "ACTIVE", items: [{ id: "item-1", skuId: "sku-1", quantity: 2 }] };
+  assert.deepEqual(readCart(delivered), expected);
+  assert.deepEqual(readCart(draft), expected);
+  assert.equal(cartItemCount(expected), 1);
   const fixture = httpFixture(() => delivered);
-  assert.deepEqual(await fixture.service.getCart(), ok(cart(2)));
+  assert.deepEqual(await fixture.service.getCart(), ok(expected));
   assert.equal(fixture.calls[0].headers.get("Authorization"), `Bearer ${member.accessToken}`);
 });
 

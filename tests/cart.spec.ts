@@ -229,7 +229,7 @@ test("cart displays snapshot unit and line prices with a checkout link at deskto
   await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
   await expect(page.getByRole("main")).not.toContainText("999.999");
   await expect(page.getByRole("link", { name: "Proceed to Checkout" })).toHaveAttribute("href", "/checkout");
-  await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName(/2/);
+  await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 1 item");
   expect(state.reads).toContain("buyer-1");
   await capture(page, info, "cart-desktop-1440.png");
   await page.setViewportSize({ width: 375, height: 812 });
