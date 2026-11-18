@@ -95,7 +95,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List seller bank accounts for administrator review
+         * @description ADMIN only; SELLER and SUPPORT_STAFF receive 403. Optional filters are combined with AND before counting and pagination. UNVERIFIED accounts come first, oldest createdAt first, then id ascending for ties; remaining accounts follow in the same chronological order. Only accountLast4 is returned, never the full number or ciphertext. This read does not verify accounts, release held payouts or create transfers. Own seller reads remain at /me. Verification uses the displayed version as expectedVersion.
+         */
+        get: operations["listAdminSellerBankAccounts"];
         put?: never;
         /**
          * Create an encrypted seller bank account
@@ -179,6 +183,26 @@ export interface paths {
          * @description Administrator verification only. expectedVersion must match the account version displayed during review; a changed account returns 409 and must be reviewed again. Rejecting requires a nonblank reason. Verifying an active default account releases eligible ON_HOLD payouts automatically; no manual payout creation endpoint exists.
          */
         post: operations["verifySellerBankAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List automatic seller payouts for administrators
+         * @description ADMIN only; SELLER and SUPPORT_STAFF receive 403. Combines sellerId, any selected status, and inclusive createdAt bounds before counting and pagination. Newest createdAt first, id descending for ties. Send repeated status parameters for needs action: ON_HOLD, UNKNOWN, FAILED, RETURNED. Lists existing #257 payouts without recalculating amounts, consuming completion events, creating payouts or retrying transfers. Each row includes the orderId, sellerId, frozen netAmount, attemptCount and updatedAt. Payout eligibility and the fee rule remain owned by #257; only eligible funded COMPLETED orders without refunds create payouts.
+         */
+        get: operations["listAdminPayouts"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -466,6 +490,8 @@ export interface components {
              */
             expectedVersion: number;
         };
+        /** @enum {string} */
+        BankVerificationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED";
         SellerBankAccount: {
             /** Format: uuid */
             id: string;
@@ -474,8 +500,7 @@ export interface components {
             bankCode: string;
             accountLast4: string;
             accountHolderName: string;
-            /** @enum {string} */
-            verificationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED";
+            verificationStatus: components["schemas"]["BankVerificationStatus"];
             isDefault: boolean;
             active: boolean;
             rejectionReason: string | null;
@@ -540,6 +565,11 @@ export interface components {
             simulated: boolean;
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: date-time
+             * @description Last persisted payout update, including automatic dispatch, reconciliation or retry.
+             */
+            updatedAt: string;
         };
         PayoutHistory: {
             /** Format: uuid */
@@ -610,8 +640,93 @@ export interface components {
             status: "ok";
         };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Invalid UUID, enum, ISO-8601 timestamp or pagination (VALIDATION_FAILED, INVALID_PARAMETER). A reversed payout time range returns PAYMENT_PAYOUT_INVALID_REQUEST. Invalid bank pagination is PAYMENT_SELLER_BANK_ACCOUNT_INVALID when validated at the service boundary. */
+        AdminListBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:domain-error",
+                 *       "title": "Bad Request",
+                 *       "status": 400,
+                 *       "detail": "Invalid pagination or payout creation-time range",
+                 *       "instance": "/api/v1/payments/payouts",
+                 *       "code": "PAYMENT_PAYOUT_INVALID_REQUEST"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Authentication is missing, invalid or expired (UNAUTHENTICATED). */
+        AdminListUnauthorized: {
+            headers: {
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://nexus/errors/unauthenticated",
+                 *       "title": "Unauthorized",
+                 *       "status": 401,
+                 *       "detail": "A valid bearer token is required",
+                 *       "instance": "/api/v1/payments/payouts",
+                 *       "code": "UNAUTHENTICATED"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The authenticated user lacks the ADMIN realm role (FORBIDDEN). */
+        AdminListForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://nexus/errors/forbidden",
+                 *       "title": "Forbidden",
+                 *       "status": 403,
+                 *       "detail": "You do not have permission to access this resource",
+                 *       "instance": "/api/v1/payments/payouts",
+                 *       "code": "FORBIDDEN"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Unexpected server error; no stack traces or sensitive details (INTERNAL_ERROR). */
+        AdminListInternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:problem:internal-server-error",
+                 *       "title": "Internal Server Error",
+                 *       "status": 500,
+                 *       "detail": "An unexpected error occurred",
+                 *       "instance": "/api/v1/payments/payouts",
+                 *       "code": "INTERNAL_ERROR"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
+    parameters: {
+        /** @description Restrict the administrator list to one seller UUID. */
+        AdminSellerId: string;
+        /** @description Zero-based page number; an out-of-range page returns an empty data array. */
+        AdminPage: number;
+        /** @description Maximum rows per page. */
+        AdminSize: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -1077,6 +1192,52 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listAdminSellerBankAccounts: {
+        parameters: {
+            query?: {
+                /** @description Restrict the administrator list to one seller UUID. */
+                sellerId?: components["parameters"]["AdminSellerId"];
+                /** @description Omit to include every verification state. */
+                verificationStatus?: components["schemas"]["BankVerificationStatus"];
+                /** @description Zero-based page number; an out-of-range page returns an empty data array. */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Maximum rows per page. */
+                size?: components["parameters"]["AdminSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Masked bank-account page with unverified accounts first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 20,
+                     *         "totalElements": 0,
+                     *         "totalPages": 0
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SellerBankAccountListApiResponse"];
+                };
+            };
+            400: components["responses"]["AdminListBadRequest"];
+            401: components["responses"]["AdminListUnauthorized"];
+            403: components["responses"]["AdminListForbidden"];
+            500: components["responses"]["AdminListInternalError"];
         };
     };
     createSellerBankAccount: {
@@ -1571,6 +1732,83 @@ export interface operations {
             };
         };
     };
+    listAdminPayouts: {
+        parameters: {
+            query?: {
+                /** @description Restrict the administrator list to one seller UUID. */
+                sellerId?: components["parameters"]["AdminSellerId"];
+                /**
+                 * @description Any of the selected states; repeated query values are supported. Omit to include all seven statuses. Duplicate values do not duplicate rows.
+                 * @example [
+                 *       "ON_HOLD",
+                 *       "UNKNOWN",
+                 *       "FAILED",
+                 *       "RETURNED"
+                 *     ]
+                 */
+                status?: components["schemas"]["PayoutStatus"][];
+                /** @description Inclusive lower bound on payout createdAt; ISO-8601 with a time zone. */
+                from?: string;
+                /** @description Inclusive upper bound on payout createdAt; must not precede from. */
+                to?: string;
+                /** @description Zero-based page number; an out-of-range page returns an empty data array. */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Maximum rows per page. */
+                size?: components["parameters"]["AdminSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Existing payout page, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "message": "response success",
+                     *       "data": [
+                     *         {
+                     *           "id": "00000000-0000-4000-8000-000000000257",
+                     *           "orderId": "00000000-0000-4000-8000-000000000001",
+                     *           "sellerId": "00000000-0000-4000-8000-000000000004",
+                     *           "orderAmount": 325000,
+                     *           "shippingFee": 25000,
+                     *           "platformFeeRate": 0,
+                     *           "platformFee": 0,
+                     *           "netAmount": 300000,
+                     *           "currency": "VND",
+                     *           "status": "ON_HOLD",
+                     *           "attemptCount": 0,
+                     *           "recipientAccountLast4": null,
+                     *           "providerReference": null,
+                     *           "simulated": true,
+                     *           "createdAt": "2026-11-16T05:00:00Z",
+                     *           "updatedAt": "2026-11-16T05:00:00Z"
+                     *         }
+                     *       ],
+                     *       "page": {
+                     *         "number": 0,
+                     *         "size": 20,
+                     *         "totalElements": 1,
+                     *         "totalPages": 1
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PayoutListApiResponse"];
+                };
+            };
+            400: components["responses"]["AdminListBadRequest"];
+            401: components["responses"]["AdminListUnauthorized"];
+            403: components["responses"]["AdminListForbidden"];
+            500: components["responses"]["AdminListInternalError"];
+        };
+    };
     listOwnPayouts: {
         parameters: {
             query?: {
@@ -1609,7 +1847,8 @@ export interface operations {
                      *           "recipientAccountLast4": null,
                      *           "providerReference": null,
                      *           "simulated": true,
-                     *           "createdAt": "2026-11-16T05:00:00Z"
+                     *           "createdAt": "2026-11-16T05:00:00Z",
+                     *           "updatedAt": "2026-11-16T05:00:00Z"
                      *         }
                      *       ],
                      *       "page": {
