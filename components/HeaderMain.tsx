@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { Suspense } from "react";
-import { ChevronDown } from "lucide-react";
+import { CategoryMegaMenu } from "@/components/CategoryMegaMenu";
 import Logo from "@/components/Logo";
 import SearchBar from "@/components/SearchBar";
 import type { CategoryNode } from "@/types/catalogResponseType";
@@ -24,17 +23,11 @@ function HeaderMain(props: HeaderMainProps) {
   return (
     <div className="mx-auto flex max-w-[1248px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:flex-nowrap lg:gap-6 lg:py-2.5">
       <Logo />
-      <Link
-        href="/#categories"
-        className="inline-flex min-h-11 lg:min-h-9 shrink-0 items-center gap-1 rounded-sm px-2 text-xs leading-4 text-gray-900 hover:text-primary"
-      >
-        <span>
-          Shop by
-          <br />
-          category
-        </span>
-        <ChevronDown size={15} aria-hidden="true" />
-      </Link>
+      <CategoryMegaMenu
+        categories={props.categories}
+        loading={props.categoriesLoading}
+        error={props.categoriesError}
+      />
       <div className="order-3 min-w-0 basis-full lg:order-none lg:flex-1">
         <Suspense fallback={<SearchBarFallback />}>
           <SearchBar

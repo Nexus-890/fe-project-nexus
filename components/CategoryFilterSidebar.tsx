@@ -7,13 +7,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CategoryNode } from "@/types/catalogResponseType";
 import {
-  categoryHref,
+  categoryListingHref,
   flattenCategories,
   searchHref,
   type SearchState,
 } from "@/features/catalogUtils";
 import { SEARCH_MAX_PRICE, searchFilterGroups, readSearchState } from "@/features/searchUtils";
-import { CategoryTree } from "./CategoryTree";
+import { CategoryBrowse } from "./CategoryBrowse";
 
 interface CategoryFilterSidebarProps {
   categories: CategoryNode[];
@@ -85,7 +85,12 @@ export function CategoryFilterSidebar({
       return;
     }
 
-    router.push(categoryHref(slug));
+    router.push(categoryListingHref(slug, { ...searchState, page: 1 }));
+  }
+
+  function browseHref(slug: string) {
+    if (basePath === "/search") return searchHref({ ...searchState, category: slug, page: 1 });
+    return slug ? categoryListingHref(slug, { ...searchState, page: 1 }) : clearHref;
   }
 
   return (
@@ -208,7 +213,7 @@ export function CategoryFilterSidebar({
       {!loading && !error ? (
         <div className="border-t border-border pt-4">
           <h3 className="mb-2 text-sm font-semibold">Browse categories</h3>
-          <CategoryTree categories={categories} activeSlug={selectedSlug} searchState={searchState} />
+          <CategoryBrowse categories={categories} activeSlug={selectedSlug} hrefFor={browseHref} />
         </div>
       ) : null}
     </aside>

@@ -162,7 +162,9 @@ test("cards align short, long and unavailable-price products while home categori
     await layoutChecks(page);
 
     await page.goto("/search");
-    await expect(page.getByRole("complementary", { name: "Filters" }).getByRole("link", { name: "Headphones", exact: true })).toBeVisible();
+    const browse = page.getByRole("complementary", { name: "Filters" }).getByRole("navigation", { name: "Browse categories" });
+    await expect(browse.getByRole("link", { name: "Electronics", exact: true })).toBeVisible();
+    await expect(browse.getByRole("link", { name: "Headphones", exact: true })).toHaveCount(0);
     await equalCardSizes(page.getByRole("region", { name: "Search results" }).getByRole("article"));
     await layoutChecks(page);
   }

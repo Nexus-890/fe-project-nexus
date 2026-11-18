@@ -75,3 +75,8 @@ export const searchHref = ({
   const query = params.toString();
   return query ? `/search?${query}` : "/search";
 };
+
+export const categoryListingHref = (slug: string, state: SearchState): string => {
+  const query = searchHref({ ...state, q: "", category: "" }).split("?")[1];
+  return query ? `${categoryHref(slug)}?${query}` : categoryHref(slug);
+};
