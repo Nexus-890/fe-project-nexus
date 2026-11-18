@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, LockKeyhole, QrCode, Truck } from "lucide-react";
 import AddressForm from "../components/AddressForm";
 import SavedAddressPicker from "../components/SavedAddressPicker";
-import VoucherPicker, { VoucherQuoteResults } from "./VoucherPicker";
+import VoucherPicker from "./VoucherPicker";
 import { useVoucherSelection } from "./useVoucherSelection";
 import CheckoutSummary from "./CheckoutSummary";
 import CheckoutOrderFeedback from "./CheckoutOrderFeedback";
@@ -28,6 +28,7 @@ import { useCart } from "./useCart";
 import { useCheckout } from "./useCheckout";
 import { getAddressBookInput, validateAddressBookAddress } from "./addressBookSchema";
 import type { CheckoutErrors } from "./checkoutSchema";
+import { getStockLevels } from "../service/backofficeService";
 
 const retryClass = "mt-4 min-h-11 min-w-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary";
 const addressFields = ["recipientName", "phoneNumber", "addressLine", "provinceCode", "wardCode"] as const;
@@ -92,7 +93,6 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   const savedMatches = selectedAddress && addressFields.every((field) => values[field] === selectedAddress[field]);
   const [submitted, setSubmitted] = useState(false);
   const [addressSaveErrors, setAddressSaveErrors] = useState<CheckoutErrors>({});
-  const [reviewedAddress, setReviewedAddress] = useState<string | null>(null);
   const meta = { requiresAuth: true };
   const provinces = useApiQuery({
     queryKey: queryKeys.checkout.provinces(sessionId), meta,
@@ -109,6 +109,9 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     wards.isError ? [] : wards.data ?? []);
   const destination = shippingDestination ? { ...shippingDestination, voucherCodes: codes } : null;
   const cartSignature = JSON.stringify(items);
+  const skuIds = items.map((item) => item.skuId);
+  const stock = useApiQuery({ queryKey: queryKeys.catalog.stockLevels(skuIds), service: (signal) => getStockLevels(skuIds, { signal }) }, { enabled: skuIds.length > 0, retry: false });
+  const shortItems = items.filter((item) => stock.data?.[item.skuId] !== undefined && item.quantity > stock.data[item.skuId]);
   const preview = useApiQuery({
     queryKey: queryKeys.checkout.preview(sessionId, cartSignature, destination), meta,
     service: async (signal) => {
@@ -121,12 +124,13 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     },
   }, {
     enabled: Boolean(destination) && !provinces.isError && !wards.isError,
-    retry: false, staleTime: 0, gcTime: 0,
+    retry: (count, error) => count < 3 && (error.kind === "network" || error.status >= 500),
+    retryDelay: (attempt) => 1500 * 2 ** attempt, staleTime: 0, gcTime: 0,
   });
   const quote = destination && !preview.isFetching && !preview.isError ? preview.data : undefined;
   const addressReady = destination !== null;
-  const canContinue = Boolean(quote && quote.shippingFee !== null && !quote.issues.length && !(quote.vouchers?.some((v) => !v.applied)));
-  const ready = reviewedAddress === JSON.stringify(destination) && addressReady;
+  const canContinue = !shortItems.length && Boolean(quote && quote.shippingFee !== null && !quote.issues.length && !(quote.vouchers?.some((v) => !v.applied)));
+  const ready = addressReady;
   const order = useCheckout(destination, ready && canContinue, onAttemptStart);
   const saving = useRef<{ sessionId: number; controller: AbortController; input: AddressBookInput } | null>(null);
   const mounted = useRef(false);
@@ -148,14 +152,14 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     ...getCheckoutFieldErrors(destination ? preview.error : null),
     ...getCheckoutFieldErrors(order.error),
   };
-  const errors = { ...(submitted ? validateCheckoutAddress(values) : {}), ...addressSaveErrors, ...serverErrors };
+  const fieldErrors = Object.fromEntries(Object.entries(validateCheckoutAddress(values)).filter(([field]) => submitted || values[field as keyof CheckoutAddress].trim() !== ""));
+  const errors = { ...fieldErrors, ...addressSaveErrors, ...serverErrors };
   const issue = quote?.issues[0];
   const quoteError = destination ? preview.error?.detail || preview.error?.title : undefined;
 
   const changeAddress = (field: keyof CheckoutAddress, value: string) => {
     if (order.addressLocked || saveMutation.isPending) return;
     order.resetAfterEdit();
-    setReviewedAddress(null);
     setSelectedAddressId("");
     setAddressSaveErrors({});
     saveMutation.reset();
@@ -170,7 +174,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     setSelectedAddressId(id);
     setAddressSaveErrors({});
     setValues(address ?? { recipientName: user.fullName, phoneNumber: user.phone, addressLine: "", provinceCode: "", wardCode: "" });
-    setReviewedAddress(null); setSubmitted(false); saveMutation.reset(); order.resetAfterEdit();
+    setSubmitted(false); saveMutation.reset(); order.resetAfterEdit();
   };
   const saveCurrentAddress = () => {
     setSubmitted(true);
@@ -186,7 +190,6 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     const currentErrors = { ...validateCheckoutAddress(values), ...serverErrors };
     const firstError = Object.keys(currentErrors)[0];
     if (firstError) requestAnimationFrame(() => document.getElementById(`checkout-${firstError}`)?.focus());
-    if (addressReady && !firstError) setReviewedAddress(JSON.stringify(destination));
   };
 
   return (
@@ -209,7 +212,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
             provinces={provinces.data ?? []} wards={wards.data ?? []}
             provinceState={{ loading: provinces.isFetching, error: provinces.error?.detail || provinces.error?.title }}
             wardState={{ loading: wards.isFetching, error: wards.error?.detail || wards.error?.title }}
-            onChange={changeAddress} onSubmit={reviewAddress}
+            onChange={changeAddress} onSubmit={reviewAddress} submitLabel={null}
             onRetry={(level) => { void (level === "province" ? provinces : wards).refetch(); }}
           />
           {ACCOUNT_EXTENSIONS_ENABLED && <div className="rounded-sm border border-border bg-card p-4 text-sm">
@@ -219,8 +222,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
             {saveMutation.error && saveMutation.error.kind !== "aborted" && <p role="alert" className="mt-2 break-words text-danger">{saveMutation.error.detail || saveMutation.error.title}</p>}
           </div>}
           {ready && <p role="status" className="rounded-sm border border-border bg-muted p-4 text-sm">Address ready. Review the delivery fee and order total below.</p>}
-          <VoucherPicker disabled={order.addressLocked} cartSignature={cartSignature} onChange={() => { order.resetAfterEdit(); setReviewedAddress(null); }} />
-          {quote?.vouchers && <VoucherQuoteResults quotes={quote.vouchers} />}
+          <VoucherPicker disabled={order.addressLocked} cartSignature={cartSignature} onChange={() => order.resetAfterEdit()} />
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="delivery-title">
             <h2 id="delivery-title" className="text-sm font-semibold">2. Delivery</h2>
             <div className={`mt-4 flex items-start gap-3 rounded-sm border p-4 ${canContinue ? "border-primary" : "border-border"}`}>
@@ -229,6 +231,7 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
               {canContinue && <span className="max-w-[45%] break-words text-right font-mono text-sm tabular-nums">{formatVND(quote!.shippingFee)}</span>}
             </div>
           </section>
+          {shortItems.length > 0 && <div role="alert" className="rounded-sm border border-danger p-4 text-sm"><p className="font-semibold">Not enough stock</p><ul className="mt-2 list-inside list-disc">{shortItems.map((item) => <li key={item.id}>{item.productName}: {stock.data?.[item.skuId] ? `only ${stock.data[item.skuId]} left` : "out of stock"}</li>)}</ul><Link href="/cart" className="mt-2 inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">Back to cart</Link></div>}
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="payment-title">
             <h2 id="payment-title" className="text-sm font-semibold">3. Payment</h2>
             <div className="mt-4 flex gap-3 rounded-sm border border-primary p-4">

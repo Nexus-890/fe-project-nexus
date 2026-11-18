@@ -30,8 +30,7 @@ interface ProductDetailPageProps {
   productId?: string;
 }
 
-function ProductStockAvailability({ skuId }: { skuId: string }) {
-  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(skuId), service: (signal) => getProductAvailability(skuId, { signal }) }, { retry: false });
+function ProductStockAvailability({ stock }: { stock: ReturnType<typeof useApiQuery<number>> }) {
   if (stock.isPending) return <p role="status" className="text-sm text-muted-foreground">Checking availability...</p>;
   if (stock.isError) return <p className="text-sm text-muted-foreground">Stock availability is unavailable. <button type="button" className="min-h-9 underline" onClick={() => void stock.refetch()}>Retry availability</button></p>;
   const available = stock.data;
@@ -77,6 +76,8 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   );
   const [selectedSkuId, setSelectedSkuId] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const stockSkuId = product.data ? selectedSku(product.data.skus, selectedSkuId)?.id ?? "" : "";
+  const stock = useApiQuery({ queryKey: queryKeys.catalog.stock(stockSkuId), service: (signal) => getProductAvailability(stockSkuId, { signal }) }, { retry: false, enabled: Boolean(stockSkuId) });
   const [signInPrompt, setSignInPrompt] = useState<number | null>(null);
   const [cartMessage, setCartMessage] = useState<{
     sessionId: number;
@@ -125,6 +126,10 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
   const price = formatVND(sku?.price ?? null);
   const formattedRange = formatVNDRange(detail.minPrice, detail.maxPrice);
   const priceRange = formattedRange !== formatVND(detail.minPrice) ? formattedRange : null;
+  const available = stock.isSuccess ? stock.data : undefined;
+  const soldOut = available === 0;
+  const overStock = available !== undefined && available > 0 && quantity > available;
+  const buyBlocked = soldOut || overStock;
   const returnTo = `/products/${encodeURIComponent(slug)}${productId ? `?id=${encodeURIComponent(productId)}` : ""}`;
 
   const handleAddToCart = async (buyNow = false) => {
@@ -133,7 +138,7 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
       setCartMessage(null);
       return;
     }
-    if (!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error") return;
+    if (buyBlocked || !sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error") return;
     setCartMessage(null);
     setSignInPrompt(null);
     const isCurrent = () => activeSession.current?.sessionId === sessionId &&
@@ -237,19 +242,20 @@ function ProductDetailPage({ slug, productId }: ProductDetailPageProps) {
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Quantity</p>
-            {sku && <ProductStockAvailability key={sku.id} skuId={sku.id} />}
-            <QuantityPicker value={quantity} onChange={setQuantity} />
+            {sku && <ProductStockAvailability stock={stock} />}
+            <QuantityPicker value={quantity} onChange={setQuantity} disabled={soldOut} />
+            {overStock && <p role="alert" className="text-sm text-danger">Only {available} available. Lower the quantity to continue.</p>}
           </div>
 
           <div className="flex flex-wrap gap-3"><button
             type="button"
             onClick={() => void handleAddToCart()}
-            disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
+            disabled={buyBlocked || !sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"}
             className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted disabled:text-gray-700 sm:w-auto sm:min-w-56"
           >
-            <ShoppingCart size={20} className="mr-2" aria-hidden="true" />{cart.adding ? "Adding…" : "Add to Cart"}
+            <ShoppingCart size={20} className="mr-2" aria-hidden="true" />{soldOut ? "Out of stock" : cart.adding ? "Adding…" : "Add to Cart"}
           </button>
-          <button type="button" disabled={!sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"} onClick={() => void handleAddToCart(true)} className="inline-flex min-h-12 min-w-32 flex-1 items-center justify-center rounded-md border border-border px-5 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground sm:flex-none">Buy Now</button></div>
+          <button type="button" disabled={buyBlocked || !sku || !cart.ready || cart.adding || cart.loading || status === "restoring" || status === "authenticating" || status === "error"} onClick={() => void handleAddToCart(true)} className="inline-flex min-h-12 min-w-32 flex-1 items-center justify-center rounded-md border border-border px-5 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground sm:flex-none">Buy Now</button></div>
 
           {signInPrompt === sessionId ? (
             <p

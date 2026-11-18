@@ -202,12 +202,13 @@ const server = http.createServer(async (req, res) => {
     && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash);
   evidence.requests.push({ method: req.method, path: url.pathname, query: url.search, authorized });
   const save = () => pm.state.set("checkout-api:evidence", evidence);
-  const publicPath = url.pathname === "/v1/categories/tree" || url.pathname.startsWith("/v1/products");
+  const publicPath = url.pathname === "/v1/categories/tree" || url.pathname.startsWith("/v1/products") || url.pathname === "/v1/inventory";
   if (!publicPath && !authorized) {
     evidence.rejectedAuth += 1;
     await save();
     return problem(res, 401, "UNAUTHENTICATED", "A valid access token is required.");
   }
+  if (url.pathname === "/v1/inventory") return json(res, envelope((url.searchParams.get("skuIds") || "").split(",").filter(Boolean).map((skuId) => ({ skuId, available: 100 }))));
   if (url.pathname === "/v1/vouchers/me") return json(res, list([]));
   if (url.pathname === "/v1/carts/me/pricing") { const subtotal = (await currentItems()).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return json(res, envelope({ subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] })); }
   if (url.pathname === "/v1/users/me") {

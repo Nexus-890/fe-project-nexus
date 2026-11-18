@@ -168,7 +168,7 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
     await adminPage.getByLabel("Quantity", { exact: true }).fill("4");
     await adminPage.getByRole("button", { name: "Add stock", exact: true }).click();
     await expect.poll(async () => (await evidence(request)).balances[skuId]?.available).toBe(10);
-    await expect(adminPage.getByRole("status")).toContainText(/10/);
+    await expect(adminPage.getByRole("status").filter({ hasText: "Stock received." })).toContainText(/10/);
     await signIn(buyerPage, request, "BUYER", `/products/${productId}`);
     await expect(buyerPage.getByTestId("product-stock")).toHaveText("In stock · 10 available");
     await buyerPage.getByRole("button", { name: /Add to cart/i }).click();
@@ -176,7 +176,6 @@ test("Seller lists a product, Admin stocks it, Buyer checks out, simulated callb
     await buyerPage.goto("/checkout");
     await buyerPage.getByLabel("Province / City", { exact: true }).selectOption("202");
     await buyerPage.getByLabel("Ward", { exact: true }).selectOption("20308");
-    await buyerPage.getByRole("button", { name: "Review address", exact: true }).click();
     await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();
     await expect(buyerPage).toHaveURL(/\/checkout\/payment\/[0-9a-f-]{36}$/);
     await expect(buyerPage.getByRole("heading", { name: "Scan to pay", exact: true })).toBeVisible();

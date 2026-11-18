@@ -11,6 +11,22 @@ export const getProductAvailability = async (skuId: string, options: ServiceRequ
   return data[0].available;
 };
 
+/** Public availability for many SKUs in the default warehouse; a SKU never stocked reads as 0. */
+export const getStockLevels = async (skuIds: string[], options: ServiceRequestOptions = {}): Promise<Record<string, number>> => {
+  const ids = [...new Set(skuIds)].filter(isUuid);
+  const levels: Record<string, number> = {};
+  for (let start = 0; start < ids.length; start += 100) {
+    const batch = ids.slice(start, start + 100);
+    const { data } = await requestApi("GET", "/api/v1/inventory", undefined, { ...options, auth: false, params: { skuIds: batch.join(",") } });
+    if (!Array.isArray(data)) throw createInvalidResponseError("Invalid stock levels");
+    for (const row of data) {
+      if (!isRecord(row) || !isUuid(row.skuId) || !validQuantity(row.available)) throw createInvalidResponseError("Invalid stock levels");
+      levels[row.skuId] = row.available;
+    }
+  }
+  return levels;
+};
+
 const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const quantityFields = ["total", "available", "reserved", "unavailable"] as const;
 const validQuantity = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 2147483647;

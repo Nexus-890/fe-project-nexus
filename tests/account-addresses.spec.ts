@@ -100,7 +100,6 @@ test("checkout preselects default and saved addresses use identical locality cod
   await page.getByLabel("Deliver to", { exact: true }).selectOption(secondAddress.id);
   await expect(page.getByLabel("Ward", { exact: true })).toHaveValue("20701");
   await expect(page.getByTestId("checkout-shipping")).toContainText("30.000");
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
   await expect(page.getByRole("button", { name: "Place order", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Place order", exact: true }).click();
   await expect(page).toHaveURL(/\/checkout\/payment\//);

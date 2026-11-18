@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === "/v1/users/me" || url.pathname.startsWith("/v1/auth/"))
     return forward(req, res, Number(process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || 3913), `/api${req.url}`);
-  if (url.pathname === "/v1/categories/tree" || url.pathname === "/v1/products")
+  if (url.pathname === "/v1/categories/tree" || url.pathname === "/v1/products" || url.pathname === "/v1/products/search")
     return forward(req, res, Number(process.env.NEXUS_TEST_API_PORT || 3911), `/api${req.url}`);
   if (url.pathname === "/v1/shipments" && req.method === "GET") {
     const authorized = /^Bearer .+/.test(req.headers.authorization || "");

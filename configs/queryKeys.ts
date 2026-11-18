@@ -98,6 +98,7 @@ export const queryKeys = {
   },
   catalog: {
     stock: (skuId: string) => ["inventory", "available", skuId] as const,
+    stockLevels: (skuIds: string[]) => ["inventory", "available", "batch", [...new Set(skuIds)].sort()] as const,
     cartProducts: (productIds: string[]) =>
       ["catalog", "cart-products", productIds] as const,
     tree: ["catalog", "category-tree"] as const,

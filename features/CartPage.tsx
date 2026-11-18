@@ -12,6 +12,7 @@ import { getCartProducts } from "../service/cartCatalogService";
 import { getCartQuantity, getCartSubtotal } from "./cartUtils";
 import { useCart } from "./useCart";
 import type { CartItem } from "../types/cartResponseType";
+import { getStockLevels } from "../service/backofficeService";
 
 function CartPage() {
   const { status, sessionId, user, error, retryProfile } = useAuth();
@@ -75,6 +76,12 @@ function CartContents() {
     queryKey: queryKeys.catalog.cartProducts(productIds),
     service: (signal) => getCartProducts(productIds, { signal }),
   }, { enabled: productIds.length > 0, staleTime: 60_000, retry: false });
+  const skuIds = items.map((item) => item.skuId);
+  const stock = useApiQuery({
+    queryKey: queryKeys.catalog.stockLevels(skuIds),
+    service: (signal) => getStockLevels(skuIds, { signal }),
+  }, { enabled: skuIds.length > 0, retry: false });
+  const stockBlocked = items.some((item) => stock.data?.[item.skuId] !== undefined && item.quantity > stock.data[item.skuId]);
   const sellers = new Map<string, CartItem[]>();
   for (const item of items) {
     const sellerId = products.data?.[item.productId]?.sellerId ?? item.sellerId ?? "shop";
@@ -112,6 +119,7 @@ function CartContents() {
       <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
         {quantity} {quantity === 1 ? "item" : "items"} from {sellers.size} {sellers.size === 1 ? "seller" : "sellers"}
       </p>
+      {stockBlocked && <p role="alert" className="mt-4 rounded-sm border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger">Some items are out of stock or above the available quantity. Update your cart to check out.</p>}
       {feedback && (
         <p
           role={feedback.error ? "alert" : "status"}
@@ -144,7 +152,7 @@ function CartContents() {
           >
             {[...sellers].map(([sellerId, lines], index) => <section key={sellerId} className="overflow-hidden rounded-sm border border-border" aria-label={`Seller ${index + 1}`}>
               <h2 className="flex min-h-12 items-center gap-2 border-b border-border bg-muted/40 px-4 text-sm font-medium"><Store size={16} aria-hidden="true" />{lines?.[0]?.sellerName || (sellerId === "shop" ? "Your shop" : `Shop ${index + 1}`)}<span className="ml-auto text-xs font-normal text-muted-foreground">{lines?.length} {lines?.length === 1 ? "product" : "products"}</span></h2>
-              <div className="divide-y divide-border">{lines?.map((item) => <CartLine key={item.id} item={item} product={products.data?.[item.productId]} pending={pending} saved={saved.includes(item.id)} onSave={() => setSaved((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onQuantityChange={(next) => updateQuantity(item.id, next)} onRemove={() => removeItem(item.id)} />)}</div>
+              <div className="divide-y divide-border">{lines?.map((item) => <CartLine key={item.id} item={item} product={products.data?.[item.productId]} available={stock.data?.[item.skuId]} pending={pending} saved={saved.includes(item.id)} onSave={() => setSaved((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} onQuantityChange={(next) => updateQuantity(item.id, next)} onRemove={() => removeItem(item.id)} />)}</div>
             </section>)}
             {saved.length > 0 && <p role="status" className="flex items-start gap-2 rounded-sm bg-muted p-4 text-xs leading-5 text-muted-foreground"><Heart size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />{saved.length} {saved.length === 1 ? "item marked" : "items marked"} for later in this visit. Items stay in your cart until you remove them.</p>}
             <Link
@@ -159,6 +167,7 @@ function CartContents() {
             quantity={quantity}
             subtotal={getCartSubtotal(items)}
             pending={pending}
+            stockBlocked={stockBlocked}
           />
         </div>
       ) : (

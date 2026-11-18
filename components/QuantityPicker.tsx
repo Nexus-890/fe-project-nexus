@@ -10,6 +10,7 @@ export interface QuantityPickerProps {
   label?: string;
   /** Keep manual edits local until the user finishes editing. */
   commitOnBlur?: boolean;
+  compact?: boolean;
 }
 
 export function QuantityPicker({
@@ -18,7 +19,9 @@ export function QuantityPicker({
   disabled = false,
   label,
   commitOnBlur = false,
+  compact = false,
 }: QuantityPickerProps) {
+  const step = compact ? "min-h-11 min-w-11 px-2 text-base sm:min-h-9 sm:min-w-9" : "min-h-11 min-w-11 px-3 text-lg";
   const input = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<{
     sourceValue: number;
@@ -59,7 +62,7 @@ export function QuantityPicker({
 
   return (
     <div
-      className="inline-flex min-h-11 items-center rounded-md border border-border"
+      className={`inline-flex items-center rounded-md border border-border ${compact ? "min-h-11 sm:min-h-9" : "min-h-11"}`}
       aria-label={`Quantity${suffix}`}
     >
       <button
@@ -68,7 +71,7 @@ export function QuantityPicker({
         disabled={disabled || stepValue <= 1}
         onPointerDown={preserveInputFocus}
         onClick={() => stepQuantity(-1)}
-        className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-lg disabled:cursor-not-allowed disabled:text-muted-foreground"
+        className={`inline-flex ${step} items-center justify-center disabled:cursor-not-allowed disabled:text-muted-foreground`}
       >
         −
       </button>
@@ -101,7 +104,7 @@ export function QuantityPicker({
             setDraft(null);
           }
         }}
-        className="box-border h-11 w-14 appearance-none border-x border-border px-0 text-center text-sm leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground"
+        className={`box-border ${compact ? "h-11 w-12 sm:h-9 sm:w-11" : "h-11 w-14"} appearance-none border-x border-border px-0 text-center text-sm leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground`}
       />
       <button
         type="button"
@@ -109,7 +112,7 @@ export function QuantityPicker({
         disabled={disabled}
         onPointerDown={preserveInputFocus}
         onClick={() => stepQuantity(1)}
-        className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-lg disabled:cursor-not-allowed disabled:text-muted-foreground"
+        className={`inline-flex ${step} items-center justify-center disabled:cursor-not-allowed disabled:text-muted-foreground`}
       >
         +
       </button>

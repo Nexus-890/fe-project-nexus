@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
   if (path === "/v1/categories/tree") {
     return cartResponse(res, [{ id: product.categoryId, name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] }]);
   }
-  if (path === "/v1/products") return cartResponse(res, [product], 200, { number: 0, size: 20, totalElements: 1, totalPages: 1 });
+  if (path === "/v1/products" || path === "/v1/products/search") return cartResponse(res, [product], 200, { number: 0, size: 20, totalElements: 1, totalPages: 1 });
   if (path === `/v1/products/${productId}`) return cartResponse(res, product);
 
   // @endpoint GET /v1/carts/me

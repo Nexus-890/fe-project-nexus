@@ -95,7 +95,6 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await expect(page.getByTestId("checkout-shipping")).toHaveText("30.000,00 ₫");
   await expect(page.getByText("Total", { exact: true })).toBeVisible();
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: /address.*ready/i })).toBeVisible();
   const actual = await evidence(request);
   expect(actual.previews[0]).toEqual({
@@ -112,14 +111,13 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   await capture(page, info, "checkout-desktop-1440.png");
 });
 
-test("empty address reports each required field and sends no checkout request", async ({ page, request }) => {
+test("empty address keeps Place order disabled and sends no checkout request", async ({ page, request }) => {
   await options(request, { emptyProfile: true });
   await openCheckout(page);
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
-  for (const name of ["Recipient name", "Phone number", "House number and street", "Province / City", "Ward"])
-    await expect(page.getByLabel(name, { exact: true })).toHaveAttribute("aria-invalid", "true");
-  await expect(page.getByLabel("Recipient name", { exact: true })).toBeFocused();
-  await expect(page.getByRole("alert").filter({ hasText: "Check the highlighted address fields below." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review address", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Place order", exact: true })).toBeDisabled();
+  await page.getByLabel("Phone number", { exact: true }).fill("12");
+  await expect(page.getByLabel("Phone number", { exact: true })).toHaveAttribute("aria-invalid", "true");
   const actual = await evidence(request);
   expect(actual.previews).toEqual([]);
   expect(actual.orderRequests).toBe(0);
@@ -232,6 +230,7 @@ test("logout while a preview is pending cannot restore another session's checkou
   await openCheckout(page);
   await destination(page);
   await expect.poll(async () => (await evidence(request)).previews.length).toBe(1);
+  await page.locator("header summary", { hasText: /^Hi / }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByText("Hi Nguyen Thi Lan", { exact: true })).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/checkout$/);

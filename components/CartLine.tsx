@@ -15,6 +15,7 @@ type CartLineProps = {
   onRemove: () => void;
   saved?: boolean;
   onSave?: () => void;
+  available?: number;
 };
 
 function CartLine({
@@ -25,7 +26,9 @@ function CartLine({
   onRemove,
   saved = false,
   onSave,
+  available,
 }: CartLineProps) {
+  const stockNote = available === undefined ? null : available === 0 ? "Out of stock. Remove this item to check out." : item.quantity > available ? `Only ${available} left. Lower the quantity to check out.` : null;
   const name = product?.name ?? item.productName ?? `Item ${item.productId}`;
   const sku = product?.skus.find((candidate) => candidate.id === item.skuId);
   const variant = [sku?.color ?? item.color, sku?.size ?? item.size].filter(Boolean).join(" · ");
@@ -38,24 +41,24 @@ function CartLine({
       data-testid={`cart-line-${item.id}`}
       aria-label={name}
       aria-busy={pending}
-      className="min-w-0 bg-card p-4 text-card-foreground sm:p-5"
+      className={`min-w-0 px-4 py-3 text-card-foreground ${stockNote ? "bg-danger/5" : "bg-card"}`}
     >
-      <div className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] gap-4 sm:grid-cols-[96px_minmax(0,1fr)] xl:grid-cols-[96px_minmax(0,1fr)_auto]">
-        <div className="flex size-20 items-center justify-center overflow-hidden rounded-sm bg-muted sm:size-24">
+      <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 sm:grid-cols-[72px_minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex size-16 items-center justify-center overflow-hidden rounded-sm bg-muted sm:size-[72px]">
           {imageUrl ? (
             // Catalog media URLs are delivered by the API, as in ProductGallery.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={imageUrl}
               alt={name}
-              width={96}
-              height={96}
+              width={72}
+              height={72}
               loading="lazy"
               className="size-full object-contain"
             />
           ) : (
             <Package
-              size={28}
+              size={24}
               role="img"
               aria-label="Product image unavailable"
               className="text-muted-foreground"
@@ -68,41 +71,43 @@ function CartLine({
             {name}
           </h2>
           {variant ? (
-            <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {variant}
             </p>
           ) : null}
-          <p className="mt-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {stockNote && <p role="alert" className="mt-1 text-xs font-medium text-danger">{stockNote}</p>}
+          <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
             Unit price:{" "}
             <span className="font-mono tabular-nums text-foreground">
               {unitPrice}
             </span>
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4">
-          {onSave && <button type="button" onClick={onSave} aria-pressed={saved} disabled={pending} className="inline-flex min-h-11 items-center gap-1 text-xs text-muted-foreground hover:text-primary disabled:opacity-50"><Heart size={13} fill={saved ? "currentColor" : "none"} aria-hidden="true" />{saved ? "Saved for later" : "Save for Later"}</button>}
+          <div className="flex flex-wrap items-center gap-x-4">
+          {onSave && <button type="button" onClick={onSave} aria-pressed={saved} disabled={pending} className="inline-flex min-h-11 min-w-11 items-center sm:min-h-8 sm:min-w-0 gap-1 text-xs text-muted-foreground hover:text-primary disabled:opacity-50"><Heart size={13} fill={saved ? "currentColor" : "none"} aria-hidden="true" />{saved ? "Saved for later" : "Save for Later"}</button>}
           <button
             type="button"
             onClick={onRemove}
             disabled={pending}
             aria-label={`Remove ${name}`}
-            className="mt-1 inline-flex min-h-11 min-w-11 items-center rounded-sm text-sm text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 min-w-11 items-center sm:min-h-8 sm:min-w-0 rounded-sm text-xs text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             Remove
           </button>
           </div>
         </div>
 
-        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-4 border-t border-border pt-4 sm:col-start-2 sm:col-span-1 xl:col-start-3 xl:row-start-1 xl:flex-nowrap xl:items-start xl:justify-end xl:border-t-0 xl:pt-0">
+        <div className="col-span-2 flex min-w-0 items-center justify-between gap-4 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:justify-end">
           <QuantityPicker
             value={item.quantity}
             onChange={onQuantityChange}
             disabled={pending}
             label={name}
             commitOnBlur
+            compact
           />
           <p className="min-w-0 text-right text-sm [overflow-wrap:anywhere]">
-            <span className="block text-muted-foreground">Line total</span>
-            <span className="font-mono text-base font-semibold tabular-nums text-primary">
+            <span className="block text-xs text-muted-foreground">Line total</span>
+            <span className="font-mono text-sm font-semibold tabular-nums text-primary">
               {lineTotal}
             </span>
           </p>

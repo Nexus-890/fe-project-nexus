@@ -268,7 +268,7 @@ const server = http.createServer(async (req, res) => {
   }
   await pm.state.set("oidc-api:evidence", evidence);
   if (url.pathname === "/v1/categories/tree") return json(res, success([]));
-  if (url.pathname === "/v1/products") return json(res, success([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
+  if (url.pathname === "/v1/products" || url.pathname === "/v1/products/search") return json(res, success([], { number: 0, size: 12, totalElements: 0, totalPages: 0 }));
   if (url.pathname === `/v1/products/${productId}/skus/${skuId}`) return json(res, success(product.skus[0]));
   if (url.pathname === `/v1/products/${productId}`) return json(res, success(product));
   return problem(res, 501, "NOT_IMPLEMENTED", "Not Implemented", "Fixture endpoint not implemented");

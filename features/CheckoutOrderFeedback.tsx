@@ -34,8 +34,8 @@ function CheckoutOrderFeedback({ error, conflict, items, pending, canConfirm, un
       <h3 id="checkout-conflict-title" className="font-semibold">
         {conflict?.kind === "price-changed" ? "Price changed" : conflict?.kind === "insufficient-stock" ? "Item out of stock" : "Unable to place your order"}
       </h3>
-      <p>{error.detail || error.title}</p>
-      {conflict && <p className="font-medium">{itemName}</p>}
+      {conflict?.kind === "insufficient-stock" ? <p>{itemName} doesn’t have enough stock for the quantity in your cart.</p> : <p>{error.detail || error.title}</p>}
+      {conflict && conflict.kind !== "insufficient-stock" && <p className="font-medium">{itemName}</p>}
       {conflict?.kind === "price-changed" && <>
         <dl className="space-y-2">
           <div className="flex flex-wrap justify-between gap-2"><dt>Previous unit price</dt><dd className="font-mono tabular-nums">{formatVND(conflict.oldPrice)}</dd></div>

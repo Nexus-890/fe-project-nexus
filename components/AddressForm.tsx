@@ -16,7 +16,7 @@ type AddressFormProps = {
   onSubmit: () => void;
   busy?: boolean;
   title?: string;
-  submitLabel?: string;
+  submitLabel?: string | null;
   addressLineMaxLength?: number;
   idPrefix?: string;
 };
@@ -216,13 +216,13 @@ function AddressForm({
         <p className="max-w-sm text-xs leading-5 text-muted-foreground">
           Shipping is recalculated when your delivery address changes.
         </p>
-        <button
+        {submitLabel && <button
           type="submit"
           disabled={busy}
           className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-sm bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-wait disabled:opacity-60 sm:w-auto"
         >
           {submitLabel}
-        </button>
+        </button>}
       </div>
     </form>
   );

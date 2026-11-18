@@ -47,7 +47,6 @@ async function readyToOrder(page: Page) {
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
   await page.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
   await expect(page.getByRole("button", { name: "Place order", exact: true })).toBeEnabled();
 }
 const placeOrder = (page: Page) => page.getByRole("button", { name: "Place order", exact: true });
@@ -57,16 +56,14 @@ test.beforeEach(async ({ request }) => {
   expect((await request.get(`${simulation}/api/test/reset`)).ok()).toBe(true);
 });
 
-test("placing an order requires a reviewed valid address and an available quote", async ({ page, request }) => {
+test("placing an order requires a valid address and an available quote", async ({ page, request }) => {
   await openCheckout(page);
   await expect(placeOrder(page)).toBeDisabled();
   await page.getByLabel("Province / City", { exact: true }).selectOption("202");
   await page.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
-  await expect(placeOrder(page)).toBeDisabled();
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
   await expect(placeOrder(page)).toBeEnabled();
-  await page.getByLabel("Phone number", { exact: true }).fill("0907654321");
+  await page.getByLabel("Phone number", { exact: true }).fill("12");
   await expect(placeOrder(page)).toBeDisabled();
   expect((await evidence(request)).orderRequests).toBe(0);
 });
@@ -182,7 +179,7 @@ for (const stockSkuOnly of [false, true]) {
     await readyToOrder(page);
     await placeOrder(page).click();
     await expect(page.getByRole("alert").filter({ hasText: "Wireless earbuds with charging case" })).toBeVisible();
-    await expect(page.getByRole("alert").filter({ hasText: "The selected item has sold out. Please update your cart." })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "doesn’t have enough stock for the quantity in your cart." })).toBeVisible();
     const actual = await evidence(request);
     expect(actual.orderRequests).toBe(1);
     expect(actual.groups).toHaveLength(0);
@@ -224,7 +221,6 @@ test("order field validation stays on the address form and permits a corrected a
   expect(rejected.groups).toHaveLength(0);
   await options(request, { orderValidation: false });
   await page.getByLabel("Phone number", { exact: true }).fill("0907654321");
-  await page.getByRole("button", { name: "Review address", exact: true }).click();
   await placeOrder(page).click();
   await expect(page).toHaveURL(new RegExp(`${paymentPath}$`));
   const actual = await evidence(request);
@@ -238,6 +234,7 @@ test("logout during an order response cannot open the previous session's payment
   await readyToOrder(page);
   await placeOrder(page).click();
   await expect.poll(async () => (await evidence(request)).orderRequests).toBe(1);
+  await page.locator("header summary", { hasText: /^Hi / }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByText("Hi Nguyen Thi Lan", { exact: true })).toHaveCount(0);
   await expect.poll(async () => (await evidence(request)).completedOrders).toBe(1);

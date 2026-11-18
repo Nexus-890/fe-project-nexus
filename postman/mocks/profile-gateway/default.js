@@ -204,7 +204,7 @@ const server = http.createServer(async (req, res) => {
       { id: "electronics", name: "Electronics", slug: "electronics", parentId: null, level: 1, children: [] },
     ]);
   }
-  if (path === "/v1/products") {
+  if (path === "/v1/products" || path === "/v1/products/search") {
     return json(res, { code: 0, message: "response success", data: [],
       page: { number: 0, size: 20, totalElements: 0, totalPages: 0 } });
   }
