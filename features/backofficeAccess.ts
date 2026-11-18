@@ -17,6 +17,15 @@ export function readBackofficeRoles(accessToken: string | null): BackofficeRole[
   } catch { return []; }
 }
 
+export function readBackofficeSubject(accessToken: string | null): string | null {
+  if (!accessToken) return null;
+  try {
+    const parts = accessToken.split(".");
+    const claims: unknown = parts.length === 3 ? JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))) : null;
+    return typeof claims === "object" && claims !== null && "sub" in claims && typeof claims.sub === "string" ? claims.sub : null;
+  } catch { return null; }
+}
+
 export const hasBackofficeAccess = (roles: readonly BackofficeRole[]) =>
   roles.some((role) => role === "SELLER" || role === "ADMIN" || role === "SUPPORT_STAFF");
 
@@ -56,6 +65,7 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     { label: "Users", href: "/backoffice/users" },
     { label: "Orders", href: "/backoffice/orders" },
     { label: "Payments", href: "/backoffice/payments" },
+    { label: "Manual payouts", href: "/backoffice/manual-payouts" },
     { label: "Refunds", href: "/backoffice/refunds" },
     { label: "Shipments", href: "/backoffice/shipments" },
     { label: "Auctions", href: "/backoffice/auctions" },

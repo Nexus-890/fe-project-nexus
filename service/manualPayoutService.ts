@@ -116,7 +116,9 @@ export const parseManualPayoutDetail = (value: unknown): ManualPayoutDetail => {
     fail("Manual payout history must be unique and newest first");
   const has = (action: typeof manualPayoutActions[number]) => allowedActions.includes(action);
   if (summary.executionMode === "AUTO" && allowedActions.length) fail("Automatic payouts never expose manual actions");
-  if (attemptActions.some(has) && (!attempt || !attempt.ownedByMe)) fail("Attempt actions belong only to the owning executor");
+  if (attemptActions.some((action) => has(action) && !(action === "UPLOAD_EVIDENCE" && has("RESOLVE"))) && (!attempt || !attempt.ownedByMe) || has("UPLOAD_EVIDENCE") && !attempt)
+    fail("Attempt actions belong only to the owning executor");
+  if (has("RESOLVE") && !attempt) fail("Reconciliation needs an attempt");
   if (has("VIEW_QR") && attempt?.state !== "QR_ISSUED") fail("A QR can be read only for an issued attempt");
   if (has("ISSUE_QR") && attempt?.state !== "CLAIMED") fail("Only a claimed attempt can issue a QR");
   if (has("CLAIM") && summary.status !== "PENDING") fail("Only a pending payout can be claimed");

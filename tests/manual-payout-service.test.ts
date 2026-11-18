@@ -9,6 +9,7 @@ import {
 } from "../service/manualPayoutService";
 import { confirmPayoutReceipt, disputePayoutReceipt } from "../service/sellerPayoutReceiptService";
 import { parseSellerPayout } from "../service/payoutService";
+import { combineQueueFilters, evidenceFileError, parseConfirmationForm, parseQueueForm, parseResolutionForm, parseSellerDisputeForm, secondsUntil, serverOffset } from "../features/manualPayoutSchema";
 
 const id = "97000000-0000-4000-8000-000000000001";
 const orderId = "97000000-0000-4000-8000-000000000002";
@@ -185,4 +186,40 @@ test("seller receipt commands target the owner route with receipt version, and o
   const other = recorder(() => Response.json(envelope({ ...confirmed, manualAttempt: { ...confirmed.manualAttempt, attemptId: evidenceId } })));
   await assert.rejects(confirmPayoutReceipt(id, attemptId, { idempotencyKey: randomUUID(), expectedReceiptVersion: 0 }, other.options), invalid);
   assert.equal(calls.length, 2);
+});
+
+test("admin resolution proof upload is allowed without ownership, other attempt actions are not", () => {
+  const unknown = { ...issued, status: "UNKNOWN", needsReview: true, claimedByMe: false, attempt: { ...issued.attempt, state: "UNKNOWN", ownedByMe: false } };
+  assert.deepEqual(parseManualPayoutDetail({ ...unknown, allowedActions: ["RESOLVE", "UPLOAD_EVIDENCE"] }).allowedActions, ["RESOLVE", "UPLOAD_EVIDENCE"]);
+  assert.throws(() => parseManualPayoutDetail({ ...unknown, allowedActions: ["UPLOAD_EVIDENCE"] }), invalid);
+  assert.throws(() => parseManualPayoutDetail({ ...unknown, allowedActions: ["RESOLVE", "CONFIRM"] }), invalid);
+  assert.throws(() => parseManualPayoutDetail({ ...detail, allowedActions: ["RESOLVE"] }), invalid);
+});
+
+test("workspace forms validate exact values locally before any command is sent", () => {
+  assert.deepEqual(parseQueueForm({ sellerId: ` ${sellerId} `, from: "2026-11-01", to: "2026-11-30", statuses: ["UNKNOWN", "SUCCEEDED"], receiptStatus: "DISPUTED" }),
+    { ok: true, value: { from: "2026-11-01T00:00:00.000+07:00", to: "2026-11-30T23:59:59.999+07:00", sellerId, status: ["UNKNOWN", "SUCCEEDED"], receiptStatus: "DISPUTED" } });
+  for (const bad of [{ sellerId: "seller" }, { from: "2026-11-30", to: "2026-11-01" }, { receiptStatus: "PAID" }])
+    assert.equal(parseQueueForm({ sellerId: "", from: "", to: "", statuses: [], receiptStatus: "", ...bad }).ok, false);
+  assert.deepEqual(combineQueueFilters("MINE", {}, 2), { claimedBy: "me", page: 2, size: 20 });
+  assert.deepEqual(combineQueueFilters("READY", { status: ["ON_HOLD"] }, 0).status, ["ON_HOLD"]);
+  const file = (name: string, type: string, size: number) => new File([new Uint8Array(size)], name, { type });
+  assert.equal(evidenceFileError(file("proof.pdf", "application/pdf", 10), 0), null);
+  assert.match(evidenceFileError(file("proof.gif", "image/gif", 10), 0) ?? "", /JPEG, PNG or PDF/);
+  assert.match(evidenceFileError(file("big.png", "image/png", 10 * 1024 * 1024 + 1), 0) ?? "", /10 MiB/);
+  assert.match(evidenceFileError(file("fourth.png", "image/png", 10), 3) ?? "", /at most 3/);
+  const form = { sourceAccountId: sourceId, amount: "95000.00", reference: "FT2611180001", transferredAt: "2026-11-18T09:30", evidenceIds: [evidenceId], attested: true };
+  const serverNow = Date.parse("2026-11-18T03:00:00Z");
+  assert.deepEqual(parseConfirmationForm(form, "95000.00", [sourceId], serverNow), { ok: true, value: { sourceAccountId: sourceId, amount: "95000.00", bankTransferReference: "FT2611180001", transferredAt: "2026-11-18T02:30:00.000Z", evidenceIds: [evidenceId] } });
+  for (const bad of [{ amount: "95000" }, { amount: "94999.99" }, { reference: "a b" }, { transferredAt: "2026-11-18T11:00" }, { evidenceIds: [] }, { attested: false }, { sourceAccountId: evidenceId }])
+    assert.equal(parseConfirmationForm({ ...form, ...bad }, "95000.00", [sourceId], serverNow).ok, false);
+  const dispute = { id: disputeId, status: "OPEN" as const, reason: "NOT_RECEIVED" as const, explanation: "Nothing arrived", version: 3, openedAt: at };
+  assert.deepEqual(parseResolutionForm("CONFIRMATION_RECORDED_IN_ERROR", " no transfer ", [evidenceId], dispute), { ok: true, value: { outcome: "CONFIRMATION_RECORDED_IN_ERROR", reason: "no transfer", evidenceIds: [evidenceId], disputeId, expectedDisputeVersion: 3 } });
+  assert.equal(parseResolutionForm("CONFIRMED_NOT_SENT", "nothing", [], null).ok, false);
+  assert.equal(parseResolutionForm("CONFIRMATION_RECORDED_IN_ERROR", "x", [evidenceId], { ...dispute, status: "RESOLVED" }).ok, false);
+  assert.equal(parseResolutionForm("CONFIRMED_SENT", "seen in bank app", [], null).ok, true);
+  assert.equal(parseSellerDisputeForm("NOT_RECEIVED", "   ").ok, false);
+  assert.equal(parseSellerDisputeForm("REFUND_ME", "please").ok, false);
+  assert.equal(secondsUntil("2026-11-18T03:10:00Z", serverOffset("2026-11-18T03:00:00Z", 1000), 1000 + 30_000), 570);
+  assert.equal(secondsUntil("2026-11-18T03:10:00Z", 0, Date.parse("2026-11-18T04:00:00Z")), 0);
 });

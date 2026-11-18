@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { backofficeMenu, canAccessBackofficePath, hasBackofficeAccess, readBackofficeRoles, resolveAuctionWorkspace, resolvePromotionWorkspace, resolveRoleLanding, sellerAuctionHref } from "../features/backofficeAccess";
+import { backofficeMenu, canAccessBackofficePath, hasBackofficeAccess, readBackofficeRoles, readBackofficeSubject, resolveAuctionWorkspace, resolvePromotionWorkspace, resolveRoleLanding, sellerAuctionHref } from "../features/backofficeAccess";
 
 const token = (claims: unknown) => `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
@@ -13,7 +13,7 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
   assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Vouchers", "Products", "Auctions", "Sales", "Bank accounts", "Payout history"]);
-  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Payments", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
+  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Payments", "Manual payouts", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/promotions", ["SELLER"]), false);
@@ -43,6 +43,10 @@ test("role menu and direct-route guards agree for seller, admin, support and mix
   assert.equal(canAccessBackofficePath("/backoffice/payouts?view=seller", ["BUYER"]), false);
   for (const roles of [["ADMIN"], ["SELLER", "ADMIN"]] as const)
     assert.equal(backofficeMenu(roles).filter((item) => item.href === "/backoffice/payouts").length, 1);
+  for (const roles of [["ADMIN"], ["SUPPORT_STAFF"], ["SELLER", "SUPPORT_STAFF"]] as const) assert.equal(canAccessBackofficePath("/backoffice/manual-payouts", roles), true);
+  for (const roles of [["SELLER"], ["BUYER"], []] as const) assert.equal(canAccessBackofficePath("/backoffice/manual-payouts", roles), false);
+  assert.equal(readBackofficeSubject(token({ sub: "68000000-0000-4000-8000-000000000004" })), "68000000-0000-4000-8000-000000000004");
+  for (const value of [null, "invalid", token({ sub: 4 })]) assert.equal(readBackofficeSubject(value), null);
 });
 
 test("shared auction workspace gives management precedence and one menu entry for every role combination", () => {
