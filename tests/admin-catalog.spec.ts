@@ -107,6 +107,36 @@ test("SKU intake refreshes balances and ledger, paginates and rejects inactive w
   expect(body.data.requests.some((row: { path: string }) => row.path.includes("adjustments"))).toBe(false);
 });
 
+test("stock adjustment removes counted units with a reason, records the ledger row and blocks removing more than available", async ({ page, request }) => {
+  await signIn(page, request, "/backoffice/stock");
+  await page.getByLabel("Product", { exact: true }).selectOption(id(30));
+  await page.getByLabel("SKU", { exact: true }).selectOption(id(31));
+  await page.getByRole("button", { name: "Adjust", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Adjust stock", exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Adjustment quantity", { exact: true }).fill("9");
+  await expect(dialog.getByRole("alert")).toHaveText("Only 8 available units can be removed.");
+  await expect(dialog.getByRole("button", { name: "Save adjustment", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Adjustment quantity", { exact: true }).fill("2");
+  await dialog.getByLabel("Adjustment reason", { exact: true }).fill("Cycle count found 2 damaged units");
+  await screenshot(page, "stock-adjust-dialog");
+  await dialog.getByRole("button", { name: "Save adjustment", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Stock adjusted by -2" })).toContainText("On hand 8 · Available 6");
+  await expect(page.getByRole("row").filter({ hasText: "Cycle count found 2 damaged units" })).toContainText("ADJUSTMENT");
+  await page.getByRole("button", { name: "Adjust", exact: true }).click();
+  await dialog.getByRole("radio", { name: "Add stock", exact: true }).check({ force: true });
+  await dialog.getByLabel("Adjustment quantity", { exact: true }).fill("3");
+  await dialog.getByLabel("Adjustment reason", { exact: true }).fill("Found in returns area");
+  await dialog.getByRole("button", { name: "Save adjustment", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Stock adjusted by +3" })).toContainText("On hand 11 · Available 9");
+  const body = await (await request.get(`${api}/api/test/catalog-admin/evidence`)).json();
+  expect(body.data.requests.filter((row: { path: string }) => row.path === "/v1/inventory/adjustments").map((row: { body: unknown }) => row.body)).toEqual([
+    { skuId: id(31), warehouseId: id(20), quantityDelta: -2, reason: "Cycle count found 2 damaged units" },
+    { skuId: id(31), warehouseId: id(20), quantityDelta: 3, reason: "Found in returns area" },
+  ]);
+});
+
 test("configuration uses delivered GET rows and short PUT response, refetches, and preserves wrong-type 400", async ({ page, request }) => {
   await signIn(page, request, "/backoffice/configuration");
   const input = page.getByLabel("Value for AUCTION_MIN_DURATION_MINUTES", { exact: true });

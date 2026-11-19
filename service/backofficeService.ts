@@ -1,6 +1,6 @@
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
-import type { StockBalance, StockIntakeInput } from "../types/backofficeType";
+import type { StockBalance, StockAdjustmentInput, StockIntakeInput } from "../types/backofficeType";
 
 /** Public selected-SKU availability used by the demo's storefront product page. */
 export const getProductAvailability = async (skuId: string, options: ServiceRequestOptions = {}): Promise<number> => {
@@ -50,6 +50,23 @@ export const intakeStock = async (input: StockIntakeInput, options: ServiceReque
   const balance = parseStockBalance(data);
   if (balance.skuId !== input.skuId || input.warehouseId && balance.warehouseId !== input.warehouseId)
     throw createInvalidResponseError("Stock intake returned a different SKU or warehouse");
+  return balance;
+};
+
+export const MAX_STOCK_ADJUSTMENT = 1_000_000;
+
+export const adjustStock = async (input: StockAdjustmentInput, options: ServiceRequestOptions = {}): Promise<StockBalance> => {
+  const reason = input.reason.trim();
+  if (!isUuid(input.skuId) || input.warehouseId !== undefined && !isUuid(input.warehouseId) ||
+    !Number.isInteger(input.quantityDelta) || input.quantityDelta === 0 || Math.abs(input.quantityDelta) > MAX_STOCK_ADJUSTMENT ||
+    !reason || reason.length > 500)
+    throw createInvalidResponseError("Enter a non-zero whole quantity up to 1,000,000 either way and a reason of up to 500 characters.");
+  const body: StockAdjustmentInput = { skuId: input.skuId, quantityDelta: input.quantityDelta, reason,
+    ...(input.warehouseId ? { warehouseId: input.warehouseId } : {}) };
+  const { data } = await requestApi("POST", "/api/v1/inventory/adjustments", body, { ...options, auth: true });
+  const balance = parseStockBalance(data);
+  if (balance.skuId !== input.skuId || input.warehouseId && balance.warehouseId !== input.warehouseId)
+    throw createInvalidResponseError("Stock adjustment returned a different SKU or warehouse");
   return balance;
 };
 

@@ -39,7 +39,7 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
       if (path === "/v1/inventory/movements") { list(res, [], url); return true; }
       return false;
     }
-    if (!/^\/v1\/(?:categories|warehouses|system\/configs|inventory\/(?:intake|balances|movements)|products(?:\/|$))/.test(path)) return false;
+    if (!/^\/v1\/(?:categories|warehouses|system\/configs|inventory\/(?:intake|adjustments|balances|movements)|products(?:\/|$))/.test(path)) return false;
     const body = bodyOf(req);
     requests.push({ method: req.method, path, query: Object.fromEntries(url.searchParams), body, authenticated: Boolean(claims), roles: claims?.roles ?? [] });
     const publicRead = req.method === "GET" && /^\/v1\/(categories|products)/.test(path);
@@ -88,6 +88,18 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
       else {
         balance.total += body.quantity; balance.available += body.quantity;
         movements.unshift({ id: randomUUID(), skuId: balance.skuId, warehouseId: balance.warehouseId, movementType: "INTAKE", quantity: body.quantity, referenceId: null, reason: null, createdAt: new Date().toISOString() });
+        ok(res, balance, 201);
+      }
+      return true;
+    }
+    if (path === "/v1/inventory/adjustments") {
+      if (!(claims?.roles ?? []).includes("ADMIN")) problem(res, 403, "Admin role required");
+      else if (!Number.isInteger(body.quantityDelta) || body.quantityDelta === 0 || typeof body.reason !== "string" || !body.reason.trim()) problem(res, 400, "Non-zero quantity and reason required");
+      else if (body.skuId !== balance.skuId || body.warehouseId && body.warehouseId !== balance.warehouseId) problem(res, 404, "Stock balance not found", "INVENTORY_BALANCE_NOT_FOUND");
+      else if (balance.available + body.quantityDelta < 0) problem(res, 409, "Adjustment would make available stock negative", "INVENTORY_NEGATIVE_QUANTITY");
+      else {
+        balance.total += body.quantityDelta; balance.available += body.quantityDelta;
+        movements.unshift({ id: randomUUID(), skuId: balance.skuId, warehouseId: balance.warehouseId, movementType: "ADJUSTMENT", quantity: body.quantityDelta, referenceId: null, reason: body.reason.trim(), createdAt: new Date().toISOString() });
         ok(res, balance, 201);
       }
       return true;

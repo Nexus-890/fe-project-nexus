@@ -55,6 +55,7 @@ export const queryKeys = {
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
     balances: (sessionId: number, skuId: string, warehouseId?: string) => ["backoffice", sessionId, "balances", { skuId, warehouseId }] as const,
     intake: (sessionId: number) => ["backoffice", sessionId, "intake"] as const,
+    adjustment: (sessionId: number) => ["backoffice", sessionId, "adjustment"] as const,
     payouts: (sessionId: number, filters?: PayoutFilters) => filters === undefined ? ["backoffice", sessionId, "payouts"] as const : ["backoffice", sessionId, "payouts", filters] as const,
     bankAccounts: (sessionId: number, filters?: SellerBankFilters) => filters === undefined ? ["backoffice", sessionId, "bank-accounts"] as const : ["backoffice", sessionId, "bank-accounts", filters] as const,
     manualPayouts: (sessionId: number, filters?: ManualPayoutFilters) => filters === undefined ? ["manual-payouts", sessionId] as const : ["manual-payouts", sessionId, "queue", filters] as const,
