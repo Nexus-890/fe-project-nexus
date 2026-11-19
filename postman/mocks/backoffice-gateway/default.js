@@ -173,7 +173,7 @@ const server = http.createServer(async (req, res) => {
   if (operationsFixture.handle(req, res, url, claims)) return;
   if (path === "/v1/shipping/provinces" || path === "/v1/shipping/wards") {
     const rows = path.endsWith("provinces") ? [{ code: "202", name: "Ho Chi Minh City" }, { code: "201", name: "Ha Noi" }]
-      : ({ "202": [{ code: "20309", name: "Ward 5" }, { code: "20310", name: "Ben Nghe" }], "201": [{ code: "20701", name: "Phuc Xa" }] })[url.searchParams.get("provinceCode")] || [];
+      : ({ "202": [{ code: "20308", name: "Ward 4" }, { code: "20309", name: "Ward 5" }, { code: "20310", name: "Ben Nghe" }], "201": [{ code: "20701", name: "Phuc Xa" }] })[url.searchParams.get("provinceCode")] || [];
     return json(res, { ...envelope(rows), page: { number: 0, size: Math.max(1, rows.length), totalElements: rows.length, totalPages: rows.length ? 1 : 0 } });
   }
   if (path === "/v1/warehouses/me") {

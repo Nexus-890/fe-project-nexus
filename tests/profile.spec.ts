@@ -385,4 +385,17 @@ test("avatar upload checks the file, posts multipart and shows the stored photo"
   ]);
   await page.reload();
   await expect(card.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  const header = page.locator("header summary", { hasText: "Hi " });
+  await expect(header.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  await card.getByRole("button", { name: "Remove photo" }).click();
+  await expect(card.getByRole("status")).toHaveText("Your photo has been removed.");
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveCount(0);
+  await expect(header.locator('[data-slot="avatar-image"]')).toHaveCount(0);
+  await expect(header.locator('[data-slot="avatar-fallback"]')).toBeVisible();
+  await expect(card.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Remove photo" })).toHaveCount(0);
+  expect((await history(request)).filter(entry => entry.path === "/v1/users/me/avatar").map(entry => [entry.method, entry.authenticated]))
+    .toEqual([["POST", true], ["POST", true], ["DELETE", true]]);
+  await page.reload();
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveCount(0);
 });

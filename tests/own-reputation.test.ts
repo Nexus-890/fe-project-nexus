@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isApiError } from "../configs/api";
 import { penaltyImpact, penaltyReference, averageRatingText } from "../features/reputationFormat";
-import { avatarFileError, uploadAvatar } from "../service/accountService";
+import { avatarFileError, removeAvatar, uploadAvatar } from "../service/accountService";
 import { isUserResponse } from "../service/authService";
 import { getMyPenalties, getMyReputation } from "../service/ratingService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
@@ -84,6 +84,17 @@ test("avatar upload checks the file first, posts multipart and needs the new ava
   const gif = fixture(user);
   await assert.rejects(uploadAvatar(new File(["GIF89a"], "me.gif", { type: "image/gif" }), gif.options), invalid);
   assert.equal(gif.calls.length, 0);
+});
+
+test("avatar removal sends DELETE with the token and needs the profile back without an avatar", async () => {
+  const { calls, options } = fixture({ ...user, avatarUrl: null });
+  assert.equal((await removeAvatar(options)).avatarUrl, null);
+  assert.equal(calls[0].method, "DELETE");
+  assert.equal(new URL(calls[0].path, "http://x").pathname, "/api/v1/users/me/avatar");
+  assert.equal(calls[0].headers.get("Authorization"), "Bearer buyer");
+  assert.equal((await removeAvatar(fixture(user).options)).avatarUrl, undefined);
+  await assert.rejects(removeAvatar(fixture({ ...user, avatarUrl: "https://storage.example/a.png" }).options), invalid);
+  await assert.rejects(removeAvatar(fixture({ id: user.id }).options), invalid);
 });
 
 test("profiles accept a missing or null avatar but not a non-string one", () => {

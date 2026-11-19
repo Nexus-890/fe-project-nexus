@@ -1,25 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { LoaderCircle, Upload } from "lucide-react";
+import { LoaderCircle, Trash2, Upload } from "lucide-react";
 import type { UserResponse } from "@/types/authResponseType";
 import type { ApiError } from "@/types/commonResponseType";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/avatar";
+import UserAvatar from "@/components/UserAvatar";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
 import { Skeleton } from "@/components/skeleton";
 import { useApiMutation } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
-import { AVATAR_TYPES, avatarFileError, uploadAvatar } from "@/service/accountService";
+import { AVATAR_TYPES, avatarFileError, removeAvatar, uploadAvatar } from "@/service/accountService";
 
 interface AvatarCardProps {
   user: UserResponse | null;
   loading?: boolean;
-}
-
-function initials(fullName: string) {
-  const names = fullName.trim().split(/\s+/).filter(Boolean);
-  return names.slice(-2).map((name) => name[0]).join("").toLocaleUpperCase() || "N";
 }
 
 function uploadErrorText(error: ApiError) {
@@ -43,6 +38,17 @@ function AvatarCard({ user, loading = false }: AvatarCardProps) {
     },
     onError: (error) => { if (error.kind !== "aborted") setMessage({ kind: "error", text: uploadErrorText(error) }); },
   });
+  const remove = useApiMutation({
+    execute: () => removeAvatar({ context: requestContext }),
+    isCurrent: () => isSessionCurrent(sessionId),
+  }, {
+    onSuccess: async () => {
+      await retryProfile();
+      setMessage({ kind: "success", text: "Your photo has been removed." });
+    },
+    onError: (error) => { if (error.kind !== "aborted") setMessage({ kind: "error", text: error.detail || "Unable to remove your photo. Please try again." }); },
+  });
+  const busy = upload.isPending || remove.isPending;
 
   if (loading || !user) {
     return (
@@ -63,7 +69,7 @@ function AvatarCard({ user, loading = false }: AvatarCardProps) {
 
   function choose(file: File | undefined) {
     if (input.current) input.current.value = "";
-    if (!file || upload.isPending) return;
+    if (!file || busy) return;
     const problem = avatarFileError(file);
     if (problem) { setMessage({ kind: "error", text: problem }); return; }
     setMessage(null);
@@ -74,10 +80,7 @@ function AvatarCard({ user, loading = false }: AvatarCardProps) {
     <Card className="gap-0 py-5">
       <CardContent className="space-y-4 px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar className="size-12 border border-border" aria-label={`${user.fullName}'s avatar`}>
-            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
-            <AvatarFallback>{initials(user.fullName)}</AvatarFallback>
-          </Avatar>
+          <UserAvatar fullName={user.fullName} avatarUrl={user.avatarUrl} className="size-12" label={`${user.fullName}'s avatar`} />
           <div className="min-w-0 flex-1">
             <p className="break-words text-sm font-medium leading-5 [overflow-wrap:anywhere]">{user.fullName}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">Your Nexus account</p>
@@ -86,11 +89,20 @@ function AvatarCard({ user, loading = false }: AvatarCardProps) {
         <div>
           <input ref={input} id="avatar-file" type="file" accept={AVATAR_TYPES.join(",")} className="sr-only" tabIndex={-1}
             aria-describedby="avatar-help" onChange={(event) => choose(event.target.files?.[0])} />
-          <Button type="button" variant="outline" disabled={upload.isPending} aria-describedby="avatar-help"
-            onClick={() => input.current?.click()} className="min-h-11 text-xs">
-            {upload.isPending ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" /> : <Upload className="size-3.5" aria-hidden="true" />}
-            {upload.isPending ? "Uploading…" : user.avatarUrl ? "Change photo" : "Upload photo"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={busy} aria-describedby="avatar-help"
+              onClick={() => input.current?.click()} className="min-h-11 text-xs">
+              {upload.isPending ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" /> : <Upload className="size-3.5" aria-hidden="true" />}
+              {upload.isPending ? "Uploading…" : user.avatarUrl ? "Change photo" : "Upload photo"}
+            </Button>
+            {user.avatarUrl && (
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => { setMessage(null); remove.mutate(undefined); }}
+                className="min-h-11 text-xs text-danger hover:text-danger">
+                {remove.isPending ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" /> : <Trash2 className="size-3.5" aria-hidden="true" />}
+                {remove.isPending ? "Removing…" : "Remove photo"}
+              </Button>
+            )}
+          </div>
           <p id="avatar-help" className="mt-2 text-xs leading-4 text-muted-foreground">JPEG, PNG or WebP, up to 2 MB.</p>
           {message && (
             <p role={message.kind === "error" ? "alert" : "status"}

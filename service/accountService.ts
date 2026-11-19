@@ -29,6 +29,13 @@ export const uploadAvatar = async (file: File, options: ServiceRequestOptions = 
   return response.data;
 };
 
+export const removeAvatar = async (options: ServiceRequestOptions = {}): Promise<UserResponse> => {
+  const response = await requestApi<unknown>("DELETE", AVATAR_PATH, undefined, { ...options, auth: true });
+  if (!isUserResponse(response.data) || (response.data.avatarUrl !== undefined && response.data.avatarUrl !== null))
+    throw createInvalidResponseError("Avatar removal must return the profile without an avatar.");
+  return response.data;
+};
+
 export const updateProfile = async (
   input: UpdateProfileRequest,
   options: ServiceRequestOptions = {},

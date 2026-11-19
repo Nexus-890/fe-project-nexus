@@ -259,6 +259,13 @@ const server = http.createServer(async (req, res) => {
     return success(res, next);
   }
 
+  // @endpoint DELETE /v1/users/me/avatar
+  if (path === "/v1/users/me/avatar" && req.method === "DELETE") {
+    const next = { ...user, avatarUrl: null };
+    await pm.state.set("profile-gateway:user", next);
+    return success(res, next);
+  }
+
   // @endpoint GET /v1/users/me/reputation
   if (path === "/v1/users/me/reputation" && req.method === "GET") {
     if (controls.reputationStatus) {

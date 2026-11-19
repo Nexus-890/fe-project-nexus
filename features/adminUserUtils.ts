@@ -10,4 +10,3 @@ export const adminRoleCodes = Object.keys(adminRoleLabels) as AdminRoleCode[];
 export const canManageUser = (roles: readonly string[], action: AdminUserAction): boolean =>
   roles.includes("ADMIN") || action === "edit" && roles.includes("SUPPORT_STAFF");
 
-export const userInitials = (fullName: string): string => fullName.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase();

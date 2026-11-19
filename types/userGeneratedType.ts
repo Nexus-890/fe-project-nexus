@@ -130,7 +130,11 @@ export interface paths {
          * @description Multipart form with one part named file. The type is detected from the file content, not from the file name or the claimed Content-Type: JPEG, PNG or WebP only, at most 2 MB (MAX_AVATAR_FILE_SIZE). The image is stored in the Supabase bucket under avatars/{userId}/ and the profile keeps its public URL. A replaced avatar object is removed after the profile is saved; if saving fails, the new object is removed and the old avatar stays. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
          */
         post: operations["uploadOwnAvatar"];
-        delete?: never;
+        /**
+         * Remove the current user's avatar
+         * @description Clears avatarUrl and then removes the stored object from the Supabase bucket. Removing the object is best effort: a storage failure is logged and the profile stays without an avatar. Without an avatar the call changes nothing and still returns the profile. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        delete: operations["removeOwnAvatar"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2437,6 +2441,53 @@ export interface operations {
             };
             /** @description Service Unavailable. Codes: `USER_AVATAR_STORAGE_NOT_CONFIGURED`, `USER_AVATAR_STORAGE_UNAVAILABLE`. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeOwnAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile without avatarUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOwnProfileResponse"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
