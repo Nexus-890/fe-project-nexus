@@ -60,7 +60,7 @@ function ProfilePage() {
   }
 
   useEffect(() => {
-    if (status === "anonymous") router.replace(ROUTES.signIn);
+    if (status === "anonymous") router.replace(`${ROUTES.signIn}?returnTo=%2Fprofile`);
   }, [router, status]);
 
   const profileError = load.error;

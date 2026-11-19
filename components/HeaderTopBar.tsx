@@ -33,8 +33,8 @@ function HeaderTopBar({
           {user ? (
             <details name="header-account-navigation" className="relative min-w-0">
               <summary className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[11rem] sm:max-w-[15rem] cursor-pointer list-none items-center gap-1.5 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
-                <UserAvatar fullName={user.fullName} avatarUrl={user.avatarUrl} className="size-6" fallbackClassName="text-[10px]" />
                 <span className="min-w-0">Hi {user.fullName}</span>
+                <UserAvatar fullName={user.fullName} avatarUrl={user.avatarUrl} className="order-first size-6" fallbackClassName="text-[10px]" />
                 <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
               </summary>
               <div className="absolute left-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">

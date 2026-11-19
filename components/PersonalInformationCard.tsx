@@ -58,7 +58,9 @@ function PersonalInformationCard({ user, onSave }: PersonalInformationCardProps)
     if (result.ok) {
       reset(profileFormValues(result.data));
       setAddressKey((key) => key + 1);
-      setMessage({ kind: "success", text: "Your profile has been updated." });
+      setMessage({ kind: "success", text: result.data.email !== user.email
+        ? "Your profile has been updated. The next time you sign in, confirm your new email with the link we send to it."
+        : "Your profile has been updated." });
       return;
     }
     let mapped = false;

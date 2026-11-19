@@ -75,7 +75,7 @@ test.beforeEach(async ({ page, request }) => {
 
 test("anonymous visitors are redirected to sign in", async ({ page, request }) => {
   await page.goto("/profile");
-  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fprofile$/);
   await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   expect((await history(request)).filter(entry => entry.path === "/v1/users/me")).toEqual([]);
 });
@@ -103,6 +103,7 @@ test("header links to profile, GET populates, PUT updates the form and header, c
   });
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan Nguyễn Updated");
   await expect(page.locator("header summary", { hasText: "Hi Lan Nguyễn Updated" })).toBeVisible();
+  await expect(page.getByText("Your profile has been updated. The next time you sign in, confirm your new email with the link we send to it.", { exact: true })).toBeVisible();
   const puts = (await history(request)).filter(entry => entry.method === "PUT" && entry.path === "/v1/users/me");
   expect(puts).toHaveLength(1);
   expect(puts[0].authenticated).toBe(true);
