@@ -11,7 +11,7 @@ import type {
   AddCartItemRequest,
   UpdateCartItemRequest,
 } from "../types/cartRequestType";
-import type { Cart, CartItem } from "../types/cartResponseType";
+import type { Cart, CartIssue, CartIssueCode, CartItem, CartValidation } from "../types/cartResponseType";
 
 /** Fill in the Cart API origin when it is available; paths already include /api/v1. */
 export const CART_API_BASE_URL = "";
@@ -20,6 +20,8 @@ export const GET_CART_PATH = CART_PATH;
 export const ADD_CART_ITEM_PATH = CART_PATH + "/items";
 export const CART_ITEM_PATH = CART_PATH + "/items/:lineId";
 export const GUEST_CART_PATH = "/api/v1/carts/guest";
+export const VALIDATE_CART_PATH = CART_PATH + "/validate";
+const CART_ISSUE_CODES: readonly CartIssueCode[] = ["OUT_OF_STOCK", "PRICE_CHANGED", "PRODUCT_INACTIVE", "QUANTITY_CAPPED", "SELF_PURCHASE"];
 
 const cartRequestOptions = (
   options: ServiceRequestOptions,
@@ -205,4 +207,24 @@ export const mergeGuestCart = async (
     config: { ...options.config, headers: { "Idempotency-Key": mergeKey } },
   });
   return parseCart(data);
+};
+
+export const parseCartValidation = (value: unknown): CartValidation => {
+  if (!isRecord(value) || typeof value.valid !== "boolean" || !Array.isArray(value.issues))
+    throw createInvalidResponseError("Invalid cart validation");
+  const issues: CartIssue[] = value.issues.map((issue) => {
+    if (!isRecord(issue) || !isNonBlankId(issue.itemId) || !isNonBlankId(issue.skuId)
+      || !CART_ISSUE_CODES.includes(issue.code as CartIssueCode))
+      throw createInvalidResponseError("Invalid cart issue");
+    return { itemId: issue.itemId, skuId: issue.skuId, code: issue.code as CartIssueCode };
+  });
+  if (value.valid !== (issues.length === 0)) throw createInvalidResponseError("Invalid cart validation");
+  return { valid: value.valid, issues };
+};
+
+export const validateCart = async (
+  options: ServiceRequestOptions = {},
+): Promise<CartValidation> => {
+  const { data } = await requestApi<unknown>("POST", VALIDATE_CART_PATH, {}, cartRequestOptions(options));
+  return parseCartValidation(data);
 };

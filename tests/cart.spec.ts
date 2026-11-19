@@ -56,6 +56,8 @@ async function installCart(page: Page, title = productName) {
     deleteGate: undefined as Promise<void> | undefined,
     updateFinished: deferred(),
     finishedUpdates: 0,
+    validations: 0,
+    validation: { valid: true, issues: [] } as { valid: boolean; issues: Array<{ itemId: string; skuId: string; code: string }> },
   };
   const issuedTokens = new Set<string>();
   page.on("response", async (response) => {
@@ -134,6 +136,10 @@ async function installCart(page: Page, title = productName) {
         // A remount or logout can cancel a deliberately held GET.
         return;
       }
+    }
+    if (method === "POST" && path === `${cartPath}/validate`) {
+      state.validations += 1;
+      return json(route, envelope(state.validation));
     }
     const body: unknown = request.postData() ? request.postDataJSON() : null;
     state.writes.push({ method, path, body, token });
@@ -217,7 +223,7 @@ test("signed-out cart requests sign-in without fetching protected cart data", as
   await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
 });
 
-test("cart displays snapshot unit and line prices with a checkout link at desktop", async ({ page }, info) => {
+test("cart displays snapshot unit and line prices with a checkout button at desktop", async ({ page }, info) => {
   await page.setViewportSize({ width: 1440, height: 1056 });
   const state = await installCart(page);
   await signInAndOpenCart(page, state.account.name);
@@ -228,12 +234,49 @@ test("cart displays snapshot unit and line prices with a checkout link at deskto
   await expect(line.getByText("300.000,00 ₫", { exact: true })).toBeVisible();
   await expect(page.getByTestId("cart-subtotal")).toHaveText("300.000,00 ₫");
   await expect(page.getByRole("main")).not.toContainText("999.999");
-  await expect(page.getByRole("link", { name: "Proceed to Checkout" })).toHaveAttribute("href", "/checkout");
+  await expect(page.getByRole("button", { name: "Proceed to Checkout" })).toBeEnabled();
   await expect(page.getByRole("link", { name: /^Shopping cart/ })).toHaveAccessibleName("Shopping cart, 1 item");
   expect(state.reads).toContain("buyer-1");
   await capture(page, info, "cart-desktop-1440.png");
   await page.setViewportSize({ width: 375, height: 812 });
   await capture(page, info, "cart-mobile-375x812.png");
+});
+
+test("checkout validates the cart first and goes to checkout when nothing changed", async ({ page }) => {
+  const state = await installCart(page);
+  await signInAndOpenCart(page, state.account.name);
+  await page.getByRole("button", { name: "Proceed to Checkout", exact: true }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
+  expect(state.validations).toBe(1);
+});
+
+test("checkout lists blocking cart issues and keeps the buyer on the cart until the line is fixed", async ({ page }, info) => {
+  const state = await installCart(page);
+  state.validation = { valid: false, issues: [{ itemId: lineId, skuId, code: "PRODUCT_INACTIVE" }] };
+  await signInAndOpenCart(page, state.account.name);
+  await page.getByRole("button", { name: "Proceed to Checkout", exact: true }).click();
+  const alert = page.getByRole("alert").filter({ hasText: "Update your cart before checking out." });
+  await expect(alert).toContainText(`${productName} is no longer available. Remove it to check out.`);
+  await expect(page).toHaveURL(/\/cart$/);
+  await expect(page.getByRole("button", { name: "Proceed to Checkout", exact: true })).toBeDisabled();
+  await capture(page, info, "cart-validation-blocked.png");
+  const line = page.getByTestId(`cart-line-${lineId}`);
+  await line.getByRole("spinbutton").fill("1");
+  await line.getByRole("spinbutton").press("Enter");
+  await expect(alert).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Proceed to Checkout", exact: true })).toBeEnabled();
+});
+
+test("checkout shows a price change for review and continues on the second click", async ({ page }) => {
+  const state = await installCart(page);
+  state.validation = { valid: false, issues: [{ itemId: lineId, skuId, code: "PRICE_CHANGED" }] };
+  await signInAndOpenCart(page, state.account.name);
+  await page.getByRole("button", { name: "Proceed to Checkout", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Review these changes" })).toContainText(`${productName} has a new price. Checkout charges the current price.`);
+  await expect(page).toHaveURL(/\/cart$/);
+  await page.getByRole("button", { name: "Continue to Checkout", exact: true }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
+  expect(state.validations).toBe(1);
 });
 
 test("quantity changes subtotal before the response and rejection restores the snapshot", async ({ page }) => {

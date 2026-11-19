@@ -153,7 +153,7 @@ test("admin activates, buyer claims and checks out; cart, preview, order and sel
   await picker.getByRole("checkbox", { name: /SECOND50/ }).uncheck();
   await picker.getByRole("checkbox", { name: /SHOP50/ }).check();
   await layouts(buyer, "cart-picker");
-  await buyer.getByRole("link", { name: "Proceed to Checkout", exact: true }).click();
+  await buyer.getByRole("button", { name: "Proceed to Checkout", exact: true }).click();
   await buyer.getByLabel("Province / City", { exact: true }).selectOption("202"); await buyer.getByLabel("Ward", { exact: true }).selectOption("20308");
   await expect(buyer.getByTestId("checkout-total")).toHaveText("4.710.000,00 ₫");
   await layouts(buyer, "checkout-voucher");

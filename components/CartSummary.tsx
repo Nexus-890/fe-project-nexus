@@ -11,10 +11,13 @@ type CartSummaryProps = {
   discountAmount?: string;
   total?: string;
   checkoutBlocked?: boolean;
+  checking?: boolean;
+  checkoutLabel?: string;
+  onCheckout?: () => void;
   children?: ReactNode;
 };
 
-function CartSummary({ quantity, subtotal, pending = false, discountAmount, total, checkoutBlocked = false, children }: CartSummaryProps) {
+function CartSummary({ quantity, subtotal, pending = false, discountAmount, total, checkoutBlocked = false, checking = false, checkoutLabel = "Proceed to Checkout", onCheckout, children }: CartSummaryProps) {
   const formattedSubtotal = formatVND(subtotal);
 
   return (
@@ -51,13 +54,14 @@ function CartSummary({ quantity, subtotal, pending = false, discountAmount, tota
           Updating your cart…
         </p>
       ) : null}
-      {pending || checkoutBlocked ? <button
+      {pending || checkoutBlocked || checking || onCheckout ? <button
         type="button"
-        disabled
-        className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={pending || checkoutBlocked || checking}
+        onClick={onCheckout}
+        className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Proceed to Checkout
-      </button> : <Link href="/checkout" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:bg-primary-hover">Proceed to Checkout</Link>}
+        {checking ? "Checking your cart…" : checkoutLabel}
+      </button> : <Link href="/checkout" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:bg-primary-hover">{checkoutLabel}</Link>}
       <p className="mt-3 text-xs leading-5 text-muted-foreground">Prices and stock are revalidated at checkout. Shipping is confirmed before you place your order.</p>
       </section>
     </aside>

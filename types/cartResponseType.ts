@@ -17,3 +17,6 @@ export type Cart = Omit<CartWireResponse, "items"> & {
   currency: "VND";
   updatedAt?: string;
 };
+export type CartIssue = components["schemas"]["CartIssue"];
+export type CartIssueCode = CartIssue["code"];
+export type CartValidation = components["schemas"]["CartValidation"];

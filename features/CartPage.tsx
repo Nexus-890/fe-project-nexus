@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, Heart, ShoppingBag, Store } from "lucide-react";
 import CartLine from "../components/CartLine";
 import CartPromotionSummary from "./CartPromotionSummary";
 import { queryKeys } from "../configs/queryKeys";
-import { useApiQuery } from "../hooks/useApi";
+import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { getCartProducts } from "../service/cartCatalogService";
-import { getCartQuantity, getCartSubtotal } from "./cartUtils";
+import { cartIssueMessage, getCartQuantity, getCartSubtotal, isBlockingCartIssue } from "./cartUtils";
 import { useCart } from "./useCart";
-import type { CartItem } from "../types/cartResponseType";
+import type { CartIssue, CartItem } from "../types/cartResponseType";
 import { getStockLevels } from "../service/backofficeService";
+import { validateCart } from "../service/cartService";
 
 function CartPage() {
   const { status, sessionId, user, error, retryProfile } = useAuth();
@@ -68,7 +70,10 @@ function CartPage() {
 
 function CartContents() {
   const { cart, pending, feedback, updateQuantity, removeItem } = useCart();
+  const { requestContext } = useAuth();
+  const router = useRouter();
   const [saved, setSaved] = useState<string[]>([]);
+  const [review, setReview] = useState<{ signature: string; issues: CartIssue[] } | null>(null);
   const quantity = getCartQuantity(cart.data?.items ?? []);
   const items = cart.data?.items ?? [];
   const productIds = [...new Set(items.map((item) => item.productId))].sort();
@@ -82,6 +87,19 @@ function CartContents() {
     service: (signal) => getStockLevels(skuIds, { signal }),
   }, { enabled: skuIds.length > 0, retry: false });
   const stockBlocked = items.some((item) => stock.data?.[item.skuId] !== undefined && item.quantity > stock.data[item.skuId]);
+  const cartSignature = JSON.stringify(items);
+  const issues = review?.signature === cartSignature ? review.issues : [];
+  const issuesBlock = issues.some(isBlockingCartIssue);
+  const validation = useApiMutation({ execute: (signature: string) => validateCart({ context: requestContext }).then((result) => ({ signature, result })) }, {
+    onSuccess: ({ signature, result }) => {
+      if (result.valid) { router.push("/checkout"); return; }
+      setReview({ signature, issues: result.issues });
+    },
+  });
+  const checkout = () => {
+    if (review?.signature === cartSignature && !issuesBlock) { router.push("/checkout"); return; }
+    validation.mutate(cartSignature);
+  };
   const sellers = new Map<string, CartItem[]>();
   for (const item of items) {
     const sellerId = products.data?.[item.productId]?.sellerId ?? item.sellerId ?? "shop";
@@ -119,6 +137,11 @@ function CartContents() {
       <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
         {quantity} {quantity === 1 ? "item" : "items"} from {sellers.size} {sellers.size === 1 ? "seller" : "sellers"}
       </p>
+      {issues.length > 0 && <div role="alert" className={`mt-4 rounded-sm border px-4 py-3 text-sm ${issuesBlock ? "border-danger/40 bg-danger/5 text-danger" : "border-warning/40 bg-warning/5 text-foreground"}`}>
+        <p className="font-medium">{issuesBlock ? "Update your cart before checking out." : "Review these changes, then continue to checkout."}</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">{issues.map((issue) => { const item = items.find((line) => line.id === issue.itemId); return <li key={`${issue.itemId}-${issue.code}`}>{(item && products.data?.[item.productId]?.name) || item?.productName || "An item"} {cartIssueMessage(issue.code)}</li>; })}</ul>
+      </div>}
+      {validation.error && <p role="alert" className="mt-4 rounded-sm border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger">{validation.error.detail || "We couldn’t check your cart. Please try again."}</p>}
       {stockBlocked && <p role="alert" className="mt-4 rounded-sm border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger">Some items are out of stock or above the available quantity. Update your cart to check out.</p>}
       {feedback && (
         <p
@@ -163,11 +186,14 @@ function CartContents() {
             </Link>
           </div>
           <CartPromotionSummary
-            cartSignature={JSON.stringify(items)}
+            cartSignature={cartSignature}
             quantity={quantity}
             subtotal={getCartSubtotal(items)}
             pending={pending}
-            stockBlocked={stockBlocked}
+            stockBlocked={stockBlocked || issuesBlock}
+            checking={validation.isPending}
+            checkoutLabel={issues.length > 0 && !issuesBlock ? "Continue to Checkout" : undefined}
+            onCheckout={checkout}
           />
         </div>
       ) : (

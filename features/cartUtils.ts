@@ -1,4 +1,4 @@
-import type { CartItem } from "../types/cartResponseType";
+import type { CartIssue, CartIssueCode, CartItem } from "../types/cartResponseType";
 
 const toCents = (value: string): bigint => {
   if (!/^\d+(?:\.\d{1,2})?$/.test(value))
@@ -38,3 +38,15 @@ export const getCartQuantity = (items: readonly CartItem[]): number => {
     throw new RangeError("Cart quantity exceeds the safe integer range");
   return Number(quantity);
 };
+
+const CART_ISSUE_MESSAGES: Record<CartIssueCode, string> = {
+  OUT_OF_STOCK: "is out of stock. Remove it or lower the quantity.",
+  PRODUCT_INACTIVE: "is no longer available. Remove it to check out.",
+  SELF_PURCHASE: "is sold by your own shop. Remove it to check out.",
+  PRICE_CHANGED: "has a new price. Checkout charges the current price.",
+  QUANTITY_CAPPED: "was limited to the maximum quantity.",
+};
+const BLOCKING_CART_ISSUES: ReadonlySet<CartIssueCode> = new Set(["OUT_OF_STOCK", "PRODUCT_INACTIVE", "SELF_PURCHASE"]);
+
+export const cartIssueMessage = (code: CartIssueCode): string => CART_ISSUE_MESSAGES[code];
+export const isBlockingCartIssue = (issue: CartIssue): boolean => BLOCKING_CART_ISSUES.has(issue.code);
