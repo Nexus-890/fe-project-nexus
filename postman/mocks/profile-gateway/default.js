@@ -17,6 +17,8 @@ const initialUser = {
 };
 
 const appOrigin = "http://127.0.0.1:3103";
+const resetToken = "Rk9yZ290LXBhc3N3b3JkLWZpeHR1cmUtdG9rZW4tMDE";
+const currentPassword = "Fixture-pass-123!";
 const reputation = {
   score: 62, trustLevel: "TRUSTED", totalTransaction: 9, successfulTransaction: 7, failedTransaction: 1,
   ratingCount: 4, averageRating: 4.3, successfulAuctions: 2, failedAuctions: 1, penaltyCount: 12,
@@ -166,6 +168,7 @@ const server = http.createServer(async (req, res) => {
     await pm.state.set("profile-gateway:user", initialUser);
     await pm.state.set("profile-gateway:controls", {});
     await pm.state.set("profile-gateway:requests", []);
+    await pm.state.set("profile-gateway:reset-used", false);
     avatars.clear();
     return json(res, {});
   }
@@ -202,6 +205,26 @@ const server = http.createServer(async (req, res) => {
   await recordRequest({ method: req.method, path, body: multipart ? { multipart: true } : req.body ?? null, authenticated });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
+
+  // @endpoint POST /v1/auth/password-reset
+  if (path === "/v1/auth/password-reset" && req.method === "POST") {
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
+
+  // @endpoint POST /v1/auth/password-reset/confirm
+  if (path === "/v1/auth/password-reset/confirm" && req.method === "POST") {
+    const used = await pm.state.get("profile-gateway:reset-used");
+    if (req.body?.token !== resetToken || used) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_RESET_LINK_INVALID", detail: "The password reset link is invalid, used or expired; ask for a new one" }, 400);
+    }
+    if (req.body?.newPassword === currentPassword) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_REUSED", detail: "The new password must be different from the current password" }, 400);
+    }
+    await pm.state.set("profile-gateway:reset-used", true);
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
 
   if (path === "/v1/users/me" || path === "/v1/carts/me" || path.startsWith("/v1/users/me/")) {
     if (!authenticated) {

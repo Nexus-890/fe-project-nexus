@@ -116,6 +116,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email a password reset link
+         * @description When the address belongs to an active account, user-service stores the SHA-256 hash of a one-time token (valid 30 minutes) and emails a link to {NEXUS_WEB_BASE_URL}/reset-password?token=... from PASSWORD_RESET_MAIL_FROM. A new link replaces the unused older ones. An unknown, deleted or inactive address gets the same 204 and no email, so the endpoint does not reveal which accounts exist. One link per account per minute; a request inside that minute also gets 204 and sends nothing. Access: public. Ownership/business restriction: None.
+         */
+        post: operations["requestPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a new password with the emailed link
+         * @description Checks the token against an unused, unexpired link of an active account, sets the new password in Keycloak under the realm password policy (at least 8 characters, different from the current password), marks every open link of the account used, records the UserPasswordChanged audit event with method RESET_LINK and then ends every Keycloak session of the account. A rejected password keeps the link usable. Access: public. Ownership/business restriction: the token alone identifies the account.
+         */
+        post: operations["confirmPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/avatar": {
         parameters: {
             query?: never;
@@ -660,6 +700,19 @@ export interface components {
              * @description Trimmed and normalized to lower case.
              */
             email: string;
+        };
+        PasswordResetRequest: {
+            /**
+             * Format: email
+             * @description Trimmed and normalized to lower case.
+             */
+            email: string;
+        };
+        PasswordResetConfirmRequest: {
+            /** @description The token query parameter of the emailed link. */
+            token: string;
+            /** Format: password */
+            newPassword: string;
         };
         ConfirmPhoneCode: {
             code: string;
@@ -2356,6 +2409,95 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    requestPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "email": "buyer@example.com"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Done; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    confirmPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Done; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_PASSWORD_RESET_LINK_INVALID`, `USER_PASSWORD_REJECTED`, `USER_PASSWORD_REUSED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict. Codes: `USER_IDENTITY_NOT_FOUND`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -318,6 +318,73 @@ test("profile password action opens Keycloak credential settings with a safe pro
   await expect(page).toHaveURL(/#\/account-security\/signing-in$/);
 });
 
+const resetToken = "Rk9yZ290LXBhc3N3b3JkLWZpeHR1cmUtdG9rZW4tMDE";
+
+test("sign-in links to forgot password, which sends one public request and never reveals the account", async ({ page, request }) => {
+  await page.goto("/sign-in");
+  await page.getByRole("link", { name: "Forgot password?", exact: true }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+  await expect(page.getByRole("heading", { name: "Forgot your password?", exact: true })).toBeVisible();
+  await page.getByLabel("Email address", { exact: true }).fill("  lan.nguyen@example.com ");
+  await page.getByRole("button", { name: "Send reset link", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("If an account uses this email, we have sent a reset link. Check your inbox and spam folder.");
+  await expect(page.getByRole("button", { name: /^Send again in \d+s$/ })).toBeDisabled();
+  await responsiveChecks(page);
+  const sent = (await history(request)).filter((entry) => entry.path === "/v1/auth/password-reset");
+  expect(sent).toEqual([{ method: "POST", path: "/v1/auth/password-reset", body: { email: "lan.nguyen@example.com" }, authenticated: false }]);
+});
+
+test("the reset page checks the passwords, explains a reused one, saves once and then treats the link as used", async ({ page, request }) => {
+  await page.goto(`/reset-password?token=${resetToken}`);
+  await expect(page.getByRole("heading", { name: "Choose a new password", exact: true })).toBeVisible();
+  const password = page.getByLabel("New password", { exact: true });
+  const confirmation = page.getByLabel("Confirm new password", { exact: true });
+  const save = page.getByRole("button", { name: "Set new password", exact: true });
+
+  await password.fill("short");
+  await confirmation.fill("short");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Use at least 8 characters.");
+  await password.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-457!");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("The passwords do not match.");
+  expect((await history(request)).filter((entry) => entry.path.startsWith("/v1/auth/password-reset"))).toEqual([]);
+
+  await password.fill("Fixture-pass-123!");
+  await confirmation.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Choose a password that is different from your current one.");
+  await expect(password).toHaveValue("Fixture-pass-123!");
+
+  await password.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-456!");
+  await save.click();
+  await expect(page.getByRole("heading", { name: "Password updated", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue to sign in", exact: true })).toHaveAttribute("href", "/sign-in");
+  await responsiveChecks(page);
+  const confirms = (await history(request)).filter((entry) => entry.path === "/v1/auth/password-reset/confirm");
+  expect(confirms.map((entry) => [entry.body, entry.authenticated])).toEqual([
+    [{ token: resetToken, newPassword: "Fixture-pass-123!" }, false],
+    [{ token: resetToken, newPassword: "Another-pass-456!" }, false],
+  ]);
+
+  await page.goto(`/reset-password?token=${resetToken}`);
+  await page.getByLabel("New password", { exact: true }).fill("Third-pass-789!");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("Third-pass-789!");
+  await page.getByRole("button", { name: "Set new password", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "This link no longer works", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Request a new link", exact: true }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+});
+
+test("a malformed reset link asks for a new one without calling the API", async ({ page, request }) => {
+  await page.goto("/reset-password?token=not-a-token");
+  await expect(page.getByRole("heading", { name: "This link no longer works", exact: true })).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  expect((await history(request)).filter((entry) => entry.path.startsWith("/v1/auth/password-reset"))).toEqual([]);
+});
+
 const pngAvatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4Ga8DAAN5AWVLTgzuAAAAAElFTkSuQmCC", "base64");
 
 test("reputation shows the own score and penalty history pages through every score loss", async ({ page, request }) => {
