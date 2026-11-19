@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AdminPageHeader, adminInputClass } from "../components/AdminPrimitives";
+import { RevealPanel } from "../components/RevealPanel";
 import { OperationsError, OperationsPagination, OperationsTable, OperationsTabs, OperationTime, operationCell as cell, referenceClass } from "../components/SupportOperationsUi";
 import { SellerPanel, SellerStatus, sellerButton, sellerPrimary } from "../components/SellerUi";
 import { formatVND } from "../components/formatPrice";
@@ -54,7 +55,7 @@ function SupportOrdersPage() {
     </form>
     {validation && <p role="alert" className="text-sm text-danger">{validation}</p>}<OperationsError error={orders.error} retry={() => void orders.refetch()} />
     {orders.isPending ? <p role="status">Loading orders…</p> : !orders.error && <><OperationsTable headers={["Order", "Buyer / seller", "Total", "Status", "Created", "Action"]} empty={!orders.data?.content.length}>{orders.data?.content.map((order) => <tr key={order.orderId} className="border-t border-border"><th scope="row" className={`${cell} text-xs font-medium`}>{order.orderNumber}<p className="mt-1 text-muted-foreground">{order.orderType}</p></th><td className={`${cell} ${referenceClass}`}><p title="Buyer">{order.userId}</p><p title="Seller" className="mt-2">{order.sellerId}</p></td><td className={`${cell} whitespace-nowrap font-mono text-xs`}>{formatVND(order.totalAmount)}</td><td className={cell}><SellerStatus>{order.status}</SellerStatus></td><td className={`${cell} text-xs`}><OperationTime value={order.createdAt} /></td><td className={cell}><button className={sellerButton} onClick={() => setSelected(order)}>Manage order</button></td></tr>)}</OperationsTable><OperationsPagination result={orders.data} change={(page) => setFilters({ ...filters, page })} /></>}
-    {selected && <OrderOperationsDetail key={selected.orderId} order={selected} close={() => setSelected(null)} />}
+    {selected && <RevealPanel key={selected.orderId}><OrderOperationsDetail order={selected} close={() => setSelected(null)} /></RevealPanel>}
   </>;
 }
 export default SupportOrdersPage;

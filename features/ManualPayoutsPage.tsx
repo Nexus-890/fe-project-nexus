@@ -15,6 +15,7 @@ import {
 import { formatVND } from "../components/formatPrice";
 import ManualPayoutDialog from "../components/ManualPayoutDialog";
 import ManualPayoutReconciliationPanel from "../components/ManualPayoutReconciliationPanel";
+import { RevealPanel } from "../components/RevealPanel";
 import ManualPayoutTable, { manualStatusLabel, receiptLabel } from "../components/ManualPayoutTable";
 import { SellerHeading, SellerPanel, SellerStatus, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import { readBackofficeRoles, readBackofficeSubject } from "./backofficeAccess";
@@ -263,7 +264,7 @@ function ManualWorkspace({ seller }: { seller: boolean }) {
       {!capabilities.data.enabled && <p role="status" className="rounded-sm border border-warning/30 bg-warning/10 p-4 text-sm">New claims and QR issuance are paused. You can still record or reconcile attempts that already have a QR.</p>}
       {!capabilities.data.canReconcile && <p className="text-xs text-muted-foreground">You can execute transfers you own. Reconciliation, corrections and retries are handled by an administrator.</p>}
       <ManualQueue selected={selected} select={setSelected} subject={subject} />
-      {selected && <ManualPayoutDetailPanel key={`${auth.sessionId}:${selected}`} id={selected} capabilities={capabilities.data} keys={keys} subject={subject} close={() => setSelected(null)} />}
+      {selected && <RevealPanel key={`${auth.sessionId}:${selected}`}><ManualPayoutDetailPanel id={selected} capabilities={capabilities.data} keys={keys} subject={subject} close={() => setSelected(null)} /></RevealPanel>}
     </>}
   </>;
 }

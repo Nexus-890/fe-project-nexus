@@ -22,7 +22,7 @@ const actionStyle = "inline-flex min-h-11 items-center justify-center rounded-sm
 function OrderRow({ order }: { order: OrderSummary }) {
   return (
     <tr data-testid={`order-row-${order.orderId}`} className="grid grid-cols-2 gap-4 border-t border-border p-4 first:border-t-0 xl:table-row xl:first:border-t xl:p-0">
-      <th scope="row" className="col-span-2 min-w-0 text-left font-normal xl:w-[28%] xl:px-4 xl:py-6">
+      <th scope="row" className="col-span-2 min-w-0 text-left font-normal xl:w-[24%] xl:px-4 xl:py-6">
         <span className="mb-1 block text-xs text-muted-foreground xl:hidden">Order</span>
         <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="font-mono text-sm hover:text-primary hover:underline [overflow-wrap:anywhere]">{order.orderNumber}</Link>
       </th>
@@ -49,7 +49,7 @@ function OrderRow({ order }: { order: OrderSummary }) {
             <p className="text-xs text-muted-foreground">Payment link unavailable.</p>
           </div>
         ))}
-        {order.status !== "PENDING" && <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="inline-flex min-h-11 items-center justify-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-secondary xl:whitespace-nowrap">{order.status === "DELIVERED" ? "Order received" : "View Order"}</Link>}
+        {order.status !== "PENDING" && <Link href={`/order/${encodeURIComponent(order.orderId)}`} className="inline-flex min-h-11 w-full items-center justify-center rounded-sm border border-border px-3 text-sm font-medium hover:bg-secondary xl:w-auto xl:whitespace-nowrap">{order.status === "DELIVERED" ? "Order received" : "View Order"}</Link>}
       </td>
     </tr>
   );
@@ -112,7 +112,7 @@ function OrdersPage({ confirmedGroupId }: { confirmedGroupId?: string }) {
               <table className="mt-6 block w-full rounded-sm border border-border text-left xl:table xl:table-fixed">
                 <caption className="sr-only">Your orders</caption>
                 <thead className="hidden bg-muted text-xs font-normal text-muted-foreground xl:table-header-group">
-                  <tr><th scope="col" className="w-[28%] px-4 py-3 font-normal">Order</th><th scope="col" className="w-[22%] px-4 py-3 font-normal">Date</th><th scope="col" className="w-[22%] px-4 py-3 font-normal">Total</th><th scope="col" className="px-4 py-3 font-normal">Status</th><th scope="col" className="w-32 px-4 py-3"><span className="sr-only">Payment</span></th></tr>
+                  <tr><th scope="col" className="w-[24%] px-4 py-3 font-normal">Order</th><th scope="col" className="w-[22%] px-4 py-3 font-normal">Date</th><th scope="col" className="w-[22%] px-4 py-3 font-normal">Total</th><th scope="col" className="px-4 py-3 font-normal">Status</th><th scope="col" className="w-44 px-4 py-3"><span className="sr-only">Payment</span></th></tr>
                 </thead>
                 <tbody className="block xl:table-row-group">{data.content.map((order) => <OrderRow key={order.orderId} order={order} />)}</tbody>
               </table>
