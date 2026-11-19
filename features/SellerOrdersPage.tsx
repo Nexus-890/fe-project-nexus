@@ -8,6 +8,7 @@ import { getSellerSales } from "../service/sellerService";
 import { formatVND } from "../components/formatPrice";
 import { SellerError, SellerHeading, SellerStatus, SellerTabs, sellerButton, sellerInput, sellerPrimary } from "../components/SellerUi";
 import { sellerSalesDates } from "./sellerSalesFilters";
+import SellerReputation from "./SellerReputation";
 
 const statuses: Record<string, string | undefined> = { "All": undefined, "To Ship": "PAID", "Shipping": "SHIPPED", "Delivered": "DELIVERED", "Completed": "COMPLETED", "Cancelled": "CANCELED", "Refunds": "REFUND_REQUESTED", "Refunded": "REFUNDED", "Awaiting Payment": "PENDING" };
 const saleDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
@@ -24,6 +25,7 @@ function SellerOrdersPage({ title = "Sales" }: { title?: string }) {
   const rows = result.data?.content ?? [];
   return <>
     <SellerHeading title={title} description="Review your own customer orders and their payment status." />
+    <SellerReputation sellerId={auth.user?.id} title="Your transaction summary" />
     <SellerTabs values={Object.keys(statuses)} selected={tab} change={(value) => { setTab(value); setPage(0); }} />
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
       event.preventDefault();

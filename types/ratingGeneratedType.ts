@@ -84,6 +84,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reputations/{userId}/restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Target user's UUID; external user IDs are logical references. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List current and historical restrictions
+         * @description ADMIN with USER.REPUTATION.VIEW may read any target. BUYER or SELLER with REPUTATION.VIEW may read only their own subject. Results include revoked and expired restrictions with a computed active flag.
+         */
+        get: operations["listReputationRestrictions"];
+        put?: never;
+        /**
+         * Restrict bidding or selling until a future time
+         * @description Requires ADMIN and USER.REPUTATION.ADJUST. Expiry must be in the future. Multiple restrictions may overlap; an action stays blocked until every restriction for it has expired or been revoked. Actor, reason and time are recorded in the immutable moderation audit.
+         */
+        post: operations["createReputationRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reputations/{userId}/restrictions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a restriction while preserving its audit history
+         * @description Requires ADMIN and USER.REPUTATION.ADJUST. Repeating the same revocation by the same actor returns the stored result; a different reason or actor after revocation returns 409. No record is physically deleted.
+         */
+        delete: operations["revokeReputationRestriction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ratings/{id}/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dispute a review received by the authenticated user
+         * @description Requires BUYER or SELLER with REPUTATION.RATE. Only the rated recipient may dispute; the original author and other users receive 403. A rating may have only one dispute, including after rejection; duplicates return 409. Pending disputes leave visibility and reputation unchanged.
+         */
+        post: operations["createRatingDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ratings/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read disputes for administrative review
+         * @description Requires ADMIN and USER.REPUTATION.VIEW. Ordered newest first.
+         */
+        get: operations["listRatingDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ratings/disputes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Approve or reject a pending dispute
+         * @description Requires ADMIN and USER.REPUTATION.ADJUST. Approval hides the rating from ordinary lists and removes its applied score contribution in the same transaction. Late events, retries and backfills cannot restore it. Rejection preserves the original rating. Actor, reason and time remain audited. Repeating an identical resolution by its actor is idempotent; another resolution of a final dispute returns 409.
+         */
+        patch: operations["resolveRatingDispute"];
+        trace?: never;
+    };
     "/internal/v1/eligibility/{userId}": {
         parameters: {
             query?: never;
@@ -93,7 +200,7 @@ export interface paths {
         };
         /**
          * Check reputation eligibility for one action
-         * @description Direct service-to-service endpoint, never routed by the public gateway. Requires a valid RS256 bearer with the configured issuer/audience, service_account boolean true, an azp listed in nexus.rating.eligibility.allowed-clients and RATING.ELIGIBILITY.CHECK authority. RATING_ELIGIBILITY_ALLOWED_CLIENTS configures the allowlist; its default client is nexus-auction-service. Normal user or ADMIN tokens are denied even if they carry the authority. action is required and selects MIN_REPUTATION_TO_BID (default 40) or MIN_REPUTATION_TO_SELL (default 50). A score equal to the minimum is eligible. A policy denial returns 200 with eligible=false and its reason, distinct from validation, authentication and availability failures. A user without activity has neutral score 50 and trust NEW. Decisions reflect committed state; asynchronous UserRated effects can arrive after rating submission. Unreconciled historical transaction inputs fail closed with 503 instead of producing an eligibility decision from incomplete evidence.
+         * @description Direct service-to-service endpoint, never routed by the public gateway. Requires a valid RS256 bearer with the configured issuer/audience, service_account boolean true, an azp listed in nexus.rating.eligibility.allowed-clients and RATING.ELIGIBILITY.CHECK authority. RATING_ELIGIBILITY_ALLOWED_CLIENTS configures the allowlist; its default client is nexus-auction-service. Normal user or ADMIN tokens are denied even if they carry the authority. action is required and selects MIN_REPUTATION_TO_BID (default 40) or MIN_REPUTATION_TO_SELL (default 50). A score equal to the minimum is eligible only when no active restriction applies to that action. restrictedUntil is the latest active restriction expiry, or null. Expired/revoked restrictions do not block. A policy denial returns 200 with eligible=false and its reason, distinct from validation, authentication and availability failures. A user without activity has neutral score 50 and trust NEW. Decisions reflect committed state; asynchronous UserRated effects can arrive after rating submission. Unreconciled historical transaction inputs fail closed with 503 instead of producing an eligibility decision from incomplete evidence.
          */
         get: operations["checkReputationEligibility"];
         put?: never;
@@ -108,6 +215,91 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateRestrictionRequest: {
+            /** @enum {string} */
+            action: "BID" | "SELL";
+            reason: string;
+            /**
+             * Format: date-time
+             * @description Must be in the future.
+             */
+            restrictedUntil: string;
+        };
+        ReputationRestriction: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            /** @enum {string} */
+            action: "BID" | "SELL";
+            reason: string;
+            /** Format: date-time */
+            restrictedUntil: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy: string;
+            /** Format: date-time */
+            revokedAt?: string | null;
+            /** Format: uuid */
+            revokedBy?: string | null;
+            revocationReason?: string | null;
+            active: boolean;
+        };
+        CreateDisputeRequest: {
+            reason: string;
+        };
+        ResolveDisputeRequest: {
+            /** @enum {string} */
+            status: "APPROVED" | "REJECTED";
+            reason: string;
+        };
+        RatingDispute: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ratingId: string;
+            /** Format: uuid */
+            userId: string;
+            reason: string;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            resolvedAt?: string | null;
+            /** Format: uuid */
+            resolvedBy?: string | null;
+            resolutionReason?: string | null;
+            ratingScore: number;
+            ratingComment?: string | null;
+        };
+        RestrictionEnvelope: {
+            /** @default 0 */
+            code: number;
+            message: string;
+            data: components["schemas"]["ReputationRestriction"];
+        };
+        RestrictionPageEnvelope: {
+            /** @default 0 */
+            code: number;
+            message: string;
+            data: components["schemas"]["ReputationRestriction"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        DisputeEnvelope: {
+            /** @default 0 */
+            code: number;
+            message: string;
+            data: components["schemas"]["RatingDispute"];
+        };
+        DisputePageEnvelope: {
+            /** @default 0 */
+            code: number;
+            message: string;
+            data: components["schemas"]["RatingDispute"][];
+            page: components["schemas"]["PageInfo"];
+        };
         /**
          * @description Level resolved by the versioned runtime reputation policy.
          * @enum {string}
@@ -179,7 +371,7 @@ export interface components {
              */
             sourceVersion: number | null;
             /** @enum {string} */
-            changeType: "USER_RATED" | "ORDER_COMPLETED" | "AUCTION_PAYMENT_TIMEOUT" | "ADMIN_ADJUSTMENT";
+            changeType: "USER_RATED" | "ORDER_COMPLETED" | "AUCTION_PAYMENT_TIMEOUT" | "ADMIN_ADJUSTMENT" | "RATING_DISPUTE_APPROVED";
             previousScore: number;
             newScore: number;
             /** @description Actual newScore minus previousScore; may be zero after clamping or a counter-only change. */
@@ -213,7 +405,7 @@ export interface components {
             /** Format: uuid */
             userId: string;
             action: components["schemas"]["EligibilityAction"];
-            /** @description True when score meets or exceeds the selected minimum. */
+            /** @description True when score meets the selected minimum and no active restriction applies. */
             eligible: boolean;
             score: number;
             trustLevel: components["schemas"]["TrustLevel"];
@@ -222,6 +414,11 @@ export interface components {
             /** @description Nonblank explanation for both eligible and ineligible results. */
             reason: string;
             policyVersion: string;
+            /**
+             * Format: date-time
+             * @description Latest active restriction expiry for the selected action.
+             */
+            restrictedUntil?: string | null;
         };
         EligibilityEnvelope: {
             /** @default 0 */
@@ -268,6 +465,11 @@ export interface components {
             createdAt: string;
             /** @description True only when the authenticated caller submitted this rating; never supplied by the request. */
             ratedByMe: boolean;
+            /**
+             * @description Existing dispute status; null when the rating has not been disputed.
+             * @enum {string|null}
+             */
+            disputeStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
         };
         RatingEnvelope: {
             /** @default 0 */
@@ -792,6 +994,226 @@ export interface operations {
             405: components["responses"]["MethodNotAllowed"];
             406: components["responses"]["NotAcceptable"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listReputationRestrictions: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["Page"];
+                /** @description Requested number of entries per page. */
+                size?: components["parameters"]["Size"];
+            };
+            header?: never;
+            path: {
+                /** @description Target user's UUID; external user IDs are logical references. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restriction history, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionPageEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createReputationRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Target user's UUID; external user IDs are logical references. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRestrictionRequest"];
+            };
+        };
+        responses: {
+            /** @description Restriction and audit committed. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeReputationRestriction: {
+        parameters: {
+            query: {
+                reason: string;
+            };
+            header?: never;
+            path: {
+                /** @description Target user's UUID; external user IDs are logical references. */
+                userId: components["parameters"]["UserId"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked restriction. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Restriction does not belong to the target or does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Restriction was already revoked with another actor or reason. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createRatingDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDisputeRequest"];
+            };
+        };
+        responses: {
+            /** @description Pending dispute recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Visible rating does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A dispute for the rating already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listRatingDisputes: {
+        parameters: {
+            query?: {
+                status?: "PENDING" | "APPROVED" | "REJECTED";
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["Page"];
+                /** @description Requested number of entries per page. */
+                size?: components["parameters"]["Size"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disputes including the original rating score and comment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputePageEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    resolveRatingDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveDisputeRequest"];
+            };
+        };
+        responses: {
+            /** @description Final dispute decision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Dispute does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dispute was already resolved with different data. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["ReconciliationRequired"];
         };
     };
     checkReputationEligibility: {

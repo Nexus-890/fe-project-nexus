@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, CheckCheck, LoaderCircle, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useId, useState } from "react";
 import type { Notification } from "@/types/notificationResponseType";
 import { Badge } from "@/components/badge";
@@ -22,6 +23,7 @@ export type NotificationBellProps = {
   loading?: boolean;
   error?: boolean;
   countError?: boolean;
+  liveUpdatesPaused?: boolean;
   isUpdating?: boolean;
   canMarkRead?: boolean;
   canMarkAllRead?: boolean;
@@ -54,6 +56,7 @@ function NotificationBell({
   loading = false,
   error = false,
   countError = false,
+  liveUpdatesPaused = false,
   isUpdating = false,
   canMarkRead = false,
   canMarkAllRead = false,
@@ -268,6 +271,8 @@ function NotificationBell({
             )}
           </div>
         )}
+        {liveUpdatesPaused && <p role="status" className="border-t border-border px-4 py-2 text-xs text-muted-foreground">Live updates are unavailable. You can refresh your inbox.</p>}
+        <Link href="/notifications" className="flex min-h-11 items-center border-t border-border px-4 text-xs text-primary underline">Notification settings</Link>
       </PopoverContent>
     </Popover>
   );

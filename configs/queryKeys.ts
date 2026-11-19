@@ -35,6 +35,10 @@ export const queryKeys = {
     sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
   },
   reputation: {
+    all: (sessionId: number) => ["reputation", sessionId] as const,
+    restrictions: (sessionId: number, userId: string, page: number) => ["reputation", sessionId, "restrictions", userId, page] as const,
+    received: (sessionId: number, userId: string, page: number) => ["reputation", sessionId, "received", userId, page] as const,
+    disputes: (sessionId: number, status: string, page: number) => ["reputation", sessionId, "disputes", status, page] as const,
     seller: (sessionId: number, sellerId: string) => ["reputation", sessionId, "seller", sellerId] as const,
     orderRating: (sessionId: number, sellerId: string, buyerId: string, orderId: string) =>
       ["rating", sessionId, "order", sellerId, buyerId, orderId] as const,
@@ -129,6 +133,9 @@ export const queryKeys = {
   },
   notification: {
     all: (sessionId: number) => ["notification", sessionId] as const,
+    preferences: (sessionId: number) => ["notification", sessionId, "preferences"] as const,
+    deliveries: (sessionId: number, filters: object) => ["notification", sessionId, "deliveries", filters] as const,
+    delivery: (sessionId: number, id: string) => ["notification", sessionId, "delivery", id] as const,
     list: (sessionId: number, filters: NotificationFilters) =>
       ["notification", sessionId, "list", filters] as const,
     unreadCount: (sessionId: number) =>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { reputationRestrictionMessage } from "./reputationRestrictionMessage";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -187,7 +188,7 @@ function ProductEditor({ initial, newProduct }: { initial: ProductDetail; newPro
   return <>
     <Link href="/backoffice/products" className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-primary">Products / {name || "New product"}</Link>
     <SellerHeading title={newProduct ? "New Product" : "Edit Product"} description={newProduct ? "Create a draft before adding SKUs and images." : "Manage this product’s SKUs, images and publication."}><button type="submit" form="seller-product-form" className={sellerPrimary} disabled={busy}>{save.isPending || update.isPending ? "Saving…" : "Save Changes"}</button></SellerHeading>
-    {notice && <p role="status" className="text-sm text-success">{notice}</p>}{error && <p role="alert" className="text-sm text-danger">{error.detail || error.title}</p>}
+    {notice && <p role="status" className="text-sm text-success">{notice}</p>}{error && <p role="alert" className="text-sm text-danger">{reputationRestrictionMessage(error) || error.detail || error.title}</p>}
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-6">
         <SellerPanel title="Basic Information"><form id="seller-product-form" onSubmit={(event) => { event.preventDefault(); if (busy) return; if (newProduct) save.mutate(); else update.mutate({ name: name.trim(), description, categoryId: category, auctionEnable }); }} className="space-y-5">

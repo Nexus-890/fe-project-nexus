@@ -116,6 +116,8 @@ const installAuth = async (page: Page) => {
     expect(account.authorization).toMatch(/^Bearer .+$/);
     expect(route.request().headers().authorization).toBe(account.authorization);
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/notifications/stream")
+      return route.fulfill({ status: 200, headers: { ...corsHeaders, "Content-Type": "text/event-stream" }, body: "event: heartbeat\ndata: fixture\n\n" });
     if (path === "/api/v1/notifications/unread-count")
       return fulfillJson(route, envelope({ count: 0 }));
     expect(path).toBe("/api/v1/notifications");

@@ -198,6 +198,14 @@ const server = createServer(async (req, res) => {
     }
     if (req.method !== "GET")
       return json(res, { title: "Not implemented by delivered contract", status: 501 }, 501);
+    if (url.pathname === "/api/v1/notifications/stream") {
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
+      res.write(`event: notifications\ndata: ${JSON.stringify({ unreadCount: notificationItems[account].filter((item) => item.readAt === null).length, revision: `fixture-${account}` })}\n\n`);
+      const heartbeat = setInterval(() => res.write("event: heartbeat\ndata: alive\n\n"), 2_000);
+      const expiry = setTimeout(() => res.end(), 30_000);
+      res.on("close", () => { clearInterval(heartbeat); clearTimeout(expiry); });
+      return;
+    }
     const mode = url.pathname.endsWith("/unread-count")
       ? notificationCase.count
       : notificationCase.list;

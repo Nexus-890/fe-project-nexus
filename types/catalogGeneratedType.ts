@@ -199,7 +199,7 @@ export interface paths {
         head?: never;
         /**
          * Transition a product status
-         * @description Transitions are DRAFT -> ACTIVE, ACTIVE -> INACTIVE, INACTIVE -> ACTIVE; all other transitions return400. Access: requires PRODUCT.UPDATE. Additional role requirement: SELLER OR ADMIN. Ownership/business restriction: Owner OR ADMIN.
+         * @description Transitions are DRAFT -> ACTIVE, ACTIVE -> INACTIVE, INACTIVE -> ACTIVE; all other transitions return 400. Requires PRODUCT.UPDATE and SELLER or ADMIN, with owner or ADMIN access. Publishing ACTIVE checks the product seller's SELL eligibility through machine authentication. Active SELL restrictions return 403 CATALOG_REPUTATION_RESTRICTED with reason, action and restrictedUntil. A low score returns 403 CATALOG_REPUTATION_TOO_LOW. Unavailable/malformed eligibility or machine authentication fails closed with 503 CATALOG_REPUTATION_UNAVAILABLE. Unpublishing, editing and creating DRAFT products remain available.
          */
         patch: operations["changeProductStatus"];
         trace?: never;
@@ -2873,7 +2873,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 403;
                         /** @enum {string} */
-                        code?: "FORBIDDEN" | "CATALOG_UNAUTHORIZED";
+                        code?: "FORBIDDEN" | "CATALOG_UNAUTHORIZED" | "CATALOG_REPUTATION_RESTRICTED" | "CATALOG_REPUTATION_TOO_LOW";
                     };
                 };
             };
@@ -2975,7 +2975,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 503;
                         /** @enum {string} */
-                        code?: "SERVICE_UNAVAILABLE";
+                        code?: "SERVICE_UNAVAILABLE" | "CATALOG_REPUTATION_UNAVAILABLE";
                     };
                 };
             };

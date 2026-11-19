@@ -107,13 +107,13 @@ test("role landing preserves allowed return destinations and replaces forbidden 
   assert.equal(resolveRoleLanding("https://outside.example", ["BUYER"]), "/");
 });
 
-test("Admin-only audit and seller review routes reject every role combination without ADMIN", () => {
+test("Admin-only audit, moderation and delivery routes reject every role combination without ADMIN", () => {
   const roles = ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"] as const;
   for (let mask = 0; mask < 16; mask++) {
     const selected = roles.filter((_role, index) => mask & 1 << index);
     const allowed = selected.includes("ADMIN");
     const fallback = hasBackofficeAccess(selected) ? "/backoffice" : "/";
-    for (const path of ["/backoffice/audit-logs", "/backoffice/seller-applications"]) {
+    for (const path of ["/backoffice/audit-logs", "/backoffice/seller-applications", "/backoffice/reputations", "/backoffice/rating-disputes", "/backoffice/notification-deliveries"]) {
       assert.equal(canAccessBackofficePath(path, selected), allowed, `${selected.join(",") || "anonymous"}: ${path}`);
       assert.equal(canAccessBackofficePath(`${path}/?view=admin`, selected), allowed);
       assert.equal(backofficeMenu(selected).some((item) => item.href === path), allowed);

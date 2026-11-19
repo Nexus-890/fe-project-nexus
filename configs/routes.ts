@@ -41,7 +41,7 @@ export const ACCOUNT_NAVIGATION: AccountNavigationItem[] = [
   { id: "orders", label: "Orders", icon: ReceiptText, href: ROUTES.orders },
   { id: "vouchers", label: "My vouchers", icon: TicketPercent, href: "/vouchers" },
   { id: "bids", label: "My Bids", icon: Gavel, href: ROUTES.myBids },
-  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
   { id: "reputation", label: "Reputation", icon: Star, href: ROUTES.reputation },
   { id: "profile", label: "Profile", icon: UserRound, href: ROUTES.profile },
   { id: "addresses", label: "Addresses", icon: MapPin, href: ROUTES.addresses },

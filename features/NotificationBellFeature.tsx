@@ -6,6 +6,7 @@ import { createCanceledError } from "@/configs/api";
 import { queryKeys } from "@/configs/queryKeys";
 import { useApiMutation, useApiQuery } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotificationStream } from "./useNotificationStream";
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -23,6 +24,7 @@ type ReadOperation = {
 const latestNotifications = { page: 0, size: 10 };
 
 function NotificationBellFeature() {
+  const liveUpdatesPaused = useNotificationStream();
   const { status, requestContext, sessionId, isSessionCurrent } = useAuth();
   const pendingRead = useRef<AbortController | null>(null);
   const enabled = status === "authenticated";
@@ -69,7 +71,8 @@ function NotificationBellFeature() {
       isSessionCurrent(operation.sessionId) &&
       !operation.controller.signal.aborted,
     invalidateKey: (_data, operation) => [
-      queryKeys.notification.all(operation.sessionId),
+      queryKeys.notification.list(operation.sessionId, latestNotifications),
+      queryKeys.notification.unreadCount(operation.sessionId),
     ],
   });
   const canMarkRead = Boolean(NOTIFICATION_ENDPOINTS.read.trim());
@@ -91,6 +94,7 @@ function NotificationBellFeature() {
   return (
     <NotificationBell
       notifications={notifications.data?.content ?? []}
+      liveUpdatesPaused={liveUpdatesPaused}
       unreadCount={unreadCount.data}
       loading={notifications.isPending}
       error={notifications.isError}

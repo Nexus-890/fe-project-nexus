@@ -10,7 +10,7 @@ import { TrustScoreGauge } from "../components/TrustScoreGauge";
 const trustLabels = { NEW: "New seller", BASIC: "Standard seller", TRUSTED: "Trusted seller", TOP: "Top Seller" };
 const trustColors = { NEW: "text-muted-foreground", BASIC: "text-info", TRUSTED: "text-success", TOP: "text-primary" };
 
-function SellerReputation({ sellerId, compact = false }: { sellerId?: string | null; compact?: boolean }) {
+function SellerReputation({ sellerId, compact = false, title = "Seller reputation" }: { sellerId?: string | null; compact?: boolean; title?: string }) {
   const auth = useAuth();
   const reputation = useApiQuery({
     queryKey: queryKeys.reputation.seller(auth.sessionId, sellerId ?? ""), meta: { requiresAuth: true },
@@ -33,13 +33,13 @@ function SellerReputation({ sellerId, compact = false }: { sellerId?: string | n
   if (auth.status !== "authenticated" || reputation.isPending) return <p role="status" className={`${wrapper} text-muted-foreground`}>Loading seller reputation…</p>;
   if (reputation.isError) return <div className={wrapper}><p className="text-muted-foreground">Seller reputation is unavailable.</p><button type="button" disabled={reputation.isFetching} onClick={() => void reputation.refetch()} className="mt-1 min-h-11 min-w-11 text-primary underline">Retry reputation</button></div>;
   const current = reputation.data;
-  return <section aria-label="Seller reputation" className={wrapper}>
-    <h2 className="mb-3 font-semibold">Seller reputation</h2>
+  return <section aria-label={title} className={wrapper}>
+    <h2 className="mb-3 font-semibold">{title}</h2>
     <div className="flex items-center gap-4">
       <TrustScoreGauge score={current.score} />
       <div className="min-w-0">
         <p className={`font-semibold ${trustColors[current.trustLevel]}`}>{trustLabels[current.trustLevel]}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{current.successfulTransaction} successful transactions · {current.totalTransaction} total</p>
+        <p className="mt-1 text-xs text-muted-foreground">{current.successfulTransaction} successful transactions · {current.failedTransaction} failed · {current.totalTransaction} total</p>
       </div>
     </div>
   </section>;

@@ -316,3 +316,99 @@ export const requestApiBlob = async (
     throw createInvalidResponseError("Unexpected binary response type");
   return new Blob([response.data], { type });
 };
+
+export type ApiStreamEvent = { event: string; data: string; id?: string };
+
+/** Private SSE uses scoped Bearer headers; credentials never enter the URL. */
+export const requestApiStream = async (
+  path: string,
+  receive: (event: ApiStreamEvent) => void,
+  options: ServiceRequestOptions = {},
+): Promise<void> => {
+  if (!path.startsWith("/") || path.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(path))
+    throw createInvalidResponseError("API requests require a safe relative path");
+  const context = options.context ?? {};
+  const baseURL = normalizeBaseUrl(context.baseUrl ?? API_BASE_URL);
+  const sessionId = context.getSessionId?.();
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  const ensureCurrent = () => {
+    throwIfAborted(options.signal);
+    if (sessionId !== undefined && context.getSessionId?.() !== sessionId)
+      throw createCanceledError();
+  };
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let connectTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    ensureCurrent();
+    const transport = context.fetch ?? globalThis.fetch;
+    const connect = async (token: string | null | undefined) => {
+      if (!token) throw { kind: "http", status: 401, title: "Sign in to receive notifications." } satisfies ApiError;
+      connectTimer = setTimeout(cancel, options.config?.timeout ?? 15_000);
+      try {
+        return await transport(`${baseURL}${path}`, {
+          method: "GET", headers: { Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+          signal: controller.signal, credentials: "omit", cache: "no-store", redirect: "error",
+        });
+      } finally { clearTimeout(connectTimer); }
+    };
+    const sentToken = context.getAccessToken?.();
+    let response = await connect(sentToken);
+    ensureCurrent();
+    if (response.status === 401 && sentToken && context.renewAccessToken) {
+      await response.body?.cancel();
+      const replacement = await abortable(context.renewAccessToken(sentToken), options.signal);
+      ensureCurrent();
+      if (replacement && replacement === context.getAccessToken?.()) response = await connect(replacement);
+    }
+    ensureCurrent();
+    if (!response.ok) {
+      let problem: unknown;
+      try { problem = await response.json(); } catch { /* The status is still authoritative. */ }
+      throw normalizeHttpError(response.status, response.statusText, problem);
+    }
+    if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream") || !response.body)
+      throw createInvalidResponseError("Expected an event stream");
+    reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = "", event = "message", data: string[] = [], id: string | undefined;
+    const line = (value: string) => {
+      if (!value) {
+        if (data.length) { ensureCurrent(); receive({ event, data: data.join("\n"), id }); }
+        event = "message"; data = []; id = undefined;
+        return;
+      }
+      if (value.startsWith(":")) return;
+      const colon = value.indexOf(":"), field = colon < 0 ? value : value.slice(0, colon);
+      const content = colon < 0 ? "" : value.slice(colon + 1).replace(/^ /, "");
+      if (field === "event") event = content;
+      if (field === "data") data.push(content);
+      if (field === "id" && !content.includes("\0")) id = content;
+    };
+    while (true) {
+      const chunk = await abortable(reader.read(), controller.signal);
+      ensureCurrent();
+      if (chunk.done) break;
+      pending += decoder.decode(chunk.value, { stream: true });
+      if (pending.length + data.join("").length > 262_144)
+        throw createInvalidResponseError("Event stream frame is too large");
+      let newline: number;
+      while ((newline = pending.indexOf("\n")) >= 0) {
+        line(pending.slice(0, newline).replace(/\r$/, ""));
+        pending = pending.slice(newline + 1);
+      }
+    }
+  } catch (error) {
+    if (options.signal?.aborted || controller.signal.aborted)
+      throw new DOMException("Request canceled", "AbortError");
+    if (isApiError(error)) throw error;
+    throw { kind: "network", status: 0, title: "Notification connection interrupted." } satisfies ApiError;
+  } finally {
+    clearTimeout(connectTimer);
+    options.signal?.removeEventListener("abort", cancel);
+    controller.abort();
+    await reader?.cancel().catch(() => {});
+    reader?.releaseLock();
+  }
+};

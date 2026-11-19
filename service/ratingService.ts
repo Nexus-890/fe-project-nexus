@@ -9,12 +9,13 @@ const validScore = (value: unknown, maximum: number, minimum = 0): value is numb
   Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum;
 const maskedName = /^(?:\*{3}|\p{L}\*{3}\p{L})$/u;
 
-const parseRating = (data: unknown): Rating => {
+export const parseRating = (data: unknown): Rating => {
   if (!isRecord(data) || !isId(data.id) || (data.orderId !== null && !isId(data.orderId)) ||
     (data.auctionId !== null && !isId(data.auctionId)) || !validScore(data.score, 5, 1) ||
     (data.comment !== null && (typeof data.comment !== "string" || data.comment.length > 1000)) ||
     typeof data.raterName !== "string" || !maskedName.test(data.raterName) ||
     typeof data.ratedByMe !== "boolean" || ["fromUserId", "toUserId", "raterId", "email"].some((key) => key in data) ||
+    (data.disputeStatus !== undefined && data.disputeStatus !== null && !["PENDING", "APPROVED", "REJECTED"].includes(String(data.disputeStatus))) ||
     typeof data.createdAt !== "string" || !Number.isFinite(Date.parse(data.createdAt))) {
     throw createInvalidResponseError("Invalid rating response");
   }
@@ -22,6 +23,7 @@ const parseRating = (data: unknown): Rating => {
     id: data.id, orderId: data.orderId as string | null, auctionId: data.auctionId as string | null,
     score: data.score, comment: data.comment as string | null, raterName: data.raterName,
     ratedByMe: data.ratedByMe, createdAt: data.createdAt,
+    ...(data.disputeStatus !== undefined ? { disputeStatus: data.disputeStatus as Rating["disputeStatus"] } : {}),
   };
 };
 

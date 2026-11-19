@@ -16,6 +16,7 @@ import SellerSecondChanceOffer from "../components/SellerSecondChanceOffer";
 import type { SellerAuction, SellerAuctionUpdate } from "../types/sellerAuctionType";
 import { readBackofficeRoles, sellerAuctionHref } from "./backofficeAccess";
 import { MoneyInput, initialVnd } from "../components/moneyInput";
+import { reputationRestrictionMessage } from "./reputationRestrictionMessage";
 
 const toLocalInput = (value: string) => {
   const date = new Date(value);
@@ -75,7 +76,7 @@ function AuctionEditor({ initial }: { initial?: SellerAuction }) {
     save.mutate({ body: { startingPrice: Number(startingPrice), bidIncrement: Number(increment), startAt: new Date(start).toISOString(), endAt }, schedule, sessionId: auth.sessionId });
   };
 
-  const error = save.error;
+  const error = save.error && { ...save.error, detail: reputationRestrictionMessage(save.error) ?? save.error.detail };
   return <>
     <Link href={sellerAuctionHref(readBackofficeRoles(auth.accessToken))} className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-primary">Auctions / {initial ? "Auction details" : "New Auction"}</Link>
     <SellerHeading title={initial ? editable ? "Edit Auction" : "Auction Details" : "Create Auction"} description="Settings lock when the auction starts.">{initial && <SellerStatus>{initial.status.replaceAll("_", " ")}</SellerStatus>}</SellerHeading>

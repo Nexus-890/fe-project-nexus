@@ -60,6 +60,11 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     ...(!roles.includes("ADMIN") ? [{ label: "Payout history", href: "/backoffice/payouts" }] : []),
   );
   if (roles.includes("ADMIN")) items.push({ label: "Payouts", href: "/backoffice/payouts" });
+  if (roles.includes("ADMIN")) items.push(
+    { label: "Reputation", href: "/backoffice/reputations" },
+    { label: "Rating disputes", href: "/backoffice/rating-disputes" },
+    { label: "Notification deliveries", href: "/backoffice/notification-deliveries" },
+  );
   if (roles.includes("ADMIN")) items.push({ label: "Categories", href: "/backoffice/categories" }, { label: "Warehouses", href: "/backoffice/warehouses" }, { label: "Stock", href: "/backoffice/stock" });
   if (roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF")) items.push(
     { label: "Users", href: "/backoffice/users" },

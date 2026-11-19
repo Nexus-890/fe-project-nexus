@@ -126,7 +126,7 @@ test("authenticated bell shows latest ten, marks opened notifications read and c
   await expect(popup.getByText("Read status updates are unavailable.", { exact: true })).toHaveCount(0);
   const beforeOpening = await evidence(request);
   expect(new Set(beforeOpening.map((entry) => entry.path))).toEqual(new Set([
-    "/api/v1/notifications", "/api/v1/notifications/unread-count",
+    "/api/v1/notifications", "/api/v1/notifications/unread-count", "/api/v1/notifications/stream",
   ]));
   expect(beforeOpening.every((entry) => entry.method === "GET" && entry.authorization === authorization)).toBe(true);
   expect(beforeOpening.find((entry) => entry.path === "/api/v1/notifications")?.query).toEqual({ page: "0", size: "10" });
@@ -329,7 +329,7 @@ test("logout cancels a pending inbox and a late old response cannot enter the ne
   await expect(popup.getByRole("button", { name: /^A update/ })).toHaveCount(0);
   const accountRequests = (await evidence(request)).slice(anonymousEvidence.length);
   expect(new Set(accountRequests.map((entry) => entry.path))).toEqual(new Set([
-    "/api/v1/notifications", "/api/v1/notifications/unread-count",
+    "/api/v1/notifications", "/api/v1/notifications/unread-count", "/api/v1/notifications/stream",
   ]));
   expect(accountRequests.every((entry) => entry.authorization === authorization)).toBe(true);
 });

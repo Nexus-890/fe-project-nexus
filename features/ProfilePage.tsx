@@ -10,9 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import type { ApiError } from "@/types/commonResponseType";
 import ProfileSkeleton from "@/components/ProfileSkeleton";
 import PersonalInformationCard from "@/components/PersonalInformationCard";
-import ReputationCard from "@/components/ReputationCard";
+import MyReputation from "./MyReputation";
 import ChangePasswordCard from "@/components/ChangePasswordCard";
-import PenaltyHistoryCard from "@/components/PenaltyHistoryCard";
 import PhoneVerificationCard from "@/features/PhoneVerificationCard";
 import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 
@@ -68,11 +67,11 @@ function ProfilePage() {
   return (
     <div className="min-w-0 space-y-6 pb-12 sm:pb-16">
       <h1 className="text-heading-32">Profile</h1>
-      <ReputationCard />
+      <MyReputation key={`reputation:${sessionId}:${user.id}`} />
       <PersonalInformationCard key={`${sessionId}:${user.id}`} user={user} onSave={updateProfile} />
       {ACCOUNT_EXTENSIONS_ENABLED && <PhoneVerificationCard key={`phone:${sessionId}:${user.phone}`} initialPhone={user.phone} />}
       <ChangePasswordCard />
-      <PenaltyHistoryCard />
+      <MyReputation key={`restrictions:${sessionId}:${user.id}`} restrictionsOnly />
     </div>
   );
 }

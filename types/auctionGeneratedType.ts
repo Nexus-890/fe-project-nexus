@@ -219,7 +219,7 @@ export interface paths {
         put?: never;
         /**
          * Create an auction as a seller
-         * @description Creates an auction in CREATED status. sellerId comes from the authenticated JWT subject. The selected product must belong to that seller and contain the selected SKU. The auction stores the catalog product name and its first image URL at creation. The duration must be between the configured minimum and maximum, inclusive. Defaults are 60 minutes and 168 hours. startingPrice must be greater than zero. startAt must not be in the past, allowing up to 5 seconds of clock skew against server time. A non-deleted auction in CREATED, SCHEDULED or ACTIVE is live. A SKU can have one live auction, and each seller can have up to the configured limit (default 5). With FEATURE_REPUTATION_ENFORCEMENT enabled, the seller must pass the direct rating-service SELL eligibility check before the auction is written. A score below MIN_REPUTATION_TO_SELL (default 50) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. When the flag is off, this check and its dependency calls are skipped. With enforcement on, unavailable rating-service, malformed decisions, machine-token failures or an open circuit return 503 AUCTION_REPUTATION_UNAVAILABLE. Refusal writes no auction or creation outbox event.
+         * @description Creates an auction in CREATED status. sellerId comes from the authenticated JWT subject. The selected product must belong to that seller and contain the selected SKU. The auction stores the catalog product name and its first image URL at creation. The duration must be between the configured minimum and maximum, inclusive. Defaults are 60 minutes and 168 hours. startingPrice must be greater than zero. startAt must not be in the past, allowing up to 5 seconds of clock skew against server time. A non-deleted auction in CREATED, SCHEDULED or ACTIVE is live. A SKU can have one live auction, and each seller can have up to the configured limit (default 5). With FEATURE_REPUTATION_ENFORCEMENT enabled, the seller must pass the direct rating-service SELL eligibility check before the auction is written. A score below MIN_REPUTATION_TO_SELL (default 50) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. An active temporary restriction returns 403 AUCTION_REPUTATION_RESTRICTED with reason and restrictedUntil. When the flag is off, this check and its dependency calls are skipped. With enforcement on, unavailable rating-service, malformed decisions, machine-token failures or an open circuit return 503 AUCTION_REPUTATION_UNAVAILABLE. Refusal writes no auction or creation outbox event.
          */
         post: operations["createAuction"];
         delete?: never;
@@ -287,7 +287,7 @@ export interface paths {
         put?: never;
         /**
          * Accept a bid request for asynchronous processing
-         * @description Validates amount format, ACTIVE/time window and seller exclusion without locking the auction price. Persists a QUEUED request and BidRequested outbox command atomically, then returns 202. Minimum-price validation and anti-sniping run in the consumer using requestedAt, including requests consumed after endAt. Reusing the same UUID Idempotency-Key for the same auction, bidder and numeric amount returns the original 202 receipt even after processing. A different payload returns 409. Follow the private bid-status URL until PLACED or REJECTED. With FEATURE_REPUTATION_ENFORCEMENT enabled, each new bid request must pass rating-service BID eligibility before any queued bid or outbox write. A score below MIN_REPUTATION_TO_BID (default 40) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. When the flag is off, the reputation check and its dependency calls are skipped. When on, rating-service unavailability, malformed decisions, machine-token failures or an open circuit fail closed with 503 AUCTION_REPUTATION_UNAVAILABLE. A replay of an already accepted key still returns its original 202 queued receipt even when reputation is now denied or rating-service is down; the request and command are not written again.
+         * @description Validates amount format, ACTIVE/time window and seller exclusion without locking the auction price. Persists a QUEUED request and BidRequested outbox command atomically, then returns 202. Minimum-price validation and anti-sniping run in the consumer using requestedAt, including requests consumed after endAt. Reusing the same UUID Idempotency-Key for the same auction, bidder and numeric amount returns the original 202 receipt even after processing. A different payload returns 409. Follow the private bid-status URL until PLACED or REJECTED. With FEATURE_REPUTATION_ENFORCEMENT enabled, each new bid request must pass rating-service BID eligibility before any queued bid or outbox write. A score below MIN_REPUTATION_TO_BID (default 40) returns 403 AUCTION_REPUTATION_TOO_LOW with the policy reason. An active temporary restriction returns 403 AUCTION_REPUTATION_RESTRICTED with reason and restrictedUntil. When the flag is off, the reputation check and its dependency calls are skipped. When on, rating-service unavailability, malformed decisions, machine-token failures or an open circuit fail closed with 503 AUCTION_REPUTATION_UNAVAILABLE. A replay of an already accepted key still returns its original 202 queued receipt even when reputation is now denied or rating-service is down; the request and command are not written again.
          */
         post: operations["placeBid"];
         delete?: never;
@@ -1755,7 +1755,7 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"] & {
                         /** @enum {unknown} */
-                        code?: "FORBIDDEN" | "AUCTION_FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW";
+                        code?: "FORBIDDEN" | "AUCTION_FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW" | "AUCTION_REPUTATION_RESTRICTED";
                         /** @description Policy explanation included for AUCTION_REPUTATION_TOO_LOW. */
                         reason?: string;
                     };
@@ -2103,7 +2103,7 @@ export interface operations {
                      */
                     "application/problem+json": components["schemas"]["Problem"] & {
                         /** @enum {unknown} */
-                        code?: "FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW";
+                        code?: "FORBIDDEN" | "AUCTION_REPUTATION_TOO_LOW" | "AUCTION_REPUTATION_RESTRICTED";
                         /** @description Policy explanation included for AUCTION_REPUTATION_TOO_LOW. */
                         reason?: string;
                     };

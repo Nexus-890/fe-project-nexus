@@ -1,6 +1,6 @@
 # Header notifications
 
-`ShopLayout` mounts `NotificationBellFeature` only for an authenticated session. The feature owns the protected queries/mutation; `NotificationBell` renders the shadcn Popover, Badge and ScrollArea. The bell is available on mobile and desktop. This feature covers the header only; it does not add notification history or preferences pages.
+`ShopLayout` mounts `NotificationBellFeature` only for an authenticated session. The feature owns the protected queries/mutation; `NotificationBell` renders the shadcn Popover, Badge and ScrollArea. The bell is available on mobile and desktop. Account navigation and the bell link to `/notifications`, where a signed-in user controls notification channels.
 
 ## Requests
 
@@ -12,6 +12,23 @@ All services use the common origin from `NEXT_PUBLIC_API_URL` through `configs/a
 | `getUnreadNotificationCount` | `GET /api/v1/notifications/unread-count` | Total unread count across all notifications |
 | `markNotificationRead` | `PATCH /api/v1/notifications/{id}/read` | Bodyless 204, then refetch list/count |
 | `markAllNotificationsRead` | `PATCH /api/v1/notifications/read-all` | Bodyless 204, then refetch list/count |
+| `getNotificationPreferences` | `GET /api/v1/notifications/preferences` | Full preference matrix with mandatory flags |
+| `updateNotificationPreferences` | `PUT /api/v1/notifications/preferences` | Sparse `{preferences:[{notificationType,channel,enabled}]}` changes; full saved matrix |
+| `watchNotifications` | `GET /api/v1/notifications/stream` | Private SSE snapshot events; refetch current inbox and count |
+| `getNotificationDeliveries` | `GET /api/v1/notifications/deliveries` | Administrator list filtered by status/channel/created range/error code |
+| `getNotificationDelivery` | `GET /api/v1/notifications/deliveries/{id}` | Administrator delivery summary and individual attempts |
+
+## Preferences and live updates
+
+The settings page displays the server's EMAIL/IN_APP choices. Required transaction choices remain enabled and disabled for editing. Saving sends only changed rows, preserves edits after failure and replaces the displayed matrix with the validated server response. It does not ask for browser push permission: in-app updates use the private event stream while the application is open.
+
+The shared HTTP boundary opens SSE with the current in-memory Bearer token in the header. Tokens never enter URLs or cache keys. It validates the stream content type, parses partial UTF-8/multiline SSE frames, renews once on an initial 401 and rejects late data from another auth generation. The feature refetches list/count when an opaque revision changes, reconnects with capped backoff, and reopens after token renewal. The backend sends a durable initial snapshot on every connection, so reconnecting does not depend on receiving every transient event. Logout aborts the stream and pending reads; an interrupted connection shows an unavailable message in the bell. Mark-read refreshes only the inbox/count and preserves unsaved preferences edits.
+
+## Delivery administration
+
+`/backoffice/notification-deliveries` is visible to ADMIN and uses protected, session-scoped queries. Its status/channel/error/date filters reset pagination. The detail panel displays attempt number, result, timestamps, symbolic error and whether retry is possible. Inspecting delivery status does not initiate another delivery.
+
+`tests/notification-settings-api.test.ts` covers the new parsers, filters, sparse changes, real HTTP SSE renewal, split frames, cancellation and session isolation. `tests/notification-settings.spec.ts` exercises settings, save failures, live bell refresh, delivery filters/detail recovery and support access denial against explicit browser HTTP stand-ins. Run the latter with `node scripts/test-browser.mjs --config playwright.notification-settings.config.ts`; these fixtures are distinct from live backend evidence.
 
 Wire types are generated from `be-project-nexus/docs/api/openapi/notification-service.yaml`. Rows contain `id`, `type`, `title`, `content`, `readAt` and `createdAt`; `readAt: null` means unread. Runtime parsers reject malformed list/count responses. Loading, empty and error states are explicit; retry refetches both queries.
 

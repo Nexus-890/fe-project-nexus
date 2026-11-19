@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { reputationRestrictionMessage } from "./reputationRestrictionMessage";
 import { useApiMutation } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 import { parseAuctionBidMinimum, placeAuctionBid } from "../service/auctionService";
@@ -71,6 +72,7 @@ export function useAuctionBid(auctionId: string, minimum: string, refresh: () =>
         setServerMinimum(nextMinimum); setAmount(null);
         setError(`Your bid was too low. The new minimum is ${nextMinimum}.`);
       } else if (failure.code === "AUCTION_NOT_ACTIVE") setError("Bidding has closed for this auction.");
+      else if (failure.code === "AUCTION_REPUTATION_RESTRICTED") setError(reputationRestrictionMessage(failure));
       else if (failure.code === "AUCTION_SELLER_CANNOT_BID") setError("You cannot bid on your own auction.");
       else if (failure.status === 401) setError("Your session expired. Sign in to place a bid.");
       else setError(failure.detail || "Your bid could not be placed. Please try again.");

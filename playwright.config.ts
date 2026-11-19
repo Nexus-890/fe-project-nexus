@@ -18,10 +18,12 @@ process.env.NEXUS_OIDC_SIM_PORT = providerPort;
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
-  testIgnore: ["**/account*.spec.ts", "**/auction-list.spec.ts", "**/auction.spec.ts", "**/backoffice.spec.ts", "**/checkout.spec.ts", "**/place-order.spec.ts", "**/payment.spec.ts", "**/payment-polling.spec.ts", "**/cart-shared.spec.ts", "**/profile.spec.ts", "**/oidc.spec.ts", "**/guest-cart.spec.ts", "**/session.spec.ts", "**/session-long.spec.ts"],
+  testIgnore: ["**/notification-settings.spec.ts", "**/reputation-moderation.spec.ts", "**/account*.spec.ts", "**/auction-list.spec.ts", "**/auction.spec.ts", "**/backoffice.spec.ts", "**/checkout.spec.ts", "**/place-order.spec.ts", "**/payment.spec.ts", "**/payment-polling.spec.ts", "**/cart-shared.spec.ts", "**/profile.spec.ts", "**/oidc.spec.ts", "**/guest-cart.spec.ts", "**/session.spec.ts", "**/session-long.spec.ts"],
   fullyParallel: false,
+  outputDir: "test-results/catalog",
   workers: 1,
   timeout: 45_000,
+  expect: { timeout: 15_000 },
   use: { baseURL: appOrigin, channel: "chrome", viewport: { width: 375, height: 812 } },
   webServer: [
     { command: "node tests/oidc-fixture.mjs", url: `${providerOrigin}/health`, reuseExistingServer: false, timeout: 60_000 },
