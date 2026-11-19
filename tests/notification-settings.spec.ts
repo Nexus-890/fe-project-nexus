@@ -116,3 +116,149 @@ test("support staff cannot read administrator notification deliveries", async ({
   await expect(page.getByRole("heading", { name: "Access denied", exact: true })).toBeVisible();
   expect(reads).toBe(0);
 });
+
+test("an SSE revision during the initial inbox load starts fresh reads and ignores late old responses", async ({ page, request }) => {
+  await inboxFixture(page);
+  let releaseOld!: () => void, releaseSnapshot!: () => void, firstList!: () => void, firstCount!: () => void;
+  const oldResponse = new Promise<void>((resolve) => { releaseOld = resolve; });
+  const snapshotReady = new Promise<void>((resolve) => { releaseSnapshot = resolve; });
+  const listStarted = new Promise<void>((resolve) => { firstList = resolve; });
+  const countStarted = new Promise<void>((resolve) => { firstCount = resolve; });
+  let listReads = 0, countReads = 0, streamReads = 0, snapshotSent = false;
+  const notice = { id: "arrived-during-load", type: "BID_OUTBID", title: "Arrived during initial load", content: "Your previous bid was exceeded.", readAt: null, createdAt: "2026-11-19T03:00:00Z" };
+  await page.route(`${moderationApi}/api/v1/notifications?*`, async (route) => {
+    listReads++;
+    const initial = !snapshotSent;
+    if (initial) { firstList(); await oldResponse; }
+    try {
+      await route.fulfill({ headers, json: envelope(initial ? [] : [notice], { number: 0, size: 10, totalElements: initial ? 0 : 1, totalPages: initial ? 0 : 1 }) });
+    } catch (error) { if (!route.request().failure()) throw error; }
+  });
+  await page.route(`${moderationApi}/api/v1/notifications/unread-count`, async (route) => {
+    countReads++;
+    const initial = !snapshotSent;
+    if (initial) { firstCount(); await oldResponse; }
+    try { await route.fulfill({ headers, json: envelope({ count: initial ? 0 : 1 }) }); }
+    catch (error) { if (!route.request().failure()) throw error; }
+  });
+  await page.route(`${moderationApi}/api/v1/notifications/stream`, async (route) => {
+    streamReads++;
+    await Promise.all([listStarted, countStarted, snapshotReady]); snapshotSent = true;
+    try { await route.fulfill({ headers: { ...headers, "content-type": "text/event-stream" }, body: 'event: notifications\ndata: {"unreadCount":1,"revision":"during-initial-load"}\n\n' }); }
+    catch (error) { if (!route.request().failure()) throw error; }
+  });
+  try {
+    await signInModeration(page, request, "BUYER", "/notifications");
+    await expect(page.getByRole("heading", { name: "Notification settings", exact: true })).toBeVisible();
+    await Promise.all([listStarted, countStarted]);
+    await expect.poll(() => streamReads).toBeGreaterThan(0);
+    const initialReads = [listReads, countReads];
+    releaseSnapshot();
+    await expect.poll(() => snapshotSent).toBe(true);
+    // Count from the committed mount, after StrictMode's initial effect replay, while every stale response remains held.
+    await expect.poll(() => listReads > initialReads[0] && countReads > initialReads[1]).toBe(true);
+    releaseOld();
+    await page.getByRole("button", { name: "Notifications, 1 unread", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Arrived during initial load, unread", exact: true })).toBeVisible();
+    const settledReads = [listReads, countReads], nextConnection = streamReads + 1;
+    await expect.poll(() => streamReads).toBeGreaterThanOrEqual(nextConnection);
+    expect([listReads, countReads]).toEqual(settledReads);
+  } finally { releaseOld(); releaseSnapshot(); }
+});
+
+test("unsaved preferences survive stale offline reconnect and saving establishes a clean baseline", async ({ page, request, context }) => {
+  test.setTimeout(90_000);
+  await inboxFixture(page);
+  let current = structuredClone(preferences), reads = 0;
+  const writes: unknown[] = [];
+  await page.route(`${moderationApi}/api/v1/notifications/preferences`, async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON(); writes.push(body);
+      current = current.map((entry) => ({ ...entry, enabled: body.preferences.find((change: typeof entry) => change.notificationType === entry.notificationType && change.channel === entry.channel)?.enabled ?? entry.enabled }));
+    } else reads++;
+    await route.fulfill({ headers, json: envelope({ preferences: current }) });
+  });
+  await signInModeration(page, request, "BUYER", "/notifications");
+  const email = page.getByRole("checkbox", { name: "Bid Outbid email", exact: true });
+  const save = page.getByRole("button", { name: "Save preferences", exact: true });
+  await email.uncheck();
+  const beforeReconnect = reads;
+  try {
+    await context.setOffline(true);
+    // Expire the real 30s staleTime while retaining the mounted form and its edits.
+    await page.waitForTimeout(31_000);
+  } finally { await context.setOffline(false); }
+  await expect.poll(() => reads).toBeGreaterThan(beforeReconnect);
+  await expect(email).not.toBeChecked();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByText("Notification preferences saved.", { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  expect(writes).toEqual([{ preferences: [{ notificationType: "BID_OUTBID", channel: "EMAIL", enabled: false }] }]);
+  await page.reload();
+  await expect(email).not.toBeChecked();
+  await expect(save).toBeDisabled();
+});
+
+test("background settings errors keep edits mounted and reordered server rows update only untouched cells", async ({ page, request }) => {
+  await inboxFixture(page);
+  let current = structuredClone(preferences), reads = 0, failReads = false;
+  await page.route(`${moderationApi}/api/v1/notifications/preferences`, (route) => {
+    reads++;
+    return route.fulfill(failReads ? { status: 403, headers, json: { title: "Settings temporarily unavailable", detail: "Settings temporarily unavailable" } }
+      : { headers, json: envelope({ preferences: current }) });
+  });
+  await signInModeration(page, request, "BUYER", "/notifications");
+  const email = page.getByRole("checkbox", { name: "Bid Outbid email", exact: true });
+  const inApp = page.getByRole("checkbox", { name: "Bid Outbid in app", exact: true });
+  await email.uncheck(); failReads = true;
+  await page.clock.install(); await page.clock.fastForward(31_000);
+  await page.evaluate(() => { window.dispatchEvent(new Event("offline")); window.dispatchEvent(new Event("online")); });
+  const section = page.getByRole("region", { name: "Notification settings", exact: true });
+  await expect(section.getByRole("alert")).toContainText("Settings temporarily unavailable");
+  await expect(email).not.toBeChecked();
+  await expect(section.getByRole("button", { name: "Save preferences", exact: true })).toBeEnabled();
+  const oldReads = reads;
+  failReads = false;
+  current = current.map((entry) => entry.notificationType === "BID_OUTBID" && entry.channel === "IN_APP" ? { ...entry, enabled: false } : entry).reverse();
+  await section.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect.poll(() => reads).toBeGreaterThan(oldReads);
+  await expect(email).not.toBeChecked(); await expect(inApp).not.toBeChecked();
+  await expect(section.getByRole("alert")).toHaveCount(0);
+});
+
+test("an old preferences GET cannot overwrite the successful save response", async ({ page, request }) => {
+  await inboxFixture(page);
+  let heldReads = 0, holdReads = false, releaseOld!: () => void, oldReturned!: () => void;
+  const oldResponse = new Promise<void>((resolve) => { releaseOld = resolve; });
+  const oldResponseReturned = new Promise<void>((resolve) => { oldReturned = resolve; });
+  let current = structuredClone(preferences);
+  await page.route(`${moderationApi}/api/v1/notifications/preferences`, async (route) => {
+    if (route.request().method() === "PUT") {
+      current = current.map((entry) => entry.notificationType === "BID_OUTBID" && entry.channel === "EMAIL" ? { ...entry, enabled: false } : entry);
+      await route.fulfill({ headers, json: envelope({ preferences: current }) });
+      return;
+    }
+    const snapshot = structuredClone(current);
+    const held = holdReads;
+    if (held) { heldReads++; await oldResponse; }
+    try { await route.fulfill({ headers, json: envelope({ preferences: snapshot }) }); }
+    catch (error) { if (!route.request().failure()) throw error; }
+    finally { if (held) oldReturned(); }
+  });
+  try {
+    await signInModeration(page, request, "BUYER", "/notifications");
+    const email = page.getByRole("checkbox", { name: "Bid Outbid email", exact: true });
+    const save = page.getByRole("button", { name: "Save preferences", exact: true });
+    await email.uncheck();
+    holdReads = true;
+    await page.clock.install(); await page.clock.fastForward(31_000);
+    await page.evaluate(() => { window.dispatchEvent(new Event("offline")); window.dispatchEvent(new Event("online")); });
+    await expect.poll(() => heldReads).toBeGreaterThan(0);
+    await save.click();
+    await expect(page.getByText("Notification preferences saved.", { exact: true })).toBeVisible();
+    releaseOld();
+    await oldResponseReturned;
+    await expect(email).not.toBeChecked(); await expect(save).toBeDisabled();
+  } finally { releaseOld(); }
+});
