@@ -219,7 +219,7 @@ const parseOrderItem = (value: unknown): CheckoutOrderItem => {
     !isNonBlankString(value.productId) ||
     !isNonBlankString(value.skuId) ||
     !isNonBlankString(value.productName) ||
-    !isNonBlankString(value.skuCode) ||
+    (value.skuCode !== null && !isNonBlankString(value.skuCode)) ||
     (value.imageUrl !== null && typeof value.imageUrl !== "string") ||
     !Number.isSafeInteger(value.quantity) ||
     Number(value.quantity) < 1
@@ -230,7 +230,7 @@ const parseOrderItem = (value: unknown): CheckoutOrderItem => {
     productId: value.productId,
     skuId: value.skuId,
     productName: value.productName,
-    skuCode: value.skuCode,
+    skuCode: value.skuCode as string | null,
     imageUrl: value.imageUrl,
     quantity: value.quantity as number,
     unitPrice: parseMoney(value.unitPrice),

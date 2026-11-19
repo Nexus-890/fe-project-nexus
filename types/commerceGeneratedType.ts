@@ -1319,7 +1319,8 @@ export interface components {
             /** Format: uuid */
             skuId: string;
             productName: string;
-            skuCode: string;
+            /** @description Null only on auction orders created before the auction kept a SKU code snapshot. */
+            skuCode: string | null;
             imageUrl: string | null;
             quantity: number;
             /** @description BigDecimal JSON number; no decimal-string conversion. */

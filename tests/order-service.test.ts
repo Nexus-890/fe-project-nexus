@@ -300,6 +300,8 @@ test("order detail rejects invalid item money, duplicate ids and mismatched orde
   for (const invalid of [{ ...item, quantity: 0 }, { ...item, unitPrice: "75000" }, { ...item, totalPrice: -1 }])
     assert.throws(() => parseOrderDetail({ ...order, items: [invalid] }), invalidResponse);
   assert.throws(() => parseOrderDetail({ ...order, items: [item, item] }), invalidResponse);
+  assert.throws(() => parseOrderDetail({ ...order, items: [{ ...item, skuCode: " " }] }), invalidResponse);
+  assert.equal(parseOrderDetail({ ...order, orderType: "AUCTION", items: [{ ...item, skuCode: null }] }).items[0].skuCode, null);
   const context: ApiContext = { fetch: async () => new Response(JSON.stringify({ code: 0, message: "response success", data: { ...order, orderId: orderGroupId, items: [item] } }), { headers: { "Content-Type": "application/json" } }) };
   await assert.rejects(getOrder(orderId, { context }), invalidResponse);
   await assert.rejects(cancelOrder(orderId, " ", { context }), invalidResponse);

@@ -125,13 +125,13 @@ export const parseOrderDetail = (value: unknown): OrderDetail => {
     throw createInvalidResponseError("Invalid order details");
   const items: OrderDetailItem[] = value.items.map((item) => {
     if (!isRecord(item) || !isUuid(item.orderItemId) || !isUuid(item.productId) || !isUuid(item.skuId) ||
-      !isNonBlank(item.productName) || !isNonBlank(item.skuCode) ||
+      !isNonBlank(item.productName) || (item.skuCode !== null && !isNonBlank(item.skuCode)) ||
       (item.imageUrl !== null && typeof item.imageUrl !== "string") ||
       !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1)
       throw createInvalidResponseError("Invalid order item");
     return {
       orderItemId: item.orderItemId, productId: item.productId, skuId: item.skuId,
-      productName: item.productName, skuCode: item.skuCode, imageUrl: item.imageUrl as string | null,
+      productName: item.productName, skuCode: item.skuCode as string | null, imageUrl: item.imageUrl as string | null,
       quantity: Number(item.quantity), unitPrice: parseAmount(item.unitPrice), totalPrice: parseAmount(item.totalPrice),
     };
   });

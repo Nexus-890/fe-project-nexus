@@ -245,7 +245,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
         <h2 className="flex items-center gap-2 text-heading-20"><Package size={20} aria-hidden="true" />Your items</h2>
         <ul className="mt-5 divide-y divide-border">{current.items.map((item) => <li key={item.orderItemId} className="flex min-w-0 gap-4 py-5 first:pt-0">
           <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-muted"><ProductImage src={item.imageUrl ?? undefined} alt={item.productName} productName={item.productName} /></div>
-          <div className="min-w-0 flex-1"><Link href={`/products/${encodeURIComponent(item.productId)}`} className="text-sm font-medium hover:text-primary [overflow-wrap:anywhere]">{item.productName}</Link><p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">{item.skuCode}</p><p className="mt-2 text-xs text-muted-foreground">Qty {item.quantity} · {formatVND(item.unitPrice)} each</p><p className="mt-2 font-mono text-sm font-semibold text-primary [overflow-wrap:anywhere]">{formatVND(item.totalPrice)}</p></div>
+          <div className="min-w-0 flex-1"><Link href={`/products/${encodeURIComponent(item.productId)}`} className="text-sm font-medium hover:text-primary [overflow-wrap:anywhere]">{item.productName}</Link>{item.skuCode && <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">{item.skuCode}</p>}<p className="mt-2 text-xs text-muted-foreground">Qty {item.quantity} · {formatVND(item.unitPrice)} each</p><p className="mt-2 font-mono text-sm font-semibold text-primary [overflow-wrap:anywhere]">{formatVND(item.totalPrice)}</p></div>
         </li>)}</ul>
       </section>
     </div>}

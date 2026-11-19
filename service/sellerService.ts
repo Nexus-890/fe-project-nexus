@@ -147,9 +147,9 @@ export const getSellerSales = async (pageNumber: number, status: string | undefi
       (row.recipientName != null && typeof row.recipientName !== "string") || (row.phoneNumber != null && typeof row.phoneNumber !== "string"))
       throw createInvalidResponseError("Invalid seller order");
     const items = row.items.map((item) => {
-      if (!isRecord(item) || typeof item.orderItemId !== "string" || typeof item.productName !== "string" || !item.productName.trim() || typeof item.skuCode !== "string" || !item.skuCode.trim() || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1 || typeof item.unitPrice !== "number" || normalizeMoney(item.unitPrice) === null || typeof item.totalPrice !== "number" || normalizeMoney(item.totalPrice) === null)
+      if (!isRecord(item) || typeof item.orderItemId !== "string" || typeof item.productName !== "string" || !item.productName.trim() || (item.skuCode !== null && (typeof item.skuCode !== "string" || !item.skuCode.trim())) || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1 || typeof item.unitPrice !== "number" || normalizeMoney(item.unitPrice) === null || typeof item.totalPrice !== "number" || normalizeMoney(item.totalPrice) === null)
         throw createInvalidResponseError("Invalid seller order item");
-      return { id: item.orderItemId, name: item.productName, skuCode: item.skuCode, quantity: Number(item.quantity) };
+      return { id: item.orderItemId, name: item.productName, skuCode: item.skuCode as string | null, quantity: Number(item.quantity) };
     });
     if (new Set(items.map((item) => item.id)).size !== items.length) throw createInvalidResponseError("Repeated seller order item");
     return { ...summary, buyerId: row.userId,

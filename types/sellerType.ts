@@ -14,5 +14,5 @@ export type SellerSale = OrderSummary & {
   buyerId: string;
   recipientName: string | null;
   phoneNumber: string | null;
-  saleItems: { id: string; name: string; skuCode: string; quantity: number }[];
+  saleItems: { id: string; name: string; skuCode: string | null; quantity: number }[];
 };

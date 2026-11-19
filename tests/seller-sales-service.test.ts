@@ -28,8 +28,10 @@ test("sales shows immutable recipient contact and each SKU quantity while reques
 test("historical missing contacts stay unavailable; malformed contact, SKU and quantity fail strict parsing", async () => {
   const historical = await getSellerSales(0, undefined, { context: { fetch: async () => result({ ...order, recipientName: undefined, phoneNumber: null }) } });
   assert.equal(historical.content[0].recipientName, null); assert.equal(historical.content[0].phoneNumber, null);
+  const auction = await getSellerSales(0, undefined, { context: { fetch: async () => result({ ...order, items: [{ ...order.items[0], skuCode: null }] }) } });
+  assert.equal(auction.content[0].saleItems[0].skuCode, null);
   for (const bad of [{ ...order, recipientName: 10 }, { ...order, phoneNumber: {} },
-    { ...order, items: [{ ...order.items[0], skuCode: null }] }, { ...order, items: [{ ...order.items[0], quantity: 0 }] }])
+    { ...order, items: [{ ...order.items[0], skuCode: " " }] }, { ...order, items: [{ ...order.items[0], quantity: 0 }] }])
     await assert.rejects(getSellerSales(0, undefined, { context: { fetch: async () => result(bad) } }), invalid);
 });
 
