@@ -17,3 +17,4 @@ export type ShipmentInput = shipment["schemas"]["CreateShipmentRequest"];
 export type ShipmentUpdate = shipment["schemas"]["OverrideShipmentStatusRequest"];
 export type ShipmentFilters = { orderId?: string; status?: ManagedShipment["status"]; page?: number; size?: number };
 export type ShipmentStep = shipment["schemas"]["ShipmentTrackingEntryResponse"];
+export type CarrierPerformance = shipment["schemas"]["CarrierPerformance"];

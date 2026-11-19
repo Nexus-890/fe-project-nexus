@@ -131,6 +131,31 @@ test("support creates a shipment, updates status, overrides a rejected transitio
   expect(evidence.requests.filter((r: { method: string; path: string }) => r.method === "POST" && r.path === "/v1/shipments")).toHaveLength(1);
 });
 
+test("support compares carrier performance for a chosen period and sees carriers with no shipments", async ({ page, request }) => {
+  await signIn(page, request, "SUPPORT_STAFF", "/backoffice/shipments");
+  await page.getByRole("button", { name: "Carrier performance", exact: true }).click();
+  const panel = page.getByRole("region", { name: "Carrier performance" });
+  await expect(panel.getByRole("table")).toContainText("Giao Hàng Nhanh");
+  await expect(panel.getByRole("table")).toContainText("90.0%");
+  await expect(panel.getByRole("table")).toContainText("2.2 days");
+  await expect(panel.getByRole("table")).toContainText("No data");
+  await expect(page.getByRole("button", { name: "New shipment", exact: true })).toHaveCount(0);
+  await panel.getByLabel("Performance from", { exact: true }).fill("2026-11-19");
+  await panel.getByLabel("Performance to", { exact: true }).fill("2026-11-01");
+  await panel.getByRole("button", { name: "Apply performance period", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText("at most 366 days apart");
+  await panel.getByLabel("Performance from", { exact: true }).fill("2026-11-01");
+  await panel.getByLabel("Performance to", { exact: true }).fill("2026-11-19");
+  await panel.getByRole("button", { name: "Apply performance period", exact: true }).click();
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+  await layouts(page, "carrier-performance");
+  const evidence = (await (await request.get(`${api}/test/operations/evidence`)).json()).data;
+  const reads = evidence.requests.filter((r: { path: string }) => r.path === "/v1/carriers/performance");
+  expect(reads.at(-1).query).toEqual({ from: "2026-11-01T00:00:00.000+07:00", to: "2026-11-19T23:59:59.999+07:00" });
+  await page.getByRole("button", { name: "Shipments", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New shipment", exact: true })).toBeVisible();
+});
+
 for (const role of ["SELLER", "SUPPORT_STAFF"]) test(`${role} is denied the admin payout page without fetching admin data`, async ({ page, request }) => {
   await signIn(page, request, role, "/backoffice");
   await expect(page).toHaveURL("/backoffice");

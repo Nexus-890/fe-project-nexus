@@ -84,6 +84,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/carriers/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Đo hiệu suất từng nhà vận chuyển
+         * @description Yêu cầu quyền SHIPPING.VIEW_SHIPMENT và vai trò ADMIN hoặc SUPPORT_STAFF. Gom các vận đơn tạo trong [from, to), tối đa 366 ngày, theo carrier. delivered là vận đơn đang DELIVERED; failed là DELIVERY_FAILED, RETURNING hoặc RETURNED; cancelled là CANCELLED; inProgress là phần còn lại. successRate = delivered / (delivered + failed), null khi chưa có vận đơn kết thúc. averageDeliveryHours tính từ lúc bàn giao (handed_over_at, hoặc created_at khi chưa ghi nhận bàn giao) tới dòng lịch sử DELIVERED đầu tiên. onTimeRate là tỷ lệ vận đơn DELIVERED giao không muộn hơn estimated_delivery_at trong số vận đơn có ước tính. Carrier đang cấu hình nhưng chưa có vận đơn vẫn xuất hiện với số 0. Sắp xếp theo số vận đơn giảm dần rồi mã carrier. Trả toàn bộ danh sách trong một trang logic.
+         */
+        get: operations["getCarrierPerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shipping/provinces": {
         parameters: {
             query?: never;
@@ -408,6 +428,45 @@ export interface components {
             /** @default response success */
             message: string;
             data: components["schemas"]["CarrierResponse"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        CarrierPerformance: {
+            /** @example GHN */
+            carrier: string;
+            /** @example Giao Hàng Nhanh */
+            name: string;
+            /** Format: int64 */
+            shipments: number;
+            /** Format: int64 */
+            delivered: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            inProgress: number;
+            /** Format: int64 */
+            cancelled: number;
+            /**
+             * @description Phân số 0..1, 4 chữ số thập phân
+             * @example 0.9231
+             */
+            successRate: number | null;
+            /**
+             * @description Số giờ trung bình, 1 chữ số thập phân
+             * @example 52.4
+             */
+            averageDeliveryHours: number | null;
+            /** @example 0.875 */
+            onTimeRate: number | null;
+        };
+        CarrierPerformanceListResponse: {
+            /**
+             * @default 0
+             * @enum {integer}
+             */
+            code: 0;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["CarrierPerformance"][];
             page: components["schemas"]["PageInfo"];
         };
         LocalityListResponse: {
@@ -758,7 +817,7 @@ export interface components {
                     /** @enum {integer} */
                     status?: 400;
                     /** @enum {string} */
-                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS";
+                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_INVALID_PERIOD";
                 };
             };
         };
@@ -1210,6 +1269,36 @@ export interface operations {
             500: components["responses"]["InternalError"];
             503: components["responses"]["RoutingUnavailable"];
             504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    getCarrierPerformance: {
+        parameters: {
+            query: {
+                /** @description Mốc bắt đầu, ISO-8601 có offset, tính cả mốc này */
+                from: string;
+                /** @description Mốc kết thúc, ISO-8601 có offset, không tính mốc này */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một dòng cho mỗi carrier. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarrierPerformanceListResponse"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
         };
     };
     getShippingProvinces: {

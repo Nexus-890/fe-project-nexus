@@ -5,7 +5,7 @@ import { SHIPMENT_STATUSES } from "./shipmentService";
 import type { ApiResponse, Page } from "../types/commonResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { OrderDetail } from "../types/orderResponseType";
-import type { ChangeOrderStatusInput, ManagedOrderFilters, ManagedShipment, PaymentFilters, PaymentTransaction, Refund, RefundEvidence, RefundEvidenceInput, RefundInput, RefundResult, ShipmentFilters, ShipmentInput, ShipmentStep, ShipmentUpdate } from "../types/supportOperationsType";
+import type { CarrierPerformance, ChangeOrderStatusInput, ManagedOrderFilters, ManagedShipment, PaymentFilters, PaymentTransaction, Refund, RefundEvidence, RefundEvidenceInput, RefundInput, RefundResult, ShipmentFilters, ShipmentInput, ShipmentStep, ShipmentUpdate } from "../types/supportOperationsType";
 import { MAX_REFUND_EVIDENCE_FILES } from "../types/supportOperationsType";
 import { evidenceContentTypes, maxEvidenceBytes } from "../types/manualPayoutType";
 
@@ -117,6 +117,22 @@ export const updateManagedShipment = async (id: string, body: ShipmentUpdate, ov
   requireId(id); if (!shipmentStatus(body.status)) fail("Invalid shipment status.");
   const { data } = await requestApi(override ? "POST" : "PATCH", `/api/v1/shipments/${id}/${override ? "override" : "status"}`, { status: body.status, reason: reason(body.reason, 255) }, { ...options, auth: true, params: undefined });
   const row = parseManagedShipment(data); if (row.id !== id) fail("Shipment reference mismatch."); return row;
+};
+const count = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
+const ratio = (v: unknown) => v === null || typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
+const hours = (v: unknown) => v === null || typeof v === "number" && Number.isFinite(v) && v >= 0;
+export const MAX_PERFORMANCE_DAYS = 366;
+export const parseCarrierPerformance = (v: unknown): CarrierPerformance => {
+  if (!isRecord(v) || !text(v.carrier) || !text(v.name) || ![v.shipments, v.delivered, v.failed, v.inProgress, v.cancelled].every(count) || Number(v.delivered) + Number(v.failed) + Number(v.inProgress) + Number(v.cancelled) !== v.shipments || !ratio(v.successRate) || !ratio(v.onTimeRate) || !hours(v.averageDeliveryHours)) return fail("Invalid carrier performance.");
+  return { carrier: v.carrier, name: v.name, shipments: Number(v.shipments), delivered: Number(v.delivered), failed: Number(v.failed), inProgress: Number(v.inProgress), cancelled: Number(v.cancelled), successRate: v.successRate as number | null, averageDeliveryHours: v.averageDeliveryHours as number | null, onTimeRate: v.onTimeRate as number | null };
+};
+export const getCarrierPerformance = async (from: string, to: string, options: ServiceRequestOptions = {}): Promise<CarrierPerformance[]> => {
+  if (!instant(from) || !instant(to) || Date.parse(from) >= Date.parse(to) || Date.parse(to) - Date.parse(from) > MAX_PERFORMANCE_DAYS * 86_400_000) fail("Choose a period that starts before it ends and spans at most 366 days.");
+  const { data } = await requestApi("GET", "/api/v1/carriers/performance", undefined, { ...options, auth: true, params: { from, to } });
+  if (!Array.isArray(data)) return fail("Invalid carrier performance.");
+  const rows = data.map(parseCarrierPerformance);
+  if (new Set(rows.map((row) => row.carrier)).size !== rows.length) fail("Duplicate carrier performance.");
+  return rows;
 };
 export const getManagedShipmentHistory = async (id: string, page: number, options: ServiceRequestOptions = {}): Promise<Page<ShipmentStep>> => {
   requireId(id); const params = filtersOf({ page, size: 10 });

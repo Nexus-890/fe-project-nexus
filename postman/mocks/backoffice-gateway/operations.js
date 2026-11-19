@@ -24,7 +24,7 @@ exports.createOperationsFixture = ({ ok, problem, list, bodyOf, randomUUID }) =>
     const path = url.pathname;
     if (path === "/test/operations/reset") { reset(); ok(res, {}); return true; }
     if (path === "/test/operations/evidence") { ok(res, { requests, refunds, shipments, orders }); return true; }
-    if (!active || !/^\/v1\/(?:orders\/manage|orders\/[^/]+\/(?:status|history)|payments$|refunds(?:\/|$)|shipments(?:\/|$))/.test(path)) return false;
+    if (!active || !/^\/v1\/(?:orders\/manage|orders\/[^/]+\/(?:status|history)|payments$|refunds(?:\/|$)|shipments(?:\/|$)|carriers\/performance$)/.test(path)) return false;
     const multipart = String(req.headers["content-type"] || "").startsWith("multipart/form-data");
     const roles = claims?.roles || [], body = multipart ? {} : bodyOf(req);
     const key = req.headers["idempotency-key"];
@@ -76,6 +76,14 @@ exports.createOperationsFixture = ({ ok, problem, list, bodyOf, randomUUID }) =>
       receipts.set(evidenceId, { refundId: row.refundId, contentType: fields.file.contentType, content: fields.file.content });
       row.evidence.push({ evidenceId, contentType: fields.file.contentType, sizeBytes: fields.file.content.length, bankReference: reference, uploadedBy: claims.sub, uploadedAt: new Date().toISOString() });
       ok(res, row); return true;
+    }
+    if (path === "/v1/carriers/performance") {
+      const from = Date.parse(url.searchParams.get("from") || ""), to = Date.parse(url.searchParams.get("to") || "");
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to || to - from > 366 * 86400000) { problem(res, 400, "Invalid statistics period", "SHIPMENT_INVALID_PERIOD"); return true; }
+      list(res, [
+        { carrier: "GHN", name: "Giao Hàng Nhanh", shipments: 12, delivered: 9, failed: 1, inProgress: 1, cancelled: 1, successRate: 0.9, averageDeliveryHours: 52.4, onTimeRate: 0.7778 },
+        { carrier: "FAKE", name: "Nhà vận chuyển giả lập", shipments: 0, delivered: 0, failed: 0, inProgress: 0, cancelled: 0, successRate: null, averageDeliveryHours: null, onTimeRate: null },
+      ], url); return true;
     }
     if (path === "/v1/shipments") {
       if (req.method === "GET") { list(res, shipments.filter((s) => (!url.searchParams.has("orderId") || s.orderId === url.searchParams.get("orderId")) && (!url.searchParams.has("status") || s.status === url.searchParams.get("status"))), url); return true; }
