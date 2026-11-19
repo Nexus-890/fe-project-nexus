@@ -104,6 +104,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/reservations/fulfillment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the pick and pack steps of one seller order
+         * @description Every reservation of the order, by SKU, with pickedAt and shippedAt. A seller sees the order only when they own every SKU in it. The gateway only requires a valid token; the service requires ADMIN or SELLER.
+         */
+        get: operations["getOrderFulfillment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/reservations/{id}/pick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark paid stock as picked from the shelf
+         * @description Sets pickedAt on a CONFIRMED reservation and writes one PICK ledger row with the reservation quantity and the reservation id as referenceId. Balances do not change: the stock already left on-hand at COMMIT. Repeating returns the reservation without a second row. The gateway only requires a valid token; the service requires ADMIN, or SELLER owning the SKU (checked with catalog-service).
+         */
+        post: operations["pickReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/reservations/{id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark picked stock as packed for the carrier
+         * @description Sets shippedAt on a picked CONFIRMED reservation and writes one SHIP ledger row with the reservation quantity. Balances do not change. Repeating returns the reservation without a second row. The gateway only requires a valid token; the service requires ADMIN, or SELLER owning the SKU (checked with catalog-service).
+         */
+        post: operations["shipReservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventory/adjustments": {
         parameters: {
             query?: never;
@@ -472,6 +532,36 @@ export interface components {
              * @description In UTC; null while HELD
              */
             releasedAt: string | null;
+            /**
+             * Format: date-time
+             * @description In UTC; set when the seller marks the items picked
+             */
+            pickedAt: string | null;
+            /**
+             * Format: date-time
+             * @description In UTC; set when the seller marks the picked items packed for the carrier
+             */
+            shippedAt: string | null;
+        };
+        ReservationViewApiResponse: {
+            /**
+             * @default 0
+             * @example 0
+             */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["ReservationView"];
+        };
+        ReservationViewListApiResponse: {
+            /**
+             * @default 0
+             * @example 0
+             */
+            code: number;
+            /** @example response success */
+            message: string;
+            data: components["schemas"]["ReservationView"][];
         };
         ReservationPageApiResponse: {
             /**
@@ -488,7 +578,7 @@ export interface components {
             page: components["schemas"]["PageInfo"];
         };
         /** @enum {string} */
-        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT" | "RETURN";
+        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT" | "RETURN" | "PICK" | "SHIP";
         Movement: {
             /** Format: uuid */
             id: string;
@@ -1327,6 +1417,180 @@ export interface operations {
                      *       "code": "INVENTORY_DEFAULT_WAREHOUSE_NOT_FOUND"
                      *     }
                      */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOrderFulfillment: {
+        parameters: {
+            query: {
+                orderId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reservations of the order; empty when nothing was reserved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationViewListApiResponse"];
+                };
+            };
+            /** @description Missing or malformed orderId (INVALID_PARAMETER) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not ADMIN or SELLER, or a SKU of the order belongs to another seller (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pickReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reservation with its fulfilment steps */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationViewApiResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not ADMIN and not the seller of the SKU (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown reservation (INVENTORY_RESERVATION_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not CONFIRMED (INVENTORY_NOT_PICKABLE) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description catalog-service could not confirm the SKU owner (INVENTORY_CATALOG_UNAVAILABLE) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    shipReservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reservation with its fulfilment steps */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationViewApiResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not ADMIN and not the seller of the SKU (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown reservation (INVENTORY_RESERVATION_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not CONFIRMED (INVENTORY_NOT_PICKABLE) or not picked yet (INVENTORY_NOT_PICKED) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description catalog-service could not confirm the SKU owner (INVENTORY_CATALOG_UNAVAILABLE) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };

@@ -8,7 +8,7 @@ const appOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || 3110}`;
 const seller = "68000000-0000-4000-8000-000000000002";
 const category = "69000000-0000-4000-8000-000000000103";
 const warehouse = "69000000-0000-4000-8000-000000000001";
-let products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {}, orderedProducts = new Set();
+let fulfilment = {}, products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {}, orderedProducts = new Set();
 const transitions = { DRAFT: ["ACTIVE"], ACTIVE: ["INACTIVE"], INACTIVE: ["ACTIVE"] };
 const envelope = (data) => ({ code: 0, message: "response success", data });
 function json(res, body, status = 200) { res.writeHead(status, { "Content-Type": status >= 400 ? "application/problem+json" : "application/json", "Cache-Control": "no-store" }); res.end(status === 204 ? undefined : JSON.stringify(body)); }
@@ -132,7 +132,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
-  if (path === "/test/reset") { products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); adminFixture.reset(); operationsFixture.deactivate(); return json(res, {}); }
+  if (path === "/test/reset") { fulfilment = {}; products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); adminFixture.reset(); operationsFixture.deactivate(); return json(res, {}); }
   if (path === "/test/seller-seed" && req.method === "POST") {
     const id = "a2250000-0000-4000-8000-000000000001", skuId = "a2250000-0000-4000-8000-000000000002";
     products = [{ id, sellerId: seller, name: "Studio Wireless Headphones", slug: `demo-${id}`, categoryId: category, status: "ACTIVE", description: "Seller operations fixture", auctionEnable: true,
@@ -142,6 +142,7 @@ const server = http.createServer(async (req, res) => {
     orders = (bodyOf(req).withoutOrders ? [] : ["PAID", "COMPLETED"]).map((status, index) => ({ orderId: `a2250000-0000-4000-8000-00000000001${index}`, orderNumber: `NX-SELLER-${index + 1}`, userId: "68000000-0000-4000-8000-000000000003", sellerId: seller, orderType: "STANDARD", status,
       createdAt: index ? "2026-10-01T00:00:00Z" : "2026-11-14T03:00:00Z", totalAmount: 4800000, recipientName: "Nguyen Thi Lan", phoneNumber: "0901234567",
       items: [{ orderItemId: randomUUID(), productId: id, skuId, productName: "Studio Wireless Headphones", skuCode: "STUDIO-SILVER", imageUrl: null, quantity: 1, unitPrice: 4800000, totalPrice: 4800000 }] }));
+    fulfilment = {};
     sellerFixtures.forEach((fixture) => fixture.reset());
     return ok(res, { productId: id, skuId });
   }
@@ -229,6 +230,19 @@ const server = http.createServer(async (req, res) => {
   }
   if (path === "/v1/inventory/intake") { const body = bodyOf(req); const owner = products.find((product) => product.skus.some((sku) => sku.id === body.skuId))?.sellerId; if (!has("ADMIN") && !(has("SELLER") && owner === claims.sub && body.warehouseId == null)) return problem(res, 403, "Admin or owning Seller required"); if (!findSku(body.skuId) || !Number.isInteger(body.quantity) || body.quantity < 1) return problem(res, 400, "Valid SKU and positive quantity required"); const balance = balances[body.skuId] ||= { skuId: body.skuId, warehouseId: warehouse, total: 0, available: 0, reserved: 0, unavailable: 0 }; balance.total += body.quantity; balance.available += body.quantity; return ok(res, balance, 201); }
   if (path === "/v1/inventory/balances") { if (!has("ADMIN") && !has("SELLER")) return problem(res, 403, "Stock role required"); return list(res, Object.values(balances).filter((balance) => !url.searchParams.has("skuId") || balance.skuId === url.searchParams.get("skuId")), url); }
+  if (path === "/v1/inventory/reservations/fulfillment" || /^\/v1\/inventory\/reservations\/[^/]+\/(?:pick|ship)$/.test(path)) {
+    if (!has("ADMIN") && !has("SELLER")) return problem(res, 403, "Seller or Admin required");
+    const stepsOf = (order) => fulfilment[order.orderId] ||= order.status === "PAID" ? order.items.map((item, index) => ({ id: `${order.orderId.slice(0, 24)}${String(index + 1).padStart(12, "0")}`, skuId: item.skuId, warehouseId: warehouse, orderId: order.orderId, quantity: item.quantity, status: "CONFIRMED", expiresAt: order.createdAt, releasedAt: null, pickedAt: null, shippedAt: null })) : [];
+    const mine = (order) => has("ADMIN") || order.sellerId === claims.sub;
+    if (req.method === "GET") { const order = orders.find((row) => row.orderId === url.searchParams.get("orderId")); if (!order) return ok(res, []); if (!mine(order)) return problem(res, 403, "Not your order"); return ok(res, stepsOf(order)); }
+    const [, , , , id, action] = path.split("/");
+    const order = orders.find((row) => stepsOf(row).some((step) => step.id === id)), step = order && stepsOf(order).find((row) => row.id === id);
+    if (!step) return problem(res, 404, "Reservation not found", "INVENTORY_RESERVATION_NOT_FOUND");
+    if (!mine(order)) return problem(res, 403, "Not your SKU");
+    if (action === "ship" && !step.pickedAt) return problem(res, 409, "Pick the reservation before packing it for shipment", "INVENTORY_NOT_PICKED");
+    if (action === "pick") step.pickedAt ||= new Date().toISOString(); else step.shippedAt ||= new Date().toISOString();
+    return ok(res, step);
+  }
   if (path === "/v1/inventory") return list(res, (url.searchParams.get("skuIds") || "").split(",").filter(Boolean).map((skuId) => ({ skuId, available: balances[skuId]?.available || 0 })), url);
   if (path.startsWith("/v1/inventory/")) { const skuId = path.split("/").at(-1); return ok(res, { skuId, available: balances[skuId]?.available || 0 }); }
   const auctionMatch = /^\/v1\/auctions(?:\/([^/]+))?(\/state|\/bids|\/admin-cancel)?$/.exec(path);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSellerSales } from "../service/sellerService";
+import { getSellerFulfilment, getSellerSales, markSellerFulfilment } from "../service/sellerService";
+import { fulfilmentStage } from "../features/sellerFulfilmentStage";
 import { isApiError } from "../configs/api";
 import { sellerSalesDates } from "../features/sellerSalesFilters";
 
@@ -51,4 +52,33 @@ test("sales dates include entire Vietnam calendar days and serialize positive ti
   let called = false;
   await assert.rejects(getSellerSales(0, undefined, { context: { fetch: async () => { called = true; return result(order); } } }, { from: "2026-11-15T00:00:00Z", to: "2026-11-14T00:00:00Z" }), invalid);
   assert.equal(called, false);
+});
+
+const reservationId = "a2000000-0000-4000-8000-000000000003";
+const step = { id: reservationId, skuId: id, warehouseId: id, orderId: id, quantity: 2, status: "CONFIRMED", expiresAt: "2026-11-11T04:30:00Z", releasedAt: null, pickedAt: null, shippedAt: null };
+
+test("fulfilment reads the order's reservations and posts each step to its own reservation", async () => {
+  const calls: string[] = [];
+  const context = { getAccessToken: () => "seller", fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), "http://fixture.test");
+    calls.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+    if (url.pathname.endsWith("/pick")) return Response.json({ code: 0, message: "response success", data: { ...step, pickedAt: "2026-11-12T01:00:00Z" } });
+    return Response.json({ code: 0, message: "response success", data: [step] });
+  } };
+  const steps = await getSellerFulfilment(id, { context });
+  assert.equal(fulfilmentStage(steps), "paid");
+  const picked = await markSellerFulfilment(reservationId, "pick", { context });
+  assert.equal(fulfilmentStage([picked]), "picked");
+  assert.equal(fulfilmentStage([{ ...picked, shippedAt: "2026-11-12T02:00:00Z" }]), "packed");
+  assert.equal(fulfilmentStage([{ ...step, status: "RELEASED" }]), "none");
+  assert.deepEqual(calls, [`GET /api/v1/inventory/reservations/fulfillment?orderId=${id}`, `POST /api/v1/inventory/reservations/${reservationId}/pick`]);
+});
+
+test("fulfilment rejects another order's step, shipping before picking and a step the server did not save", async () => {
+  const reply = (data: unknown) => ({ fetch: async () => Response.json({ code: 0, message: "response success", data }) });
+  await assert.rejects(getSellerFulfilment(id, { context: reply([{ ...step, orderId: itemId }]) }), invalid);
+  await assert.rejects(getSellerFulfilment(id, { context: reply([{ ...step, shippedAt: "2026-11-12T02:00:00Z" }]) }), invalid);
+  await assert.rejects(getSellerFulfilment(id, { context: reply([step, step]) }), invalid);
+  await assert.rejects(markSellerFulfilment(reservationId, "ship", { context: reply({ ...step, pickedAt: "2026-11-12T01:00:00Z" }) }), invalid);
+  await assert.rejects(getSellerFulfilment("not-an-id"), invalid);
 });

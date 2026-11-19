@@ -85,6 +85,22 @@ test("deleting a product clears its cached auction picker entry", async ({ page,
   await expect(product.locator(`option[value="${productId}"]`)).toHaveCount(0);
 });
 
+test("a paid sale is marked picked, then packed, and each step reaches its reservation", async ({ page, request }) => {
+  await signIn(page, request, "SELLER", "/backoffice/sales");
+  const table = page.getByRole("table", { name: "Seller orders", exact: true });
+  const row = table.getByRole("row").filter({ hasText: "NX-SELLER-1" });
+  await expect(row.getByRole("button", { name: "Mark packed", exact: false })).toHaveCount(0);
+  await row.getByRole("button", { name: "Mark NX-SELLER-1 picked", exact: true }).click();
+  await expect(row.getByText("Picked", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Mark NX-SELLER-1 packed", exact: true }).click();
+  await expect(row.getByText("Packed for carrier", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: /Mark NX-SELLER-1/ })).toHaveCount(0);
+  const evidence = await (await request.get(`${api}/test/evidence`)).json();
+  const steps = evidence.requests.filter((entry: { method: string; path: string }) => entry.method === "POST" && /\/api\/v1\/inventory\/reservations\/[^/]+\/(?:pick|ship)$/.test(entry.path)).map((entry: { path: string }) => entry.path.split("/").at(-1));
+  expect(steps).toEqual(["pick", "ship"]);
+  await screenshot(page, "sales-fulfilment");
+});
+
 test("sales combines status and full-day Vietnam date filters", async ({ page, request }) => {
   await signIn(page, request, "SELLER", "/backoffice/sales");
   await page.getByRole("button", { name: "All", exact: true }).click();

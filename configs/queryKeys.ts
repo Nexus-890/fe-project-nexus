@@ -68,6 +68,7 @@ export const queryKeys = {
     listings: (sessionId: number, page: number, status?: string) => ["seller", sessionId, "listings", { page, status }] as const,
     productBalances: (sessionId: number, productId: string, skuIds: readonly string[]) => ["seller", sessionId, "balances", productId, skuIds] as const,
     sales: (sessionId: number, page: number, status?: string, from?: string, to?: string) => ["seller", sessionId, "sales", { page, status, from, to }] as const,
+    fulfilment: (sessionId: number, orderId: string) => ["seller", sessionId, "fulfilment", orderId] as const,
     offers: (sessionId: number, auctionId: string) => ["seller", sessionId, "offers", auctionId] as const,
     auctionRoot: (sessionId: number) => ["seller", sessionId, "auctions"] as const,
     auctions: (sessionId: number, filters: SellerAuctionFilters) => ["seller", sessionId, "auctions", filters] as const,

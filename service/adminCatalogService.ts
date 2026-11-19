@@ -74,7 +74,7 @@ export const updateAdminWarehouse = async (id: string, body: WarehouseUpdate, op
 };
 export const parseMovement = (value: unknown): StockMovement => {
   if (!isRecord(value) || !isAdminUuid(value.id) || !isAdminUuid(value.skuId) || !isAdminUuid(value.warehouseId) ||
-    !["INTAKE", "RESERVE", "RELEASE", "COMMIT", "ADJUSTMENT", "RETURN"].includes(String(value.movementType)) ||
+    !["INTAKE", "RESERVE", "RELEASE", "COMMIT", "ADJUSTMENT", "RETURN", "PICK", "SHIP"].includes(String(value.movementType)) ||
     !Number.isInteger(value.quantity) || Number(value.quantity) < -2147483648 || Number(value.quantity) > 2147483647 ||
     !(value.referenceId === null || isAdminUuid(value.referenceId)) || !nullableString(value.reason) ||
     typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) throw createInvalidResponseError("Invalid stock movement.");
