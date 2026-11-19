@@ -92,14 +92,14 @@ test("profile service allowlists wire fields, reads current Bearer and forwards 
       assert.equal(String(input), "/api/v1/users/me");
       assert.equal(init?.method, "PUT");
       assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer current-session-token");
-      assert.deepEqual(JSON.parse(String(init?.body)), { fullName: "Updated" });
+      assert.deepEqual(JSON.parse(String(init?.body)), { fullName: "Updated", phone: "0900000009" });
       assert.equal(init?.signal?.aborted, false);
       controller.abort();
       assert.equal(init?.signal?.aborted, true);
       return new Response(JSON.stringify({ code: 0, message: "response success", data: user }));
     },
   };
-  await assert.rejects(updateProfile({ fullName: "Updated", ...{ phone: "ignored", roles: ["ADMIN"] } }, { context, signal: controller.signal }), { name: "AbortError" });
+  await assert.rejects(updateProfile({ fullName: "Updated", ...{ phone: "0900000009", roles: ["ADMIN"], id: "other" } }, { context, signal: controller.signal }), { name: "AbortError" });
 });
 
 test("profile service rejects malformed nested user responses and missing envelopes", async () => {

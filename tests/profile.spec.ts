@@ -317,3 +317,72 @@ test("profile password action opens Keycloak credential settings with a safe pro
   ]);
   await expect(page).toHaveURL(/#\/account-security\/signing-in$/);
 });
+
+const pngAvatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4Ga8DAAN5AWVLTgzuAAAAAElFTkSuQmCC", "base64");
+
+test("reputation shows the own score and penalty history pages through every score loss", async ({ page, request }) => {
+  await signIn(page);
+  await openProfile(page);
+  const reputation = page.locator("#reputation");
+  await expect(reputation.getByLabel("Reputation score 62 out of 100")).toBeVisible();
+  await expect(reputation.getByText("Trusted", { exact: true })).toBeVisible();
+  await expect(reputation.getByRole("meter", { name: "Reputation score" })).toHaveAttribute("aria-valuenow", "62");
+  for (const [label, value] of [["Transactions", "9"], ["Successful", "7"], ["Failed", "1"], ["Auctions won", "2"], ["Avg rating", "4.3"]]) {
+    await expect(reputation.locator("dl > div", { has: page.getByText(label, { exact: true }) }).locator("dd")).toHaveText(value);
+  }
+  await expect(reputation.getByText("12 entries lowered your score.")).toBeVisible();
+  const penaltyCard = page.locator("#penalty-history");
+  const items = penaltyCard.getByRole("list", { name: "Penalty history" }).getByRole("listitem");
+  await expect(items).toHaveCount(10);
+  await expect(items.first()).toContainText("Unpaid auction");
+  await expect(items.first()).toContainText("-2 (64 → 62)");
+  await expect(items.first()).toContainText("Auction 5B1C2D3E");
+  await expect(items.nth(2)).toContainText("Admin deduction");
+  await expect(penaltyCard.getByText("Page 1 of 2")).toBeVisible();
+  await expect(penaltyCard.getByRole("button", { name: "Previous" })).toBeDisabled();
+  await penaltyCard.getByRole("button", { name: "Next" }).click();
+  await expect(penaltyCard.getByText("Page 2 of 2")).toBeVisible();
+  await expect(items).toHaveCount(2);
+  await expect(penaltyCard.getByRole("button", { name: "Next" })).toBeDisabled();
+  const reads = (await history(request)).filter(entry => entry.path.startsWith("/v1/users/me/"));
+  expect(reads.every(entry => entry.authenticated && entry.method === "GET")).toBe(true);
+  await responsiveChecks(page);
+});
+
+test("a reputation read failure keeps the profile usable and retries, and no penalties shows an empty state", async ({ page, request }) => {
+  await control(request, { reputationStatus: 403, noPenalties: true });
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  const reputation = page.locator("#reputation");
+  await expect(reputation.getByRole("alert")).toContainText("Unable to load your reputation.");
+  await expect(page.locator("#penalty-history").getByRole("status")).toHaveText("No penalties. Your score has never been lowered.");
+  await control(request, { reputationStatus: 0 });
+  await reputation.getByRole("button", { name: "Retry reputation" }).click();
+  await expect(reputation.getByLabel("Reputation score 62 out of 100")).toBeVisible();
+});
+
+test("avatar upload checks the file, posts multipart and shows the stored photo", async ({ page, request }) => {
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  const card = page.getByRole("complementary", { name: "Your account" });
+  await expect(card.getByRole("button", { name: "Upload photo" })).toBeEnabled();
+  await page.setInputFiles("#avatar-file", { name: "me.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
+  await expect(card.getByRole("alert")).toHaveText("Use a JPEG, PNG or WebP image.");
+  expect((await history(request)).filter(entry => entry.path === "/v1/users/me/avatar")).toEqual([]);
+  await control(request, { avatarStatus: 503 });
+  await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png", buffer: pngAvatar });
+  await expect(card.getByRole("alert")).toHaveText("Photo storage is unavailable right now. Please try again later.");
+  await control(request, { avatarStatus: 0 });
+  await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png", buffer: pngAvatar });
+  await expect(card.getByRole("status")).toHaveText("Your photo has been updated.");
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  await expect(card.getByRole("button", { name: "Change photo" })).toBeVisible();
+  const posts = (await history(request)).filter(entry => entry.path === "/v1/users/me/avatar");
+  expect(posts.map(entry => [entry.method, entry.authenticated, entry.body])).toEqual([
+    ["POST", true, { multipart: true }], ["POST", true, { multipart: true }],
+  ]);
+  await page.reload();
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+});

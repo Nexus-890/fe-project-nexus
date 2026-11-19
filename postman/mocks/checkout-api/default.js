@@ -210,6 +210,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === "/v1/inventory") return json(res, envelope((url.searchParams.get("skuIds") || "").split(",").filter(Boolean).map((skuId) => ({ skuId, available: 100 }))));
   if (url.pathname === "/v1/vouchers/me") return json(res, list([]));
+  if (url.pathname === "/v1/users/me/addresses" && req.method === "GET") return json(res, list([]));
   if (url.pathname === "/v1/carts/me/pricing") { const subtotal = (await currentItems()).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return json(res, envelope({ subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] })); }
   if (url.pathname === "/v1/users/me") {
     await save();

@@ -7,6 +7,9 @@ import { ROUTES } from "@/configs/routes";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
 import { useAuth } from "@/hooks/useAuth";
+import { useApiQuery } from "@/hooks/useApi";
+import { queryKeys } from "@/configs/queryKeys";
+import { getMyPenalties, getMyReputation } from "@/service/ratingService";
 import type { ApiError } from "@/types/commonResponseType";
 import ProfileSkeleton from "@/components/ProfileSkeleton";
 import PersonalInformationCard from "@/components/PersonalInformationCard";
@@ -18,8 +21,17 @@ import { ACCOUNT_EXTENSIONS_ENABLED } from "@/configs/account";
 
 function ProfilePage() {
   const router = useRouter();
-  const { user, status, accessToken, sessionId, isSessionCurrent, retryProfile, updateProfile } = useAuth();
+  const { user, status, accessToken, sessionId, requestContext, isSessionCurrent, retryProfile, updateProfile } = useAuth();
   const profileReady = Boolean(accessToken) && (status === "authenticated" || status === "error");
+  const [penaltyPage, setPenaltyPage] = useState(0);
+  const reputation = useApiQuery({
+    queryKey: queryKeys.account.reputation(sessionId),
+    service: (signal) => getMyReputation({ context: requestContext, signal }),
+  }, { enabled: profileReady });
+  const penalties = useApiQuery({
+    queryKey: queryKeys.account.penalties(sessionId, penaltyPage),
+    service: (signal) => getMyPenalties(penaltyPage, { context: requestContext, signal }),
+  }, { enabled: profileReady, placeholderData: (previous) => previous });
   const [load, setLoad] = useState<{
     sessionId: number;
     pending: boolean;
@@ -68,11 +80,15 @@ function ProfilePage() {
   return (
     <div className="min-w-0 space-y-6 pb-12 sm:pb-16">
       <h1 className="text-heading-32">Profile</h1>
-      <ReputationCard />
+      <ReputationCard reputation={reputation.data}
+        error={reputation.isError && !reputation.data ? reputation.error.detail || "Unable to load your reputation." : null}
+        onRetry={() => void reputation.refetch()} />
       <PersonalInformationCard key={`${sessionId}:${user.id}`} user={user} onSave={updateProfile} />
       {ACCOUNT_EXTENSIONS_ENABLED && <PhoneVerificationCard key={`phone:${sessionId}:${user.phone}`} initialPhone={user.phone} />}
       <ChangePasswordCard />
-      <PenaltyHistoryCard />
+      <PenaltyHistoryCard penalties={penalties.data} busy={penalties.isFetching}
+        error={penalties.isError ? penalties.error.detail || "Unable to load your penalty history." : null}
+        onPage={setPenaltyPage} onRetry={() => void penalties.refetch()} />
     </div>
   );
 }

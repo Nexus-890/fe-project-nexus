@@ -43,6 +43,8 @@ export const queryKeys = {
     addresses: (sessionId: number) => ["account", sessionId, "addresses"] as const,
     sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
     phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
+    reputation: (sessionId: number) => ["account", sessionId, "reputation"] as const,
+    penalties: (sessionId: number, page: number) => ["account", sessionId, "penalties", page] as const,
   },
   backoffice: {
     categories: (sessionId: number) => ["admin-categories", sessionId] as const,

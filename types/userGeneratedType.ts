@@ -116,6 +116,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload or replace the current user's avatar
+         * @description Multipart form with one part named file. The type is detected from the file content, not from the file name or the claimed Content-Type: JPEG, PNG or WebP only, at most 2 MB (MAX_AVATAR_FILE_SIZE). The image is stored in the Supabase bucket under avatars/{userId}/ and the profile keeps its public URL. A replaced avatar object is removed after the profile is saved; if saving fails, the new object is removed and the old avatar stays. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        post: operations["uploadOwnAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/phone/verification": {
         parameters: {
             query?: never;
@@ -511,6 +531,11 @@ export interface components {
              * @example ********1234
              */
             identityNumberMasked?: string | null;
+            /**
+             * Format: uri
+             * @description Public URL of the uploaded avatar; null until the user uploads one.
+             */
+            avatarUrl?: string | null;
         };
         Register: {
             /**
@@ -2327,6 +2352,96 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    uploadOwnAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The profile with its new avatarUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOwnProfileResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: `USER_AVATAR_REQUIRED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payload Too Large. Codes: `USER_AVATAR_TOO_LARGE`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported Media Type. Codes: `USER_AVATAR_INVALID_TYPE`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_AVATAR_STORAGE_NOT_CONFIGURED`, `USER_AVATAR_STORAGE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

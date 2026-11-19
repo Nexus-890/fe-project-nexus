@@ -84,6 +84,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/reputation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the caller's own reputation
+         * @description Requires REPUTATION.VIEW. The gateway routes this path to rating-service. The owner is the JWT subject. Returns the committed score and trust level with transaction and auction counters, the average rating rounded to one decimal (null without ratings) and how many history entries lowered the score. A user without an aggregate receives neutral score 50, trust NEW and zero counters; reading never creates an aggregate.
+         */
+        get: operations["getOwnReputation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/penalties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own score losses
+         * @description Requires REPUTATION.VIEW. The owner is the JWT subject. Returns reputation history entries with delta below zero (payment timeouts, low ratings and admin deductions), newest first, then id descending. Defaults page=0, size=10; maximum size=50. The acting admin is not exposed.
+         */
+        get: operations["listOwnPenalties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/eligibility/{userId}": {
         parameters: {
             query?: never;
@@ -198,6 +238,56 @@ export interface components {
              * @description Persisted change time normalized to UTC.
              */
             changedAt: string;
+        };
+        MyReputation: {
+            score: number;
+            trustLevel: components["schemas"]["TrustLevel"];
+            totalTransaction: number;
+            successfulTransaction: number;
+            failedTransaction: number;
+            /** Format: int64 */
+            ratingCount: number;
+            /** @description Average star rating with one decimal; null without ratings. */
+            averageRating: number | null;
+            successfulAuctions: number;
+            failedAuctions: number;
+            /** Format: int64 */
+            penaltyCount: number;
+            policyVersion: string;
+        };
+        MyReputationEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["MyReputation"];
+        };
+        Penalty: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            changeType: "USER_RATED" | "ORDER_COMPLETED" | "AUCTION_PAYMENT_TIMEOUT" | "ADMIN_ADJUSTMENT";
+            /**
+             * Format: uuid
+             * @description Rating, order or auction behind the change; null for an admin adjustment.
+             */
+            sourceId: string | null;
+            delta: number;
+            previousScore: number;
+            newScore: number;
+            previousLevel: components["schemas"]["TrustLevel"];
+            newLevel: components["schemas"]["TrustLevel"];
+            reason: string;
+            /** Format: date-time */
+            changedAt: string;
+        };
+        PenaltyEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Penalty"][];
+            page: components["schemas"]["PageInfo"];
         };
         ReputationHistoryEnvelope: {
             /** @default 0 */
@@ -791,6 +881,57 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             405: components["responses"]["MethodNotAllowed"];
             406: components["responses"]["NotAcceptable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getOwnReputation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own reputation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReputationEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listOwnPenalties: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["Page"];
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of own score losses. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PenaltyEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };

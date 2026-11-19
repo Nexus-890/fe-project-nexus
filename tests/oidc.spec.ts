@@ -264,7 +264,7 @@ test("develop registration accepts the backend 201 user envelope and continues t
   expect(await evidence(request, "keycloak")).toMatchObject({ authorizations: 0, codeExchanges: 0 });
 });
 
-test("develop disables undelivered account operations and leaves a sign-in path", async ({ page }) => {
+test("switching account extensions off hides their operations and leaves a sign-in path", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => {
     if (/\/phone\/verification|\/verification-email|\/users\/me\/addresses|\/sellers\/applications/.test(request.url())) requests.push(request.url());
