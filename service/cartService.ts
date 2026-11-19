@@ -160,7 +160,6 @@ const guestRequestOptions = (
   };
 };
 
-/** Proposed guest contract; disabled by default until the backend delivers it. */
 export const createGuestCart = async (
   options: ServiceRequestOptions = {},
 ): Promise<{ guestToken: string; cart: CartSnapshot }> => {
@@ -174,7 +173,7 @@ export const getGuestCart = async (
   guestToken: string,
   options: ServiceRequestOptions = {},
 ): Promise<CartSnapshot> => {
-  const { data } = await requestApi<unknown>("GET", GUEST_CART_PATH, undefined, guestRequestOptions(options, guestToken));
+  const { data } = await requestApi<unknown>("GET", CART_PATH, undefined, guestRequestOptions(options, guestToken));
   const cart = readCart(data);
   if (!cart) throw createInvalidResponseError("Invalid guest cart response");
   return cart;
@@ -187,7 +186,7 @@ export const addGuestCartItem = async (
 ): Promise<CartSnapshot> => {
   if (!isPositiveQuantity(input.quantity) || !isNonBlankId(input.skuId))
     throw createInvalidResponseError("skuId and a positive quantity are required");
-  const { data } = await requestApi<unknown>("POST", `${GUEST_CART_PATH}/items`,
+  const { data } = await requestApi<unknown>("POST", ADD_CART_ITEM_PATH,
     { skuId: input.skuId, quantity: input.quantity }, guestRequestOptions(options, guestToken));
   const cart = readCart(data);
   if (!cart) throw createInvalidResponseError("Invalid guest cart response");
@@ -201,9 +200,9 @@ export const mergeGuestCart = async (
 ): Promise<Cart> => {
   if (!isGuestToken(guestToken) || !/^[A-Za-z0-9_-]{16,128}$/.test(mergeKey))
     throw createInvalidResponseError("Invalid guest cart merge credentials");
-  const { data } = await requestApi<unknown>("POST", "/api/v1/carts/me/merge", {}, {
+  const { data } = await requestApi<unknown>("POST", "/api/v1/carts/me/merge", { guestToken }, {
     ...cartRequestOptions(options),
-    config: { ...options.config, headers: { "X-Guest-Token": guestToken, "Idempotency-Key": mergeKey } },
+    config: { ...options.config, headers: { "Idempotency-Key": mergeKey } },
   });
   return parseCart(data);
 };

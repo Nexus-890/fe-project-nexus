@@ -204,7 +204,10 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith("/v1/carts/")) {
     const input = typeof req.body === "object" && req.body ? req.body : JSON.parse(body);
     const validItem = () => input.skuId === skuId && Number.isSafeInteger(input.quantity) && input.quantity > 0;
-    if (url.pathname.startsWith("/v1/carts/guest")) {
+    const guestToken = req.headers["x-guest-token"];
+    const guestRead = url.pathname === "/v1/carts/me" && req.method === "GET";
+    const guestAdd = url.pathname === "/v1/carts/me/items" && req.method === "POST";
+    if (url.pathname === "/v1/carts/guest" || (guestToken && (guestRead || guestAdd))) {
       if (authorization) {
         evidence.guestBearerLeaks += 1;
         return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Guest requests must not carry an account token");
@@ -218,13 +221,13 @@ const server = http.createServer(async (req, res) => {
         evidence.guestCreations += 1;
         return json(res, success({ guestToken: token, cart }), 201);
       }
-      const cart = guests[req.headers["x-guest-token"]];
+      const cart = guests[guestToken];
       if (!cart) return problem(res, 404, "CART_NOT_FOUND", "Not Found", "Guest cart not found");
-      if (url.pathname === "/v1/carts/guest" && req.method === "GET") {
+      if (guestRead) {
         evidence.guestReads += 1;
         return json(res, success(cart));
       }
-      if (url.pathname === "/v1/carts/guest/items" && req.method === "POST") {
+      if (guestAdd) {
         if (mode === "guest-disabled") return problem(res, 403, "FORBIDDEN", "Forbidden", "Guest carts are disabled");
         if (!validItem()) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Invalid cart item");
         add(cart, input);
@@ -245,7 +248,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/carts/me/merge" && req.method === "POST") {
       evidence.mergeRequests += 1;
-      const token = req.headers["x-guest-token"];
+      const token = input.guestToken;
       const key = req.headers["idempotency-key"];
       if (!token || typeof key !== "string" || !key) return problem(res, 400, "VALIDATION_FAILED", "Validation Failed", "Guest token and idempotency key are required");
       evidence.mergeKeys.push(key);

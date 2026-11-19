@@ -116,7 +116,7 @@ function controllerFixture(options: {
   return { controller, storage, raw, calls };
 }
 
-test("guest requests carry only the guest credential while merge includes bearer and a stable idempotency key", async () => {
+test("guest requests use the delivered cart routes with only the guest credential while merge sends the token in the body with bearer and a stable idempotency key", async () => {
   const fixture = httpFixture((path, method) => path === "/api/v1/carts/guest" && method === "POST"
     ? { code: 0, message: "success", data: { guestToken: guestSession.token, cart: cart() } }
     : { code: 0, message: "success", data: fullCart(3) });
@@ -129,13 +129,14 @@ test("guest requests carry only the guest credential while merge includes bearer
 
   assert.deepEqual(fixture.calls.map(({ method, path, body }) => ({ method, path, body })), [
     { method: "POST", path: "/api/v1/carts/guest", body: {} },
-    { method: "GET", path: "/api/v1/carts/guest", body: undefined },
-    { method: "POST", path: "/api/v1/carts/guest/items", body: { skuId: "sku-1", quantity: 3 } },
-    { method: "POST", path: "/api/v1/carts/me/merge", body: {} },
+    { method: "GET", path: "/api/v1/carts/me", body: undefined },
+    { method: "POST", path: "/api/v1/carts/me/items", body: { skuId: "sku-1", quantity: 3 } },
+    { method: "POST", path: "/api/v1/carts/me/merge", body: { guestToken: guestSession.token } },
   ]);
   for (const call of fixture.calls.slice(0, 3)) assert.equal(call.headers.has("Authorization"), false);
   assert.equal(fixture.calls[0].headers.has("X-Guest-Token"), false);
-  for (const call of fixture.calls.slice(1)) assert.equal(call.headers.get("X-Guest-Token"), guestSession.token);
+  for (const call of fixture.calls.slice(1, 3)) assert.equal(call.headers.get("X-Guest-Token"), guestSession.token);
+  assert.equal(fixture.calls[3].headers.has("X-Guest-Token"), false);
   assert.equal(fixture.calls[3].headers.get("Authorization"), `Bearer ${member.accessToken}`);
   assert.equal(fixture.calls[3].headers.get("Idempotency-Key"), guestSession.mergeKey);
   assert.equal(merged.ok && cartItemCount(merged.data), 3);
