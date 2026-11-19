@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test, expect, type APIRequestContext, type Page, type Request, type TestInfo } from "@playwright/test";
 
 test.skip(!process.env.NEXUS_ORDER_LIST_TEST, "Run with playwright.orders.config.ts for the order HTTP simulation.");
@@ -260,6 +261,44 @@ test("order failure has a retry and only requests history after recovery", async
   // retry must add exactly one request to that observed baseline.
   expect((await evidence(request)).details).toHaveLength(failedCalls.details.length + 1);
 });
+
+test("completed order downloads the buyer's HTML invoice and shows the 409 reason", async ({ page, request }, info) => {
+  await control(request, `order?id=${pendingId}&status=COMPLETED`);
+  const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept", "Access-Control-Allow-Methods": "GET, OPTIONS" };
+  const calls: Array<{ authorized: boolean; accept: string }> = [];
+  let completed = true;
+  await page.route(`**/api/v1/orders/${pendingId}/invoice`, (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const headers = route.request().headers();
+    calls.push({ authorized: /^Bearer \S+$/.test(headers.authorization ?? ""), accept: headers.accept ?? "" });
+    return completed
+      ? route.fulfill({ status: 200, headers: { ...cors, "Content-Type": "text/html;charset=UTF-8" }, body: "<!doctype html><title>Order receipt</title><p>NX-260929-0038</p>" })
+      : route.fulfill({ status: 409, headers: { ...cors, "Content-Type": "application/problem+json" }, body: JSON.stringify({ title: "Conflict", status: 409, code: "COMMERCE_ORDER_NOT_COMPLETED", detail: "Order is not completed." }) });
+  });
+  await signIn(page, `/order/${pendingId}`);
+  const button = page.getByRole("button", { name: "Download invoice", exact: true });
+  await expect(button).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent("download"), button.click()]);
+  expect(download.suggestedFilename()).toBe("invoice-NX-260929-0038.html");
+  const saved = info.outputPath("invoice.html");
+  await download.saveAs(saved);
+  expect(readFileSync(saved, "utf8")).toContain("NX-260929-0038");
+  await expect(page.getByRole("status").filter({ hasText: "Invoice downloaded." })).toBeVisible();
+  expect(calls).toEqual([{ authorized: true, accept: "text/html, application/problem+json" }]);
+  await capture(page, info, "buyer-order-invoice.png");
+  completed = false;
+  await button.click();
+  await expect(page.getByRole("alert").filter({ hasText: "The invoice is available once the order is completed." })).toBeVisible();
+});
+
+for (const status of ["PENDING", "PAID", "SHIPPED", "DELIVERED", "CANCELED"] as const) {
+  test(`${status} order has no invoice download`, async ({ page, request }) => {
+    await control(request, `order?id=${pendingId}&status=${status}`);
+    await signIn(page, `/order/${pendingId}`);
+    await expect(page.getByRole("heading", { name: "Order NX-260929-0038", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download invoice", exact: true })).toHaveCount(0);
+  });
+}
 
 test("delivered order keeps its status until the buyer confirms once", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1440, height: 1060 });

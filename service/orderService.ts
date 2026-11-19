@@ -1,5 +1,5 @@
 import { parseOrderVouchers } from "./promotionService";
-import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
+import { createInvalidResponseError, isRecord, requestApi, requestApiBlob } from "../configs/api";
 import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
@@ -195,6 +195,14 @@ export const confirmReceipt = async (orderId: string, options: ServiceRequestOpt
     throw createInvalidResponseError("Receipt confirmation did not return the completed order");
   return order;
 };
+
+export const getOrderInvoice = async (orderId: string, options: ServiceRequestOptions = {}): Promise<Blob> => {
+  if (!isUuid(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  return requestApiBlob(`${ORDERS_PATH}/${encodeURIComponent(orderId)}/invoice`, ["text/html"], { ...options, auth: true, params: undefined });
+};
+
+export const invoiceFileName = (orderNumber: string): string =>
+  `invoice-${orderNumber.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "order"}.html`;
 
 export const reportReceiptIssue = async (orderId: string, reason: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
   if (!isUuid(orderId) || !reason.trim() || reason.trim().length > 500)

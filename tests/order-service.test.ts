@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { test } from "node:test";
 import { isApiError } from "../configs/api";
-import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, getOrders, parseOrderDetail, parseOrderSummary, reportReceiptIssue } from "../service/orderService";
+import { cancelOrder, confirmReceipt, getOrder, getOrderHistory, getOrderInvoice, getOrders, invoiceFileName, parseOrderDetail, parseOrderSummary, reportReceiptIssue } from "../service/orderService";
 import type { ApiContext } from "../types/commonRequestType";
 import type { OrderFilters } from "../types/orderRequestType";
 
@@ -402,4 +402,39 @@ test("receipt issue rejects malformed hold pairs and invalid input before HTTP",
   for (const reason of [" ", "x".repeat(501)])
     await assert.rejects(reportReceiptIssue(orderId, reason, { context }), invalidResponse);
   assert.equal(calls, 0);
+});
+
+test("order invoice downloads the HTML receipt with the account token and keeps Problem Details on 409", async () => {
+  const seen: Array<{ path?: string; accept?: string; auth?: string }> = [];
+  let completed = true;
+  const server = createServer((request, response) => {
+    seen.push({ path: request.url, accept: request.headers.accept, auth: request.headers.authorization });
+    if (!completed) {
+      response.writeHead(409, { "Content-Type": "application/problem+json" });
+      response.end(JSON.stringify({ title: "Conflict", status: 409, code: "COMMERCE_ORDER_NOT_COMPLETED", detail: "Order is not completed." }));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html;charset=UTF-8", "Cache-Control": "no-store" });
+    response.end("<!doctype html><title>Order receipt</title><p>NX-260929-0038</p>");
+  });
+  const context: ApiContext = { baseUrl: await listen(server), getAccessToken: () => "buyer-token" };
+  try {
+    const blob = await getOrderInvoice(orderId, { context });
+    assert.equal(blob.type, "text/html");
+    assert.match(await blob.text(), /NX-260929-0038/);
+    assert.deepEqual(seen[0], { path: `/api/v1/orders/${orderId}/invoice`, accept: "text/html, application/problem+json", auth: "Bearer buyer-token" });
+    completed = false;
+    await assert.rejects(getOrderInvoice(orderId, { context }), (error: unknown) =>
+      isApiError(error) && error.status === 409 && error.code === "COMMERCE_ORDER_NOT_COMPLETED");
+    await assert.rejects(getOrderInvoice("not-an-order", { context }), invalidResponse);
+    assert.equal(seen.length, 2);
+  } finally {
+    await close(server);
+  }
+});
+
+test("invoice file names keep only safe order number characters", () => {
+  assert.equal(invoiceFileName("NX-260929-0038"), "invoice-NX-260929-0038.html");
+  assert.equal(invoiceFileName("AUC/12 34"), "invoice-AUC-12-34.html");
+  assert.equal(invoiceFileName("///"), "invoice-order.html");
 });
