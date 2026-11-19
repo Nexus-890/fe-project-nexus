@@ -39,12 +39,17 @@ export const deleteAdminCategory = async (id: string, options: ServiceRequestOpt
 };
 
 const warehouseStatuses = ["ACTIVE", "INACTIVE", "MAINTENANCE"];
+const isLocalityCode = (value: unknown): value is string => typeof value === "string" && /^[1-9][0-9]{0,8}$/.test(value);
 export const parseWarehouse = (value: unknown): Warehouse => {
   if (!isRecord(value) || !isAdminUuid(value.id) || typeof value.code !== "string" || typeof value.name !== "string" ||
     !(value.address === undefined || nullableString(value.address)) || typeof value.status !== "string" || !warehouseStatuses.includes(value.status) ||
-    !(value.sellerId === undefined || value.sellerId === null || isAdminUuid(value.sellerId)))
+    !(value.sellerId === undefined || value.sellerId === null || isAdminUuid(value.sellerId)) ||
+    !(value.provinceCode === undefined || value.provinceCode === null || isLocalityCode(value.provinceCode)) ||
+    !(value.wardCode === undefined || value.wardCode === null || isLocalityCode(value.wardCode)) ||
+    (value.provinceCode == null) !== (value.wardCode == null))
     throw createInvalidResponseError("Invalid warehouse details.");
-  return { id: value.id, code: value.code, name: value.name, address: value.address as string | null | undefined, status: value.status as Warehouse["status"], sellerId: (value.sellerId ?? null) as string | null };
+  return { id: value.id, code: value.code, name: value.name, address: value.address as string | null | undefined, status: value.status as Warehouse["status"], sellerId: (value.sellerId ?? null) as string | null,
+    provinceCode: (value.provinceCode ?? null) as string | null, wardCode: (value.wardCode ?? null) as string | null };
 };
 export const getOwnWarehouse = async (options: ServiceRequestOptions = {}): Promise<Warehouse | null> => {
   try {
@@ -56,8 +61,9 @@ export const getOwnWarehouse = async (options: ServiceRequestOptions = {}): Prom
   }
 };
 export const saveOwnWarehouse = async (body: OwnWarehouseInput, options: ServiceRequestOptions = {}): Promise<Warehouse> => {
-  const { name, address } = body;
-  const { data } = await requestApi("PUT", "/api/v1/warehouses/me", { name, address }, { ...options, auth: true });
+  const { name, address, provinceCode, wardCode } = body;
+  const pickup = provinceCode && wardCode ? { provinceCode, wardCode } : {};
+  const { data } = await requestApi("PUT", "/api/v1/warehouses/me", { name, address, ...pickup }, { ...options, auth: true });
   return parseWarehouse(data);
 };
 export const getAdminWarehouses = async (options: ServiceRequestOptions = {}): Promise<Warehouse[]> => {

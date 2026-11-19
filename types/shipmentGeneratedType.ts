@@ -546,6 +546,12 @@ export interface components {
              * @description UUID kho có mapping lấy hàng đã cấu hình; bỏ trống hoặc null dùng kho mặc định.
              */
             warehouseId?: string | null;
+            /** @description Địa chỉ lấy hàng của kho riêng seller do Commerce đọc từ Inventory. Có giá trị thì thay cho mapping theo warehouseId và địa chỉ lấy hàng của nền tảng; bỏ trống giữ cách chọn cũ. */
+            pickupAddress?: {
+                provinceCode: string;
+                wardCode: string;
+                line1: string;
+            } | null;
             /**
              * @description Giá trị khai bảo hiểm, đơn vị VND nguyên; bỏ trống hoặc null gửi 0. Không tự dùng subtotal, không tự cắt ngưỡng hoặc làm tròn. Giá trị âm, có phần lẻ hoặc vượt 5.000.000 trả 400 SHIPMENT_VALIDATION_FAILED.
              * @default 0

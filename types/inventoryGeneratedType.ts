@@ -20,6 +20,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/inventory/warehouses/pickup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read where carriers collect a seller's parcels
+         * @description Internal service endpoint for Commerce shipping quotes and order creation. Commerce relays the buyer's bearer token. data is null when the seller has no warehouse, the warehouse is not ACTIVE, or it has no complete pickup (province, ward and a street address of at most 255 characters); Commerce then quotes from the platform pickup.
+         */
+        get: operations["getSellerPickup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventory/{skuId}": {
         parameters: {
             query?: never;
@@ -302,7 +322,7 @@ export interface paths {
         get: operations["getOwnWarehouse"];
         /**
          * Create or rename the seller's own warehouse
-         * @description Creates the caller's warehouse when it does not exist yet, then stores the name and address. Code, status and owner are not request fields. A blank address is stored as null. The gateway requires a valid token; the service requires the SELLER role.
+         * @description Creates the caller's warehouse when it does not exist yet, then stores the name, address and pickup area. Code, status and owner are not request fields. A blank address is stored as null. With provinceCode and wardCode the address is the house number and street carriers collect from; without them orders ship from the platform pickup. The gateway requires a valid token; the service requires the SELLER role.
          */
         put: operations["updateOwnWarehouse"];
         post?: never;
@@ -683,8 +703,12 @@ export interface components {
         UpdateOwnWarehouseRequest: {
             /** @description Nonblank name; surrounding whitespace is trimmed before storage */
             name: string;
-            /** @description Omit, null or blank clears the address */
+            /** @description Omit, null or blank clears the address. With a pickup area it is the house number and street, at most 255 characters. */
             address?: string | null;
+            /** @description Province code from the public shipping localities; send together with wardCode, or omit both to clear the pickup area */
+            provinceCode?: string | null;
+            /** @description Ward code inside provinceCode */
+            wardCode?: string | null;
         };
         UpdateWarehouseRequest: {
             /** @description Nonblank name; surrounding ASCII whitespace is trimmed before storage */
@@ -724,6 +748,24 @@ export interface components {
              * @description Owner of a seller warehouse; null for a platform warehouse
              */
             sellerId?: string | null;
+            /** @description Pickup province code; null when no pickup area is set */
+            provinceCode?: string | null;
+            /** @description Pickup ward code; null when no pickup area is set */
+            wardCode?: string | null;
+        };
+        SellerPickupApiResponse: {
+            /** @enum {integer} */
+            code: 0;
+            message: string;
+            data: {
+                /** Format: uuid */
+                warehouseId: string;
+                /** Format: uuid */
+                sellerId: string;
+                provinceCode: string;
+                wardCode: string;
+                line1: string;
+            } | null;
         };
         WarehousePageInfo: {
             /** @description Complete warehouse lists always use page number 0 */
@@ -937,6 +979,56 @@ export interface operations {
                 };
             };
             /** @description orderId is missing or invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Caller lacks the BUYER role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSellerPickup: {
+        parameters: {
+            query: {
+                /** @description Seller UUID */
+                sellerId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The seller warehouse pickup, or null data */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerPickupApiResponse"];
+                };
+            };
+            /** @description sellerId is missing or invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2471,7 +2563,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WarehouseRead"];
-            /** @description VALIDATION_FAILED (missing, blank or overlong name, overlong address) or INVALID_REQUEST_BODY. */
+            /** @description VALIDATION_FAILED (missing, blank or overlong name, overlong address, only one of provinceCode and wardCode, a malformed code, or a pickup area without a street address of at most 255 characters) or INVALID_REQUEST_BODY. */
             400: {
                 headers: {
                     [name: string]: unknown;

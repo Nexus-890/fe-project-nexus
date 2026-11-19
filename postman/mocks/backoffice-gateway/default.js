@@ -25,7 +25,7 @@ const validParcel = (parcel) => parcel !== null && typeof parcel === "object" &&
 const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Math.min(...product.skus.map((sku) => sku.price)) : null, maxPrice: product.skus.length ? Math.max(...product.skus.map((sku) => sku.price)) : null });
 const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key]) => key !== "costPrice"));
 const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
-const ownWarehouse = (sellerId) => ownWarehouses[sellerId] ||= { id: randomUUID(), code: `SELLER-${sellerId.replaceAll("-", "").toUpperCase()}`, name: "Seller warehouse", address: null, status: "ACTIVE", sellerId };
+const ownWarehouse = (sellerId) => ownWarehouses[sellerId] ||= { id: randomUUID(), code: `SELLER-${sellerId.replaceAll("-", "").toUpperCase()}`, name: "Seller warehouse", address: null, status: "ACTIVE", sellerId, provinceCode: null, wardCode: null };
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus,
   getBankAccounts: () => sellerAccountsFixture.accounts, verifyBank: (sellerId) => sellerAccountsFixture.verifyDefault(sellerId), onVerified: (account) => payoutFixture.releaseHeld(account) };
@@ -171,13 +171,23 @@ const server = http.createServer(async (req, res) => {
   if (token) { try { const hash = createHash("sha256").update(token).digest("hex"); const allowed = await pm.state.get("oidc-keycloak:access-tokens") || {}; if (allowed[hash]) claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url")); } catch {} }
   const roles = claims?.roles || [], has = (role) => roles.includes(role);
   if (operationsFixture.handle(req, res, url, claims)) return;
+  if (path === "/v1/shipping/provinces" || path === "/v1/shipping/wards") {
+    const rows = path.endsWith("provinces") ? [{ code: "202", name: "Ho Chi Minh City" }, { code: "201", name: "Ha Noi" }]
+      : ({ "202": [{ code: "20309", name: "Ward 5" }, { code: "20310", name: "Ben Nghe" }], "201": [{ code: "20701", name: "Phuc Xa" }] })[url.searchParams.get("provinceCode")] || [];
+    return json(res, { ...envelope(rows), page: { number: 0, size: Math.max(1, rows.length), totalElements: rows.length, totalPages: rows.length ? 1 : 0 } });
+  }
   if (path === "/v1/warehouses/me") {
     if (!has("SELLER")) return problem(res, 403, "Seller role required");
     if (req.method === "PUT") {
       const body = bodyOf(req);
       if (typeof body.name !== "string" || !body.name.trim() || body.name.length > 150) return problem(res, 400, "The request data is invalid", "VALIDATION_FAILED");
+      const code = /^[1-9][0-9]{0,8}$/;
+      const area = body.provinceCode != null || body.wardCode != null;
+      if (area && (!code.test(body.provinceCode || "") || !code.test(body.wardCode || "") || typeof body.address !== "string" || !body.address.trim() || body.address.trim().length > 255))
+        return problem(res, 400, "The request data is invalid", "VALIDATION_FAILED");
       const row = ownWarehouse(claims.sub);
-      Object.assign(row, { name: body.name.trim(), address: typeof body.address === "string" && body.address.trim() ? body.address.trim() : null });
+      Object.assign(row, { name: body.name.trim(), address: typeof body.address === "string" && body.address.trim() ? body.address.trim() : null,
+        provinceCode: area ? body.provinceCode : null, wardCode: area ? body.wardCode : null });
       evidence.push({ method: "PUT", path: "/api/v1/warehouses/me", role: roles.join(","), body });
       return ok(res, row);
     }

@@ -54,6 +54,17 @@ test("seller warehouse reads 404 as not set up yet, saves name and address and k
     return Response.json(envelope(own));
   } };
   assert.equal((await saveOwnWarehouse({ name: "District 7", address: null }, { context })).sellerId, own.sellerId);
+  const pickup = { ...own, address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" };
+  const withPickup: ApiContext = { fetch: async (_input, init) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), { name: "District 7", address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" });
+    return Response.json(envelope(pickup));
+  } };
+  const saved = await saveOwnWarehouse({ name: "District 7", address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" }, { context: withPickup });
+  assert.equal(saved.provinceCode, "201");
+  assert.equal(saved.wardCode, "20309");
+  assert.equal((await getOwnWarehouse({ context: { fetch: async () => Response.json(envelope(own)) } }))?.provinceCode, null);
+  for (const broken of [{ ...pickup, wardCode: null }, { ...pickup, provinceCode: "20A" }, { ...pickup, wardCode: 20309 }])
+    await assert.rejects(getOwnWarehouse({ context: { fetch: async () => Response.json(envelope(broken)) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
   assert.equal((await getAdminWarehouses({ context: { fetch: async () => Response.json(envelope([{ ...own, sellerId: undefined }])) } }))[0].sellerId, null);
   await assert.rejects(getAdminWarehouses({ context: { fetch: async () => Response.json(envelope([{ ...own, sellerId: "seller" }])) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
 });
