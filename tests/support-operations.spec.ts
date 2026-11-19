@@ -75,12 +75,35 @@ test("support reaches unreconciled payments, records a refund with one captured 
   await expect(page.getByRole("table")).toContainText("REQUESTED");
   expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);
   await page.getByRole("button", { name: "Confirm refund transfer", exact: true }).click();
+  await expect(page.getByText("No transfer receipt uploaded yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Complete refund", exact: true })).toBeDisabled();
+  await page.getByLabel("Transfer receipt (JPEG, PNG or PDF, up to 10 MiB)", { exact: true }).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a receipt") });
+  await expect(page.getByRole("alert").filter({ hasText: "notes.txt is not a JPEG, PNG or PDF file." })).toBeVisible();
+  await page.getByLabel("Transfer receipt (JPEG, PNG or PDF, up to 10 MiB)", { exact: true }).setInputFiles({ name: "receipt.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n% refund receipt\n%%EOF\n") });
+  await page.getByLabel("Bank transaction reference", { exact: true }).fill("  FT2611190001  ");
+  await page.getByRole("button", { name: "Upload receipt", exact: true }).click();
+  const receipts = page.getByRole("list", { name: "Transfer receipts", exact: true });
+  await expect(receipts.getByRole("listitem")).toHaveCount(1);
+  await expect(receipts).toContainText("FT2611190001");
+  await expect(receipts).toContainText("PDF");
+  await expect(page.getByRole("table")).toContainText("1 receipt");
+  await receipts.getByRole("button", { name: "Open receipt 1", exact: true }).click();
+  await expect(receipts.getByRole("link", { name: "Save receipt 1", exact: true })).toHaveAttribute("download", /^refund-receipt-.+\.pdf$/);
   await page.getByRole("checkbox").check();
+  await layouts(page, "refund-receipt");
   await page.getByRole("button", { name: "Complete refund", exact: true }).click();
   await expect(page.getByRole("table")).toContainText("COMPLETED");
+  await expect(page.getByRole("status").filter({ hasText: "Refund completed." })).toBeVisible();
   await layouts(page, "refunds");
+  await page.getByRole("button", { name: "View transfer receipts", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Transfer receipts", exact: true })).toContainText("FT2611190001");
+  await expect(page.getByRole("button", { name: "Upload receipt", exact: true })).toHaveCount(0);
   const evidence = (await (await request.get(`${api}/test/operations/evidence`)).json()).data;
   expect(evidence.refunds).toHaveLength(1);
+  expect(evidence.refunds[0].evidence).toHaveLength(1);
+  expect(evidence.requests.filter((row: { path: string; method: string }) => row.method === "POST" && row.path.endsWith("/evidence")).map((row: { body: unknown }) => row.body)).toEqual([
+    { bankReference: "FT2611190001", file: { contentType: "application/pdf", size: 32 } },
+  ]);
 });
 
 test("support creates a shipment, updates status, overrides a rejected transition and reviews history", async ({ page, request }) => {

@@ -79,9 +79,46 @@ export interface paths {
         put?: never;
         /**
          * Record that the manual transfer back to the buyer is done
-         * @description Requires ORDER.REFUND. Records one REFUND payment transaction (MANUAL_TRANSFER) and emits OrderRefundCompleted. Calling it again on a completed refund returns the stored refund without a second transaction or event.
+         * @description Requires ORDER.REFUND. Records one REFUND payment transaction (MANUAL_TRANSFER) and emits OrderRefundCompleted. At least one transfer evidence file must be uploaded first. Calling it again on a completed refund returns the stored refund without a second transaction or event.
          */
         post: operations["completeRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/refunds/{id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach proof of the manual bank transfer to a refund
+         * @description Requires ORDER.REFUND. Stores a JPEG, PNG or PDF (detected from the bytes, up to 10 MiB) in private storage with the bank transaction reference. Uploading the same file again returns the stored refund. A refund keeps at most 3 files and accepts none after completion.
+         */
+        post: operations["uploadRefundEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/refunds/{id}/evidence/{evidenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download one refund transfer proof */
+        get: operations["getRefundEvidence"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -739,6 +776,19 @@ export interface components {
             requestedAt: string;
             /** Format: date-time */
             completedAt: string | null;
+            evidence: components["schemas"]["RefundEvidence"][];
+        };
+        RefundEvidence: {
+            /** Format: uuid */
+            evidenceId: string;
+            /** @enum {string} */
+            contentType: "image/jpeg" | "image/png" | "application/pdf";
+            sizeBytes: number;
+            bankReference: string;
+            /** Format: uuid */
+            uploadedBy: string;
+            /** Format: date-time */
+            uploadedAt: string;
         };
         RefundApiResponse: {
             /** @default 0 */
@@ -1984,8 +2034,135 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Refund changed by a concurrent request (PAYMENT_REFUND_CONFLICT) */
+            /** @description Refund changed by a concurrent request (PAYMENT_REFUND_CONFLICT) or no evidence uploaded yet (PAYMENT_REFUND_EVIDENCE_REQUIRED) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadRefundEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    bankReference: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Refund with its evidence list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundApiResponse"];
+                };
+            };
+            /** @description Missing file or bank reference (PAYMENT_REFUND_EVIDENCE_INVALID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing ORDER.REFUND (FORBIDDEN) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown refund (PAYMENT_REFUND_NOT_FOUND) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Completed refund (PAYMENT_REFUND_COMPLETED) or three files already (PAYMENT_REFUND_EVIDENCE_LIMIT) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description File larger than 10 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a JPEG, PNG or PDF */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Private evidence storage is not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRefundEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                evidenceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private evidence bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "application/pdf": string;
+                };
+            };
+            /** @description Unknown refund or evidence (PAYMENT_REFUND_NOT_FOUND) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
