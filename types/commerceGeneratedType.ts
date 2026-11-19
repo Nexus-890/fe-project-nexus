@@ -1114,6 +1114,20 @@ export interface components {
             /** @description subtotal - discountAmount + taxAmount + shippingFee. A null shippingFee counts as 0 until #201. */
             total: number;
             issues: components["schemas"]["CartIssue"][];
+            /** @description Carriers every seller order can ship with. fee is the sum over seller orders, estimatedDeliveryAt the latest arrival. Empty while shipping is not quoted. */
+            shippingOptions?: components["schemas"]["CheckoutShippingOption"][];
+            /** @description Carrier priced into shippingFee: the requested carrier when offered, else the recommended one; null without options. */
+            selectedCarrier?: string | null;
+        };
+        CheckoutShippingOption: {
+            /** @example GHN */
+            carrier: string;
+            /** @example Giao Hàng Nhanh */
+            carrierName: string;
+            fee: number;
+            /** Format: date-time */
+            estimatedDeliveryAt: string;
+            recommended: boolean;
         };
         CheckoutPreviewRequest: {
             shippingAddress: components["schemas"]["ShippingAddress"];
@@ -1125,6 +1139,8 @@ export interface components {
             /** @description Legacy alias for a single voucher code. */
             promoCode?: string;
             voucherCodes?: components["schemas"]["VoucherCodes"];
+            /** @description Carrier code chosen by the buyer from shippingOptions. Omitted or null uses the recommended option. A carrier not offered to every seller falls back to the recommended one in the preview. */
+            carrier?: string | null;
         };
         CartPricingEnvelope: {
             /** @default 0 */
@@ -1303,6 +1319,8 @@ export interface components {
             /** @description Legacy alias for a single voucher code. */
             promoCode?: string;
             voucherCodes?: components["schemas"]["VoucherCodes"];
+            /** @description Carrier code chosen by the buyer from shippingOptions. Omitted or null uses the recommended option. Every seller order is quoted and booked with this carrier; a carrier one seller cannot use returns 422 COMMERCE_SHIPPING_CARRIER_UNAVAILABLE. It is part of the idempotent payload. */
+            carrier?: string | null;
         };
         ChangeOrderStatus: {
             status: components["schemas"]["OrderStatus"];
@@ -5436,7 +5454,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`. */
+            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`, `COMMERCE_SHIPPING_CARRIER_UNAVAILABLE`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5446,7 +5464,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 422;
                         /** @enum {string} */
-                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE";
+                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE" | "COMMERCE_SHIPPING_CARRIER_UNAVAILABLE";
                     };
                 };
             };

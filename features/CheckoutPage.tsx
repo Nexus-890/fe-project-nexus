@@ -20,7 +20,7 @@ import { getCheckoutPreview, getProvinces, getWards } from "../service/checkoutS
 import { getAddresses, saveAddress } from "../service/addressBookService";
 import { ADDRESS_BOOK_LIMIT } from "../types/addressBookType";
 import type { AddressBookInput, SavedAddress } from "../types/addressBookType";
-import type { CheckoutAddress } from "../types/checkoutType";
+import type { CheckoutAddress, CheckoutPreview } from "../types/checkoutType";
 import type { CartItem } from "../types/cartResponseType";
 import type { UserResponse } from "../types/authResponseType";
 import { getCheckoutDestination, getCheckoutFieldErrors, previewMatchesCart, validateCheckoutAddress } from "./checkoutSchema";
@@ -32,6 +32,8 @@ import { getStockLevels } from "../service/backofficeService";
 
 const retryClass = "mt-4 min-h-11 min-w-11 rounded-sm border border-border px-4 text-sm font-medium hover:bg-secondary";
 const addressFields = ["recipientName", "phoneNumber", "addressLine", "provinceCode", "wardCode"] as const;
+
+const arrivalDate = (value: string) => new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
 
 function CheckoutPage() {
   const router = useRouter();
@@ -104,10 +106,11 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
   }, { enabled: Boolean(values.provinceCode), retry: false });
 
   const { codes } = useVoucherSelection();
+  const [carrier, setCarrier] = useState<string | null>(null);
   const shippingDestination = getCheckoutDestination(values,
     provinces.isError ? [] : provinces.data ?? [],
     wards.isError ? [] : wards.data ?? []);
-  const destination = shippingDestination ? { ...shippingDestination, voucherCodes: codes } : null;
+  const destination = shippingDestination ? { ...shippingDestination, voucherCodes: codes, ...(carrier ? { carrier } : {}) } : null;
   const cartSignature = JSON.stringify(items);
   const skuIds = items.map((item) => item.skuId);
   const stock = useApiQuery({ queryKey: queryKeys.catalog.stockLevels(skuIds), service: (signal) => getStockLevels(skuIds, { signal }) }, { enabled: skuIds.length > 0, retry: false });
@@ -128,10 +131,16 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
     retryDelay: (attempt) => 1500 * 2 ** attempt, staleTime: 0, gcTime: 0,
   });
   const quote = destination && !preview.isFetching && !preview.isError ? preview.data : undefined;
+  const addressKey = JSON.stringify([shippingDestination, codes, cartSignature]);
+  const [shownQuote, setShownQuote] = useState<{ key: string; quote: CheckoutPreview } | null>(null);
+  if (quote && shownQuote?.quote !== quote) setShownQuote({ key: addressKey, quote });
+  const shippingOptions = (quote ?? (shownQuote?.key === addressKey ? shownQuote.quote : undefined))?.shippingOptions ?? [];
+  const selectedCarrier = quote?.selectedCarrier ?? (preview.isFetching ? carrier : null);
+  const orderDestination = destination && quote ? { ...destination, ...(quote.selectedCarrier ? { carrier: quote.selectedCarrier } : {}) } : destination;
   const addressReady = destination !== null;
   const canContinue = !shortItems.length && Boolean(quote && quote.shippingFee !== null && !quote.issues.length && !(quote.vouchers?.some((v) => !v.applied)));
   const ready = addressReady;
-  const order = useCheckout(destination, ready && canContinue, onAttemptStart);
+  const order = useCheckout(orderDestination, ready && canContinue, onAttemptStart);
   const saving = useRef<{ sessionId: number; controller: AbortController; input: AddressBookInput } | null>(null);
   const mounted = useRef(false);
   useEffect(() => {
@@ -225,11 +234,22 @@ function CheckoutContents({ user, items, onAttemptStart }: { user: UserResponse;
           <VoucherPicker disabled={order.addressLocked} cartSignature={cartSignature} onChange={() => order.resetAfterEdit()} />
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="delivery-title">
             <h2 id="delivery-title" className="text-sm font-semibold">2. Delivery</h2>
-            <div className={`mt-4 flex items-start gap-3 rounded-sm border p-4 ${canContinue ? "border-primary" : "border-border"}`}>
+            {shippingOptions.length > 1 ? <fieldset className="mt-4" disabled={order.addressLocked || order.pending}>
+              <legend className="text-xs leading-5 text-muted-foreground">Choose a carrier. Fees and arrival dates are for your selected address.</legend>
+              <div className="mt-2 space-y-2">
+                {shippingOptions.map((option) => (
+                  <label key={option.carrier} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-sm border p-4 has-[:disabled]:cursor-not-allowed ${selectedCarrier === option.carrier ? "border-primary" : "border-border"}`}>
+                    <input type="radio" name="carrier" value={option.carrier} checked={selectedCarrier === option.carrier} onChange={() => { setCarrier(option.carrier); order.resetAfterEdit(); }} className="mt-1 size-4 shrink-0 accent-primary" />
+                    <span className="min-w-0 flex-1 text-sm"><span className="flex flex-wrap items-center gap-2 font-medium">{option.carrierName}{option.recommended && <span className="rounded-sm border border-primary px-1.5 text-xs font-medium text-primary">Recommended</span>}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">Arrives by {arrivalDate(option.estimatedDeliveryAt)}</span></span>
+                    <span className="max-w-[40%] break-words text-right font-mono text-sm tabular-nums">{formatVND(option.fee)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset> : <div className={`mt-4 flex items-start gap-3 rounded-sm border p-4 ${canContinue ? "border-primary" : "border-border"}`}>
               <Truck size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div className="min-w-0 flex-1 text-sm"><p className="font-medium">GHN delivery</p><p className="mt-1 text-xs leading-5 text-muted-foreground">The delivery fee is calculated for your selected address.</p></div>
+              <div className="min-w-0 flex-1 text-sm"><p className="font-medium">{shippingOptions[0] ? shippingOptions[0].carrierName : "GHN delivery"}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{shippingOptions[0] ? `Arrives by ${arrivalDate(shippingOptions[0].estimatedDeliveryAt)}. ` : ""}The delivery fee is calculated for your selected address.</p></div>
               {canContinue && <span className="max-w-[45%] break-words text-right font-mono text-sm tabular-nums">{formatVND(quote!.shippingFee)}</span>}
-            </div>
+            </div>}
           </section>
           {shortItems.length > 0 && <div role="alert" className="rounded-sm border border-danger p-4 text-sm"><p className="font-semibold">Not enough stock</p><ul className="mt-2 list-inside list-disc">{shortItems.map((item) => <li key={item.id}>{item.productName}: {stock.data?.[item.skuId] ? `only ${stock.data[item.skuId]} left` : "out of stock"}</li>)}</ul><Link href="/cart" className="mt-2 inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">Back to cart</Link></div>}
           <section className="rounded-sm border border-border bg-card p-4 sm:p-6" aria-labelledby="payment-title">
