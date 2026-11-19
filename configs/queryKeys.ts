@@ -1,4 +1,4 @@
-import type { ProductFilters } from "../types/catalogRequestType";
+import type { DiscoveryType, ProductFilters } from "../types/catalogRequestType";
 import type { CheckoutDestination } from "../types/checkoutType";
 import type { OrderFilters } from "../types/orderRequestType";
 import type { NotificationFilters } from "../types/notificationRequestType";
@@ -103,6 +103,7 @@ export const queryKeys = {
     cartProducts: (productIds: string[]) =>
       ["catalog", "cart-products", productIds] as const,
     tree: ["catalog", "category-tree"] as const,
+    discovery: (type: DiscoveryType, size: number) => ["catalog", "discovery", type, size] as const,
     products: (filters: ProductFilters) =>
       ["catalog", "products", filters] as const,
     product: (productId: string) => ["catalog", "product", productId] as const,

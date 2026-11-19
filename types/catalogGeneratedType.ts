@@ -144,6 +144,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/discovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List best-selling or newest public products
+         * @description Home page discovery. type=popular orders ACTIVE, nondeleted products that have at least one ACTIVE SKU by units sold in completed orders (counted from OrderCompleted), then newest and ID; products never sold are left out. type=new orders the same products by newest and ID. Not paginated; size caps the list.
+         */
+        get: operations["discoverProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products/mine": {
         parameters: {
             query?: never;
@@ -602,6 +622,11 @@ export interface components {
             message: string;
             data: components["schemas"]["Product"][];
             page: components["schemas"]["PageInfo"];
+        };
+        DiscoverProductsResponse: {
+            code: number;
+            message: string;
+            data: components["schemas"]["Product"][];
         };
         FlatCategoryPage: {
             code: number;
@@ -2574,6 +2599,38 @@ export interface operations {
                 };
             };
             /** @description Invalid parameters or minimum price above maximum price */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    discoverProducts: {
+        parameters: {
+            query?: {
+                type?: "popular" | "new";
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discovery list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoverProductsResponse"];
+                };
+            };
+            /** @description Unknown type or size outside 1..24 */
             400: {
                 headers: {
                     [name: string]: unknown;

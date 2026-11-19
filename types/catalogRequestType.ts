@@ -1,6 +1,10 @@
 import type { operations } from "./catalogGeneratedType";
 type SearchQuery = NonNullable<operations["searchProducts"]["parameters"]["query"]>;
 
+type DiscoveryQuery = NonNullable<operations["discoverProducts"]["parameters"]["query"]>;
+export type DiscoveryType = NonNullable<DiscoveryQuery["type"]>;
+export const MAX_DISCOVERY_SIZE = 24;
+
 export type ShopSort = "relevance" | "createdAt,desc" | "price,asc" | "price,desc";
 type SearchSort = NonNullable<SearchQuery["sort"]>;
 export const SEARCH_SORT: Record<ShopSort, SearchSort> = {

@@ -63,7 +63,9 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await expect(tree.getByRole("link", { name: "Electronics", exact: true })).toBeVisible();
   await expect(tree.getByRole("link", { name: "Audio", exact: true })).toHaveCount(0);
   await expect(tree.getByRole("link", { name: "Headphones", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("article")).toHaveCount(11);
+  await expect(page.getByRole("article")).toHaveCount(18);
+  await expect(page.locator("#best-sellers").getByRole("heading", { level: 3 })).toHaveText(["Product 3", "Product 1"]);
+  await expect(page.locator("#new-arrivals").getByRole("heading", { level: 3 })).toHaveText(["Product 5", "Product 4", "Product 3", "Product 2", "Product 1"]);
   await expect(page.getByRole("heading", { name: "FLASH SALE", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Today's picks", exact: true })).toBeVisible();
   await expect(page.getByText("250.000,00 ₫", { exact: true })).toBeVisible();
@@ -73,7 +75,7 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await expect(page.getByRole("region", { name: "Available vouchers", exact: true })).toContainText("No claimable vouchers right now");
   expect(
     apiRequests.every(
-      (url) => ["/api/v1/categories/tree", "/api/v1/products/search", "/api/v1/auctions", "/api/v1/vouchers"].includes(new URL(url).pathname),
+      (url) => ["/api/v1/categories/tree", "/api/v1/products/search", "/api/v1/products/discovery", "/api/v1/auctions", "/api/v1/vouchers"].includes(new URL(url).pathname),
     ),
   ).toBe(true);
   const initialApiRequests = [...apiRequests];
@@ -85,7 +87,7 @@ test("home renders live catalog and auctions with responsive campaign and vouche
     .getByRole("option", { name: "Home & Living", exact: true })
     .click();
   await expect(categoryPicker).toContainText("Home & Living");
-  await expect(page.getByRole("article")).toHaveCount(11);
+  await expect(page.getByRole("article")).toHaveCount(18);
   expect(apiRequests).toEqual(initialApiRequests);
   await mobileChecks(page);
   await page.screenshot({
@@ -116,7 +118,7 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(categoryPicker).toBeFocused();
   await expect(categoryPicker).toContainText("Electronics");
-  await expect(page.getByRole("article")).toHaveCount(11);
+  await expect(page.getByRole("article")).toHaveCount(18);
   await expect(page).toHaveURL(/\/$/);
   expect(apiRequests).toEqual(initialApiRequests);
   await layoutChecks(page);
@@ -127,6 +129,34 @@ test("home renders live catalog and auctions with responsive campaign and vouche
   await tree.getByRole("link", { name: "Electronics", exact: true }).click();
   await expect(page).toHaveURL(/\/categories\/electronics$/);
   await expect(page.getByRole("article")).toHaveCount(2);
+});
+
+test("home best sellers and new arrivals come from discovery with empty, failure and retry states", async ({ page }) => {
+  const requests: string[] = [];
+  let newFails = true;
+  await page.route("**/api/v1/products/discovery?*", async (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url.search);
+    if (url.searchParams.get("type") === "popular")
+      return route.fulfill({ json: { code: 0, message: "response success", data: [] } });
+    if (newFails) return route.fulfill({ status: 503, json: { title: "Unavailable", status: 503 } });
+    return route.continue();
+  });
+  await page.goto("/");
+  const bestSellers = page.getByRole("region", { name: "Best sellers", exact: true });
+  const newArrivals = page.getByRole("region", { name: "New arrivals", exact: true });
+  await expect(bestSellers.getByRole("status")).toHaveText("No best sellers yet. Products show up here after their orders are completed.");
+  await expect(bestSellers.getByRole("article")).toHaveCount(0);
+  await expect(newArrivals.getByRole("alert")).toContainText("Unable to load new arrivals.");
+  await expect(page.locator("#today-picks").getByRole("article")).toHaveCount(5);
+  newFails = false;
+  await newArrivals.getByRole("button", { name: "Retry new arrivals", exact: true }).click();
+  await expect(newArrivals.getByRole("article")).toHaveCount(5);
+  await expect(newArrivals.getByRole("link", { name: "View all new arrivals" })).toHaveAttribute("href", "/search?sort=createdAt%2Cdesc");
+  expect(requests).toEqual(expect.arrayContaining(["?type=popular&size=6", "?type=new&size=6"]));
+  await layoutChecks(page);
+  await newArrivals.getByRole("link", { name: "View all new arrivals" }).click();
+  await expect(page).toHaveURL(/\/search\?sort=createdAt%2Cdesc$/);
 });
 
 test("cards align short, long and unavailable-price products while home categories show only roots", async ({ page }) => {
@@ -250,7 +280,7 @@ test("home category failure displays the error and retry restores the category t
       : route.continue(),
   );
   await page.goto("/");
-  await expect(page.getByRole("article")).toHaveCount(11);
+  await expect(page.getByRole("article")).toHaveCount(18);
   await expect(page.getByText("Unable to load categories.")).toBeVisible();
   await mobileChecks(page);
   failed = false;

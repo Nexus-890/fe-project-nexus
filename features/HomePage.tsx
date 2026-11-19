@@ -17,6 +17,7 @@ import { getActiveAuctions } from "@/service/auctionService";
 import { flattenCategories } from "@/features/catalogUtils";
 import SellerReputation from "./SellerReputation";
 import ClaimableVouchers from "./ClaimableVouchers";
+import HomeDiscoverySection from "./HomeDiscoverySection";
 import AuctionCountdown from "../components/AuctionCardCountdown";
 
 const homeFilters = { page: 0, size: 10 };
@@ -44,6 +45,8 @@ function HomePage() {
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="nexus-live" className="flex items-center gap-2 text-heading-20"><span className="size-2 rounded-full bg-success" aria-hidden="true" />Live auctions ending soon</h2><span className="text-xs text-muted-foreground">Updates every 30 seconds</span></div>
         {auctions.isPending ? <p role="status" className="rounded-sm border border-border p-6 text-sm">Loading live auctions…</p> : auctions.isError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border p-6 text-sm"><p>Unable to load live auctions.</p><button type="button" disabled={auctions.isFetching} onClick={() => void auctions.refetch()} className="min-h-11 rounded-sm border border-border px-4">Retry auctions</button></div> : auctions.data?.length ? <ul className="grid list-none grid-cols-1 gap-4 p-0 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">{auctions.data.map((auction) => <li key={auction.auctionId} className="min-w-0"><article className="overflow-hidden rounded-sm border border-border"><Link href={`/auctions/${encodeURIComponent(auction.auctionId)}`} className="block"><div className="relative aspect-square bg-muted"><ProductImage src={auction.imageUrl} alt={auction.name} productName={auction.name} loading="lazy" /><div className="absolute top-2 left-2"><AuctionCountdown closesAt={auction.closesAt} /></div></div><div className="space-y-2 p-3"><h3 className="line-clamp-2 min-h-10 text-sm leading-5">{auction.name}</h3><p className="text-xs text-muted-foreground">Current bid</p><div className="flex flex-wrap items-center justify-between gap-1"><strong className="text-primary">{auction.currency === "VND" ? formatVND(auction.currentBid) : `${auction.currentBid} ${auction.currency}`}</strong><span className="text-xs text-muted-foreground">{auction.bidCount} bids</span></div><div className="flex min-h-7 items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Enter auction room</p><SellerReputation sellerId={auction.sellerId} compact /></div></div></Link></article></li>)}</ul> : <p role="status" className="rounded-sm border border-dashed border-border p-6 text-sm text-muted-foreground">There are no live auctions right now. Check back for new finds.</p>}
       </section>
+      <HomeDiscoverySection type="popular" />
+      <HomeDiscoverySection type="new" />
       <section id="today-picks" aria-label="Today's picks" className="space-y-4">
         <h2 className="text-heading-20">Today&apos;s picks</h2>
         <p className="text-xs text-muted-foreground">Current catalog prices · deal, shipping, sales and seller details are sample previews.</p>

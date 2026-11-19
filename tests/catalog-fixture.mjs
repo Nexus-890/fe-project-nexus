@@ -242,6 +242,13 @@ const server = createServer(async (req, res) => {
       },
     });
   }
+  if (url.pathname === "/api/v1/products/discovery") {
+    const size = Number(url.searchParams.get("size") || 8);
+    const ranked = url.searchParams.get("type") === "new"
+      ? [...backendProducts].sort((a, b) => b.id.localeCompare(a.id))
+      : [backendProducts[2], backendProducts[0]];
+    return json(res, success(ranked.slice(0, size)));
+  }
   if (url.pathname === "/api/v1/products/search") {
     const categoryId = url.searchParams.get("categoryId");
     const page = Number(url.searchParams.get("page") || 0);
