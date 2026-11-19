@@ -169,6 +169,7 @@ const server = http.createServer(async (req, res) => {
     await pm.state.set("profile-gateway:controls", {});
     await pm.state.set("profile-gateway:requests", []);
     await pm.state.set("profile-gateway:reset-used", false);
+    await pm.state.set("profile-gateway:password", currentPassword);
     avatars.clear();
     return json(res, {});
   }
@@ -280,6 +281,20 @@ const server = http.createServer(async (req, res) => {
     const next = { ...user, avatarUrl: `http://127.0.0.1:3913/api/test/avatar/${key}` };
     await pm.state.set("profile-gateway:user", next);
     return success(res, next);
+  }
+
+  // @endpoint POST /v1/users/me/password
+  if (path === "/v1/users/me/password" && req.method === "POST") {
+    const password = await pm.state.get("profile-gateway:password") || currentPassword;
+    if (req.body?.currentPassword !== password) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_CURRENT_PASSWORD_INCORRECT", detail: "The current password is incorrect" }, 400);
+    }
+    if (req.body?.newPassword === password) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_REUSED", detail: "The new password must be different from the current password" }, 400);
+    }
+    await pm.state.set("profile-gateway:password", req.body.newPassword);
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
   }
 
   // @endpoint DELETE /v1/users/me/avatar

@@ -156,6 +156,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the current user's password
+         * @description Checks the current password with Keycloak (a password grant of the user-service client whose session is ended at once; failed checks count toward the realm brute-force lock), sets the new password under the realm password policy, records the UserPasswordChanged audit event with method SELF and then ends every other Keycloak session of the account, keeping the session of the calling token (its sid claim). Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        post: operations["changeOwnPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/avatar": {
         parameters: {
             query?: never;
@@ -712,6 +732,15 @@ export interface components {
             /** @description The token query parameter of the emailed link. */
             token: string;
             /** Format: password */
+            newPassword: string;
+        };
+        ChangePasswordRequest: {
+            /** Format: password */
+            currentPassword: string;
+            /**
+             * Format: password
+             * @description Must differ from the current password.
+             */
             newPassword: string;
         };
         ConfirmPhoneCode: {
@@ -2475,6 +2504,84 @@ export interface operations {
             };
             /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_PASSWORD_RESET_LINK_INVALID`, `USER_PASSWORD_REJECTED`, `USER_PASSWORD_REUSED`. */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict. Codes: `USER_IDENTITY_NOT_FOUND`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_CURRENT_PASSWORD_INCORRECT`, `USER_PASSWORD_REJECTED`, `USER_PASSWORD_REUSED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

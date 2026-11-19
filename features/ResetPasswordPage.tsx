@@ -12,7 +12,7 @@ import { PASSWORD_MAX_LENGTH, RESET_TOKEN_PATTERN, confirmPasswordReset, passwor
 
 const failureMessages: Record<string, string> = {
   USER_PASSWORD_REUSED: "Choose a password that is different from your current one.",
-  USER_PASSWORD_REJECTED: "This password does not meet the password rules. Use at least 8 characters.",
+  USER_PASSWORD_REJECTED: "This password does not meet the password rules. Use at least 8 characters with a number and a symbol.",
 };
 
 function ResetPasswordPage({ token }: { token: string }) {
@@ -49,7 +49,7 @@ function ResetPasswordPage({ token }: { token: string }) {
         <LockKeyhole className="size-12 text-primary" aria-hidden="true" />
         <div className="space-y-3">
           <h1 className="text-heading-32">Choose a new password</h1>
-          <p className="text-sm text-muted-foreground">Use at least 8 characters and do not reuse your current password.</p>
+          <p className="text-sm text-muted-foreground">Use at least 8 characters with a number and a symbol, and do not reuse your current password.</p>
         </div>
         <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <div className="space-y-2"><Label htmlFor="new-password">New password</Label>

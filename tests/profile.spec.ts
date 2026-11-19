@@ -294,28 +294,50 @@ test("profile fits 375x812 without clipped text and has desktop and mobile scree
   await page.screenshot({ path: info.outputPath("profile-desktop-1440.png"), fullPage: true, style: screenshotStyle });
 });
 
-test("profile password action opens Keycloak credential settings with a safe profile referrer", async ({ page }) => {
+test("profile changes the password in place: checks locally, explains a wrong current one and saves once", async ({ page, request }) => {
   await signIn(page);
   await openProfile(page);
   await populatedForm(page);
-  await expect(page.locator('input[type="password"]')).toHaveCount(0);
-  const profileOrigin = new URL(page.url()).origin;
-  // The fixture only acknowledges navigation. Keycloak's actual forms, reset
-  // tokens and email delivery require the documented live acceptance checks.
-  await page.route("**/realms/nexus/account/**", (route) => route.fulfill({
-    contentType: "text/html",
-    body: "<!doctype html><html><body><h1>Account console fixture</h1></body></html>",
-  }));
-  const accountRequest = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/realms/nexus/account/"));
-  await page.getByRole("button", { name: "Change password", exact: true }).click();
-  const destination = new URL((await accountRequest).url());
-  expect(destination.origin).toBe(simulation);
-  expect(destination.pathname).toBe("/keycloak/realms/nexus/account/");
-  expect([...destination.searchParams]).toEqual([
-    ["referrer", "nexus-web"],
-    ["referrer_uri", `${profileOrigin}/profile`],
+  const security = page.locator("#security");
+  const current = security.getByLabel("Current password", { exact: true });
+  const next = security.getByLabel("New password", { exact: true });
+  const confirmation = security.getByLabel("Confirm new password", { exact: true });
+  const save = security.getByRole("button", { name: "Change password", exact: true });
+  const ownPasswordCalls = async () => (await history(request)).filter((entry) => entry.path === "/v1/users/me/password");
+
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Enter your current password.");
+  await current.fill("Fixture-pass-123!");
+  await next.fill("short");
+  await confirmation.fill("short");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Use at least 8 characters.");
+  await next.fill("Fixture-pass-123!");
+  await confirmation.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Choose a password that is different from your current one.");
+  expect(await ownPasswordCalls()).toEqual([]);
+
+  await current.fill("Not-my-pass-000!");
+  await next.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-456!");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("The current password is incorrect.");
+  await expect(current).toHaveAttribute("aria-invalid", "true");
+  await expect(next).toHaveValue("Another-pass-456!");
+
+  await current.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(security.getByRole("status")).toHaveText("Your password has been changed. Other devices have been signed out.");
+  await expect(current).toHaveValue("");
+  await expect(next).toHaveValue("");
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
+  await responsiveChecks(page);
+  expect((await ownPasswordCalls()).map((entry) => [entry.body, entry.authenticated])).toEqual([
+    [{ currentPassword: "Not-my-pass-000!", newPassword: "Another-pass-456!" }, true],
+    [{ currentPassword: "Fixture-pass-123!", newPassword: "Another-pass-456!" }, true],
   ]);
-  await expect(page).toHaveURL(/#\/account-security\/signing-in$/);
 });
 
 const resetToken = "Rk9yZ290LXBhc3N3b3JkLWZpeHR1cmUtdG9rZW4tMDE";
@@ -345,6 +367,10 @@ test("the reset page checks the passwords, explains a reused one, saves once and
   await confirmation.fill("short");
   await save.click();
   await expect(page.locator("main").getByRole("alert")).toHaveText("Use at least 8 characters.");
+  await password.fill("Another-pass");
+  await confirmation.fill("Another-pass");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Include at least one number.");
   await password.fill("Another-pass-456!");
   await confirmation.fill("Another-pass-457!");
   await save.click();
