@@ -83,6 +83,9 @@ test("warehouse create, edit and status filtering", async ({ page, request }) =>
   await page.getByLabel("Filter warehouse status").selectOption("MAINTENANCE");
   await expect(page.getByRole("table").getByText("Da Nang warehouse", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Ho Chi Minh warehouse", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Filter warehouse status").selectOption("");
+  await expect(page.getByRole("row").filter({ hasText: "Demo seller warehouse" })).toContainText("Seller68000000");
+  await expect(page.getByRole("row").filter({ hasText: "Ho Chi Minh warehouse" })).toContainText("Platform");
   await screenshot(page, "warehouses");
 });
 

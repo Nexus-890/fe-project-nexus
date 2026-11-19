@@ -11,8 +11,9 @@ exports.createAdminCatalogFixture = ({ ok, problem, list, bodyOf, randomUUID }) 
       { id: id(3), name: "Headphones", slug: "headphones", parentId: id(2), description: "Personal audio" },
       { id: id(4), name: "Books", slug: "books", parentId: null, description: "Books with products", hasProducts: true },
     ];
-    warehouses = [{ id: id(20), code: "WH_HCM", name: "Ho Chi Minh warehouse", address: "1 Nguyen Hue", status: "ACTIVE" },
-      { id: id(21), code: "WH_HN", name: "Hanoi warehouse", address: null, status: "INACTIVE" }];
+    warehouses = [{ id: id(20), code: "WH_HCM", name: "Ho Chi Minh warehouse", address: "1 Nguyen Hue", status: "ACTIVE", sellerId: null },
+      { id: id(21), code: "WH_HN", name: "Hanoi warehouse", address: null, status: "INACTIVE", sellerId: null },
+      { id: id(22), code: "SELLER-68000000000040008000000000000002", name: "Demo seller warehouse", address: "5 Le Loi", status: "ACTIVE", sellerId: "68000000-0000-4000-8000-000000000002" }];
     balance = { skuId: id(31), warehouseId: id(20), total: 10, available: 8, reserved: 2, unavailable: 0 };
     movements = Array.from({ length: 12 }, (_, index) => ({ id: id(100 + index), skuId: id(31), warehouseId: id(20),
       movementType: index === 0 ? "ADJUSTMENT" : "INTAKE", quantity: index === 0 ? -2 : 1, referenceId: null,

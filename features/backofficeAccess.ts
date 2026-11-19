@@ -56,6 +56,7 @@ export function backofficeMenu(roles: readonly BackofficeRole[]): BackofficeMenu
     { label: "Products", href: "/backoffice/products" },
     ...(resolveAuctionWorkspace(roles) === "seller" ? [{ label: "Auctions", href: "/backoffice/auctions" }] : []),
     { label: "Sales", href: "/backoffice/sales" },
+    { label: "Warehouse", href: "/backoffice/warehouse" },
     { label: "Bank accounts", href: "/backoffice/bank-accounts" },
     ...(!roles.includes("ADMIN") ? [{ label: "Payout history", href: "/backoffice/payouts" }] : []),
   );

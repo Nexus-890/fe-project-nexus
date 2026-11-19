@@ -8,7 +8,7 @@ const appOrigin = `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || 3110}`;
 const seller = "68000000-0000-4000-8000-000000000002";
 const category = "69000000-0000-4000-8000-000000000103";
 const warehouse = "69000000-0000-4000-8000-000000000001";
-let fulfilment = {}, products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {}, orderedProducts = new Set();
+let ownWarehouses = {}, fulfilment = {}, products = [], balances = {}, carts = {}, orders = [], groups = {}, evidence = [], rejectPublish = false, profileRole = null, auctions = [], auctionBids = {}, auctionCreatedAt = {}, orderedProducts = new Set();
 const transitions = { DRAFT: ["ACTIVE"], ACTIVE: ["INACTIVE"], INACTIVE: ["ACTIVE"] };
 const envelope = (data) => ({ code: 0, message: "response success", data });
 function json(res, body, status = 200) { res.writeHead(status, { "Content-Type": status >= 400 ? "application/problem+json" : "application/json", "Cache-Control": "no-store" }); res.end(status === 204 ? undefined : JSON.stringify(body)); }
@@ -25,6 +25,7 @@ const validParcel = (parcel) => parcel !== null && typeof parcel === "object" &&
 const withPrice = (product) => ({ ...product, minPrice: product.skus.length ? Math.min(...product.skus.map((sku) => sku.price)) : null, maxPrice: product.skus.length ? Math.max(...product.skus.map((sku) => sku.price)) : null });
 const publicSku = (sku) => Object.fromEntries(Object.entries(sku).filter(([key]) => key !== "costPrice"));
 const publicProduct = (product) => withPrice({ ...product, skus: product.skus.map(publicSku) });
+const ownWarehouse = (sellerId) => ownWarehouses[sellerId] ||= { id: randomUUID(), code: `SELLER-${sellerId.replaceAll("-", "").toUpperCase()}`, name: "Seller warehouse", address: null, status: "ACTIVE", sellerId };
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus,
   getBankAccounts: () => sellerAccountsFixture.accounts, verifyBank: (sellerId) => sellerAccountsFixture.verifyDefault(sellerId), onVerified: (account) => payoutFixture.releaseHeld(account) };
@@ -132,7 +133,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, origin), path = url.pathname;
   if (path === "/health") return json(res, { ready: true });
   if (path.startsWith("/v1/auth/")) return session(req, res, url);
-  if (path === "/test/reset") { fulfilment = {}; products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); adminFixture.reset(); operationsFixture.deactivate(); return json(res, {}); }
+  if (path === "/test/reset") { ownWarehouses = {}; fulfilment = {}; products = []; balances = {}; carts = {}; orders = []; groups = {}; evidence = []; rejectPublish = false; profileRole = null; orderedProducts = new Set(); resetAuctions(); sellerFixtures.forEach((fixture) => fixture.reset()); adminFixture.reset(); operationsFixture.deactivate(); return json(res, {}); }
   if (path === "/test/seller-seed" && req.method === "POST") {
     const id = "a2250000-0000-4000-8000-000000000001", skuId = "a2250000-0000-4000-8000-000000000002";
     products = [{ id, sellerId: seller, name: "Studio Wireless Headphones", slug: `demo-${id}`, categoryId: category, status: "ACTIVE", description: "Seller operations fixture", auctionEnable: true,
@@ -161,6 +162,7 @@ const server = http.createServer(async (req, res) => {
     products.push(product);
     return ok(res, withPrice(product), 201);
   }
+  if (path === "/test/own-warehouses") return ok(res, ownWarehouses);
   if (path === "/test/evidence") return json(res, { requests: evidence, products: products.map(withPrice), balances, orders, groups, auctions });
   if (path === "/test/payment-confirmed") { const { groupId } = bodyOf(req); const group = groups[groupId]; if (!group) return problem(res, 404, "No simulated order group"); group.status = "PAID"; group.orders.forEach((order) => { order.status = "PAID"; }); evidence.push({ method: "TEST", path, status: 200, environment: "simulation only; models undelivered payment consumer" }); return ok(res, group); }
   if (path === "/test/image.svg") { res.writeHead(200, { "Content-Type": "image/svg+xml" }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="orange"/></svg>'); }
@@ -169,6 +171,18 @@ const server = http.createServer(async (req, res) => {
   if (token) { try { const hash = createHash("sha256").update(token).digest("hex"); const allowed = await pm.state.get("oidc-keycloak:access-tokens") || {}; if (allowed[hash]) claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url")); } catch {} }
   const roles = claims?.roles || [], has = (role) => roles.includes(role);
   if (operationsFixture.handle(req, res, url, claims)) return;
+  if (path === "/v1/warehouses/me") {
+    if (!has("SELLER")) return problem(res, 403, "Seller role required");
+    if (req.method === "PUT") {
+      const body = bodyOf(req);
+      if (typeof body.name !== "string" || !body.name.trim() || body.name.length > 150) return problem(res, 400, "The request data is invalid", "VALIDATION_FAILED");
+      const row = ownWarehouse(claims.sub);
+      Object.assign(row, { name: body.name.trim(), address: typeof body.address === "string" && body.address.trim() ? body.address.trim() : null });
+      evidence.push({ method: "PUT", path: "/api/v1/warehouses/me", role: roles.join(","), body });
+      return ok(res, row);
+    }
+    return ownWarehouses[claims.sub] ? ok(res, ownWarehouses[claims.sub]) : problem(res, 404, "Your warehouse is created with your first stock intake or when you save its details", "INVENTORY_WAREHOUSE_NOT_FOUND");
+  }
   if (adminCatalogFixture.handle(req, res, url, claims)) return;
   if (adminFixture.handle(req, res, url, claims)) return;
   const operation = { method: req.method, path: `/api${path}`, role: roles.join(","), query: Object.fromEntries(url.searchParams) };
@@ -228,7 +242,7 @@ const server = http.createServer(async (req, res) => {
     if (body.shippingParcel != null) sku.shippingParcel = { ...body.shippingParcel };
     return ok(res, sku);
   }
-  if (path === "/v1/inventory/intake") { const body = bodyOf(req); const owner = products.find((product) => product.skus.some((sku) => sku.id === body.skuId))?.sellerId; if (!has("ADMIN") && !(has("SELLER") && owner === claims.sub && body.warehouseId == null)) return problem(res, 403, "Admin or owning Seller required"); if (!findSku(body.skuId) || !Number.isInteger(body.quantity) || body.quantity < 1) return problem(res, 400, "Valid SKU and positive quantity required"); const balance = balances[body.skuId] ||= { skuId: body.skuId, warehouseId: warehouse, total: 0, available: 0, reserved: 0, unavailable: 0 }; balance.total += body.quantity; balance.available += body.quantity; return ok(res, balance, 201); }
+  if (path === "/v1/inventory/intake") { const body = bodyOf(req); const owner = products.find((product) => product.skus.some((sku) => sku.id === body.skuId))?.sellerId; if (!has("ADMIN") && !(has("SELLER") && owner === claims.sub && body.warehouseId == null)) return problem(res, 403, "Admin or owning Seller required"); if (!findSku(body.skuId) || !Number.isInteger(body.quantity) || body.quantity < 1) return problem(res, 400, "Valid SKU and positive quantity required"); const target = has("ADMIN") ? warehouse : ownWarehouse(claims.sub).id; const balance = balances[body.skuId] ||= { skuId: body.skuId, warehouseId: target, total: 0, available: 0, reserved: 0, unavailable: 0 }; balance.total += body.quantity; balance.available += body.quantity; return ok(res, balance, 201); }
   if (path === "/v1/inventory/balances") { if (!has("ADMIN") && !has("SELLER")) return problem(res, 403, "Stock role required"); return list(res, Object.values(balances).filter((balance) => !url.searchParams.has("skuId") || balance.skuId === url.searchParams.get("skuId")), url); }
   if (path === "/v1/inventory/reservations/fulfillment" || /^\/v1\/inventory\/reservations\/[^/]+\/(?:pick|ship)$/.test(path)) {
     if (!has("ADMIN") && !has("SELLER")) return problem(res, 403, "Seller or Admin required");

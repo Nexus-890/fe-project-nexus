@@ -71,7 +71,7 @@ export interface paths {
         put?: never;
         /**
          * Receive stock into a warehouse
-         * @description Raises total and available by the quantity in one statement and creates the balance row on the first intake of a SKU in that warehouse. When warehouseId is left out, the warehouse is the one whose code is nexus.inventory.default-warehouse-code. Only ACTIVE warehouses accept intake: INACTIVE or MAINTENANCE returns 409 for both an explicit warehouseId and the configured default, without changing balances or writing a movement. The status check and writes share a transaction and coordinate with warehouse updates. The gateway only requires a valid token; the service requires the ADMIN role.
+         * @description Raises total and available by the quantity in one statement and creates the balance row on the first intake of a SKU in that warehouse. Each seller has one warehouse (code SELLER- plus the seller id), created on the seller's first intake. A seller's intake always goes to that warehouse and cannot name another one. An admin intake without warehouseId goes to the warehouse of the SKU's seller; when catalog knows no seller, it goes to the warehouse already holding the SKU, else to the one whose code is nexus.inventory.default-warehouse-code. An explicit warehouseId that is not the SKU's warehouse returns 409 INVENTORY_WAREHOUSE_NOT_SKU_HOME. When stock lands in a seller warehouse, available stock of the SKU still held in platform warehouses moves there with a pair of TRANSFER movements. Only ACTIVE warehouses accept intake: INACTIVE or MAINTENANCE returns 409 for both an explicit warehouseId and the configured default, without changing balances or writing a movement. The status check and writes share a transaction and coordinate with warehouse updates. The gateway only requires a valid token; the service requires ADMIN or a SELLER who owns the SKU.
          */
         post: operations["intakeStock"];
         delete?: never;
@@ -288,6 +288,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/warehouses/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the seller's own warehouse
+         * @description Returns the caller's warehouse. It exists after the seller's first stock intake or first save; before that the answer is 404. The gateway requires a valid token; the service requires the SELLER role.
+         */
+        get: operations["getOwnWarehouse"];
+        /**
+         * Create or rename the seller's own warehouse
+         * @description Creates the caller's warehouse when it does not exist yet, then stores the name and address. Code, status and owner are not request fields. A blank address is stored as null. The gateway requires a valid token; the service requires the SELLER role.
+         */
+        put: operations["updateOwnWarehouse"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/warehouses/{id}": {
         parameters: {
             query?: never;
@@ -405,8 +429,18 @@ export interface components {
         Reservation: {
             /** @description One per item, in request order */
             reservationIds: string[];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Warehouse of the first order; each order's own warehouse is in orders
+             */
             warehouseId: string;
+            /** @description One entry per order, in request order. Each SKU is held in the warehouse that stocks it (its seller's warehouse), so orders of different sellers name different warehouses. */
+            orders?: {
+                /** Format: uuid */
+                orderId: string;
+                /** Format: uuid */
+                warehouseId: string;
+            }[];
             /**
              * Format: date-time
              * @description In UTC with a Z offset; the same for every item of the request. The time of the request plus nexus.inventory.reservation-timeout-minutes from Config Server (30 by default), read again on /actuator/refresh.
@@ -578,7 +612,7 @@ export interface components {
             page: components["schemas"]["PageInfo"];
         };
         /** @enum {string} */
-        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT" | "RETURN" | "PICK" | "SHIP";
+        MovementType: "INTAKE" | "RESERVE" | "RELEASE" | "COMMIT" | "ADJUSTMENT" | "RETURN" | "PICK" | "SHIP" | "TRANSFER";
         Movement: {
             /** Format: uuid */
             id: string;
@@ -646,6 +680,12 @@ export interface components {
             message: string;
             data: components["schemas"]["Warehouse"];
         };
+        UpdateOwnWarehouseRequest: {
+            /** @description Nonblank name; surrounding whitespace is trimmed before storage */
+            name: string;
+            /** @description Omit, null or blank clears the address */
+            address?: string | null;
+        };
         UpdateWarehouseRequest: {
             /** @description Nonblank name; surrounding ASCII whitespace is trimmed before storage */
             name: string;
@@ -679,6 +719,11 @@ export interface components {
              * @enum {string}
              */
             status: "ACTIVE" | "INACTIVE" | "MAINTENANCE";
+            /**
+             * Format: uuid
+             * @description Owner of a seller warehouse; null for a platform warehouse
+             */
+            sellerId?: string | null;
         };
         WarehousePageInfo: {
             /** @description Complete warehouse lists always use page number 0 */
@@ -1179,22 +1224,12 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The selected or configured default warehouse is INACTIVE or MAINTENANCE. Code INVENTORY_WAREHOUSE_UNAVAILABLE. */
+            /** @description INVENTORY_WAREHOUSE_UNAVAILABLE when the target warehouse is INACTIVE or MAINTENANCE; INVENTORY_WAREHOUSE_NOT_SKU_HOME when an admin names a warehouse other than the one holding the SKU. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "urn:problem:domain-error",
-                     *       "title": "Conflict",
-                     *       "status": 409,
-                     *       "detail": "Warehouse is not active for stock intake",
-                     *       "instance": "/api/v1/inventory/intake",
-                     *       "code": "INVENTORY_WAREHOUSE_UNAVAILABLE"
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
@@ -2398,6 +2433,56 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    getOwnWarehouse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["WarehouseRead"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["WarehouseNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateOwnWarehouse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "District 7 warehouse",
+                 *       "address": "12 Nguyen Thi Thap, District 7, Ho Chi Minh City"
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateOwnWarehouseRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["WarehouseRead"];
+            /** @description VALIDATION_FAILED (missing, blank or overlong name, overlong address) or INVALID_REQUEST_BODY. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
         };
     };
     getWarehouse: {

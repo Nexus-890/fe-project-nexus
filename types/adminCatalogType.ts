@@ -7,4 +7,5 @@ export type CategoryPatch = Catalog["schemas"]["UpdateCategory"];
 export type Warehouse = Inventory["schemas"]["Warehouse"];
 export type WarehouseInput = Inventory["schemas"]["CreateWarehouseRequest"];
 export type WarehouseUpdate = Inventory["schemas"]["UpdateWarehouseRequest"];
+export type OwnWarehouseInput = Inventory["schemas"]["UpdateOwnWarehouseRequest"];
 export type StockMovement = Inventory["schemas"]["Movement"];

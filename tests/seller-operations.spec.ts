@@ -292,6 +292,38 @@ test("shop profile and masked default bank release automatic payouts after verif
   } finally { await context.close(); }
 });
 
+test("seller sets up their one warehouse, then renames it, and staff cannot open the page", async ({ page, request, browser }) => {
+  await signIn(page, request, "SELLER", "/backoffice/warehouse");
+  await expect(page.getByRole("heading", { name: "Warehouse", exact: true })).toBeVisible();
+  await expect(page.getByText("No warehouse yet. Save its name here, or add stock to a SKU and it is created for you.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Warehouse", exact: true })).toBeVisible();
+  await page.getByLabel("Warehouse name", { exact: true }).fill("  District 7 warehouse  ");
+  await page.getByLabel("Address", { exact: true }).fill("12 Nguyen Thi Thap");
+  await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Warehouse saved." })).toBeVisible();
+  await expect(page.getByText("SELLER-68000000000040008000000000000002", { exact: true })).toBeVisible();
+  await screenshot(page, "seller-warehouse");
+  await page.getByLabel("Warehouse name", { exact: true }).fill("Thu Duc warehouse");
+  await page.getByLabel("Address", { exact: true }).fill(" ");
+  await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
+  await expect(page.getByText("Thu Duc warehouse", { exact: true })).toBeVisible();
+  const own = (await (await request.get(`${api}/test/own-warehouses`)).json()).data[ids.SELLER];
+  expect(own).toMatchObject({ name: "Thu Duc warehouse", address: null, status: "ACTIVE", sellerId: ids.SELLER });
+  const calls = (await (await request.get(`${api}/test/evidence`)).json()).requests.filter((row: { path: string }) => row.path === "/api/v1/warehouses/me");
+  expect(calls.map((row: { body: unknown }) => row.body)).toEqual([{ name: "District 7 warehouse", address: "12 Nguyen Thi Thap" }, { name: "Thu Duc warehouse", address: null }]);
+  const adminContext = await browser.newContext();
+  try {
+    const adminPage = await adminContext.newPage();
+    await request.get(`${provider}/test/control?roles=ADMIN&subject=${ids.ADMIN}`);
+    await adminPage.goto(`/sign-in?returnTo=${encodeURIComponent("/backoffice/warehouse")}`);
+    await adminPage.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+    await adminPage.getByLabel("Email", { exact: true }).fill("admin@nexus.local");
+    await adminPage.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+    await adminPage.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
+    await expect(adminPage.getByLabel("Warehouse name", { exact: true })).toHaveCount(0);
+  } finally { await adminContext.close(); }
+});
+
 test("admin must review the changed bank again after a stale version conflict", async ({ page, request, browser }) => {
   await signIn(page, request, "ADMIN", "/backoffice/payouts");
   const sellerContext = await browser.newContext();
