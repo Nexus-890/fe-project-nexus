@@ -115,7 +115,7 @@ export interface paths {
         put?: never;
         /**
          * Hold stock for the orders of one order group
-         * @description Sent by commerce-service with the buyer's token while it creates the orders; the frontend does not call it. Each SKU is reserved by one UPDATE whose WHERE clause requires available_quantity to cover the quantity, in SKU order, all in one transaction: one shortage reserves nothing. Items of the same SKU are checked against their sum. All SKUs of one order are held in one warehouse: when one of them is stocked in its seller's warehouse, available stock of the order's other SKUs of that seller still in platform warehouses moves there first with TRANSFER movements; otherwise each SKU is held where it is stocked, else in the warehouse whose code is nexus.inventory.default-warehouse-code. Each reservation keeps its item's orderId and writes one RESERVE ledger row. orderGroupId is not stored. Sending the same items again returns the reservations already held. The gateway only requires a valid token; the service requires the BUYER role.
+         * @description Sent by commerce-service with the buyer's token while it creates the orders; the frontend does not call it. Each SKU is reserved by one UPDATE whose WHERE clause requires available_quantity to cover the quantity, in SKU order, all in one transaction: one shortage reserves nothing. Items of the same SKU are checked against their sum. All SKUs of one order are held in one warehouse: when one of them is stocked in its seller's warehouse, available stock of the order's other SKUs of that seller still in platform warehouses moves there first with TRANSFER movements; otherwise each SKU is held where it is stocked, else in the warehouse whose code is nexus.inventory.default-warehouse-code. An order whose SKUs would still be held in two warehouses is refused. Each reservation keeps its item's orderId and writes one RESERVE ledger row. orderGroupId is not stored. Sending the same items again returns the reservations already held. The gateway only requires a valid token; the service requires the BUYER role.
          */
         post: operations["reserveStock"];
         delete?: never;
@@ -1521,7 +1521,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not enough stock for a SKU (INVENTORY_INSUFFICIENT_STOCK, with skuId, available and requested), these orders already hold reservations that differ from the request (INVENTORY_RESERVATION_CONFLICT), or one order mixes SKUs stocked by different sellers (INVENTORY_SKUS_FROM_DIFFERENT_SELLERS). Nothing is reserved. */
+            /** @description Not enough stock for a SKU (INVENTORY_INSUFFICIENT_STOCK, with skuId, available and requested), these orders already hold reservations that differ from the request (INVENTORY_RESERVATION_CONFLICT), one order mixes SKUs stocked by different sellers (INVENTORY_SKUS_FROM_DIFFERENT_SELLERS), or one order's SKUs are stocked in different platform warehouses (INVENTORY_ORDER_SPANS_WAREHOUSES). Nothing is reserved. */
             409: {
                 headers: {
                     [name: string]: unknown;
