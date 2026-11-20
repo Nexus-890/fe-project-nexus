@@ -29,7 +29,7 @@ export interface paths {
         };
         /**
          * Read where carriers collect a seller's parcels
-         * @description Internal service endpoint for Commerce shipping quotes and order creation. Commerce relays the buyer's bearer token. data is null when the seller has no warehouse, the warehouse is not ACTIVE, or it has no complete pickup (province, ward and a street address of at most 255 characters); Commerce then quotes from the platform pickup.
+         * @description Internal service endpoint for Commerce shipping quotes and order creation. Commerce relays the buyer's bearer token. data is null when the seller has no warehouse, the warehouse is not ACTIVE, or it has no complete pickup (province, ward and a street address of at most 255 characters), or when skuIds is sent and none of those SKUs is stocked in the seller warehouse, or some are stocked in another seller's warehouse (the order is then held in a platform warehouse or refused, so the parcel does not leave from this pickup); Commerce then quotes from the platform pickup. When at least one SKU is stocked in the seller warehouse, the reservation gathers the other SKUs there, so this pickup is returned.
          */
         get: operations["getSellerPickup"];
         put?: never;
@@ -91,7 +91,7 @@ export interface paths {
         put?: never;
         /**
          * Receive stock into a warehouse
-         * @description Raises total and available by the quantity in one statement and creates the balance row on the first intake of a SKU in that warehouse. Each seller has one warehouse (code SELLER- plus the seller id), created on the seller's first intake. A seller's intake always goes to that warehouse and cannot name another one. An admin intake without warehouseId goes to the warehouse of the SKU's seller; when catalog knows no seller, it goes to the warehouse already holding the SKU, else to the one whose code is nexus.inventory.default-warehouse-code. An explicit warehouseId that is not the SKU's warehouse returns 409 INVENTORY_WAREHOUSE_NOT_SKU_HOME. When stock lands in a seller warehouse, available stock of the SKU still held in platform warehouses moves there with a pair of TRANSFER movements. Only ACTIVE warehouses accept intake: INACTIVE or MAINTENANCE returns 409 for both an explicit warehouseId and the configured default, without changing balances or writing a movement. The status check and writes share a transaction and coordinate with warehouse updates. The gateway only requires a valid token; the service requires ADMIN or a SELLER who owns the SKU.
+         * @description Raises total and available by the quantity in one statement and creates the balance row on the first intake of a SKU in that warehouse. Each seller has one warehouse (code SELLER- plus the seller id), created on the seller's first intake. A seller's intake always goes to that warehouse and cannot name another one. An admin intake without warehouseId goes to the warehouse of the SKU's seller; when catalog knows no seller, it goes to the warehouse already holding the SKU, else to the one whose code is nexus.inventory.default-warehouse-code. An explicit warehouseId that is not the SKU's warehouse, or a seller warehouse of a seller who does not own the SKU (also on the SKU's first intake), returns 409 INVENTORY_WAREHOUSE_NOT_SKU_HOME. When stock lands in a seller warehouse, available stock of the SKU still held in platform warehouses moves there with a pair of TRANSFER movements. Only ACTIVE warehouses accept intake: INACTIVE or MAINTENANCE returns 409 for both an explicit warehouseId and the configured default, without changing balances or writing a movement. The status check and writes share a transaction and coordinate with warehouse updates. The gateway only requires a valid token; the service requires ADMIN or a SELLER who owns the SKU.
          */
         post: operations["intakeStock"];
         delete?: never;
@@ -115,7 +115,7 @@ export interface paths {
         put?: never;
         /**
          * Hold stock for the orders of one order group
-         * @description Sent by commerce-service with the buyer's token while it creates the orders; the frontend does not call it. Each SKU is reserved by one UPDATE whose WHERE clause requires available_quantity to cover the quantity, in SKU order, all in one transaction: one shortage reserves nothing. Items of the same SKU are checked against their sum. Every reservation is HELD in the warehouse whose code is nexus.inventory.default-warehouse-code, keeps its item's orderId and writes one RESERVE ledger row. orderGroupId is not stored. Sending the same items again returns the reservations already held. The gateway only requires a valid token; the service requires the BUYER role.
+         * @description Sent by commerce-service with the buyer's token while it creates the orders; the frontend does not call it. Each SKU is reserved by one UPDATE whose WHERE clause requires available_quantity to cover the quantity, in SKU order, all in one transaction: one shortage reserves nothing. Items of the same SKU are checked against their sum. All SKUs of one order are held in one warehouse: when one of them is stocked in its seller's warehouse, available stock of the order's other SKUs of that seller still in platform warehouses moves there first with TRANSFER movements; otherwise each SKU is held where it is stocked, else in the warehouse whose code is nexus.inventory.default-warehouse-code. Each reservation keeps its item's orderId and writes one RESERVE ledger row. orderGroupId is not stored. Sending the same items again returns the reservations already held. The gateway only requires a valid token; the service requires the BUYER role.
          */
         post: operations["reserveStock"];
         delete?: never;
@@ -1012,6 +1012,8 @@ export interface operations {
             query: {
                 /** @description Seller UUID */
                 sellerId: string;
+                /** @description SKUs of the parcel; repeat the parameter for each SKU. Commerce always sends them. */
+                skuIds?: string[];
             };
             header?: never;
             path?: never;
@@ -1316,7 +1318,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description INVENTORY_WAREHOUSE_UNAVAILABLE when the target warehouse is INACTIVE or MAINTENANCE; INVENTORY_WAREHOUSE_NOT_SKU_HOME when an admin names a warehouse other than the one holding the SKU. */
+            /** @description INVENTORY_WAREHOUSE_UNAVAILABLE when the target warehouse is INACTIVE or MAINTENANCE; INVENTORY_WAREHOUSE_NOT_SKU_HOME when an admin names a warehouse other than the one holding the SKU, or another seller's warehouse. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1519,7 +1521,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not enough stock for a SKU (INVENTORY_INSUFFICIENT_STOCK, with skuId, available and requested), or these orders already hold reservations that differ from the request (INVENTORY_RESERVATION_CONFLICT). Nothing is reserved. */
+            /** @description Not enough stock for a SKU (INVENTORY_INSUFFICIENT_STOCK, with skuId, available and requested), these orders already hold reservations that differ from the request (INVENTORY_RESERVATION_CONFLICT), or one order mixes SKUs stocked by different sellers (INVENTORY_SKUS_FROM_DIFFERENT_SELLERS). Nothing is reserved. */
             409: {
                 headers: {
                     [name: string]: unknown;
