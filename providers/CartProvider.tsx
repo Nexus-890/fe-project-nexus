@@ -48,7 +48,7 @@ function CartProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const currentUser = useRef(user);
   const editing = useIsMutating({ mutationKey: ["cart", sessionId, "edit"], exact: true }) > 0;
-  const guestEnabled = process.env.NEXT_PUBLIC_GUEST_CART_ENABLED === "true";
+  const guestEnabled = process.env.NEXT_PUBLIC_GUEST_CART_ENABLED !== "false";
   const [controller] = useState(() => createCartController({
     guestEnabled,
     storage: createGuestStorage(() => window.localStorage),

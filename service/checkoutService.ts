@@ -19,6 +19,7 @@ import type {
   CheckoutOrderGroup,
   CheckoutOrderItem,
   CheckoutPreview,
+  CheckoutShippingOption,
   CheckoutPreviewItem,
   ShippingLocality,
 } from "../types/checkoutType";
@@ -140,9 +141,34 @@ const parseCheckoutIssue = (value: unknown): CheckoutIssue => {
   return { itemId: value.itemId, skuId: value.skuId, code: value.code };
 };
 
+const parseShippingOption = (value: unknown): CheckoutShippingOption => {
+  if (
+    !isRecord(value) ||
+    !isNonBlankString(value.carrier) ||
+    !isNonBlankString(value.carrierName) ||
+    !isDateTime(value.estimatedDeliveryAt) ||
+    typeof value.recommended !== "boolean"
+  )
+    throw createInvalidResponseError("Invalid shipping option");
+  return {
+    carrier: value.carrier,
+    carrierName: value.carrierName,
+    fee: parseMoney(value.fee),
+    estimatedDeliveryAt: value.estimatedDeliveryAt,
+    recommended: value.recommended,
+  };
+};
+
 export const parseCheckoutPreview = (value: unknown): CheckoutPreview => {
-  if (!isRecord(value) || !Array.isArray(value.items) || !Array.isArray(value.issues))
+  if (
+    !isRecord(value) || !Array.isArray(value.items) || !Array.isArray(value.issues) ||
+    (value.shippingOptions !== undefined && !Array.isArray(value.shippingOptions)) ||
+    (value.selectedCarrier !== undefined && value.selectedCarrier !== null && !isNonBlankString(value.selectedCarrier))
+  )
     throw createInvalidResponseError("Invalid checkout preview");
+  const shippingOptions = ((value.shippingOptions ?? []) as unknown[]).map(parseShippingOption);
+  const selectedCarrier = (value.selectedCarrier ?? null) as string | null;
+  const selected = shippingOptions.find((option) => option.carrier === selectedCarrier);
   const preview: CheckoutPreview = {
     items: value.items.map(parsePreviewItem),
     subtotal: parseMoney(value.subtotal),
@@ -152,8 +178,13 @@ export const parseCheckoutPreview = (value: unknown): CheckoutPreview => {
     total: parseMoney(value.total),
     issues: value.issues.map(parseCheckoutIssue),
     ...(value.vouchers === undefined ? {} : { vouchers: parseVoucherQuotes(value.vouchers) }),
+    shippingOptions,
+    selectedCarrier,
   };
   if (
+    new Set(shippingOptions.map((option) => option.carrier)).size !== shippingOptions.length ||
+    (selectedCarrier !== null && !selected) ||
+    (selected !== undefined && preview.shippingFee !== null && selected.fee !== preview.shippingFee) ||
     new Set(preview.items.map((item) => item.itemId)).size !== preview.items.length ||
     preview.items.some((item) =>
       multiplyCartMoney(item.unitPrice, item.quantity) !== item.lineTotal) ||
@@ -191,6 +222,7 @@ const createOrderBody = (
     },
     paymentMethod: "SEPAY",
     ...(destination.voucherCodes === undefined ? {} : { voucherCodes: [...destination.voucherCodes] }),
+    ...(destination.carrier === undefined ? {} : { carrier: destination.carrier }),
   };
 };
 
@@ -219,7 +251,7 @@ const parseOrderItem = (value: unknown): CheckoutOrderItem => {
     !isNonBlankString(value.productId) ||
     !isNonBlankString(value.skuId) ||
     !isNonBlankString(value.productName) ||
-    !isNonBlankString(value.skuCode) ||
+    (value.skuCode !== null && !isNonBlankString(value.skuCode)) ||
     (value.imageUrl !== null && typeof value.imageUrl !== "string") ||
     !Number.isSafeInteger(value.quantity) ||
     Number(value.quantity) < 1
@@ -230,7 +262,7 @@ const parseOrderItem = (value: unknown): CheckoutOrderItem => {
     productId: value.productId,
     skuId: value.skuId,
     productName: value.productName,
-    skuCode: value.skuCode,
+    skuCode: value.skuCode as string | null,
     imageUrl: value.imageUrl,
     quantity: value.quantity as number,
     unitPrice: parseMoney(value.unitPrice),

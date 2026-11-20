@@ -191,6 +191,46 @@ export interface paths {
         patch: operations["resolveRatingDispute"];
         trace?: never;
     };
+    "/api/v1/users/me/reputation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the caller's own reputation
+         * @description Requires REPUTATION.VIEW. The gateway routes this path to rating-service. The owner is the JWT subject. Returns the committed score and trust level with transaction and auction counters, the average rating rounded to one decimal (null without ratings) and how many history entries lowered the score. A user without an aggregate receives neutral score 50, trust NEW and zero counters; reading never creates an aggregate.
+         */
+        get: operations["getOwnReputation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/penalties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own score losses
+         * @description Requires REPUTATION.VIEW. The owner is the JWT subject. Returns reputation history entries with delta below zero (payment timeouts, low ratings, admin deductions and approved rating disputes that reduce the score), newest first, then id descending. Defaults page=0, size=10; maximum size=50. The acting admin is not exposed.
+         */
+        get: operations["listOwnPenalties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/eligibility/{userId}": {
         parameters: {
             query?: never;
@@ -200,7 +240,7 @@ export interface paths {
         };
         /**
          * Check reputation eligibility for one action
-         * @description Direct service-to-service endpoint, never routed by the public gateway. Requires a valid RS256 bearer with the configured issuer/audience, service_account boolean true, an azp listed in nexus.rating.eligibility.allowed-clients and RATING.ELIGIBILITY.CHECK authority. RATING_ELIGIBILITY_ALLOWED_CLIENTS configures the allowlist; its default client is nexus-auction-service. Normal user or ADMIN tokens are denied even if they carry the authority. action is required and selects MIN_REPUTATION_TO_BID (default 40) or MIN_REPUTATION_TO_SELL (default 50). A score equal to the minimum is eligible only when no active restriction applies to that action. restrictedUntil is the latest active restriction expiry, or null. Expired/revoked restrictions do not block. A policy denial returns 200 with eligible=false and its reason, distinct from validation, authentication and availability failures. A user without activity has neutral score 50 and trust NEW. Decisions reflect committed state; asynchronous UserRated effects can arrive after rating submission. Unreconciled historical transaction inputs fail closed with 503 instead of producing an eligibility decision from incomplete evidence.
+         * @description Direct service-to-service endpoint, never routed by the public gateway. Requires a valid RS256 bearer with the configured issuer/audience, service_account boolean true, an azp listed in nexus.rating.eligibility.allowed-clients and RATING.ELIGIBILITY.CHECK authority. RATING_ELIGIBILITY_ALLOWED_CLIENTS configures the allowlist; its default clients are nexus-auction-service and nexus-catalog-service. Normal user or ADMIN tokens are denied even if they carry the authority. action is required and selects MIN_REPUTATION_TO_BID (default 40) or MIN_REPUTATION_TO_SELL (default 50). A score equal to the minimum is eligible only when no active restriction applies to that action. restrictedUntil is the latest active restriction expiry, or null. Expired/revoked restrictions do not block. A policy denial returns 200 with eligible=false and its reason, distinct from validation, authentication and availability failures. A user without activity has neutral score 50 and trust NEW. Decisions reflect committed state; asynchronous UserRated effects can arrive after rating submission. Unreconciled historical transaction inputs fail closed with 503 instead of producing an eligibility decision from incomplete evidence.
          */
         get: operations["checkReputationEligibility"];
         put?: never;
@@ -390,6 +430,56 @@ export interface components {
              * @description Persisted change time normalized to UTC.
              */
             changedAt: string;
+        };
+        MyReputation: {
+            score: number;
+            trustLevel: components["schemas"]["TrustLevel"];
+            totalTransaction: number;
+            successfulTransaction: number;
+            failedTransaction: number;
+            /** Format: int64 */
+            ratingCount: number;
+            /** @description Average star rating with one decimal; null without ratings. */
+            averageRating: number | null;
+            successfulAuctions: number;
+            failedAuctions: number;
+            /** Format: int64 */
+            penaltyCount: number;
+            policyVersion: string;
+        };
+        MyReputationEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["MyReputation"];
+        };
+        Penalty: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            changeType: "USER_RATED" | "ORDER_COMPLETED" | "AUCTION_PAYMENT_TIMEOUT" | "ADMIN_ADJUSTMENT" | "RATING_DISPUTE_APPROVED";
+            /**
+             * Format: uuid
+             * @description Rating, order or auction behind the change; null for an admin adjustment.
+             */
+            sourceId: string | null;
+            delta: number;
+            previousScore: number;
+            newScore: number;
+            previousLevel: components["schemas"]["TrustLevel"];
+            newLevel: components["schemas"]["TrustLevel"];
+            reason: string;
+            /** Format: date-time */
+            changedAt: string;
+        };
+        PenaltyEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["Penalty"][];
+            page: components["schemas"]["PageInfo"];
         };
         ReputationHistoryEnvelope: {
             /** @default 0 */
@@ -1214,6 +1304,57 @@ export interface operations {
                 content?: never;
             };
             503: components["responses"]["ReconciliationRequired"];
+        };
+    };
+    getOwnReputation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own reputation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReputationEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listOwnPenalties: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page number. */
+                page?: components["parameters"]["Page"];
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of own score losses. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PenaltyEnvelope"];
+                };
+            };
+            400: components["responses"]["InvalidQuery"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
         };
     };
     checkReputationEligibility: {

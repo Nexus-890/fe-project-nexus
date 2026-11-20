@@ -58,6 +58,8 @@ export default function SignInPage() {
             {redirecting ? "Opening sign-in…" : "Continue to sign in"}
           </Button>
 
+          <p className="mt-4 text-center text-xs text-muted-foreground"><Link href="/forgot-password" className="text-primary hover:underline">Forgot password?</Link></p>
+
           <p className="mt-4 text-center text-xs text-muted-foreground">Don&apos;t have an account? <Link href="/sign-up" className="text-primary hover:underline">Sign Up</Link></p>
         </section>
       </main>

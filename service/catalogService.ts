@@ -13,8 +13,8 @@ import type {
   ProductSummary,
   ShippingParcel,
 } from "../types/catalogResponseType";
-import type { ProductFilters } from "../types/catalogRequestType";
-import { SEARCH_SORT } from "../types/catalogRequestType";
+import type { DiscoveryType, ProductFilters } from "../types/catalogRequestType";
+import { MAX_DISCOVERY_SIZE, SEARCH_SORT } from "../types/catalogRequestType";
 
 export const normalizeMoney = (value: unknown): string | null => {
   if (typeof value === "string")
@@ -92,15 +92,7 @@ export const parseProductImages = (value: unknown): ProductImage[] => {
   });
 };
 
-export const parseProductPage = (
-  response: ApiResponse<unknown>,
-): Page<ProductSummary> => {
-  const { data, page } = response;
-  if (!page || !Array.isArray(data))
-    throw createInvalidResponseError(
-      "Expected product data[] with page metadata",
-    );
-  const content = data.map((item): ProductSummary => {
+const parseProductSummary = (item: unknown): ProductSummary => {
     if (
       !isRecord(item) ||
       typeof item.id !== "string" ||
@@ -124,7 +116,17 @@ export const parseProductPage = (
       // Older list responses may omit the optional media supplied by #122.
       images: item.images == null ? [] : parseProductImages(item.images),
     };
-  });
+};
+
+export const parseProductPage = (
+  response: ApiResponse<unknown>,
+): Page<ProductSummary> => {
+  const { data, page } = response;
+  if (!page || !Array.isArray(data))
+    throw createInvalidResponseError(
+      "Expected product data[] with page metadata",
+    );
+  const content = data.map(parseProductSummary);
   return {
     content,
     page: page.number,
@@ -202,6 +204,29 @@ export const getProducts = async (
       auth: false,
     }),
   );
+export const parseDiscoveryProducts = (data: unknown): ProductSummary[] => {
+  if (!Array.isArray(data) || data.length > MAX_DISCOVERY_SIZE)
+    throw createInvalidResponseError("Expected at most 24 discovery products");
+  const products = data.map(parseProductSummary);
+  if (new Set(products.map((product) => product.id)).size !== products.length)
+    throw createInvalidResponseError("Duplicate discovery product");
+  return products;
+};
+export const getDiscoveryProducts = async (
+  type: DiscoveryType,
+  size = 6,
+  options: ServiceRequestOptions = {},
+): Promise<ProductSummary[]> => {
+  if (!Number.isInteger(size) || size < 1 || size > MAX_DISCOVERY_SIZE)
+    throw createInvalidResponseError("Discovery size must be between 1 and 24");
+  const { data } = await requestApi<unknown>(
+    "GET",
+    "/api/v1/products/discovery",
+    undefined,
+    { ...options, params: { type, size }, auth: false },
+  );
+  return parseDiscoveryProducts(data);
+};
 export const getProduct = async (
   productId: string,
   options: ServiceRequestOptions = {},

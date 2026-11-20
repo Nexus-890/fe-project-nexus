@@ -116,6 +116,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email a password reset link
+         * @description When the address belongs to an active account, user-service stores the SHA-256 hash of a one-time token (valid 30 minutes) and emails a link to {NEXUS_WEB_BASE_URL}/reset-password?token=... from PASSWORD_RESET_MAIL_FROM. A new link replaces the unused older ones. An unknown, deleted or inactive address gets the same 204 and no email, so the endpoint does not reveal which accounts exist. One link per account per minute; a request inside that minute also gets 204 and sends nothing. Access: public. Ownership/business restriction: None.
+         */
+        post: operations["requestPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a new password with the emailed link
+         * @description Checks the token against an unused, unexpired link of an active account, sets the new password in Keycloak under the realm password policy (at least 8 characters, different from the current password), marks every open link of the account used, records the UserPasswordChanged audit event with method RESET_LINK and then ends every Keycloak session of the account. A rejected password keeps the link usable. Access: public. Ownership/business restriction: the token alone identifies the account.
+         */
+        post: operations["confirmPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the current user's password
+         * @description Checks the current password with Keycloak (a password grant of the user-service client whose session is ended at once; failed checks count toward the realm brute-force lock), sets the new password under the realm password policy, records the UserPasswordChanged audit event with method SELF and then ends every other Keycloak session of the account, keeping the session of the calling token (its sid claim). Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        post: operations["changeOwnPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload or replace the current user's avatar
+         * @description Multipart form with one part named file. The type is detected from the file content, not from the file name or the claimed Content-Type: JPEG, PNG or WebP only, at most 2 MB (MAX_AVATAR_FILE_SIZE). The image is stored in the Supabase bucket under avatars/{userId}/ and the profile keeps its public URL. A replaced avatar object is removed after the profile is saved; if saving fails, the new object is removed and the old avatar stays. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        post: operations["uploadOwnAvatar"];
+        /**
+         * Remove the current user's avatar
+         * @description Clears avatarUrl and then removes the stored object from the Supabase bucket. Removing the object is best effort: a storage failure is logged and the profile stays without an avatar. Without an avatar the call changes nothing and still returns the profile. Access: requires PROFILE.UPDATE. Ownership/business restriction: JWT subject only.
+         */
+        delete: operations["removeOwnAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me/phone/verification": {
         parameters: {
             query?: never;
@@ -511,6 +595,11 @@ export interface components {
              * @example ********1234
              */
             identityNumberMasked?: string | null;
+            /**
+             * Format: uri
+             * @description Public URL of the uploaded avatar; null until the user uploads one.
+             */
+            avatarUrl?: string | null;
         };
         Register: {
             /**
@@ -631,6 +720,28 @@ export interface components {
              * @description Trimmed and normalized to lower case.
              */
             email: string;
+        };
+        PasswordResetRequest: {
+            /**
+             * Format: email
+             * @description Trimmed and normalized to lower case.
+             */
+            email: string;
+        };
+        PasswordResetConfirmRequest: {
+            /** @description The token query parameter of the emailed link. */
+            token: string;
+            /** Format: password */
+            newPassword: string;
+        };
+        ChangePasswordRequest: {
+            /** Format: password */
+            currentPassword: string;
+            /**
+             * Format: password
+             * @description Must differ from the current password.
+             */
+            newPassword: string;
         };
         ConfirmPhoneCode: {
             code: string;
@@ -2327,6 +2438,310 @@ export interface operations {
                         /** @enum {string} */
                         code?: "GATEWAY_TIMEOUT";
                     };
+                };
+            };
+        };
+    };
+    requestPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "email": "buyer@example.com"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Done; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    confirmPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Done; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_PASSWORD_RESET_LINK_INVALID`, `USER_PASSWORD_REJECTED`, `USER_PASSWORD_REUSED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict. Codes: `USER_IDENTITY_NOT_FOUND`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; nothing to return. */
+            204: {
+                headers: {
+                    /** @description Must not be cached. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request. Codes: `VALIDATION_FAILED`, `INVALID_REQUEST_BODY`, `USER_CURRENT_PASSWORD_INCORRECT`, `USER_PASSWORD_REJECTED`, `USER_PASSWORD_REUSED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict. Codes: `USER_IDENTITY_NOT_FOUND`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_IDENTITY_PROVIDER_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadOwnAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The profile with its new avatarUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOwnProfileResponse"];
+                };
+            };
+            /** @description Bad Request. Codes: `USER_AVATAR_REQUIRED`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payload Too Large. Codes: `USER_AVATAR_TOO_LARGE`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported Media Type. Codes: `USER_AVATAR_INVALID_TYPE`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable. Codes: `USER_AVATAR_STORAGE_NOT_CONFIGURED`, `USER_AVATAR_STORAGE_UNAVAILABLE`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeOwnAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile without avatarUrl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOwnProfileResponse"];
+                };
+            };
+            /** @description Unauthorized. Codes: `UNAUTHENTICATED`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden. Codes: `FORBIDDEN`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found. Codes: `USER_NOT_FOUND`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { ArrowDownUp, MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { AdminEmptyState, AdminError, AdminPageHeader, AdminPagination, adminInputClass, adminSelectClass } from "../components/AdminPrimitives";
 import { Button } from "../components/button";
+import UserAvatar from "../components/UserAvatar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/popover";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
@@ -13,7 +14,7 @@ import type { AdminAssignRolesRequest, AdminCreateUserRequest, AdminPasswordRequ
 import type { UserResponse } from "../types/authResponseType";
 import type { ApiError } from "../types/commonResponseType";
 import { readBackofficeRoles } from "./backofficeAccess";
-import { adminRoleCodes, adminRoleLabels, canManageUser, userInitials, type AdminUserAction } from "./adminUserUtils";
+import { adminRoleCodes, adminRoleLabels, canManageUser, type AdminUserAction } from "./adminUserUtils";
 
 type UserEditor = { action: "create" } | { action: Exclude<AdminUserAction, "create">; user: UserResponse };
 type UserMutation =
@@ -166,7 +167,7 @@ function AdminUsersPage() {
         <th scope="col" className="px-4 py-3 font-normal" aria-sort={filters.direction === "asc" ? "ascending" : "descending"}><button type="button" onClick={() => updateFilters({ direction: filters.direction === "asc" ? "desc" : "asc" })} className="inline-flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-ring">Full name<ArrowDownUp className="size-3" aria-hidden="true" /></button></th>
         {["Phone", "Gender", "Role", "Status"].map((label) => <th key={label} scope="col" className="px-4 py-3 font-normal">{label}</th>)}<th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
       </tr></thead><tbody>{result.data.users.map((user) => <tr key={user.id} className="border-t border-border">
-        <th scope="row" className="px-4 py-4 font-normal"><div className="flex items-center gap-3"><span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-medium">{userInitials(user.fullName)}</span><div><span className="block font-medium">{user.fullName}</span><span className="mt-0.5 block text-xs text-muted-foreground">{user.email}</span></div></div></th>
+        <th scope="row" className="px-4 py-4 font-normal"><div className="flex items-center gap-3"><UserAvatar fullName={user.fullName} avatarUrl={user.avatarUrl} className="size-9" fallbackClassName="bg-secondary text-xs" /><div><span className="block font-medium">{user.fullName}</span><span className="mt-0.5 block text-xs text-muted-foreground">{user.email}</span></div></div></th>
         <td className="px-4 py-4 font-mono text-xs">{user.phone}</td><td className="px-4 py-4 text-muted-foreground">{user.gender ? user.gender.charAt(0) + user.gender.slice(1).toLowerCase() : "—"}</td>
         <td className="max-w-52 px-4 py-4 text-muted-foreground">{user.roles.map((role) => adminRoleLabels[role as AdminRoleCode] ?? role).join(", ") || "—"}</td>
         <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-xs ${user.status === "ACTIVE" ? "text-success" : "text-danger"}`}><span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{user.status === "ACTIVE" ? "Active" : user.status === "LOCKED" ? "Locked" : "Deleted"}</span></td>

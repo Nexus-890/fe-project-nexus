@@ -262,3 +262,48 @@ test("an old preferences GET cannot overwrite the successful save response", asy
     await expect(email).not.toBeChecked(); await expect(save).toBeDisabled();
   } finally { releaseOld(); }
 });
+
+test("profile retains own reputation and score penalties alongside action restrictions and disputes", async ({ page, request }) => {
+  await inboxFixture(page);
+  await page.route(`${moderationApi}/api/v1/users/me/reputation`, (route) => route.fulfill({ headers, json: envelope({
+    score: 70, trustLevel: "TRUSTED", totalTransaction: 9, successfulTransaction: 7, failedTransaction: 1,
+    ratingCount: 0, averageRating: null, successfulAuctions: 2, failedAuctions: 1, penaltyCount: 1, policyVersion: "reputation-policy-1",
+  }) }));
+  await page.route(`${moderationApi}/api/v1/users/me/penalties?*`, (route) => route.fulfill({ headers, json: envelope([{
+    id: "68000000-0000-4000-8000-000000000001", changeType: "RATING_DISPUTE_APPROVED",
+    sourceId: "68000000-0000-4000-8000-000000000002", delta: -30, previousScore: 100, newScore: 70,
+    previousLevel: "TOP", newLevel: "TRUSTED", reason: "Favorable review was for a different order", changedAt: "2026-11-19T02:00:00Z",
+  }], { number: 0, size: 10, totalElements: 1, totalPages: 1 }) }));
+  await page.route(`${moderationApi}/api/v1/reputations/*/restrictions?*`, (route) => {
+    const userId = new URL(route.request().url()).pathname.split("/")[4];
+    return route.fulfill({ headers, json: envelope([{
+      id: "68000000-0000-4000-8000-000000000003", userId, action: "BID", reason: "Action restriction retained after merge",
+      restrictedUntil: "2030-01-01T12:00:00Z", createdAt: "2026-11-19T01:00:00Z", createdBy: "68000000-0000-4000-8000-000000000004",
+      revokedAt: null, revokedBy: null, revocationReason: null, active: true,
+    }], { number: 0, size: 20, totalElements: 1, totalPages: 1 }) });
+  });
+  await signInModeration(page, request, "BUYER", "/profile");
+  await expect(page.locator("#reputation")).toHaveCount(1);
+  await expect(page.locator("#reputation")).toContainText("70");
+  await expect(page.locator("#reputation")).toContainText("Auctions won");
+  await expect(page.locator("#penalty-history")).toHaveCount(1);
+  await expect(page.locator("#penalty-history")).toContainText("Disputed rating removed");
+  await expect(page.locator("#penalty-history")).toContainText("-30 (100 → 70)");
+  await expect(page.getByRole("region", { name: "Action restrictions", exact: true })).toContainText("Action restriction retained after merge");
+  await expect(page.getByRole("link", { name: "View ratings received and submit a dispute", exact: true })).toHaveAttribute("href", "/ratings");
+});
+
+test("seller sales retains transaction summary and the paid picking and packing workflow", async ({ page, request }) => {
+  await inboxFixture(page);
+  expect((await request.post(`${moderationApi}/api/test/seller-seed`, { data: {} })).ok()).toBe(true);
+  await page.route(`${moderationApi}/api/v1/reputations/*`, (route) => {
+    const userId = new URL(route.request().url()).pathname.split("/").at(-1);
+    return route.fulfill({ headers, json: envelope({ userId, score: 78, trustLevel: "TRUSTED", totalTransaction: 42,
+      successfulTransaction: 40, failedTransaction: 2, ratingCount: 20, policyVersion: "reputation-policy-1" }) });
+  });
+  await signInModeration(page, request, "SELLER", "/backoffice/sales", "68000000-0000-4000-8000-000000000002");
+  await expect(page.getByRole("region", { name: "Your transaction summary", exact: true })).toContainText("40 successful transactions · 2 failed · 42 total");
+  await page.getByRole("button", { name: "Mark NX-SELLER-1 picked", exact: true }).click();
+  await page.getByRole("button", { name: "Mark NX-SELLER-1 packed", exact: true }).click();
+  await expect(page.getByText("Packed for carrier", { exact: true })).toBeVisible();
+});

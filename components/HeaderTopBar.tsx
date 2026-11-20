@@ -8,6 +8,7 @@ import { HEADER_UTILITY_NAVIGATION, ROUTES } from "@/configs/routes";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import MobileAccountNavigation from "@/components/MobileAccountNavigation";
 import { useSellHref } from "@/hooks/useSellHref";
+import UserAvatar from "@/components/UserAvatar";
 
 function HeaderTopBar({
   user,
@@ -31,8 +32,9 @@ function HeaderTopBar({
         <nav aria-label="Nexus utility links" className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
           {user ? (
             <details name="header-account-navigation" className="relative min-w-0">
-              <summary className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[9rem] sm:max-w-[13rem] cursor-pointer list-none items-center gap-1 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
-                Hi {user.fullName}
+              <summary className="inline-flex min-h-11 lg:min-h-9 min-w-0 max-w-[11rem] sm:max-w-[15rem] cursor-pointer list-none items-center gap-1.5 whitespace-normal break-words rounded-sm px-2 text-left font-medium leading-4 hover:text-primary [overflow-wrap:anywhere]">
+                <span className="min-w-0">Hi {user.fullName}</span>
+                <UserAvatar fullName={user.fullName} avatarUrl={user.avatarUrl} className="order-first size-6" fallbackClassName="text-[10px]" />
                 <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
               </summary>
               <div className="absolute left-0 top-full z-30 w-48 rounded-sm border border-border bg-popover p-2 shadow-md">

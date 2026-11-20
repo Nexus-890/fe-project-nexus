@@ -188,6 +188,48 @@ test("preview rejects malformed amounts and totals that cannot be reconciled", a
   }
 });
 
+test("preview sends the chosen carrier, parses every shipping option and rejects options that do not reconcile", async () => {
+  const options = [
+    { carrier: "FAKE", carrierName: "Nhà vận chuyển giả lập", fee: 30000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
+    { carrier: "GHN", carrierName: "Giao Hàng Nhanh", fee: 45000, estimatedDeliveryAt: "2026-11-21T10:00:00+07:00", recommended: false },
+  ];
+  let body: unknown = envelope({ ...preview, shippingOptions: options, selectedCarrier: "FAKE" });
+  const sent: unknown[] = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    sent.push(JSON.parse(Buffer.concat(chunks).toString()));
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(body));
+  });
+  const context = { baseUrl: await listen(server) };
+  try {
+    const result = await getCheckoutPreview({ ...destination, carrier: "FAKE" }, { context });
+    assert.equal((sent[0] as { carrier?: string }).carrier, "FAKE");
+    assert.equal(result.selectedCarrier, "FAKE");
+    assert.deepEqual(result.shippingOptions?.map((option) => [option.carrier, option.carrierName, option.fee, option.recommended]),
+      [["FAKE", "Nhà vận chuyển giả lập", "30000.00", true], ["GHN", "Giao Hàng Nhanh", "45000.00", false]]);
+    await getCheckoutPreview(destination, { context });
+    assert.equal("carrier" in (sent[1] as object), false);
+    body = envelope(preview);
+    const legacy = await getCheckoutPreview(destination, { context });
+    assert.deepEqual(legacy.shippingOptions, []);
+    assert.equal(legacy.selectedCarrier, null);
+    for (body of [
+      envelope({ ...preview, shippingOptions: options, selectedCarrier: "GHN" }),
+      envelope({ ...preview, shippingOptions: options, selectedCarrier: "VNPOST" }),
+      envelope({ ...preview, shippingOptions: [options[0], options[0]], selectedCarrier: "FAKE" }),
+      envelope({ ...preview, shippingOptions: [{ ...options[0], estimatedDeliveryAt: "soon" }], selectedCarrier: "FAKE" }),
+      envelope({ ...preview, shippingOptions: [{ ...options[0], carrierName: " " }], selectedCarrier: "FAKE" }),
+      envelope({ ...preview, shippingOptions: [{ ...options[0], recommended: "yes" }], selectedCarrier: "FAKE" }),
+      envelope({ ...preview, shippingOptions: {}, selectedCarrier: null }),
+      envelope({ ...preview, selectedCarrier: 7 }),
+    ]) await assert.rejects(getCheckoutPreview(destination, { context }), invalidResponse);
+  } finally {
+    await close(server);
+  }
+});
+
 test("empty address/filter values reject before transport and in-flight preview cancellation stays AbortError", async () => {
   let calls = 0;
   const context = { fetch: async () => { calls++; return new Response(); } };

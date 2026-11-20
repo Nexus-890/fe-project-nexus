@@ -1,6 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
-// These scenarios exercise the real frontend against the proposed guest/merge
+// These scenarios exercise the real frontend against the delivered guest/merge
 // contract in the local HTTP fixture. They do not establish backend readiness.
 const simulation = `http://127.0.0.1:${process.env.NEXUS_TEST_PROVIDER_PORT || process.env.NEXUS_OIDC_SIM_PORT || "3913"}`;
 const app = process.env.NEXUS_OIDC_APP_ORIGIN || `http://127.0.0.1:${process.env.NEXUS_TEST_APP_PORT || "3103"}`;
@@ -91,7 +91,7 @@ test("Keycloak callback merges once before returning, shows the merged quantity 
   page.on("request", (req) => {
     if (new URL(req.url()).pathname === "/api/v1/carts/me/merge" && req.method() === "POST") {
       mergeAt.push(new URL(page.url()).pathname);
-      mergedTokens.push(req.headers()["x-guest-token"]);
+      mergedTokens.push(req.postDataJSON()?.guestToken);
     }
   });
   await signIn(page, async () => {

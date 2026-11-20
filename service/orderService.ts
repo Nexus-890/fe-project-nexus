@@ -1,5 +1,5 @@
 import { parseOrderVouchers } from "./promotionService";
-import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
+import { createInvalidResponseError, isRecord, requestApi, requestApiBlob } from "../configs/api";
 import { normalizeMoney } from "./catalogService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
@@ -125,13 +125,13 @@ export const parseOrderDetail = (value: unknown): OrderDetail => {
     throw createInvalidResponseError("Invalid order details");
   const items: OrderDetailItem[] = value.items.map((item) => {
     if (!isRecord(item) || !isUuid(item.orderItemId) || !isUuid(item.productId) || !isUuid(item.skuId) ||
-      !isNonBlank(item.productName) || !isNonBlank(item.skuCode) ||
+      !isNonBlank(item.productName) || (item.skuCode !== null && !isNonBlank(item.skuCode)) ||
       (item.imageUrl !== null && typeof item.imageUrl !== "string") ||
       !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1)
       throw createInvalidResponseError("Invalid order item");
     return {
       orderItemId: item.orderItemId, productId: item.productId, skuId: item.skuId,
-      productName: item.productName, skuCode: item.skuCode, imageUrl: item.imageUrl as string | null,
+      productName: item.productName, skuCode: item.skuCode as string | null, imageUrl: item.imageUrl as string | null,
       quantity: Number(item.quantity), unitPrice: parseAmount(item.unitPrice), totalPrice: parseAmount(item.totalPrice),
     };
   });
@@ -195,6 +195,14 @@ export const confirmReceipt = async (orderId: string, options: ServiceRequestOpt
     throw createInvalidResponseError("Receipt confirmation did not return the completed order");
   return order;
 };
+
+export const getOrderInvoice = async (orderId: string, options: ServiceRequestOptions = {}): Promise<Blob> => {
+  if (!isUuid(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  return requestApiBlob(`${ORDERS_PATH}/${encodeURIComponent(orderId)}/invoice`, ["text/html"], { ...options, auth: true, params: undefined });
+};
+
+export const invoiceFileName = (orderNumber: string): string =>
+  `invoice-${orderNumber.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "order"}.html`;
 
 export const reportReceiptIssue = async (orderId: string, reason: string, options: ServiceRequestOptions = {}): Promise<OrderDetail> => {
   if (!isUuid(orderId) || !reason.trim() || reason.trim().length > 500)

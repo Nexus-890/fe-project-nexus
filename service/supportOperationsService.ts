@@ -1,11 +1,13 @@
 import { AxiosHeaders } from "axios";
-import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
+import { createInvalidResponseError, isRecord, requestApi, requestApiBlob } from "../configs/api";
 import { parseOrderDetail, isOrderStatus } from "./orderService";
 import { SHIPMENT_STATUSES } from "./shipmentService";
 import type { ApiResponse, Page } from "../types/commonResponseType";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { OrderDetail } from "../types/orderResponseType";
-import type { ChangeOrderStatusInput, ManagedOrderFilters, ManagedShipment, PaymentFilters, PaymentTransaction, Refund, RefundInput, RefundResult, ShipmentFilters, ShipmentInput, ShipmentStep, ShipmentUpdate } from "../types/supportOperationsType";
+import type { CarrierPerformance, ChangeOrderStatusInput, ManagedOrderFilters, ManagedShipment, PaymentFilters, PaymentTransaction, Refund, RefundEvidence, RefundEvidenceInput, RefundInput, RefundResult, ShipmentFilters, ShipmentInput, ShipmentStep, ShipmentUpdate } from "../types/supportOperationsType";
+import { MAX_REFUND_EVIDENCE_FILES } from "../types/supportOperationsType";
+import { evidenceContentTypes, maxEvidenceBytes } from "../types/manualPayoutType";
 
 const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const instant = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(v) && Number.isFinite(Date.parse(v));
@@ -51,9 +53,16 @@ export const getManagedPayments = async (filters: PaymentFilters, options: Servi
   // The order lookup is a complete list; backend ignores status/page when orderId is present.
   return pageOf(await requestApi("GET", "/api/v1/payments", undefined, { ...options, auth: true, params }), parsePaymentTransaction, params.orderId ? undefined : params.page);
 };
+const evidenceType = (v: unknown): v is RefundEvidence["contentType"] => evidenceContentTypes.some((type) => type === v);
+const parseRefundEvidence = (v: unknown): RefundEvidence => {
+  if (!isRecord(v) || !uuid(v.evidenceId) || !evidenceType(v.contentType) || !Number.isSafeInteger(v.sizeBytes) || Number(v.sizeBytes) < 1 || Number(v.sizeBytes) > maxEvidenceBytes || !text(v.bankReference) || v.bankReference.length > 100 || !uuid(v.uploadedBy) || !instant(v.uploadedAt)) return fail("Invalid refund evidence.");
+  return { evidenceId: v.evidenceId, contentType: v.contentType, sizeBytes: Number(v.sizeBytes), bankReference: v.bankReference, uploadedBy: v.uploadedBy, uploadedAt: v.uploadedAt };
+};
 export const parseRefund = (v: unknown): Refund => {
-  if (!isRecord(v) || !uuid(v.refundId) || !uuid(v.orderId) || !money(v.amount) || v.amount <= 0 || v.currency !== "VND" || !["REQUESTED", "COMPLETED"].includes(String(v.status)) || !text(v.reason) || !instant(v.requestedAt) || !(v.completedAt === null || instant(v.completedAt))) return fail("Invalid refund.");
-  return { refundId: v.refundId, orderId: v.orderId, amount: v.amount, currency: v.currency, status: v.status as Refund["status"], reason: v.reason, requestedAt: v.requestedAt, completedAt: v.completedAt as string | null };
+  if (!isRecord(v) || !uuid(v.refundId) || !uuid(v.orderId) || !money(v.amount) || v.amount <= 0 || v.currency !== "VND" || !["REQUESTED", "COMPLETED"].includes(String(v.status)) || !text(v.reason) || !instant(v.requestedAt) || !(v.completedAt === null || instant(v.completedAt)) || !Array.isArray(v.evidence) || v.evidence.length > MAX_REFUND_EVIDENCE_FILES) return fail("Invalid refund.");
+  const evidence = v.evidence.map(parseRefundEvidence);
+  if (new Set(evidence.map((file) => file.evidenceId)).size !== evidence.length) fail("Duplicate refund evidence.");
+  return { refundId: v.refundId, orderId: v.orderId, amount: v.amount, currency: v.currency, status: v.status as Refund["status"], reason: v.reason, requestedAt: v.requestedAt, completedAt: v.completedAt as string | null, evidence };
 };
 export const getOrderRefunds = async (orderId: string, options: ServiceRequestOptions = {}): Promise<Refund[]> => {
   requireId(orderId); const response = await requestApi("GET", "/api/v1/refunds", undefined, { ...options, auth: true, params: { orderId } });
@@ -69,6 +78,26 @@ export const requestOrderRefund = async (body: RefundInput, key: string, options
 export const completeOrderRefund = async (id: string, options: ServiceRequestOptions = {}): Promise<Refund> => {
   requireId(id); const { data } = await requestApi("POST", `/api/v1/refunds/${id}/complete`, undefined, { ...options, auth: true, params: undefined });
   const refund = parseRefund(data); if (refund.refundId !== id || refund.status !== "COMPLETED") fail("Refund completion reference mismatch."); return refund;
+};
+export const refundEvidenceError = (file: File, attached: number): string | null => {
+  if (attached >= MAX_REFUND_EVIDENCE_FILES) return `A refund keeps at most ${MAX_REFUND_EVIDENCE_FILES} transfer receipts.`;
+  if (!evidenceType(file.type)) return `${file.name} is not a JPEG, PNG or PDF file.`;
+  if (file.size < 1) return `${file.name} is empty.`;
+  if (file.size > maxEvidenceBytes) return `${file.name} is larger than 10 MiB.`;
+  return null;
+};
+export const uploadRefundEvidence = async (id: string, input: RefundEvidenceInput, options: ServiceRequestOptions = {}): Promise<Refund> => {
+  requireId(id);
+  const problem = refundEvidenceError(input.file, 0); if (problem) fail(problem);
+  const bankReference = input.bankReference.trim();
+  if (!bankReference || bankReference.length > 100) fail("Enter the bank transaction reference (1–100 characters).");
+  const form = new FormData(); form.append("file", input.file, input.file.name); form.append("bankReference", bankReference);
+  const { data } = await requestApi("POST", `/api/v1/refunds/${id}/evidence`, form, { ...options, auth: true, params: undefined });
+  const refund = parseRefund(data); if (refund.refundId !== id) fail("Refund evidence reference mismatch."); return refund;
+};
+export const getRefundEvidence = async (id: string, evidenceId: string, options: ServiceRequestOptions = {}): Promise<Blob> => {
+  requireId(id); requireId(evidenceId);
+  return requestApiBlob(`/api/v1/refunds/${id}/evidence/${evidenceId}`, evidenceContentTypes, { ...options, auth: true, params: undefined });
 };
 export const parseManagedShipment = (v: unknown): ManagedShipment => {
   if (!isRecord(v) || ![v.id, v.orderId, v.warehouseId, v.buyerId].every(uuid) || !text(v.carrier) || !nullableText(v.serviceType) || !nullableText(v.trackingCode) || !shipmentStatus(v.status) || !money(v.shippingFee) || !isRecord(v.shippingInfo) || !instant(v.createdAt) || !instant(v.updatedAt) || !Number.isSafeInteger(v.version) || Number(v.version) < 0) return fail("Invalid shipment.");
@@ -88,6 +117,22 @@ export const updateManagedShipment = async (id: string, body: ShipmentUpdate, ov
   requireId(id); if (!shipmentStatus(body.status)) fail("Invalid shipment status.");
   const { data } = await requestApi(override ? "POST" : "PATCH", `/api/v1/shipments/${id}/${override ? "override" : "status"}`, { status: body.status, reason: reason(body.reason, 255) }, { ...options, auth: true, params: undefined });
   const row = parseManagedShipment(data); if (row.id !== id) fail("Shipment reference mismatch."); return row;
+};
+const count = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
+const ratio = (v: unknown) => v === null || typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
+const hours = (v: unknown) => v === null || typeof v === "number" && Number.isFinite(v) && v >= 0;
+export const MAX_PERFORMANCE_DAYS = 366;
+export const parseCarrierPerformance = (v: unknown): CarrierPerformance => {
+  if (!isRecord(v) || !text(v.carrier) || !text(v.name) || ![v.shipments, v.delivered, v.failed, v.inProgress, v.cancelled].every(count) || Number(v.delivered) + Number(v.failed) + Number(v.inProgress) + Number(v.cancelled) !== v.shipments || !ratio(v.successRate) || !ratio(v.onTimeRate) || !hours(v.averageDeliveryHours)) return fail("Invalid carrier performance.");
+  return { carrier: v.carrier, name: v.name, shipments: Number(v.shipments), delivered: Number(v.delivered), failed: Number(v.failed), inProgress: Number(v.inProgress), cancelled: Number(v.cancelled), successRate: v.successRate as number | null, averageDeliveryHours: v.averageDeliveryHours as number | null, onTimeRate: v.onTimeRate as number | null };
+};
+export const getCarrierPerformance = async (from: string, to: string, options: ServiceRequestOptions = {}): Promise<CarrierPerformance[]> => {
+  if (!instant(from) || !instant(to) || Date.parse(from) >= Date.parse(to) || Date.parse(to) - Date.parse(from) > MAX_PERFORMANCE_DAYS * 86_400_000) fail("Choose a period that starts before it ends and spans at most 366 days.");
+  const { data } = await requestApi("GET", "/api/v1/carriers/performance", undefined, { ...options, auth: true, params: { from, to } });
+  if (!Array.isArray(data)) return fail("Invalid carrier performance.");
+  const rows = data.map(parseCarrierPerformance);
+  if (new Set(rows.map((row) => row.carrier)).size !== rows.length) fail("Duplicate carrier performance.");
+  return rows;
 };
 export const getManagedShipmentHistory = async (id: string, page: number, options: ServiceRequestOptions = {}): Promise<Page<ShipmentStep>> => {
   requireId(id); const params = filtersOf({ page, size: 10 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getProductAvailability, getStockBalances, intakeStock, parseStockBalance } from "../service/backofficeService";
+import { adjustStock, getProductAvailability, getStockBalances, intakeStock, parseStockBalance } from "../service/backofficeService";
 import { isApiError } from "../configs/api";
 import type { ApiContext } from "../types/commonRequestType";
 
@@ -82,4 +82,30 @@ test("canceling intake preserves AbortError without another write", async () => 
   } } });
   await sending; controller.abort();
   await assert.rejects(pending, { name: "AbortError" });
+});
+
+test("stock adjustment posts a trimmed reason and signed delta for the chosen warehouse", async () => {
+  const calls: Array<{ path: string; auth: string | null; body: unknown }> = [];
+  const context: ApiContext = { getAccessToken: () => "admin-fixture", fetch: async (input, init) => {
+    calls.push({ path: new URL(String(input), "http://fixture.test").pathname, auth: new Headers(init?.headers).get("Authorization"), body: JSON.parse(String(init?.body)) });
+    return Response.json({ code: 0, message: "response success", data: { ...balance, total: 12, available: 8 } }, { status: 201 });
+  } };
+  const result = await adjustStock({ skuId, warehouseId, quantityDelta: -2, reason: "  Cycle count found 2 damaged units  " }, { context });
+  assert.equal(result.available, 8);
+  assert.deepEqual(calls, [{ path: "/api/v1/inventory/adjustments", auth: "Bearer admin-fixture",
+    body: { skuId, quantityDelta: -2, reason: "Cycle count found 2 damaged units", warehouseId } }]);
+  await assert.rejects(adjustStock({ skuId, warehouseId: otherWarehouse, quantityDelta: 1, reason: "Found" }, { context }), invalid);
+});
+
+test("stock adjustment rejects zero, fractional or oversized deltas and blank reasons before sending", async () => {
+  let requests = 0;
+  const context: ApiContext = { fetch: async () => { requests++; return Response.json({ title: "Conflict", status: 409, code: "INVENTORY_NEGATIVE_QUANTITY", detail: "Adjustment would make stock negative." }, { status: 409 }); } };
+  for (const quantityDelta of [0, 1.5, 1_000_001, -1_000_001, Number.NaN])
+    await assert.rejects(adjustStock({ skuId, quantityDelta, reason: "Count" }, { context }), invalid);
+  for (const reason of ["", "   ", "x".repeat(501)])
+    await assert.rejects(adjustStock({ skuId, quantityDelta: -1, reason }, { context }), invalid);
+  assert.equal(requests, 0);
+  await assert.rejects(adjustStock({ skuId, quantityDelta: -99, reason: "Lost" }, { context }), (error: unknown) =>
+    isApiError(error) && error.status === 409 && error.code === "INVENTORY_NEGATIVE_QUANTITY");
+  assert.equal(requests, 1);
 });

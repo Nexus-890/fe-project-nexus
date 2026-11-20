@@ -75,7 +75,7 @@ test.beforeEach(async ({ page, request }) => {
 
 test("anonymous visitors are redirected to sign in", async ({ page, request }) => {
   await page.goto("/profile");
-  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fprofile$/);
   await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   expect((await history(request)).filter(entry => entry.path === "/v1/users/me")).toEqual([]);
 });
@@ -103,6 +103,7 @@ test("header links to profile, GET populates, PUT updates the form and header, c
   });
   await expect(page.getByLabel("Full Name", { exact: true })).toHaveValue("Lan Nguyễn Updated");
   await expect(page.locator("header summary", { hasText: "Hi Lan Nguyễn Updated" })).toBeVisible();
+  await expect(page.getByText("Your profile has been updated. The next time you sign in, confirm your new email with the link we send to it.", { exact: true })).toBeVisible();
   const puts = (await history(request)).filter(entry => entry.method === "PUT" && entry.path === "/v1/users/me");
   expect(puts).toHaveLength(1);
   expect(puts[0].authenticated).toBe(true);
@@ -294,26 +295,201 @@ test("profile fits 375x812 without clipped text and has desktop and mobile scree
   await page.screenshot({ path: info.outputPath("profile-desktop-1440.png"), fullPage: true, style: screenshotStyle });
 });
 
-test("profile password action opens Keycloak credential settings with a safe profile referrer", async ({ page }) => {
+test("profile changes the password in place: checks locally, explains a wrong current one and saves once", async ({ page, request }) => {
   await signIn(page);
   await openProfile(page);
   await populatedForm(page);
-  await expect(page.locator('input[type="password"]')).toHaveCount(0);
-  const profileOrigin = new URL(page.url()).origin;
-  // The fixture only acknowledges navigation. Keycloak's actual forms, reset
-  // tokens and email delivery require the documented live acceptance checks.
-  await page.route("**/realms/nexus/account/**", (route) => route.fulfill({
-    contentType: "text/html",
-    body: "<!doctype html><html><body><h1>Account console fixture</h1></body></html>",
-  }));
-  const accountRequest = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/realms/nexus/account/"));
-  await page.getByRole("button", { name: "Change password", exact: true }).click();
-  const destination = new URL((await accountRequest).url());
-  expect(destination.origin).toBe(simulation);
-  expect(destination.pathname).toBe("/keycloak/realms/nexus/account/");
-  expect([...destination.searchParams]).toEqual([
-    ["referrer", "nexus-web"],
-    ["referrer_uri", `${profileOrigin}/profile`],
+  const security = page.locator("#security");
+  const current = security.getByLabel("Current password", { exact: true });
+  const next = security.getByLabel("New password", { exact: true });
+  const confirmation = security.getByLabel("Confirm new password", { exact: true });
+  const save = security.getByRole("button", { name: "Change password", exact: true });
+  const ownPasswordCalls = async () => (await history(request)).filter((entry) => entry.path === "/v1/users/me/password");
+
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Enter your current password.");
+  await current.fill("Fixture-pass-123!");
+  await next.fill("short");
+  await confirmation.fill("short");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Use at least 8 characters.");
+  await next.fill("Fixture-pass-123!");
+  await confirmation.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("Choose a password that is different from your current one.");
+  expect(await ownPasswordCalls()).toEqual([]);
+
+  await current.fill("Not-my-pass-000!");
+  await next.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-456!");
+  await save.click();
+  await expect(security.getByRole("alert")).toHaveText("The current password is incorrect.");
+  await expect(current).toHaveAttribute("aria-invalid", "true");
+  await expect(next).toHaveValue("Another-pass-456!");
+
+  await current.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(security.getByRole("status")).toHaveText("Your password has been changed. Other devices have been signed out.");
+  await expect(current).toHaveValue("");
+  await expect(next).toHaveValue("");
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.locator("header summary", { hasText: `Hi ${originalName}` })).toBeVisible();
+  await responsiveChecks(page);
+  expect((await ownPasswordCalls()).map((entry) => [entry.body, entry.authenticated])).toEqual([
+    [{ currentPassword: "Not-my-pass-000!", newPassword: "Another-pass-456!" }, true],
+    [{ currentPassword: "Fixture-pass-123!", newPassword: "Another-pass-456!" }, true],
   ]);
-  await expect(page).toHaveURL(/#\/account-security\/signing-in$/);
+});
+
+const resetToken = "Rk9yZ290LXBhc3N3b3JkLWZpeHR1cmUtdG9rZW4tMDE";
+
+test("sign-in links to forgot password, which sends one public request and never reveals the account", async ({ page, request }) => {
+  await page.goto("/sign-in");
+  await page.getByRole("link", { name: "Forgot password?", exact: true }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+  await expect(page.getByRole("heading", { name: "Forgot your password?", exact: true })).toBeVisible();
+  await page.getByLabel("Email address", { exact: true }).fill("  lan.nguyen@example.com ");
+  await page.getByRole("button", { name: "Send reset link", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("If an account uses this email, we have sent a reset link. Check your inbox and spam folder.");
+  await expect(page.getByRole("button", { name: /^Send again in \d+s$/ })).toBeDisabled();
+  await responsiveChecks(page);
+  const sent = (await history(request)).filter((entry) => entry.path === "/v1/auth/password-reset");
+  expect(sent).toEqual([{ method: "POST", path: "/v1/auth/password-reset", body: { email: "lan.nguyen@example.com" }, authenticated: false }]);
+});
+
+test("the reset page checks the passwords, explains a reused one, saves once and then treats the link as used", async ({ page, request }) => {
+  await page.goto(`/reset-password?token=${resetToken}`);
+  await expect(page.getByRole("heading", { name: "Choose a new password", exact: true })).toBeVisible();
+  const password = page.getByLabel("New password", { exact: true });
+  const confirmation = page.getByLabel("Confirm new password", { exact: true });
+  const save = page.getByRole("button", { name: "Set new password", exact: true });
+
+  await password.fill("short");
+  await confirmation.fill("short");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Use at least 8 characters.");
+  await password.fill("Another-pass");
+  await confirmation.fill("Another-pass");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Include at least one number.");
+  await password.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-457!");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("The passwords do not match.");
+  expect((await history(request)).filter((entry) => entry.path.startsWith("/v1/auth/password-reset"))).toEqual([]);
+
+  await password.fill("Fixture-pass-123!");
+  await confirmation.fill("Fixture-pass-123!");
+  await save.click();
+  await expect(page.locator("main").getByRole("alert")).toHaveText("Choose a password that is different from your current one.");
+  await expect(password).toHaveValue("Fixture-pass-123!");
+
+  await password.fill("Another-pass-456!");
+  await confirmation.fill("Another-pass-456!");
+  await save.click();
+  await expect(page.getByRole("heading", { name: "Password updated", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue to sign in", exact: true })).toHaveAttribute("href", "/sign-in");
+  await responsiveChecks(page);
+  const confirms = (await history(request)).filter((entry) => entry.path === "/v1/auth/password-reset/confirm");
+  expect(confirms.map((entry) => [entry.body, entry.authenticated])).toEqual([
+    [{ token: resetToken, newPassword: "Fixture-pass-123!" }, false],
+    [{ token: resetToken, newPassword: "Another-pass-456!" }, false],
+  ]);
+
+  await page.goto(`/reset-password?token=${resetToken}`);
+  await page.getByLabel("New password", { exact: true }).fill("Third-pass-789!");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("Third-pass-789!");
+  await page.getByRole("button", { name: "Set new password", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "This link no longer works", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Request a new link", exact: true }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+});
+
+test("a malformed reset link asks for a new one without calling the API", async ({ page, request }) => {
+  await page.goto("/reset-password?token=not-a-token");
+  await expect(page.getByRole("heading", { name: "This link no longer works", exact: true })).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  expect((await history(request)).filter((entry) => entry.path.startsWith("/v1/auth/password-reset"))).toEqual([]);
+});
+
+const pngAvatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4Ga8DAAN5AWVLTgzuAAAAAElFTkSuQmCC", "base64");
+
+test("reputation shows the own score and penalty history pages through every score loss", async ({ page, request }) => {
+  await signIn(page);
+  await openProfile(page);
+  const reputation = page.locator("#reputation");
+  await expect(reputation.getByLabel("Reputation score 62 out of 100")).toBeVisible();
+  await expect(reputation.getByText("Trusted", { exact: true })).toBeVisible();
+  await expect(reputation.getByRole("meter", { name: "Reputation score" })).toHaveAttribute("aria-valuenow", "62");
+  for (const [label, value] of [["Transactions", "9"], ["Successful", "7"], ["Failed", "1"], ["Auctions won", "2"], ["Avg rating", "4.3"]]) {
+    await expect(reputation.locator("dl > div", { has: page.getByText(label, { exact: true }) }).locator("dd")).toHaveText(value);
+  }
+  await expect(reputation.getByText("12 entries lowered your score.")).toBeVisible();
+  const penaltyCard = page.locator("#penalty-history");
+  const items = penaltyCard.getByRole("list", { name: "Penalty history" }).getByRole("listitem");
+  await expect(items).toHaveCount(10);
+  await expect(items.first()).toContainText("Unpaid auction");
+  await expect(items.first()).toContainText("-2 (64 → 62)");
+  await expect(items.first()).toContainText("Auction 5B1C2D3E");
+  await expect(items.nth(2)).toContainText("Admin deduction");
+  await expect(penaltyCard.getByText("Page 1 of 2")).toBeVisible();
+  await expect(penaltyCard.getByRole("button", { name: "Previous" })).toBeDisabled();
+  await penaltyCard.getByRole("button", { name: "Next" }).click();
+  await expect(penaltyCard.getByText("Page 2 of 2")).toBeVisible();
+  await expect(items).toHaveCount(2);
+  await expect(penaltyCard.getByRole("button", { name: "Next" })).toBeDisabled();
+  const reads = (await history(request)).filter(entry => entry.path.startsWith("/v1/users/me/"));
+  expect(reads.every(entry => entry.authenticated && entry.method === "GET")).toBe(true);
+  await responsiveChecks(page);
+});
+
+test("a reputation read failure keeps the profile usable and retries, and no penalties shows an empty state", async ({ page, request }) => {
+  await control(request, { reputationStatus: 403, noPenalties: true });
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  const reputation = page.locator("#reputation");
+  await expect(reputation.getByRole("alert")).toContainText("Unable to load your reputation.");
+  await expect(page.locator("#penalty-history").getByRole("status")).toHaveText("No penalties. Your score has never been lowered.");
+  await control(request, { reputationStatus: 0 });
+  await reputation.getByRole("button", { name: "Retry reputation" }).click();
+  await expect(reputation.getByLabel("Reputation score 62 out of 100")).toBeVisible();
+});
+
+test("avatar upload checks the file, posts multipart and shows the stored photo", async ({ page, request }) => {
+  await signIn(page);
+  await openProfile(page);
+  await populatedForm(page);
+  const card = page.getByRole("complementary", { name: "Your account" });
+  await expect(card.getByRole("button", { name: "Upload photo" })).toBeEnabled();
+  await page.setInputFiles("#avatar-file", { name: "me.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
+  await expect(card.getByRole("alert")).toHaveText("Use a JPEG, PNG or WebP image.");
+  expect((await history(request)).filter(entry => entry.path === "/v1/users/me/avatar")).toEqual([]);
+  await control(request, { avatarStatus: 503 });
+  await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png", buffer: pngAvatar });
+  await expect(card.getByRole("alert")).toHaveText("Photo storage is unavailable right now. Please try again later.");
+  await control(request, { avatarStatus: 0 });
+  await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png", buffer: pngAvatar });
+  await expect(card.getByRole("status")).toHaveText("Your photo has been updated.");
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  await expect(card.getByRole("button", { name: "Change photo" })).toBeVisible();
+  const posts = (await history(request)).filter(entry => entry.path === "/v1/users/me/avatar");
+  expect(posts.map(entry => [entry.method, entry.authenticated, entry.body])).toEqual([
+    ["POST", true, { multipart: true }], ["POST", true, { multipart: true }],
+  ]);
+  await page.reload();
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  const header = page.locator("header summary", { hasText: "Hi " });
+  await expect(header.locator('[data-slot="avatar-image"]')).toHaveAttribute("src", /\/api\/test\/avatar\/1$/);
+  await card.getByRole("button", { name: "Remove photo" }).click();
+  await expect(card.getByRole("status")).toHaveText("Your photo has been removed.");
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveCount(0);
+  await expect(header.locator('[data-slot="avatar-image"]')).toHaveCount(0);
+  await expect(header.locator('[data-slot="avatar-fallback"]')).toBeVisible();
+  await expect(card.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Remove photo" })).toHaveCount(0);
+  expect((await history(request)).filter(entry => entry.path === "/v1/users/me/avatar").map(entry => [entry.method, entry.authenticated]))
+    .toEqual([["POST", true], ["POST", true], ["DELETE", true]]);
+  await page.reload();
+  await expect(card.locator('[data-slot="avatar-image"]')).toHaveCount(0);
 });

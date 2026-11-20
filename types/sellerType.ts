@@ -9,10 +9,12 @@ export type SellerSkuInput = catalog["schemas"]["WriteSku"];
 export type SellerProductStatus = catalog["schemas"]["ChangeProductStatus"]["status"];
 export type SellerProductFilters = { status?: SellerProductStatus; auctionEnable?: boolean };
 export type SellerBalance = inventory["schemas"]["Balance"];
+export type SellerFulfilment = inventory["schemas"]["ReservationView"];
+export type SellerFulfilmentStep = "pick" | "ship";
 export type SellerProductListing = ProductDetail;
 export type SellerSale = OrderSummary & {
   buyerId: string;
   recipientName: string | null;
   phoneNumber: string | null;
-  saleItems: { id: string; name: string; skuCode: string; quantity: number }[];
+  saleItems: { id: string; name: string; skuCode: string | null; quantity: number }[];
 };

@@ -85,6 +85,22 @@ test("deleting a product clears its cached auction picker entry", async ({ page,
   await expect(product.locator(`option[value="${productId}"]`)).toHaveCount(0);
 });
 
+test("a paid sale is marked picked, then packed, and each step reaches its reservation", async ({ page, request }) => {
+  await signIn(page, request, "SELLER", "/backoffice/sales");
+  const table = page.getByRole("table", { name: "Seller orders", exact: true });
+  const row = table.getByRole("row").filter({ hasText: "NX-SELLER-1" });
+  await expect(row.getByRole("button", { name: "Mark packed", exact: false })).toHaveCount(0);
+  await row.getByRole("button", { name: "Mark NX-SELLER-1 picked", exact: true }).click();
+  await expect(row.getByText("Picked", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Mark NX-SELLER-1 packed", exact: true }).click();
+  await expect(row.getByText("Packed for carrier", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: /Mark NX-SELLER-1/ })).toHaveCount(0);
+  const evidence = await (await request.get(`${api}/test/evidence`)).json();
+  const steps = evidence.requests.filter((entry: { method: string; path: string }) => entry.method === "POST" && /\/api\/v1\/inventory\/reservations\/[^/]+\/(?:pick|ship)$/.test(entry.path)).map((entry: { path: string }) => entry.path.split("/").at(-1));
+  expect(steps).toEqual(["pick", "ship"]);
+  await screenshot(page, "sales-fulfilment");
+});
+
 test("sales combines status and full-day Vietnam date filters", async ({ page, request }) => {
   await signIn(page, request, "SELLER", "/backoffice/sales");
   await page.getByRole("button", { name: "All", exact: true }).click();
@@ -274,6 +290,59 @@ test("shop profile and masked default bank release automatic payouts after verif
     const calls = (await (await request.get(`${api}/test/evidence`)).json()).requests;
     expect(calls.some((row: { method: string; path: string }) => row.method === "POST" && ["/api/v1/payouts", "/api/v1/payments/payouts"].includes(row.path))).toBe(false);
   } finally { await context.close(); }
+});
+
+test("seller sets up their one warehouse, then renames it, and staff cannot open the page", async ({ page, request, browser }) => {
+  await signIn(page, request, "SELLER", "/backoffice/warehouse");
+  await expect(page.getByRole("heading", { name: "Warehouse", exact: true })).toBeVisible();
+  await expect(page.getByText("No warehouse yet. Save its name here, or add stock to a SKU and it is created for you.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Warehouse", exact: true })).toBeVisible();
+  await page.getByLabel("Warehouse name", { exact: true }).fill("  District 7 warehouse  ");
+  await expect(page.getByText("Without a province and ward, orders ship from the platform pickup address.", { exact: false })).toBeVisible();
+  await page.getByLabel("House number and street", { exact: true }).fill("12 Nguyen Thi Thap");
+  await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Warehouse saved." })).toBeVisible();
+  await expect(page.getByText("SELLER-68000000000040008000000000000002", { exact: true })).toBeVisible();
+  await expect(page.getByText("Platform pickup address", { exact: true })).toBeVisible();
+  const province = page.getByLabel("Province or city", { exact: true });
+  await expect(province.locator("option").nth(1)).toBeAttached();
+  await province.selectOption({ index: 1 });
+  await expect(page.getByRole("button", { name: "Save warehouse", exact: true })).toBeDisabled();
+  const ward = page.getByLabel("Ward or commune", { exact: true });
+  await expect(ward.locator("option").nth(1)).toBeAttached();
+  await ward.selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
+  await expect(page.getByText("From this warehouse", { exact: true })).toBeVisible();
+  await screenshot(page, "seller-warehouse");
+  const picked = (await (await request.get(`${api}/test/own-warehouses`)).json()).data[ids.SELLER];
+  expect(picked.provinceCode).toMatch(/^[1-9][0-9]*$/);
+  expect(picked.wardCode).toMatch(/^[1-9][0-9]*$/);
+  expect(picked.address).toBe("12 Nguyen Thi Thap");
+  await page.reload();
+  await expect(page.getByLabel("Province or city", { exact: true })).toHaveValue(picked.provinceCode);
+  await expect(page.getByLabel("Ward or commune", { exact: true })).toHaveValue(picked.wardCode);
+  await page.getByLabel("Warehouse name", { exact: true }).fill("Thu Duc warehouse");
+  await page.getByLabel("Province or city", { exact: true }).selectOption("");
+  await page.getByLabel("House number and street", { exact: true }).fill(" ");
+  await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
+  await expect(page.getByText("Thu Duc warehouse", { exact: true })).toBeVisible();
+  await expect(page.getByText("Platform pickup address", { exact: true })).toBeVisible();
+  const own = (await (await request.get(`${api}/test/own-warehouses`)).json()).data[ids.SELLER];
+  expect(own).toMatchObject({ name: "Thu Duc warehouse", address: null, status: "ACTIVE", sellerId: ids.SELLER, provinceCode: null, wardCode: null });
+  const calls = (await (await request.get(`${api}/test/evidence`)).json()).requests.filter((row: { path: string }) => row.path === "/api/v1/warehouses/me");
+  expect(calls.map((row: { body: unknown }) => row.body)).toEqual([{ name: "District 7 warehouse", address: "12 Nguyen Thi Thap" },
+    { name: "District 7 warehouse", address: "12 Nguyen Thi Thap", provinceCode: picked.provinceCode, wardCode: picked.wardCode }, { name: "Thu Duc warehouse", address: null }]);
+  const adminContext = await browser.newContext();
+  try {
+    const adminPage = await adminContext.newPage();
+    await request.get(`${provider}/test/control?roles=ADMIN&subject=${ids.ADMIN}`);
+    await adminPage.goto(`/sign-in?returnTo=${encodeURIComponent("/backoffice/warehouse")}`);
+    await adminPage.getByRole("button", { name: "Continue to sign in", exact: true }).click();
+    await adminPage.getByLabel("Email", { exact: true }).fill("admin@nexus.local");
+    await adminPage.getByLabel("Password", { exact: true }).fill("Fixture-pass-123!");
+    await adminPage.getByRole("button", { name: "Sign in at Keycloak", exact: true }).click();
+    await expect(adminPage.getByLabel("Warehouse name", { exact: true })).toHaveCount(0);
+  } finally { await adminContext.close(); }
 });
 
 test("admin must review the changed bank again after a stale version conflict", async ({ page, request, browser }) => {

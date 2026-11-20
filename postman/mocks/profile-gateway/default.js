@@ -17,6 +17,46 @@ const initialUser = {
 };
 
 const appOrigin = "http://127.0.0.1:3103";
+const resetToken = "Rk9yZ290LXBhc3N3b3JkLWZpeHR1cmUtdG9rZW4tMDE";
+const currentPassword = "Fixture-pass-123!";
+const reputation = {
+  score: 62, trustLevel: "TRUSTED", totalTransaction: 9, successfulTransaction: 7, failedTransaction: 1,
+  ratingCount: 4, averageRating: 4.3, successfulAuctions: 2, failedAuctions: 1, penaltyCount: 12,
+  policyVersion: "reputation-policy-1",
+};
+const penaltyTypes = ["AUCTION_PAYMENT_TIMEOUT", "USER_RATED", "ADMIN_ADJUSTMENT"];
+const penaltyReasons = {
+  AUCTION_PAYMENT_TIMEOUT: "Auction payment deadline missed",
+  USER_RATED: "Rated 1 star by a buyer",
+  ADMIN_ADJUSTMENT: "Listing policy violation",
+};
+const penalties = Array.from({ length: 12 }, (_, index) => {
+  const changeType = penaltyTypes[index % 3];
+  const previousScore = 64 + index * 2;
+  return {
+    id: `7d000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, changeType,
+    sourceId: changeType === "ADMIN_ADJUSTMENT" ? null : `5b1c2d3e-4f50-4a61-8b72-${String(index + 1).padStart(12, "0")}`,
+    delta: -2, previousScore, newScore: previousScore - 2, previousLevel: "TRUSTED", newLevel: "TRUSTED",
+    reason: penaltyReasons[changeType], changedAt: new Date(Date.UTC(2026, 10, 18 - index, 3)).toISOString(),
+  };
+});
+const avatarSignatures = [
+  { type: "image/png", test: (b) => b.length >= 4 && b.toString("latin1", 1, 4) === "PNG" },
+  { type: "image/jpeg", test: (b) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { type: "image/webp", test: (b) => b.length >= 12 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP" },
+];
+const avatars = new Map();
+const storedAvatar = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4Ga8DAAN5AWVLTgzuAAAAAElFTkSuQmCC", "base64");
+function multipartFile(req) {
+  const raw = Buffer.isBuffer(req.body) ? req.body.toString("latin1") : typeof req.body === "string" ? req.body : "";
+  const boundary = /boundary=([^;]+)/.exec(String(req.headers["content-type"] || ""))?.[1];
+  if (!boundary) return null;
+  for (const part of raw.split(`--${boundary}`)) {
+    if (!/name="file"/.test(part) || !/filename="/.test(part)) continue;
+    return Buffer.from(part.slice(part.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, ""), "latin1");
+  }
+  return null;
+}
 const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
 function json(res, value, status = 200) {
@@ -128,6 +168,9 @@ const server = http.createServer(async (req, res) => {
     await pm.state.set("profile-gateway:user", initialUser);
     await pm.state.set("profile-gateway:controls", {});
     await pm.state.set("profile-gateway:requests", []);
+    await pm.state.set("profile-gateway:reset-used", false);
+    await pm.state.set("profile-gateway:password", currentPassword);
+    avatars.clear();
     return json(res, {});
   }
   if (path === "/__test/control" && req.method === "POST") {
@@ -142,6 +185,11 @@ const server = http.createServer(async (req, res) => {
   if (path === "/__test/user") {
     return json(res, await pm.state.get("profile-gateway:user") || initialUser);
   }
+  const avatarFile = /^\/test\/avatar\/(\d+)$/.exec(path);
+  if (avatarFile && avatars.has(avatarFile[1])) {
+    res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
+    return res.end(storedAvatar);
+  }
 
   if (sessionPaths.has(path) && req.method === "POST") {
     return session(req, res, path, await pm.state.get("profile-gateway:controls") || {});
@@ -154,11 +202,32 @@ const server = http.createServer(async (req, res) => {
   const authenticated = Boolean(authorization.startsWith("Bearer ") && expectedHash
     && createHash("sha256").update(authorization.slice(7)).digest("hex") === expectedHash
     && typeof expiry === "number" && expiry > Math.floor(time / 1000));
-  await recordRequest({ method: req.method, path, body: req.body ?? null, authenticated });
+  const multipart = String(req.headers["content-type"] || "").startsWith("multipart/form-data");
+  await recordRequest({ method: req.method, path, body: multipart ? { multipart: true } : req.body ?? null, authenticated });
   const controls = await pm.state.get("profile-gateway:controls") || {};
   const user = await pm.state.get("profile-gateway:user") || initialUser;
 
-  if (path === "/v1/users/me" || path === "/v1/carts/me") {
+  // @endpoint POST /v1/auth/password-reset
+  if (path === "/v1/auth/password-reset" && req.method === "POST") {
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
+
+  // @endpoint POST /v1/auth/password-reset/confirm
+  if (path === "/v1/auth/password-reset/confirm" && req.method === "POST") {
+    const used = await pm.state.get("profile-gateway:reset-used");
+    if (req.body?.token !== resetToken || used) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_RESET_LINK_INVALID", detail: "The password reset link is invalid, used or expired; ask for a new one" }, 400);
+    }
+    if (req.body?.newPassword === currentPassword) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_REUSED", detail: "The new password must be different from the current password" }, 400);
+    }
+    await pm.state.set("profile-gateway:reset-used", true);
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
+
+  if (path === "/v1/users/me" || path === "/v1/carts/me" || path.startsWith("/v1/users/me/")) {
     if (!authenticated) {
       return json(res, { title: "Unauthorized", status: 401 }, 401);
     }
@@ -196,6 +265,63 @@ const server = http.createServer(async (req, res) => {
     if (typeof next.email === "string") next.email = next.email.trim().toLowerCase();
     await pm.state.set("profile-gateway:user", next);
     return success(res, next);
+  }
+
+  // @endpoint POST /v1/users/me/avatar
+  if (path === "/v1/users/me/avatar" && req.method === "POST") {
+    if (controls.avatarStatus) {
+      return json(res, { title: "Service Unavailable", status: controls.avatarStatus, code: "USER_AVATAR_STORAGE_UNAVAILABLE", detail: "Avatar storage is unavailable" }, controls.avatarStatus);
+    }
+    const file = multipartFile(req);
+    if (!file || file.length === 0) return json(res, { title: "Bad Request", status: 400, code: "USER_AVATAR_REQUIRED", detail: "Choose an image to upload" }, 400);
+    const kind = avatarSignatures.find((signature) => signature.test(file));
+    if (!kind) return json(res, { title: "Unsupported Media Type", status: 415, code: "USER_AVATAR_INVALID_TYPE", detail: "The avatar must be a JPEG, PNG or WebP image" }, 415);
+    const key = String(avatars.size + 1);
+    avatars.set(key, kind.type);
+    const next = { ...user, avatarUrl: `http://127.0.0.1:3913/api/test/avatar/${key}` };
+    await pm.state.set("profile-gateway:user", next);
+    return success(res, next);
+  }
+
+  // @endpoint POST /v1/users/me/password
+  if (path === "/v1/users/me/password" && req.method === "POST") {
+    const password = await pm.state.get("profile-gateway:password") || currentPassword;
+    if (req.body?.currentPassword !== password) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_CURRENT_PASSWORD_INCORRECT", detail: "The current password is incorrect" }, 400);
+    }
+    if (req.body?.newPassword === password) {
+      return json(res, { title: "Bad Request", status: 400, code: "USER_PASSWORD_REUSED", detail: "The new password must be different from the current password" }, 400);
+    }
+    await pm.state.set("profile-gateway:password", req.body.newPassword);
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    return res.end();
+  }
+
+  // @endpoint DELETE /v1/users/me/avatar
+  if (path === "/v1/users/me/avatar" && req.method === "DELETE") {
+    const next = { ...user, avatarUrl: null };
+    await pm.state.set("profile-gateway:user", next);
+    return success(res, next);
+  }
+
+  // @endpoint GET /v1/users/me/reputation
+  if (path === "/v1/users/me/reputation" && req.method === "GET") {
+    if (controls.reputationStatus) {
+      return json(res, { title: "Reputation unavailable", status: controls.reputationStatus, detail: "Unable to load your reputation." }, controls.reputationStatus);
+    }
+    return success(res, reputation);
+  }
+
+  // @endpoint GET /v1/users/me/penalties
+  if (path === "/v1/users/me/penalties" && req.method === "GET") {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const number = Number(query.get("page") || 0), size = Number(query.get("size") || 10);
+    if (!Number.isInteger(number) || number < 0 || !Number.isInteger(size) || size < 1 || size > 50) {
+      return json(res, { title: "Bad Request", status: 400, code: "VALIDATION_FAILED", detail: "Invalid page" }, 400);
+    }
+    const rows = controls.noPenalties ? [] : penalties;
+    return json(res, { code: 0, message: "response success", data: rows.slice(number * size, number * size + size),
+      page: { number, size, totalElements: rows.length, totalPages: Math.ceil(rows.length / size) } });
   }
 
   // Shared shop shell dependencies; exact category and PageResponse shapes.

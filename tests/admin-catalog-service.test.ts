@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isApiError } from "../configs/api";
-import { deleteAdminCategory, getAdminMovements, getAdminWarehouse, getAdminWarehouses, updateAdminCategory, updateAdminWarehouse } from "../service/adminCatalogService";
+import { deleteAdminCategory, getAdminMovements, getAdminWarehouse, getAdminWarehouses, getOwnWarehouse, saveOwnWarehouse, updateAdminCategory, updateAdminWarehouse } from "../service/adminCatalogService";
 import { getSystemConfigs, updateSystemConfig } from "../service/adminConfigService";
 import { flattenAdminCategories } from "../features/adminCategoryUtils";
 import type { ApiContext } from "../types/commonRequestType";
@@ -39,6 +39,35 @@ test("warehouse updates send PUT without immutable code and validate server stat
   assert.equal((await updateAdminWarehouse(id, warehouse, { context })).code, "WH_HCM");
   await assert.rejects(getAdminWarehouses({ context: { fetch: async () => Response.json(envelope([{ ...warehouse, status: "UNKNOWN" }])) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
 });
+test("seller warehouse reads 404 as not set up yet, saves name and address and keeps its owner", async () => {
+  const own = { id, code: "SELLER-68000000000040008000000000000002", name: "District 7", address: null, status: "ACTIVE", sellerId: "68000000-0000-4000-8000-000000000002" };
+  const notFound: ApiContext = { fetch: async (input) => {
+    assert.equal(new URL(String(input), "http://fixture").pathname, "/api/v1/warehouses/me");
+    return Response.json({ title: "Not Found", status: 404, detail: "Warehouse not found", code: "INVENTORY_WAREHOUSE_NOT_FOUND" }, { status: 404 });
+  } };
+  assert.equal(await getOwnWarehouse({ context: notFound }), null);
+  await assert.rejects(getOwnWarehouse({ context: { fetch: async () => Response.json({ title: "Forbidden", status: 403, code: "FORBIDDEN" }, { status: 403 }) } }), (error: unknown) => isApiError(error) && error.status === 403);
+  const context: ApiContext = { getAccessToken: () => "seller", fetch: async (_input, init) => {
+    assert.equal(init?.method, "PUT");
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer seller");
+    assert.deepEqual(JSON.parse(String(init?.body)), { name: "District 7", address: null });
+    return Response.json(envelope(own));
+  } };
+  assert.equal((await saveOwnWarehouse({ name: "District 7", address: null }, { context })).sellerId, own.sellerId);
+  const pickup = { ...own, address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" };
+  const withPickup: ApiContext = { fetch: async (_input, init) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), { name: "District 7", address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" });
+    return Response.json(envelope(pickup));
+  } };
+  const saved = await saveOwnWarehouse({ name: "District 7", address: "12 Kim Ma", provinceCode: "201", wardCode: "20309" }, { context: withPickup });
+  assert.equal(saved.provinceCode, "201");
+  assert.equal(saved.wardCode, "20309");
+  assert.equal((await getOwnWarehouse({ context: { fetch: async () => Response.json(envelope(own)) } }))?.provinceCode, null);
+  for (const broken of [{ ...pickup, wardCode: null }, { ...pickup, provinceCode: "20A" }, { ...pickup, wardCode: 20309 }])
+    await assert.rejects(getOwnWarehouse({ context: { fetch: async () => Response.json(envelope(broken)) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+  assert.equal((await getAdminWarehouses({ context: { fetch: async () => Response.json(envelope([{ ...own, sellerId: undefined }])) } }))[0].sellerId, null);
+  await assert.rejects(getAdminWarehouses({ context: { fetch: async () => Response.json(envelope([{ ...own, sellerId: "seller" }])) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
+});
 test("ledger keeps page, SKU and warehouse filters and allows signed historical adjustments", async () => {
   const movement = { id, skuId: id, warehouseId: id, movementType: "ADJUSTMENT", quantity: -2, referenceId: null, reason: "Damaged", createdAt: "2026-11-17T01:00:00Z" };
   const context: ApiContext = { fetch: async (input) => {
@@ -48,6 +77,8 @@ test("ledger keeps page, SKU and warehouse filters and allows signed historical 
   } };
   const page = await getAdminMovements(id, id, 1, { context });
   assert.equal(page.content[0].quantity, -2); assert.equal(page.totalPages, 2);
+  const transfer = await getAdminMovements(id, undefined, 0, { context: { fetch: async () => Response.json({ ...envelope([{ ...movement, movementType: "TRANSFER", quantity: 17, reason: null }]), page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } }) } });
+  assert.equal(transfer.content[0].movementType, "TRANSFER");
   await assert.rejects(getAdminMovements(id, undefined, 0, { context: { fetch: async () => Response.json({ ...envelope([{ ...movement, skuId: "a2280000-0000-4000-8000-000000000002" }]), page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } }) } }), (error: unknown) => isApiError(error) && error.kind === "invalid-response");
 });
 test("warehouse detail uses the authenticated WH-03 read and rejects a mismatched reference", async () => {

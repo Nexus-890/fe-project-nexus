@@ -7,12 +7,34 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 
 export const PROFILE_PATH = ME_PATH;
 
-/** These account capabilities remain disabled until their contracts are delivered. */
-export const PENDING_ACCOUNT_ENDPOINTS = {
-  avatar: "/api/v1/users/me/avatar",
-  reputation: "/api/v1/users/me/reputation",
-  penalties: "/api/v1/users/me/penalties",
-} as const;
+export const AVATAR_PATH = "/api/v1/users/me/avatar";
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+export const avatarFileError = (file: { size: number; type: string }): string | null => {
+  if (file.size <= 0) return "Choose an image file.";
+  if (!(AVATAR_TYPES as readonly string[]).includes(file.type)) return "Use a JPEG, PNG or WebP image.";
+  if (file.size > AVATAR_MAX_BYTES) return "The image must be 2 MB or smaller.";
+  return null;
+};
+
+export const uploadAvatar = async (file: File, options: ServiceRequestOptions = {}): Promise<UserResponse> => {
+  const problem = avatarFileError(file);
+  if (problem) throw createInvalidResponseError(problem);
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const response = await requestApi<unknown>("POST", AVATAR_PATH, form, { ...options, auth: true, params: undefined });
+  if (!isUserResponse(response.data) || typeof response.data.avatarUrl !== "string" || !/^https?:\/\//.test(response.data.avatarUrl))
+    throw createInvalidResponseError("Avatar upload must return the profile with its new avatar.");
+  return response.data;
+};
+
+export const removeAvatar = async (options: ServiceRequestOptions = {}): Promise<UserResponse> => {
+  const response = await requestApi<unknown>("DELETE", AVATAR_PATH, undefined, { ...options, auth: true });
+  if (!isUserResponse(response.data) || (response.data.avatarUrl !== undefined && response.data.avatarUrl !== null))
+    throw createInvalidResponseError("Avatar removal must return the profile without an avatar.");
+  return response.data;
+};
 
 export const updateProfile = async (
   input: UpdateProfileRequest,

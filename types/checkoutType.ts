@@ -17,6 +17,15 @@ export type CheckoutDestination = CheckoutAddress & {
   ward: string;
   countryCode: "VN";
   voucherCodes?: string[];
+  carrier?: string;
+};
+
+export type CheckoutShippingOption = {
+  carrier: string;
+  carrierName: string;
+  fee: string;
+  estimatedDeliveryAt: string;
+  recommended: boolean;
 };
 
 export type CheckoutPreviewItem = {
@@ -47,6 +56,8 @@ export type CheckoutPreview = {
   total: string;
   issues: CheckoutIssue[];
   vouchers?: components["schemas"]["VoucherQuote"][];
+  shippingOptions?: CheckoutShippingOption[];
+  selectedCarrier?: string | null;
 };
 
 /** Delivered order DTOs normalized to decimal strings for UI money. */

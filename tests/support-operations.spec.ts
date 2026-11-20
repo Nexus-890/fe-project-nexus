@@ -75,12 +75,35 @@ test("support reaches unreconciled payments, records a refund with one captured 
   await expect(page.getByRole("table")).toContainText("REQUESTED");
   expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);
   await page.getByRole("button", { name: "Confirm refund transfer", exact: true }).click();
+  await expect(page.getByText("No transfer receipt uploaded yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Complete refund", exact: true })).toBeDisabled();
+  await page.getByLabel("Transfer receipt (JPEG, PNG or PDF, up to 10 MiB)", { exact: true }).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a receipt") });
+  await expect(page.getByRole("alert").filter({ hasText: "notes.txt is not a JPEG, PNG or PDF file." })).toBeVisible();
+  await page.getByLabel("Transfer receipt (JPEG, PNG or PDF, up to 10 MiB)", { exact: true }).setInputFiles({ name: "receipt.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n% refund receipt\n%%EOF\n") });
+  await page.getByLabel("Bank transaction reference", { exact: true }).fill("  FT2611190001  ");
+  await page.getByRole("button", { name: "Upload receipt", exact: true }).click();
+  const receipts = page.getByRole("list", { name: "Transfer receipts", exact: true });
+  await expect(receipts.getByRole("listitem")).toHaveCount(1);
+  await expect(receipts).toContainText("FT2611190001");
+  await expect(receipts).toContainText("PDF");
+  await expect(page.getByRole("table")).toContainText("1 receipt");
+  await receipts.getByRole("button", { name: "Open receipt 1", exact: true }).click();
+  await expect(receipts.getByRole("link", { name: "Save receipt 1", exact: true })).toHaveAttribute("download", /^refund-receipt-.+\.pdf$/);
   await page.getByRole("checkbox").check();
+  await layouts(page, "refund-receipt");
   await page.getByRole("button", { name: "Complete refund", exact: true }).click();
   await expect(page.getByRole("table")).toContainText("COMPLETED");
+  await expect(page.getByRole("status").filter({ hasText: "Refund completed." })).toBeVisible();
   await layouts(page, "refunds");
+  await page.getByRole("button", { name: "View transfer receipts", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Transfer receipts", exact: true })).toContainText("FT2611190001");
+  await expect(page.getByRole("button", { name: "Upload receipt", exact: true })).toHaveCount(0);
   const evidence = (await (await request.get(`${api}/test/operations/evidence`)).json()).data;
   expect(evidence.refunds).toHaveLength(1);
+  expect(evidence.refunds[0].evidence).toHaveLength(1);
+  expect(evidence.requests.filter((row: { path: string; method: string }) => row.method === "POST" && row.path.endsWith("/evidence")).map((row: { body: unknown }) => row.body)).toEqual([
+    { bankReference: "FT2611190001", file: { contentType: "application/pdf", size: 32 } },
+  ]);
 });
 
 test("support creates a shipment, updates status, overrides a rejected transition and reviews history", async ({ page, request }) => {
@@ -106,6 +129,31 @@ test("support creates a shipment, updates status, overrides a rejected transitio
   const evidence = (await (await request.get(`${api}/test/operations/evidence`)).json()).data;
   expect(evidence.shipments).toHaveLength(1);
   expect(evidence.requests.filter((r: { method: string; path: string }) => r.method === "POST" && r.path === "/v1/shipments")).toHaveLength(1);
+});
+
+test("support compares carrier performance for a chosen period and sees carriers with no shipments", async ({ page, request }) => {
+  await signIn(page, request, "SUPPORT_STAFF", "/backoffice/shipments");
+  await page.getByRole("button", { name: "Carrier performance", exact: true }).click();
+  const panel = page.getByRole("region", { name: "Carrier performance" });
+  await expect(panel.getByRole("table")).toContainText("Giao Hàng Nhanh");
+  await expect(panel.getByRole("table")).toContainText("90.0%");
+  await expect(panel.getByRole("table")).toContainText("2.2 days");
+  await expect(panel.getByRole("table")).toContainText("No data");
+  await expect(page.getByRole("button", { name: "New shipment", exact: true })).toHaveCount(0);
+  await panel.getByLabel("Performance from", { exact: true }).fill("2026-11-19");
+  await panel.getByLabel("Performance to", { exact: true }).fill("2026-11-01");
+  await panel.getByRole("button", { name: "Apply performance period", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText("at most 366 days apart");
+  await panel.getByLabel("Performance from", { exact: true }).fill("2026-11-01");
+  await panel.getByLabel("Performance to", { exact: true }).fill("2026-11-19");
+  await panel.getByRole("button", { name: "Apply performance period", exact: true }).click();
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+  await layouts(page, "carrier-performance");
+  const evidence = (await (await request.get(`${api}/test/operations/evidence`)).json()).data;
+  const reads = evidence.requests.filter((r: { path: string }) => r.path === "/v1/carriers/performance");
+  expect(reads.at(-1).query).toEqual({ from: "2026-11-01T00:00:00.000+07:00", to: "2026-11-19T23:59:59.999+07:00" });
+  await page.getByRole("button", { name: "Shipments", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New shipment", exact: true })).toBeVisible();
 });
 
 for (const role of ["SELLER", "SUPPORT_STAFF"]) test(`${role} is denied the admin payout page without fetching admin data`, async ({ page, request }) => {

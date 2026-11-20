@@ -210,6 +210,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === "/v1/inventory") return json(res, envelope((url.searchParams.get("skuIds") || "").split(",").filter(Boolean).map((skuId) => ({ skuId, available: 100 }))));
   if (url.pathname === "/v1/vouchers/me") return json(res, list([]));
+  if (url.pathname === "/v1/users/me/addresses" && req.method === "GET") return json(res, list([]));
   if (url.pathname === "/v1/carts/me/pricing") { const subtotal = (await currentItems()).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0); return json(res, envelope({ subtotal, taxAmount: 0, discountAmount: 0, estimatedShippingFee: null, total: subtotal, vouchers: [] })); }
   if (url.pathname === "/v1/users/me") {
     await save();
@@ -269,13 +270,20 @@ const server = http.createServer(async (req, res) => {
     const invalid = required.filter((field) => typeof address[field] !== "string" || !address[field].trim());
     if (body.paymentMethod !== "SEPAY" || invalid.length)
       return problem(res, 400, "VALIDATION_FAILED", "All shipping fields are required.", invalid.map((field) => ({ field: `shippingAddress.${field}`, code: "VALIDATION_NOT_BLANK", detail: "This field is required." })));
-    const shippingFee = options.nullShippingFee ? null : address.wardCode === "20309" ? 45000 : 30000;
+    const ghnFee = options.nullShippingFee ? null : address.wardCode === "20309" ? 45000 : 30000;
+    const shippingOptions = options.multiCarrier && ghnFee !== null ? [
+      { carrier: "FAKE", carrierName: "Nhà vận chuyển giả lập", fee: 22000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
+      { carrier: "GHN", carrierName: "Giao Hàng Nhanh", fee: ghnFee, estimatedDeliveryAt: "2026-11-21T10:00:00Z", recommended: false },
+    ] : undefined;
+    const selected = shippingOptions && (shippingOptions.find((option) => option.carrier === body.carrier) || shippingOptions[0]);
+    const shippingFee = selected ? selected.fee : ghnFee;
     const cartItems = await currentItems();
     const subtotal = options.changedPreview ? 500000 : cartItems.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
     const preview = {
       items: cartItems.map((entry) => ({ itemId: entry.id, productId: entry.productId, skuId: entry.skuId, quantity: entry.quantity, unitPrice: entry.unitPrice, lineTotal: entry.unitPrice * entry.quantity })),
       subtotal, shippingFee, taxAmount: 0, discountAmount: 0,
       total: subtotal + (shippingFee || 0), issues: [],
+      ...(shippingOptions ? { shippingOptions, selectedCarrier: selected.carrier } : {}),
     };
     return json(res, options.malformedPreview ? { ...envelope(preview), data: { ...preview, total: "invalid" } } : envelope(preview));
   }

@@ -4,7 +4,7 @@ import { parseOrderSummary } from "./orderService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 import type { Page } from "../types/commonResponseType";
 import type { ProductDetail, ProductImage, ProductSku, ProductSummary } from "../types/catalogResponseType";
-import type { SellerProductFilters, SellerProductInput, SellerProductStatus, SellerProductUpdate, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance } from "../types/sellerType";
+import type { SellerProductFilters, SellerProductInput, SellerProductStatus, SellerProductUpdate, SellerSale, SellerSkuInput, SellerProductListing, SellerBalance, SellerFulfilment, SellerFulfilmentStep } from "../types/sellerType";
 
 const sellerProductStatuses: readonly SellerProductStatus[] = ["DRAFT", "INACTIVE", "ACTIVE"];
 
@@ -147,9 +147,9 @@ export const getSellerSales = async (pageNumber: number, status: string | undefi
       (row.recipientName != null && typeof row.recipientName !== "string") || (row.phoneNumber != null && typeof row.phoneNumber !== "string"))
       throw createInvalidResponseError("Invalid seller order");
     const items = row.items.map((item) => {
-      if (!isRecord(item) || typeof item.orderItemId !== "string" || typeof item.productName !== "string" || !item.productName.trim() || typeof item.skuCode !== "string" || !item.skuCode.trim() || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1 || typeof item.unitPrice !== "number" || normalizeMoney(item.unitPrice) === null || typeof item.totalPrice !== "number" || normalizeMoney(item.totalPrice) === null)
+      if (!isRecord(item) || typeof item.orderItemId !== "string" || typeof item.productName !== "string" || !item.productName.trim() || (item.skuCode !== null && (typeof item.skuCode !== "string" || !item.skuCode.trim())) || !Number.isSafeInteger(item.quantity) || Number(item.quantity) < 1 || typeof item.unitPrice !== "number" || normalizeMoney(item.unitPrice) === null || typeof item.totalPrice !== "number" || normalizeMoney(item.totalPrice) === null)
         throw createInvalidResponseError("Invalid seller order item");
-      return { id: item.orderItemId, name: item.productName, skuCode: item.skuCode, quantity: Number(item.quantity) };
+      return { id: item.orderItemId, name: item.productName, skuCode: item.skuCode as string | null, quantity: Number(item.quantity) };
     });
     if (new Set(items.map((item) => item.id)).size !== items.length) throw createInvalidResponseError("Repeated seller order item");
     return { ...summary, buyerId: row.userId,
@@ -177,4 +177,31 @@ export const reorderSellerImages = async (productId: string, imageIds: readonly 
   if (images.length !== imageIds.length || images.some((image, index) => image.id !== imageIds[index] || image.sortOrder !== index))
     throw createInvalidResponseError("Mismatched image order");
   return images;
+};
+
+const fulfilmentId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const fulfilmentTime = (value: unknown): value is string | null => value === null || typeof value === "string" && Number.isFinite(Date.parse(value));
+const parseFulfilment = (value: unknown, orderId: string): SellerFulfilment => {
+  if (!isRecord(value) || !fulfilmentId(value.id) || !fulfilmentId(value.skuId) || !fulfilmentId(value.warehouseId) || value.orderId !== orderId ||
+    !Number.isSafeInteger(value.quantity) || Number(value.quantity) < 1 || !["HELD", "CONFIRMED", "RELEASED", "EXPIRED"].includes(String(value.status)) ||
+    !fulfilmentTime(value.expiresAt) || !fulfilmentTime(value.releasedAt) || !fulfilmentTime(value.pickedAt) || !fulfilmentTime(value.shippedAt) ||
+    value.shippedAt !== null && value.pickedAt === null)
+    throw createInvalidResponseError("Invalid fulfilment step");
+  return { id: value.id, skuId: value.skuId, warehouseId: value.warehouseId, orderId, quantity: Number(value.quantity), status: value.status as SellerFulfilment["status"],
+    expiresAt: value.expiresAt as string, releasedAt: value.releasedAt, pickedAt: value.pickedAt, shippedAt: value.shippedAt };
+};
+export const getSellerFulfilment = async (orderId: string, options: ServiceRequestOptions = {}): Promise<SellerFulfilment[]> => {
+  if (!fulfilmentId(orderId)) throw createInvalidResponseError("A valid order reference is required");
+  const { data } = await requestApi("GET", "/api/v1/inventory/reservations/fulfillment", undefined, { ...options, auth: true, params: { orderId } });
+  if (!Array.isArray(data)) throw createInvalidResponseError("Invalid fulfilment steps");
+  const steps = data.map((row) => parseFulfilment(row, orderId));
+  if (new Set(steps.map((step) => step.id)).size !== steps.length) throw createInvalidResponseError("Repeated fulfilment step");
+  return steps;
+};
+export const markSellerFulfilment = async (reservationId: string, step: SellerFulfilmentStep, options: ServiceRequestOptions = {}): Promise<SellerFulfilment> => {
+  if (!fulfilmentId(reservationId) || step !== "pick" && step !== "ship") throw createInvalidResponseError("Invalid fulfilment step");
+  const { data } = await requestApi("POST", `/api/v1/inventory/reservations/${reservationId}/${step}`, undefined, { ...options, auth: true });
+  const saved = parseFulfilment(data, isRecord(data) ? String(data.orderId) : "");
+  if (saved.id !== reservationId || (step === "pick" ? saved.pickedAt : saved.shippedAt) === null) throw createInvalidResponseError("Fulfilment step was not saved");
+  return saved;
 };

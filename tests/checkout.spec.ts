@@ -8,12 +8,14 @@ type PreviewBody = {
     provinceCode: string; wardCode: string; countryCode: string;
   };
   paymentMethod: string;
+  carrier?: string;
 };
 type Evidence = {
   requests: Array<{ method: string; path: string; query: string; authorized: boolean }>;
   previews: PreviewBody[];
   completedPreviews: string[];
   orderRequests: number;
+  orders: Array<{ body: PreviewBody; status: number }>;
   rejectedAuth: number;
 };
 
@@ -109,6 +111,44 @@ test("two-line checkout prefills only profile text, uses saved unit prices and s
   expect(actual.rejectedAuth).toBe(0);
   expect(actual.orderRequests).toBe(0);
   await capture(page, info, "checkout-desktop-1440.png");
+});
+
+test("buyer picks a carrier, the quote follows it and the order is placed with that carrier", async ({ page, request }, info) => {
+  await options(request, { multiCarrier: true });
+  await openCheckout(page);
+  await destination(page);
+  const delivery = page.getByRole("region", { name: "2. Delivery" });
+  const fake = delivery.getByRole("radio", { name: /Nhà vận chuyển giả lập/ });
+  const ghn = delivery.getByRole("radio", { name: /Giao Hàng Nhanh/ });
+  await expect(fake).toBeChecked();
+  await expect(delivery.getByText("Recommended", { exact: true })).toHaveCount(1);
+  await expect(delivery.locator("label").filter({ hasText: "Nhà vận chuyển giả lập" })).toContainText("Recommended");
+  await expect(delivery.locator("label").filter({ hasText: "Nhà vận chuyển giả lập" })).toContainText("Arrives by 24/11/2026");
+  await expect(delivery.locator("label").filter({ hasText: "Giao Hàng Nhanh" })).toContainText("30.000,00 ₫");
+  await expect(page.getByTestId("checkout-shipping")).toHaveText("22.000,00 ₫");
+  await expect(page.getByTestId("checkout-total")).toHaveText("447.000,00 ₫");
+  expect((await evidence(request)).previews[0].carrier).toBeUndefined();
+  await ghn.check();
+  await expect(page.getByTestId("checkout-shipping")).toHaveText("30.000,00 ₫");
+  await expect(page.getByTestId("checkout-total")).toHaveText("455.000,00 ₫");
+  await expect(ghn).toBeChecked();
+  expect((await evidence(request)).previews.at(-1)?.carrier).toBe("GHN");
+  await capture(page, info, "checkout-carrier-choice.png");
+  await page.getByRole("button", { name: "Place order", exact: true }).click();
+  await expect.poll(async () => (await evidence(request)).orders.length).toBe(1);
+  expect((await evidence(request)).orders[0].body.carrier).toBe("GHN");
+});
+
+test("a single carrier quote keeps one delivery row without a carrier choice", async ({ page, request }) => {
+  await openCheckout(page);
+  await destination(page);
+  await expect(page.getByTestId("checkout-shipping")).toHaveText("30.000,00 ₫");
+  const delivery = page.getByRole("region", { name: "2. Delivery" });
+  await expect(delivery.getByRole("radio")).toHaveCount(0);
+  await expect(delivery).toContainText("GHN delivery");
+  await page.getByRole("button", { name: "Place order", exact: true }).click();
+  await expect.poll(async () => (await evidence(request)).orders.length).toBe(1);
+  expect((await evidence(request)).orders[0].body.carrier).toBeUndefined();
 });
 
 test("empty address keeps Place order disabled and sends no checkout request", async ({ page, request }) => {

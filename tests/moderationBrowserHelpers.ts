@@ -1,10 +1,10 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const moderationApi = `http://127.0.0.1:${process.env.NEXUS_BACKOFFICE_API_PORT || "3944"}`;
-export async function signInModeration(page: Page, request: APIRequestContext, role = "ADMIN", destination = "/backoffice/notification-deliveries") {
+export async function signInModeration(page: Page, request: APIRequestContext, role = "ADMIN", destination = "/backoffice/notification-deliveries", subject?: string) {
   // Compile the callback before OAuth changes history; cold dev compilation can otherwise trigger HMR during the exchange.
   expect((await request.get("/auth/callback")).ok()).toBe(true);
-  expect((await request.get(`${moderationApi}/keycloak/test/control`, { params: { roles: role } })).ok()).toBe(true);
+  expect((await request.get(`${moderationApi}/keycloak/test/control`, { params: { roles: role, ...(subject ? { subject } : {}) } })).ok()).toBe(true);
   await page.goto(`/sign-in?returnTo=${encodeURIComponent(destination)}`);
   await page.getByRole("button", { name: "Continue to sign in", exact: true }).click();
   await page.getByLabel("Email", { exact: true }).fill(`${role.toLowerCase()}@nexus.local`);

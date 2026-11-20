@@ -1,4 +1,4 @@
-import type { ProductFilters } from "../types/catalogRequestType";
+import type { DiscoveryType, ProductFilters } from "../types/catalogRequestType";
 import type { CheckoutDestination } from "../types/checkoutType";
 import type { OrderFilters } from "../types/orderRequestType";
 import type { NotificationFilters } from "../types/notificationRequestType";
@@ -47,6 +47,8 @@ export const queryKeys = {
     addresses: (sessionId: number) => ["account", sessionId, "addresses"] as const,
     sellerApplication: (sessionId: number) => ["account", sessionId, "seller-application"] as const,
     phoneVerification: (sessionId: number) => ["account", sessionId, "phone-verification"] as const,
+    reputation: (sessionId: number) => ["account", sessionId, "reputation"] as const,
+    penalties: (sessionId: number, page: number) => ["account", sessionId, "penalties", page] as const,
   },
   backoffice: {
     categories: (sessionId: number) => ["admin-categories", sessionId] as const,
@@ -59,6 +61,7 @@ export const queryKeys = {
     product: (sessionId: number, id: string) => ["backoffice", sessionId, "product", id] as const,
     balances: (sessionId: number, skuId: string, warehouseId?: string) => ["backoffice", sessionId, "balances", { skuId, warehouseId }] as const,
     intake: (sessionId: number) => ["backoffice", sessionId, "intake"] as const,
+    adjustment: (sessionId: number) => ["backoffice", sessionId, "adjustment"] as const,
     payouts: (sessionId: number, filters?: PayoutFilters) => filters === undefined ? ["backoffice", sessionId, "payouts"] as const : ["backoffice", sessionId, "payouts", filters] as const,
     bankAccounts: (sessionId: number, filters?: SellerBankFilters) => filters === undefined ? ["backoffice", sessionId, "bank-accounts"] as const : ["backoffice", sessionId, "bank-accounts", filters] as const,
     manualPayouts: (sessionId: number, filters?: ManualPayoutFilters) => filters === undefined ? ["manual-payouts", sessionId] as const : ["manual-payouts", sessionId, "queue", filters] as const,
@@ -68,9 +71,11 @@ export const queryKeys = {
   seller: {
     all: (sessionId: number) => ["seller", sessionId] as const,
     products: (sessionId: number, page: number) => ["seller", sessionId, "products", page] as const,
+    warehouse: (sessionId: number) => ["seller", sessionId, "warehouse"] as const,
     listings: (sessionId: number, page: number, status?: string) => ["seller", sessionId, "listings", { page, status }] as const,
     productBalances: (sessionId: number, productId: string, skuIds: readonly string[]) => ["seller", sessionId, "balances", productId, skuIds] as const,
     sales: (sessionId: number, page: number, status?: string, from?: string, to?: string) => ["seller", sessionId, "sales", { page, status, from, to }] as const,
+    fulfilment: (sessionId: number, orderId: string) => ["seller", sessionId, "fulfilment", orderId] as const,
     offers: (sessionId: number, auctionId: string) => ["seller", sessionId, "offers", auctionId] as const,
     auctionRoot: (sessionId: number) => ["seller", sessionId, "auctions"] as const,
     auctions: (sessionId: number, filters: SellerAuctionFilters) => ["seller", sessionId, "auctions", filters] as const,
@@ -106,6 +111,7 @@ export const queryKeys = {
     cartProducts: (productIds: string[]) =>
       ["catalog", "cart-products", productIds] as const,
     tree: ["catalog", "category-tree"] as const,
+    discovery: (type: DiscoveryType, size: number) => ["catalog", "discovery", type, size] as const,
     products: (filters: ProductFilters) =>
       ["catalog", "products", filters] as const,
     product: (productId: string) => ["catalog", "product", productId] as const,

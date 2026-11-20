@@ -432,7 +432,7 @@ export interface paths {
         put?: never;
         /**
          * Validate the current cart (CRT-06)
-         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; applied vouchers reduce only the merchandise total and rejected vouchers include a reason. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
+         * @description Read-only: never creates a cart, touches activity/audit timestamps, updates cart prices, reserves inventory, creates orders or publishes events. Reads only the JWT subject's active cart, even for ADMIN. Uses current SKU prices and compares them numerically with saved prices. Catalog 404 means PRODUCT_INACTIVE; a line whose product belongs to the caller is SELF_PURCHASE; unavailable SKU lines remain visible at their last saved price and cannot be treated as a valid checkout. Catalog transport failures return a named error, never a valid result. Tax-inclusive prices give taxAmount=0; applied vouchers reduce only the merchandise total and rejected vouchers include a reason. Shipping is null without a delivery address and total excludes unknown shipping; FREE_SHIPPING_THRESHOLD cannot manufacture a carrier quote. INV-03 stock check is skipped until that endpoint exists. CHECKOUT_PRICE_REVALIDATION must remain true (BR-103), enforced at configuration binding. Empty or missing active cart returns zero amounts or valid=true with issues=[] without inserting a cart.
          */
         post: operations["validateCart"];
         delete?: never;
@@ -1114,6 +1114,20 @@ export interface components {
             /** @description subtotal - discountAmount + taxAmount + shippingFee. A null shippingFee counts as 0 until #201. */
             total: number;
             issues: components["schemas"]["CartIssue"][];
+            /** @description Carriers every seller order can ship with. fee is the sum over seller orders, estimatedDeliveryAt the latest arrival. Empty while shipping is not quoted. */
+            shippingOptions?: components["schemas"]["CheckoutShippingOption"][];
+            /** @description Carrier priced into shippingFee: the requested carrier when offered, else the recommended one; null without options. */
+            selectedCarrier?: string | null;
+        };
+        CheckoutShippingOption: {
+            /** @example GHN */
+            carrier: string;
+            /** @example Giao Hàng Nhanh */
+            carrierName: string;
+            fee: number;
+            /** Format: date-time */
+            estimatedDeliveryAt: string;
+            recommended: boolean;
         };
         CheckoutPreviewRequest: {
             shippingAddress: components["schemas"]["ShippingAddress"];
@@ -1125,6 +1139,8 @@ export interface components {
             /** @description Legacy alias for a single voucher code. */
             promoCode?: string;
             voucherCodes?: components["schemas"]["VoucherCodes"];
+            /** @description Carrier code chosen by the buyer from shippingOptions. Omitted or null uses the recommended option. A carrier not offered to every seller falls back to the recommended one in the preview. */
+            carrier?: string | null;
         };
         CartPricingEnvelope: {
             /** @default 0 */
@@ -1303,6 +1319,8 @@ export interface components {
             /** @description Legacy alias for a single voucher code. */
             promoCode?: string;
             voucherCodes?: components["schemas"]["VoucherCodes"];
+            /** @description Carrier code chosen by the buyer from shippingOptions. Omitted or null uses the recommended option. Every seller order is quoted and booked with this carrier; a carrier one seller cannot use returns 422 COMMERCE_SHIPPING_CARRIER_UNAVAILABLE. It is part of the idempotent payload. */
+            carrier?: string | null;
         };
         ChangeOrderStatus: {
             status: components["schemas"]["OrderStatus"];
@@ -1319,7 +1337,8 @@ export interface components {
             /** Format: uuid */
             skuId: string;
             productName: string;
-            skuCode: string;
+            /** @description Null only on auction orders created before the auction kept a SKU code snapshot. */
+            skuCode: string | null;
             imageUrl: string | null;
             quantity: number;
             /** @description BigDecimal JSON number; no decimal-string conversion. */
@@ -5435,7 +5454,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`. */
+            /** @description Codes: `COMMERCE_SHIPPING_NOT_AVAILABLE`, `COMMERCE_SHIPPING_CARRIER_UNAVAILABLE`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5445,7 +5464,7 @@ export interface operations {
                         /** @enum {integer} */
                         status?: 422;
                         /** @enum {string} */
-                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE";
+                        code?: "COMMERCE_SHIPPING_NOT_AVAILABLE" | "COMMERCE_SHIPPING_CARRIER_UNAVAILABLE";
                     };
                 };
             };

@@ -84,6 +84,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/carriers/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Đo hiệu suất từng nhà vận chuyển
+         * @description Yêu cầu quyền SHIPPING.VIEW_SHIPMENT và vai trò ADMIN hoặc SUPPORT_STAFF. Gom các vận đơn tạo trong [from, to), tối đa 366 ngày, theo carrier. delivered là vận đơn đang DELIVERED; failed là DELIVERY_FAILED, RETURNING hoặc RETURNED; cancelled là CANCELLED; inProgress là phần còn lại. successRate = delivered / (delivered + failed), null khi chưa có vận đơn kết thúc. averageDeliveryHours tính từ lúc bàn giao (handed_over_at, hoặc created_at khi chưa ghi nhận bàn giao) tới dòng lịch sử DELIVERED đầu tiên. onTimeRate là tỷ lệ vận đơn DELIVERED giao không muộn hơn estimated_delivery_at trong số vận đơn có ước tính. Carrier đang cấu hình nhưng chưa có vận đơn vẫn xuất hiện với số 0. Sắp xếp theo số vận đơn giảm dần rồi mã carrier. Trả toàn bộ danh sách trong một trang logic.
+         */
+        get: operations["getCarrierPerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shipping/provinces": {
         parameters: {
             query?: never;
@@ -135,7 +155,7 @@ export interface paths {
         put?: never;
         /**
          * Báo giá vận chuyển và ngày giao hàng dự kiến
-         * @description Yêu cầu JWT hợp lệ và quyền SHIPPING.QUOTE; ADMIN không tự bỏ qua quyền. Địa chỉ nhận và pickup dùng mã _id GHN v3 hai cấp, được kiểm tra tỉnh → phường đang hoạt động. Tên chuẩn được resolve từ danh mục v3 rồi gửi POST /shiip/public-api/v2/shipping-order/preview với is_new_to_address=true và is_new_from_address=true; endpoint preview hiện do GHN công bố tại path v2 nhưng hỗ trợ mô hình địa chỉ mới. Người nhận phải có tên, số điện thoại và địa chỉ thật; pickup phải có địa chỉ cụ thể đã xác minh. Preview chỉ chạy thử, không tạo vận đơn: order_code phải rỗng; fee lấy từ total_fee, ETA từ expected_delivery_time. GHN_PAYMENT_TYPE_ID cấu hình bên trả phí, mặc định 1 là shop trả trong luồng trả trước SEPAY; GHN_REQUIRED_NOTE cấu hình chính sách kiểm hàng, mặc định KHONGCHOXEMHANG. cod_amount gửi bằng 0 vì luồng hiện tại không thu hộ. Tên và số điện thoại người gửi không gửi riêng sẽ theo hồ sơ ShopId được GHN công bố. Items cung cấp số lượng đơn vị và số SKU để tóm tắt nội dung; parcel là một kiện đã đóng gói. Khi GHN cần items theo kiện, quantity=1 là số kiện, không phải số đơn vị SKU. InsuranceValue là giá trị khai bảo hiểm tùy chọn: VND nguyên từ 0 đến 5.000.000, bỏ trống hoặc null gửi 0; không tự lấy subtotal, không cắt ngưỡng hoặc làm tròn. WarehouseId ánh xạ tới pickup được cấu hình; bỏ trống dùng defaultWarehouseId cho WH_001. Subtotal miễn phí lấy toàn bộ giá SKU hiện tại nhân số lượng từ catalog, độc lập insuranceValue. Subtotal lớn hơn hoặc bằng FREE_SHIPPING_THRESHOLD cho fee=0 sau khi có preview và ETA hợp lệ, trừ khi applyFreeShipping=false. Cờ tùy chọn này mặc định true khi bỏ trống hoặc null. Commerce gửi false cho đơn đấu giá để nhận phí carrier gốc rồi xét miễn phí theo giá đấu thắng bất biến; request không được cung cấp giá hay subtotal thay thế. SHIPPING_API_TIMEOUT_MS là ngân sách toàn bộ thao tác gồm lookup và retries. SHIPPING_RETRY_LIMIT là số retry tối đa sau lần đầu, chỉ dành cho lỗi tạm thời. Mỗi HTTP attempt GHN dùng min(GHN_HTTP_TIMEOUT_MS, deadline còn lại), mặc định GHN_HTTP_TIMEOUT_MS là1500ms; không chia deadline tổng theo số retries và không bảo đảm mọi retry đều được chạy. Danh mục province/wards hợp lệ có cache TTL mặc định5phút; phí preview, ETA và giá catalog không cache. Breaker theo carrier từ chối nhanh bằng 503 khi mở. Không tạo order, reservation hoặc dữ liệu shipment và không fallback sang FAKE.
+         * @description Yêu cầu JWT hợp lệ và quyền SHIPPING.QUOTE; ADMIN không tự bỏ qua quyền. Địa chỉ nhận và pickup dùng mã _id GHN v3 hai cấp, được kiểm tra tỉnh → phường đang hoạt động. Tên chuẩn được resolve từ danh mục v3 rồi gửi POST /shiip/public-api/v2/shipping-order/preview với is_new_to_address=true và is_new_from_address=true; endpoint preview hiện do GHN công bố tại path v2 nhưng hỗ trợ mô hình địa chỉ mới. Người nhận phải có tên, số điện thoại và địa chỉ thật; pickup phải có địa chỉ cụ thể đã xác minh. Preview chỉ chạy thử, không tạo vận đơn: order_code phải rỗng; fee lấy từ total_fee, ETA từ expected_delivery_time. GHN_PAYMENT_TYPE_ID cấu hình bên trả phí, mặc định 1 là shop trả trong luồng trả trước SEPAY; GHN_REQUIRED_NOTE cấu hình chính sách kiểm hàng, mặc định KHONGCHOXEMHANG. cod_amount gửi bằng 0 vì luồng hiện tại không thu hộ. Tên và số điện thoại người gửi không gửi riêng sẽ theo hồ sơ ShopId được GHN công bố. Items cung cấp số lượng đơn vị và số SKU để tóm tắt nội dung; parcel là một kiện đã đóng gói. Khi GHN cần items theo kiện, quantity=1 là số kiện, không phải số đơn vị SKU. Khi SHIPPING_CHECKOUT_CARRIERS có giá trị (ví dụ FAKE), mỗi hãng đang bật (quote carrier trước, rồi các hãng trong danh sách) được báo giá riêng; hãng lỗi bị bỏ qua, chỉ khi mọi hãng lỗi mới trả lỗi. Danh sách được sắp theo SHIPPING_CARRIER_STRATEGY (CHEAPEST: phí rồi ngày giao; FASTEST: ngày giao rồi phí) và phần tử đầu có recommended=true. Không đặt biến này thì chỉ quote carrier trả lời. InsuranceValue là giá trị khai bảo hiểm tùy chọn: VND nguyên từ 0 đến 5.000.000, bỏ trống hoặc null gửi 0; không tự lấy subtotal, không cắt ngưỡng hoặc làm tròn. WarehouseId ánh xạ tới pickup được cấu hình; bỏ trống dùng defaultWarehouseId cho WH_001. Subtotal miễn phí lấy toàn bộ giá SKU hiện tại nhân số lượng từ catalog, độc lập insuranceValue. Subtotal lớn hơn hoặc bằng FREE_SHIPPING_THRESHOLD cho fee=0 sau khi có preview và ETA hợp lệ, trừ khi applyFreeShipping=false. Cờ tùy chọn này mặc định true khi bỏ trống hoặc null. Commerce gửi false cho đơn đấu giá để nhận phí carrier gốc rồi xét miễn phí theo giá đấu thắng bất biến; request không được cung cấp giá hay subtotal thay thế. SHIPPING_API_TIMEOUT_MS là ngân sách toàn bộ thao tác gồm lookup và retries. SHIPPING_RETRY_LIMIT là số retry tối đa sau lần đầu, chỉ dành cho lỗi tạm thời. Mỗi HTTP attempt GHN dùng min(GHN_HTTP_TIMEOUT_MS, deadline còn lại), mặc định GHN_HTTP_TIMEOUT_MS là1500ms; không chia deadline tổng theo số retries và không bảo đảm mọi retry đều được chạy. Danh mục province/wards hợp lệ có cache TTL mặc định5phút; phí preview, ETA và giá catalog không cache. Breaker theo carrier từ chối nhanh bằng 503 khi mở. Không tạo order, reservation hoặc dữ liệu shipment và không fallback sang FAKE.
          */
         post: operations["getShippingQuotes"];
         delete?: never;
@@ -410,6 +430,45 @@ export interface components {
             data: components["schemas"]["CarrierResponse"][];
             page: components["schemas"]["PageInfo"];
         };
+        CarrierPerformance: {
+            /** @example GHN */
+            carrier: string;
+            /** @example Giao Hàng Nhanh */
+            name: string;
+            /** Format: int64 */
+            shipments: number;
+            /** Format: int64 */
+            delivered: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            inProgress: number;
+            /** Format: int64 */
+            cancelled: number;
+            /**
+             * @description Phân số 0..1, 4 chữ số thập phân
+             * @example 0.9231
+             */
+            successRate: number | null;
+            /**
+             * @description Số giờ trung bình, 1 chữ số thập phân
+             * @example 52.4
+             */
+            averageDeliveryHours: number | null;
+            /** @example 0.875 */
+            onTimeRate: number | null;
+        };
+        CarrierPerformanceListResponse: {
+            /**
+             * @default 0
+             * @enum {integer}
+             */
+            code: 0;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["CarrierPerformance"][];
+            page: components["schemas"]["PageInfo"];
+        };
         LocalityListResponse: {
             /**
              * @default 0
@@ -470,6 +529,13 @@ export interface components {
              * @example 2026-11-13T16:59:59Z
              */
             estimatedDeliveryAt: string;
+            /**
+             * @description Tên hiển thị của hãng vận chuyển.
+             * @example Giao Hàng Nhanh
+             */
+            carrierName?: string;
+            /** @description true cho lựa chọn đứng đầu theo SHIPPING_CARRIER_STRATEGY. */
+            recommended?: boolean;
         };
         ShippingQuoteRequest: {
             toAddress: components["schemas"]["ShippingAddressRequest"];
@@ -480,6 +546,12 @@ export interface components {
              * @description UUID kho có mapping lấy hàng đã cấu hình; bỏ trống hoặc null dùng kho mặc định.
              */
             warehouseId?: string | null;
+            /** @description Địa chỉ lấy hàng của kho riêng seller do Commerce đọc từ Inventory. Có giá trị thì thay cho mapping theo warehouseId và địa chỉ lấy hàng của nền tảng; bỏ trống giữ cách chọn cũ. */
+            pickupAddress?: {
+                provinceCode: string;
+                wardCode: string;
+                line1: string;
+            } | null;
             /**
              * @description Giá trị khai bảo hiểm, đơn vị VND nguyên; bỏ trống hoặc null gửi 0. Không tự dùng subtotal, không tự cắt ngưỡng hoặc làm tròn. Giá trị âm, có phần lẻ hoặc vượt 5.000.000 trả 400 SHIPMENT_VALIDATION_FAILED.
              * @default 0
@@ -758,7 +830,7 @@ export interface components {
                     /** @enum {integer} */
                     status?: 400;
                     /** @enum {string} */
-                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS";
+                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_INVALID_PERIOD";
                 };
             };
         };
@@ -1210,6 +1282,36 @@ export interface operations {
             500: components["responses"]["InternalError"];
             503: components["responses"]["RoutingUnavailable"];
             504: components["responses"]["GatewayTimeout"];
+        };
+    };
+    getCarrierPerformance: {
+        parameters: {
+            query: {
+                /** @description Mốc bắt đầu, ISO-8601 có offset, tính cả mốc này */
+                from: string;
+                /** @description Mốc kết thúc, ISO-8601 có offset, không tính mốc này */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một dòng cho mỗi carrier. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarrierPerformanceListResponse"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
         };
     };
     getShippingProvinces: {

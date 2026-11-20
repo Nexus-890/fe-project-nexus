@@ -1,6 +1,6 @@
 import { createInvalidResponseError, isRecord, requestApi } from "../configs/api";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
-import type { AdminCategory, CategoryInput, CategoryPatch, Warehouse, WarehouseInput, WarehouseUpdate, StockMovement } from "../types/adminCatalogType";
+import type { AdminCategory, CategoryInput, CategoryPatch, OwnWarehouseInput, Warehouse, WarehouseInput, WarehouseUpdate, StockMovement } from "../types/adminCatalogType";
 import type { ApiResponse, Page } from "../types/commonResponseType";
 
 export const isAdminUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -39,11 +39,32 @@ export const deleteAdminCategory = async (id: string, options: ServiceRequestOpt
 };
 
 const warehouseStatuses = ["ACTIVE", "INACTIVE", "MAINTENANCE"];
+const isLocalityCode = (value: unknown): value is string => typeof value === "string" && /^[1-9][0-9]{0,8}$/.test(value);
 export const parseWarehouse = (value: unknown): Warehouse => {
   if (!isRecord(value) || !isAdminUuid(value.id) || typeof value.code !== "string" || typeof value.name !== "string" ||
-    !(value.address === undefined || nullableString(value.address)) || typeof value.status !== "string" || !warehouseStatuses.includes(value.status))
+    !(value.address === undefined || nullableString(value.address)) || typeof value.status !== "string" || !warehouseStatuses.includes(value.status) ||
+    !(value.sellerId === undefined || value.sellerId === null || isAdminUuid(value.sellerId)) ||
+    !(value.provinceCode === undefined || value.provinceCode === null || isLocalityCode(value.provinceCode)) ||
+    !(value.wardCode === undefined || value.wardCode === null || isLocalityCode(value.wardCode)) ||
+    (value.provinceCode == null) !== (value.wardCode == null))
     throw createInvalidResponseError("Invalid warehouse details.");
-  return { id: value.id, code: value.code, name: value.name, address: value.address as string | null | undefined, status: value.status as Warehouse["status"] };
+  return { id: value.id, code: value.code, name: value.name, address: value.address as string | null | undefined, status: value.status as Warehouse["status"], sellerId: (value.sellerId ?? null) as string | null,
+    provinceCode: (value.provinceCode ?? null) as string | null, wardCode: (value.wardCode ?? null) as string | null };
+};
+export const getOwnWarehouse = async (options: ServiceRequestOptions = {}): Promise<Warehouse | null> => {
+  try {
+    const { data } = await requestApi("GET", "/api/v1/warehouses/me", undefined, { ...options, auth: true });
+    return parseWarehouse(data);
+  } catch (error) {
+    if (isRecord(error) && error.status === 404 && error.code === "INVENTORY_WAREHOUSE_NOT_FOUND") return null;
+    throw error;
+  }
+};
+export const saveOwnWarehouse = async (body: OwnWarehouseInput, options: ServiceRequestOptions = {}): Promise<Warehouse> => {
+  const { name, address, provinceCode, wardCode } = body;
+  const pickup = provinceCode && wardCode ? { provinceCode, wardCode } : {};
+  const { data } = await requestApi("PUT", "/api/v1/warehouses/me", { name, address, ...pickup }, { ...options, auth: true });
+  return parseWarehouse(data);
 };
 export const getAdminWarehouses = async (options: ServiceRequestOptions = {}): Promise<Warehouse[]> => {
   const { data } = await requestApi("GET", "/api/v1/warehouses", undefined, { ...options, auth: true });
@@ -74,7 +95,7 @@ export const updateAdminWarehouse = async (id: string, body: WarehouseUpdate, op
 };
 export const parseMovement = (value: unknown): StockMovement => {
   if (!isRecord(value) || !isAdminUuid(value.id) || !isAdminUuid(value.skuId) || !isAdminUuid(value.warehouseId) ||
-    !["INTAKE", "RESERVE", "RELEASE", "COMMIT", "ADJUSTMENT", "RETURN"].includes(String(value.movementType)) ||
+    !["INTAKE", "RESERVE", "RELEASE", "COMMIT", "ADJUSTMENT", "RETURN", "PICK", "SHIP", "TRANSFER"].includes(String(value.movementType)) ||
     !Number.isInteger(value.quantity) || Number(value.quantity) < -2147483648 || Number(value.quantity) > 2147483647 ||
     !(value.referenceId === null || isAdminUuid(value.referenceId)) || !nullableString(value.reason) ||
     typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) throw createInvalidResponseError("Invalid stock movement.");
