@@ -240,7 +240,7 @@ function SignUpPage() {
               <TextField
                 name="fullName"
                 label="Full Name"
-                placeholder="Nguyễn Thị Lan"
+                placeholder="Lan Nguyen"
                 register={register}
                 errors={errors}
                 autoComplete="name"

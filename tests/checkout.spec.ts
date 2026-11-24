@@ -118,12 +118,12 @@ test("buyer picks a carrier, the quote follows it and the order is placed with t
   await openCheckout(page);
   await destination(page);
   const delivery = page.getByRole("region", { name: "2. Delivery" });
-  const fake = delivery.getByRole("radio", { name: /Nhà vận chuyển giả lập/ });
+  const fake = delivery.getByRole("radio", { name: /Simulated carrier/ });
   const ghn = delivery.getByRole("radio", { name: /Giao Hàng Nhanh/ });
   await expect(fake).toBeChecked();
   await expect(delivery.getByText("Recommended", { exact: true })).toHaveCount(1);
-  await expect(delivery.locator("label").filter({ hasText: "Nhà vận chuyển giả lập" })).toContainText("Recommended");
-  await expect(delivery.locator("label").filter({ hasText: "Nhà vận chuyển giả lập" })).toContainText("Arrives by 24/11/2026");
+  await expect(delivery.locator("label").filter({ hasText: "Simulated carrier" })).toContainText("Recommended");
+  await expect(delivery.locator("label").filter({ hasText: "Simulated carrier" })).toContainText("Arrives by 24/11/2026");
   await expect(delivery.locator("label").filter({ hasText: "Giao Hàng Nhanh" })).toContainText("30.000,00 ₫");
   await expect(page.getByTestId("checkout-shipping")).toHaveText("22.000,00 ₫");
   await expect(page.getByTestId("checkout-total")).toHaveText("447.000,00 ₫");

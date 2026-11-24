@@ -8,14 +8,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Đọc danh sách shipment có phân trang
-         * @description Yêu cầu SHIPPING.VIEW_SHIPMENT. ADMIN và SUPPORT_STAFF đọc mọi shipment; các actor khác chỉ đọc shipment có buyerId bằng sub của JWT. Điều kiện chủ sở hữu và bộ lọc được áp dụng trước khi phân trang và đếm tổng, nên tổng không tiết lộ shipment của người khác. Sắp xếp createdAt giảm dần, sau đó id. Trang vượt cuối trả 200 với data=[] và tổng thực tế. Không có bộ lọc buyerId cho client.
+         * List shipments with pagination
+         * @description Requires SHIPPING.VIEW_SHIPMENT. ADMIN and SUPPORT_STAFF read every shipment; other actors read only shipments whose buyerId equals the JWT sub. Ownership and filters are applied before pagination and counting, so the total does not reveal other users' shipments. Sorted by createdAt descending, then id. A page past the end returns 200 with data=[] and the real total. Clients have no buyerId filter.
          */
         get: operations["listShipments"];
         put?: never;
         /**
-         * Tạo shipment thủ công từ snapshot đơn đã thanh toán
-         * @description Yêu cầu SHIPPING.CREATE_SHIPMENT và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Buyer có privilege tạo nhưng thiếu vai trò vận hành vẫn bị từ chối 403. Nguồn buyerId, shippingFee và shippingInfo lấy từ đơn đã thanh toán, không nhận các trường này từ client và không đọc commerce_db. Khi chưa có shipment, gọi trực tiếp GET /internal/v1/orders/{id}/shipping-snapshot của commerce bằng bearer của caller, có timeout và circuit breaker. Chỉ đơn PAID có snapshot hợp lệ được tạo. Đơn không tồn tại trả 404 SHIPMENT_ORDER_NOT_FOUND; chưa PAID trả 409 SHIPMENT_ORDER_NOT_PAID; upstream không khả dụng trả 503 SHIPMENT_COMMERCE_UNAVAILABLE; snapshot sai trả 502 SHIPMENT_INVALID_ORDER_SNAPSHOT. warehouseId, carrier và serviceType tùy chọn được dùng để chọn dispatch cho shipment mới. Kho và pickup phải có nguồn tin cậy; không dùng pickup cũ cho kho khác. Bỏ trống carrier dùng SHIPPING_BOOKING_CARRIER (fallback về SHIPPING_CARRIER khi chưa cấu hình), độc lập với carrier báo phí đã lưu trong snapshot. Các lựa chọn còn lại dùng snapshot tin cậy hoặc cấu hình shipping. Khi shipment đã tồn tại, các giá trị nếu gửi phải khớp lựa chọn đã lưu; không thay carrier/service/kho đã có sau khi có request identity. Service còn trống của GHN/FAKE được suy ra từ parcel đã chốt; pickup còn trống chỉ bổ sung bằng cấu hình của đúng warehouse. Khác lựa chọn đã lưu trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. OrderCancelled đến trước shipment được lưu thành tombstone bền vững; yêu cầu tạo thủ công sau đó trả 409 SHIPMENT_ORDER_NOT_PAID và OrderPaid giao muộn không tạo/book shipment cho đơn đã hủy. Mỗi order chỉ có một shipment. Cùng Idempotency-Key và cùng yêu cầu trả lại shipment đã tạo; tái dùng khóa cho yêu cầu khác hoặc lựa chọn xung đột với shipment hiện có trả 409. Key đầu tiên được lưu trên shipment cùng fingerprint nội dung request; một key khác cho shipment đã gắn key cũng trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT. Phản hồi thành công luôn là 201 với Location của shipment. Carrier tạm lỗi hoặc thiếu dữ liệu chuẩn bị giữ shipment PENDING_TRACKING với trackingCode=null; job retry dùng shipment.id làm request identity ổn định. Manual transaction ghi shipment/history/outbox trước khi gọi carrier; consumer OrderPaid còn ghi processed marker trong cùng transaction. Hai đường tạo dùng cùng khóa order và unique order_id, nên chạy đồng thời vẫn chỉ có một shipment và một creation event. ShipmentCreated ghi nhận creation PENDING_TRACKING, trackingCode=null; GET phản ánh tracking được bổ sung sau, không ghi thêm ShipmentCreated. SHIPPING_BOOKING_CARRIER=NONE giữ shipment PENDING_TRACKING với trackingCode=null và không lên lịch booking. GHN quote cùng FAKE booking tạo tracking FAKE- mà vẫn giữ shippingFee từ snapshot đã thanh toán. GHN booking chỉ dùng sandbox, dùng shipment.id làm client_order_code và đối soát mã này trước khi retry để tránh tạo vận đơn trùng sau timeout. TO_ADDRESS_CONFLICT thử lại một lần với phường và tỉnh; lịch sử shipment ghi nhận lần dùng địa chỉ dự phòng. expected_delivery_time được lưu khi GHN trả về. Khi tạo và khi retry, GHN/FAKE có thể điền serviceType còn trống từ parcel đã chốt và pickupAddress còn trống từ cấu hình của đúng warehouse. Default pickup chỉ dùng khi warehouse khớp default-warehouse-id. Không thay request identity hoặc lựa chọn đã lưu, không bịa parcel/người nhận/mã địa giới; thiếu parcel, địa chỉ người nhận hợp lệ hoặc cấu hình pickup tin cậy vẫn giữ PENDING_TRACKING.
+         * Create a shipment manually from a paid order snapshot
+         * @description Requires SHIPPING.CREATE_SHIPMENT and one of the roles ADMIN or SUPPORT_STAFF. A buyer with the create privilege but no operations role is still rejected with 403. buyerId, shippingFee and shippingInfo come from the paid order; these fields are not accepted from the client and commerce_db is not read. When no shipment exists, GET /internal/v1/orders/{id}/shipping-snapshot on commerce is called directly with the caller's bearer token, with a timeout and a circuit breaker. Only a PAID order with a valid snapshot is created. A missing order returns 404 SHIPMENT_ORDER_NOT_FOUND; an order that is not PAID returns 409 SHIPMENT_ORDER_NOT_PAID; an unavailable upstream returns 503 SHIPMENT_COMMERCE_UNAVAILABLE; an invalid snapshot returns 502 SHIPMENT_INVALID_ORDER_SNAPSHOT. The optional warehouseId, carrier and serviceType choose the dispatch for a new shipment. The warehouse and pickup must come from a trusted source; an old pickup is never used for another warehouse. An empty carrier uses SHIPPING_BOOKING_CARRIER (falling back to SHIPPING_CARRIER when it is not configured), independent of the quoting carrier stored in the snapshot. The other choices use the trusted snapshot or the shipping configuration. When the shipment already exists, any value sent must match the stored choice; an existing carrier/service/warehouse is not replaced once a request identity exists. An empty service for GHN/FAKE is derived from the final parcel; an empty pickup is filled only from the configuration of the same warehouse. A choice that differs from the stored one returns 409 SHIPMENT_IDEMPOTENCY_CONFLICT. An OrderCancelled that arrives before the shipment is stored as a durable tombstone; a later manual create returns 409 SHIPMENT_ORDER_NOT_PAID, and a late OrderPaid does not create or book a shipment for the cancelled order. Each order has one shipment. The same Idempotency-Key with the same request returns the created shipment; reusing the key for another request, or a choice that conflicts with the existing shipment, returns 409. The first key is stored on the shipment with a fingerprint of the request body; a different key for a shipment that already has one also returns 409 SHIPMENT_IDEMPOTENCY_CONFLICT. A successful response is always 201 with the shipment's Location. A temporary carrier error or missing preparation data keeps the shipment PENDING_TRACKING with trackingCode=null; the retry job uses shipment.id as a stable request identity. The manual transaction writes shipment/history/outbox before calling the carrier; the OrderPaid consumer also writes its processed marker in the same transaction. Both creation paths use the same order lock and the unique order_id, so concurrent runs still produce one shipment and one creation event. ShipmentCreated records the PENDING_TRACKING creation with trackingCode=null; GET reflects tracking added later and no further ShipmentCreated is written. SHIPPING_BOOKING_CARRIER=NONE keeps the shipment PENDING_TRACKING with trackingCode=null and schedules no booking. A GHN quote with FAKE booking creates a FAKE- tracking code and keeps shippingFee from the paid snapshot. GHN booking uses the sandbox only, uses shipment.id as client_order_code and reconciles that code before a retry so a timeout does not create a duplicate order. TO_ADDRESS_CONFLICT is retried once with the ward and province; the shipment history records the fallback address. expected_delivery_time is stored when GHN returns it. On creation and on retry, GHN/FAKE can fill an empty serviceType from the final parcel and an empty pickupAddress from the configuration of the same warehouse. The default pickup is used only when the warehouse matches default-warehouse-id. The request identity and stored choices are never replaced, and parcel, recipient and locality codes are never invented; a missing parcel, valid recipient address or trusted pickup configuration keeps PENDING_TRACKING.
          */
         post: operations["createShipment"];
         delete?: never;
@@ -32,8 +32,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Đọc chi tiết shipment
-         * @description Yêu cầu SHIPPING.VIEW_SHIPMENT. ADMIN và SUPPORT_STAFF đọc mọi shipment; các actor khác chỉ đọc shipment có buyerId bằng sub của JWT. Shipment không tồn tại hoặc thuộc buyer khác đều trả cùng 404 SHIPMENT_NOT_FOUND. Không gọi commerce để quyết định quyền sở hữu.
+         * Get shipment details
+         * @description Requires SHIPPING.VIEW_SHIPMENT. ADMIN and SUPPORT_STAFF read every shipment; other actors read only shipments whose buyerId equals the JWT sub. A missing shipment and one owned by another buyer both return the same 404 SHIPMENT_NOT_FOUND. Commerce is not called to decide ownership.
          */
         get: operations["getShipment"];
         put?: never;
@@ -52,8 +52,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Đọc tracking và lịch sử trạng thái shipment
-         * @description Yêu cầu SHIPPING.VIEW_SHIPMENT. ADMIN và SUPPORT_STAFF đọc mọi shipment; các actor khác chỉ đọc shipment có buyerId bằng sub của JWT. Shipment không tồn tại hoặc thuộc buyer khác đều trả cùng 404 SHIPMENT_NOT_FOUND. Quyền sở hữu được kiểm tra trước khi đọc lịch sử. Chỉ đọc shipment và shipment_history đã lưu, không gọi carrier hoặc tạo sự kiện giả. history tăng dần theo createdAt, sau đó id; history=[] là hợp lệ với shipment chưa có lịch sử. trackingCode=null khi chưa được cấp. Để tìm shipment của order, dùng GET /api/v1/shipments?orderId={orderId}; data=[] nghĩa là chưa có shipment và giao diện có thể ẩn khối tracking.
+         * Get shipment tracking and status history
+         * @description Requires SHIPPING.VIEW_SHIPMENT. ADMIN and SUPPORT_STAFF read every shipment; other actors read only shipments whose buyerId equals the JWT sub. A missing shipment and one owned by another buyer both return the same 404 SHIPMENT_NOT_FOUND. Ownership is checked before the history is read. Only the stored shipment and shipment_history are read; the carrier is not called and no fake events are created. history is ordered by createdAt ascending, then id; history=[] is valid for a shipment without history. trackingCode=null until one is assigned. To find an order's shipment, use GET /api/v1/shipments?orderId={orderId}; data=[] means there is no shipment yet and the UI can hide the tracking block.
          */
         get: operations["getShipmentTracking"];
         put?: never;
@@ -72,8 +72,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Lấy danh sách nhà vận chuyển
-         * @description Yêu cầu JWT hợp lệ và quyền SHIPPING.QUOTE; ADMIN không tự bỏ qua quyền này. Đọc metadata và trạng thái circuit breaker của adapter báo phí được chọn, không gọi thử nhà vận chuyển hoặc đọc/ghi cơ sở dữ liệu. SHIPPING_QUOTE_CARRIER chọn adapter này, fallback về SHIPPING_CARRIER khi chưa cấu hình. Carrier chỉ dùng để booking không xuất hiện trong danh sách. isDefault xác định adapter báo phí mặc định. available phản ánh trạng thái breaker hiện tại: false khi OPEN/FORCED_OPEN, true khi CLOSED/HALF_OPEN hoặc chưa có breaker. HALF_OPEN cho phép một lượt thử theo chính sách breaker; available không giữ chỗ và không bảo đảm GHN đang hoạt động. GHN được báo phí bằng SHIPPING_QUOTE_CARRIER=GHN, FAKE chỉ bật tường minh cho local/test; quote carrier NONE trả danh sách rỗng kể cả khi SHIPPING_BOOKING_CARRIER đã bật. GHN quote cùng FAKE booking chỉ trả GHN trong danh sách. Không tự chuyển sang FAKE khi GHN lỗi. Trả toàn bộ danh sách trong một trang logic.
+         * List carriers
+         * @description Requires a valid JWT and SHIPPING.QUOTE; ADMIN does not bypass this privilege. Reads the metadata and circuit breaker state of the selected quoting adapter; the carrier is not probed and the database is not read or written. SHIPPING_QUOTE_CARRIER selects this adapter, falling back to SHIPPING_CARRIER when it is not configured. A carrier used only for booking is not listed. isDefault marks the default quoting adapter. available reflects the current breaker state: false when OPEN/FORCED_OPEN, true when CLOSED/HALF_OPEN or when there is no breaker. HALF_OPEN allows a trial call under the breaker policy; available reserves nothing and does not guarantee that GHN is up. GHN quotes with SHIPPING_QUOTE_CARRIER=GHN; FAKE is enabled explicitly for local/test only; quote carrier NONE returns an empty list even when SHIPPING_BOOKING_CARRIER is set. A GHN quote with FAKE booking lists only GHN. There is no automatic switch to FAKE when GHN fails. The whole list is returned in one logical page.
          */
         get: operations["getCarriers"];
         put?: never;
@@ -92,8 +92,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Đo hiệu suất từng nhà vận chuyển
-         * @description Yêu cầu quyền SHIPPING.VIEW_SHIPMENT và vai trò ADMIN hoặc SUPPORT_STAFF. Gom các vận đơn tạo trong [from, to), tối đa 366 ngày, theo carrier. delivered là vận đơn đang DELIVERED; failed là DELIVERY_FAILED, RETURNING hoặc RETURNED; cancelled là CANCELLED; inProgress là phần còn lại. successRate = delivered / (delivered + failed), null khi chưa có vận đơn kết thúc. averageDeliveryHours tính từ lúc bàn giao (handed_over_at, hoặc created_at khi chưa ghi nhận bàn giao) tới dòng lịch sử DELIVERED đầu tiên. onTimeRate là tỷ lệ vận đơn DELIVERED giao không muộn hơn estimated_delivery_at trong số vận đơn có ước tính. Carrier đang cấu hình nhưng chưa có vận đơn vẫn xuất hiện với số 0. Sắp xếp theo số vận đơn giảm dần rồi mã carrier. Trả toàn bộ danh sách trong một trang logic.
+         * Measure the performance of each carrier
+         * @description Requires SHIPPING.VIEW_SHIPMENT and the role ADMIN or SUPPORT_STAFF. Groups the shipments created in [from, to), at most 366 days, by carrier. delivered counts shipments now DELIVERED; failed counts DELIVERY_FAILED, RETURNING or RETURNED; cancelled counts CANCELLED; inProgress is the rest. successRate = delivered / (delivered + failed), null when no shipment has finished. averageDeliveryHours runs from handover (handed_over_at, or created_at when no handover was recorded) to the first DELIVERED history row. onTimeRate is the share of DELIVERED shipments delivered no later than estimated_delivery_at, among shipments that have an estimate. A configured carrier with no shipments still appears with zeros. Sorted by shipment count descending, then carrier code. The whole list is returned in one logical page.
          */
         get: operations["getCarrierPerformance"];
         put?: never;
@@ -112,8 +112,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Lấy tỉnh/thành phố theo danh mục mới
-         * @description Đọc /shiip/public-api/v3/master-data/province/all; parent_id=1 xác định tỉnh/thành phố thuộc Việt Nam. Không yêu cầu JWT tại gateway hoặc shipment-service; token được gửi kèm nhưng không hợp lệ vẫn bị từ chối. Dữ liệu đọc qua CarrierAdapter theo danh mục GHN v3 hai cấp sau sáp nhập: tỉnh/thành phố → phường/xã. Chỉ trả bản ghi status=1 và đúng parent_id. Code là _id của danh mục v3 được biểu diễn bằng chuỗi số nguyên dương chuẩn, tối đa 9 chữ số; không có số 0 ở đầu. Chế độ FAKE dùng fixture riêng. Trả toàn bộ danh sách trong một trang logic; không có tham số phân trang. Thông tin xác thực nhà vận chuyển chỉ được dùng ở backend. Danh mục hợp lệ được cache trong shipment-service theo GHN_MASTER_DATA_CACHE_TTL_MS, mặc định 300000ms. Chỉ cache kết quả đã validate/lọc active; hết TTL tải lại, lỗi không được cache và không dùng lại bản đã hết hạn.
+         * List provinces and cities from the new catalog
+         * @description Reads /shiip/public-api/v3/master-data/province/all; parent_id=1 marks provinces and cities in Vietnam. No JWT is required at the gateway or shipment-service; a token that is sent but invalid is still rejected. Data is read through the CarrierAdapter from the two-level GHN v3 catalog after the administrative merger: province/city → ward/commune. Only records with status=1 and the right parent_id are returned. The code is the v3 catalog _id as a canonical positive integer string of at most 9 digits, without leading zeros. FAKE mode uses its own fixture. The whole list is returned in one logical page; there are no pagination parameters. Carrier credentials are used only in the backend. The valid catalog is cached in shipment-service for GHN_MASTER_DATA_CACHE_TTL_MS, 300000ms by default. Only validated, active results are cached; after the TTL the list is reloaded, errors are not cached and an expired copy is never reused.
          */
         get: operations["getShippingProvinces"];
         put?: never;
@@ -132,8 +132,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Lấy phường/xã thuộc một tỉnh/thành phố
-         * @description Đọc /shiip/public-api/v3/master-data/ward/all-by-province-id; chỉ trả phường/xã có parent_id trùng provinceCode. Tên chuẩn của địa giới được dùng nguyên văn khi báo giá. Không yêu cầu JWT tại gateway hoặc shipment-service; token được gửi kèm nhưng không hợp lệ vẫn bị từ chối. Dữ liệu đọc qua CarrierAdapter theo danh mục GHN v3 hai cấp sau sáp nhập: tỉnh/thành phố → phường/xã. Chỉ trả bản ghi status=1 và đúng parent_id. Code là _id của danh mục v3 được biểu diễn bằng chuỗi số nguyên dương chuẩn, tối đa 9 chữ số; không có số 0 ở đầu. Chế độ FAKE dùng fixture riêng. Trả toàn bộ danh sách trong một trang logic; không có tham số phân trang. Thông tin xác thực nhà vận chuyển chỉ được dùng ở backend. Danh mục hợp lệ được cache theo provinceCode trong GHN_MASTER_DATA_CACHE_TTL_MS, mặc định300000ms. Hết TTL tải lại; lỗi không cache và không fallback sang danh sách đã hết hạn.
+         * List the wards of a province or city
+         * @description Reads /shiip/public-api/v3/master-data/ward/all-by-province-id; returns only wards whose parent_id equals provinceCode. The canonical locality name is used as is in quotes. No JWT is required at the gateway or shipment-service; a token that is sent but invalid is still rejected. Data is read through the CarrierAdapter from the two-level GHN v3 catalog after the administrative merger: province/city → ward/commune. Only records with status=1 and the right parent_id are returned. The code is the v3 catalog _id as a canonical positive integer string of at most 9 digits, without leading zeros. FAKE mode uses its own fixture. The whole list is returned in one logical page; there are no pagination parameters. Carrier credentials are used only in the backend. The valid catalog is cached per provinceCode for GHN_MASTER_DATA_CACHE_TTL_MS, 300000ms by default. After the TTL the list is reloaded; errors are not cached and there is no fallback to an expired list.
          */
         get: operations["getShippingWards"];
         put?: never;
@@ -154,8 +154,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Báo giá vận chuyển và ngày giao hàng dự kiến
-         * @description Yêu cầu JWT hợp lệ và quyền SHIPPING.QUOTE; ADMIN không tự bỏ qua quyền. Địa chỉ nhận và pickup dùng mã _id GHN v3 hai cấp, được kiểm tra tỉnh → phường đang hoạt động. Tên chuẩn được resolve từ danh mục v3 rồi gửi POST /shiip/public-api/v2/shipping-order/preview với is_new_to_address=true và is_new_from_address=true; endpoint preview hiện do GHN công bố tại path v2 nhưng hỗ trợ mô hình địa chỉ mới. Người nhận phải có tên, số điện thoại và địa chỉ thật; pickup phải có địa chỉ cụ thể đã xác minh. Preview chỉ chạy thử, không tạo vận đơn: order_code phải rỗng; fee lấy từ total_fee, ETA từ expected_delivery_time. GHN_PAYMENT_TYPE_ID cấu hình bên trả phí, mặc định 1 là shop trả trong luồng trả trước SEPAY; GHN_REQUIRED_NOTE cấu hình chính sách kiểm hàng, mặc định KHONGCHOXEMHANG. cod_amount gửi bằng 0 vì luồng hiện tại không thu hộ. Tên và số điện thoại người gửi không gửi riêng sẽ theo hồ sơ ShopId được GHN công bố. Items cung cấp số lượng đơn vị và số SKU để tóm tắt nội dung; parcel là một kiện đã đóng gói. Khi GHN cần items theo kiện, quantity=1 là số kiện, không phải số đơn vị SKU. Khi SHIPPING_CHECKOUT_CARRIERS có giá trị (ví dụ FAKE), mỗi hãng đang bật (quote carrier trước, rồi các hãng trong danh sách) được báo giá riêng; hãng lỗi bị bỏ qua, chỉ khi mọi hãng lỗi mới trả lỗi. Danh sách được sắp theo SHIPPING_CARRIER_STRATEGY (CHEAPEST: phí rồi ngày giao; FASTEST: ngày giao rồi phí) và phần tử đầu có recommended=true. Không đặt biến này thì chỉ quote carrier trả lời. InsuranceValue là giá trị khai bảo hiểm tùy chọn: VND nguyên từ 0 đến 5.000.000, bỏ trống hoặc null gửi 0; không tự lấy subtotal, không cắt ngưỡng hoặc làm tròn. WarehouseId ánh xạ tới pickup được cấu hình; bỏ trống dùng defaultWarehouseId cho WH_001. Subtotal miễn phí lấy toàn bộ giá SKU hiện tại nhân số lượng từ catalog, độc lập insuranceValue. Subtotal lớn hơn hoặc bằng FREE_SHIPPING_THRESHOLD cho fee=0 sau khi có preview và ETA hợp lệ, trừ khi applyFreeShipping=false. Cờ tùy chọn này mặc định true khi bỏ trống hoặc null. Commerce gửi false cho đơn đấu giá để nhận phí carrier gốc rồi xét miễn phí theo giá đấu thắng bất biến; request không được cung cấp giá hay subtotal thay thế. SHIPPING_API_TIMEOUT_MS là ngân sách toàn bộ thao tác gồm lookup và retries. SHIPPING_RETRY_LIMIT là số retry tối đa sau lần đầu, chỉ dành cho lỗi tạm thời. Mỗi HTTP attempt GHN dùng min(GHN_HTTP_TIMEOUT_MS, deadline còn lại), mặc định GHN_HTTP_TIMEOUT_MS là1500ms; không chia deadline tổng theo số retries và không bảo đảm mọi retry đều được chạy. Danh mục province/wards hợp lệ có cache TTL mặc định5phút; phí preview, ETA và giá catalog không cache. Breaker theo carrier từ chối nhanh bằng 503 khi mở. Không tạo order, reservation hoặc dữ liệu shipment và không fallback sang FAKE.
+         * Shipping quotes and estimated delivery dates
+         * @description Requires a valid JWT and SHIPPING.QUOTE; ADMIN does not bypass the privilege. The delivery and pickup addresses use two-level GHN v3 _id codes and are checked as an active province → ward. Canonical names are resolved from the v3 catalog, then POST /shiip/public-api/v2/shipping-order/preview is sent with is_new_to_address=true and is_new_from_address=true; GHN publishes the preview endpoint under the v2 path, but it supports the new address model. The recipient needs a real name, phone number and address; the pickup needs a verified street address. Preview is a dry run and creates no order: order_code must be empty; the fee comes from total_fee and the ETA from expected_delivery_time. GHN_PAYMENT_TYPE_ID sets who pays the fee, default 1 meaning the shop pays in the SEPAY prepaid flow; GHN_REQUIRED_NOTE sets the inspection policy, default KHONGCHOXEMHANG. cod_amount is sent as 0 because the current flow collects no cash on delivery. A sender name and phone that are not sent follow the ShopId profile published by GHN. Items give the unit count and the SKU count for the content summary; parcel is one packed parcel. When GHN needs items per parcel, quantity=1 is the parcel count, not the SKU unit count. When SHIPPING_CHECKOUT_CARRIERS is set (for example FAKE), each enabled carrier (the quote carrier first, then the listed carriers) is quoted separately; a failing carrier is skipped, and an error is returned only when every carrier fails. The list is sorted by SHIPPING_CARRIER_STRATEGY (CHEAPEST: fee then delivery date; FASTEST: delivery date then fee) and the first item has recommended=true. Without this variable only the quote carrier answers. InsuranceValue is the optional declared insurance value: whole VND from 0 to 5,000,000; empty or null sends 0; the subtotal is never used in its place and the value is never capped or rounded. WarehouseId maps to a configured pickup; empty uses defaultWarehouseId for WH_001. The free-shipping subtotal is the current SKU price times quantity from the catalog, independent of insuranceValue. A subtotal greater than or equal to FREE_SHIPPING_THRESHOLD gives fee=0 once the preview and ETA are valid, unless applyFreeShipping=false. This optional flag defaults to true when empty or null. Commerce sends false for auction orders to get the raw carrier fee, then applies free shipping on the fixed winning bid; the request cannot supply a replacement price or subtotal. SHIPPING_API_TIMEOUT_MS is the budget for the whole operation, including lookups and retries. SHIPPING_RETRY_LIMIT is the maximum number of retries after the first attempt, for transient errors only. Each GHN HTTP attempt uses min(GHN_HTTP_TIMEOUT_MS, remaining deadline), with GHN_HTTP_TIMEOUT_MS 1500ms by default; the total deadline is not split by the retry count and every retry is not guaranteed to run. The valid province/ward catalog is cached for 5 minutes by default; the preview fee, ETA and catalog prices are not cached. The per-carrier breaker fails fast with 503 when open. No order, reservation or shipment data is created and there is no fallback to FAKE.
          */
         post: operations["getShippingQuotes"];
         delete?: never;
@@ -172,8 +172,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Đọc lịch sử trạng thái shipment
-         * @description Yêu cầu SHIPPING.VIEW_SHIPMENT. ADMIN/SUPPORT_STAFF đọc mọi shipment; actor khác chỉ đọc shipment có buyerId bằng sub, hoặc role SELLER với sellerId tin cậy bằng sub. Không có quyền sở hữu trả 404 SHIPMENT_NOT_FOUND. Đọc history đã lưu, không gọi carrier theo mỗi request. Sắp xếp changedAt giảm dần, sau đó id giảm dần. Trang vượt cuối trả 200, data=[] và tổng thực tế.
+         * Get shipment status history
+         * @description Requires SHIPPING.VIEW_SHIPMENT. ADMIN/SUPPORT_STAFF read every shipment; other actors read only shipments whose buyerId equals sub, or the SELLER role with a trusted sellerId equal to sub. Without ownership the response is 404 SHIPMENT_NOT_FOUND. The stored history is read; the carrier is not called per request. Sorted by changedAt descending, then id descending. A page past the end returns 200, data=[] and the real total.
          */
         get: operations["getShipmentHistory"];
         put?: never;
@@ -198,8 +198,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Cập nhật trạng thái shipment
-         * @description Yêu cầu privilege tương ứng và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Mọi nguồn cập nhật dùng chung quy tắc chuyển trạng thái và khóa shipment. Cho phép bỏ qua bước khi tiến về phía trước; DELIVERY_FAILED có thể trở lại OUT_FOR_DELIVERY để giao lại. DELIVERED, CANCELLED và RETURNED là trạng thái kết thúc; kể cả override cũng không cho DELIVERED -> IN_TRANSIT. Cùng trạng thái là no-op, trả 200 và không thêm history/event. Mỗi thay đổi được chấp nhận ghi status/version, đúng một history và một Shipment* outbox trong cùng transaction; event phát lên nexus.shipment.events. actor lấy từ JWT, source=MANUAL; reason được chuẩn hóa để audit. reason tùy chọn. Khi đích là CANCELLED trước pickup, hủy booking qua CarrierAdapter trước khi chốt trạng thái; carrier từ chối hoặc lỗi thì không ghi local cancellation. Khi chưa có trackingCode, thao tác thủ công chỉ được giữ nguyên trạng thái hoặc chuyển CANCELLED. Mọi thay đổi thủ công khác trả 409 SHIPMENT_INVALID_TRANSITION để giữ nguyên luồng retry booking PENDING_TRACKING.
+         * Update shipment status
+         * @description Requires the matching privilege and one of the roles ADMIN or SUPPORT_STAFF. Every update source uses the same transition rules and shipment lock. Skipping steps forward is allowed; DELIVERY_FAILED can go back to OUT_FOR_DELIVERY for another attempt. DELIVERED, CANCELLED and RETURNED are terminal; even an override cannot move DELIVERED -> IN_TRANSIT. The same status is a no-op that returns 200 and adds no history or event. Each accepted change writes status/version, exactly one history row and one Shipment* outbox event in the same transaction; the event is published to nexus.shipment.events. The actor comes from the JWT, source=MANUAL; reason is normalized for audit. reason is optional. When the target is CANCELLED before pickup, the booking is cancelled through the CarrierAdapter before the status is committed; if the carrier rejects it or fails, no local cancellation is written. Without a trackingCode, a manual change can only keep the status or move to CANCELLED. Every other manual change returns 409 SHIPMENT_INVALID_TRANSITION so the PENDING_TRACKING booking retry flow stays intact.
          */
         patch: operations["updateShipmentStatus"];
         trace?: never;
@@ -214,8 +214,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Điều chỉnh trạng thái shipment có lý do
-         * @description Yêu cầu privilege tương ứng và một trong hai vai trò ADMIN hoặc SUPPORT_STAFF. Mọi nguồn cập nhật dùng chung quy tắc chuyển trạng thái và khóa shipment. Cho phép bỏ qua bước khi tiến về phía trước; DELIVERY_FAILED có thể trở lại OUT_FOR_DELIVERY để giao lại. DELIVERED, CANCELLED và RETURNED là trạng thái kết thúc; kể cả override cũng không cho DELIVERED -> IN_TRANSIT. Cùng trạng thái là no-op, trả 200 và không thêm history/event. Mỗi thay đổi được chấp nhận ghi status/version, đúng một history và một Shipment* outbox trong cùng transaction; event phát lên nexus.shipment.events. actor lấy từ JWT, source=MANUAL; reason được chuẩn hóa để audit. Override bắt buộc reason có nội dung; đây là điều chỉnh có audit, vẫn tuân thủ quy tắc chuyển trạng thái. Khi đích là CANCELLED trước pickup, hủy booking qua CarrierAdapter trước khi chốt trạng thái; carrier từ chối hoặc lỗi thì không ghi local cancellation. Khi chưa có trackingCode, thao tác thủ công chỉ được giữ nguyên trạng thái hoặc chuyển CANCELLED. Mọi thay đổi thủ công khác trả 409 SHIPMENT_INVALID_TRANSITION để giữ nguyên luồng retry booking PENDING_TRACKING.
+         * Adjust shipment status with a reason
+         * @description Requires the matching privilege and one of the roles ADMIN or SUPPORT_STAFF. Every update source uses the same transition rules and shipment lock. Skipping steps forward is allowed; DELIVERY_FAILED can go back to OUT_FOR_DELIVERY for another attempt. DELIVERED, CANCELLED and RETURNED are terminal; even an override cannot move DELIVERED -> IN_TRANSIT. The same status is a no-op that returns 200 and adds no history or event. Each accepted change writes status/version, exactly one history row and one Shipment* outbox event in the same transaction; the event is published to nexus.shipment.events. The actor comes from the JWT, source=MANUAL; reason is normalized for audit. An override requires a non-blank reason; it is an audited adjustment that still follows the transition rules. When the target is CANCELLED before pickup, the booking is cancelled through the CarrierAdapter before the status is committed; if the carrier rejects it or fails, no local cancellation is written. Without a trackingCode, a manual change can only keep the status or move to CANCELLED. Every other manual change returns 409 SHIPMENT_INVALID_TRANSITION so the PENDING_TRACKING booking retry flow stays intact.
          */
         post: operations["overrideShipmentStatus"];
         delete?: never;
@@ -234,8 +234,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Nhận callback trạng thái carrier
-         * @description Endpoint giao thức carrier được đánh dấu @ProtocolResponse; HTTP 200 giữ body xác nhận riêng, không bọc ApiResponse. GHN hỗ trợ cấu hình custom header ở portal; cấu hình X-Carrier-Signature bằng callback secret của adapter. Giá trị được so sánh constant-time trước khi parse payload và trước mọi ghi dữ liệu. Đây là token xác thực callback qua header, không phải khẳng định GHN tạo HMAC cho body. Thiếu/sai token hoặc chưa cấu hình secret trả 401 Problem Details và không đổi dữ liệu. Mỗi webhook trùng được chấp nhận 200, không lặp history/event; sự kiện cũ không được đảo ngược trạng thái. GHN OrderCode xác định shipment theo carrier/trackingCode; danh tính callback được tạo ổn định bằng hash của OrderCode, Type, Status và Time. Cùng status là no-op. Mỗi thay đổi hợp lệ ghi đúng một history và một Shipment* outbox. GHN dùng GHN_WEBHOOK_SECRET. Fake dùng FAKE_WEBHOOK_SECRET, cùng dạng callback nhưng không cần ShopID và Status là enum nội bộ. Status nằm trong danh tính để hai trạng thái khác nhau cùng timestamp vẫn được phân biệt; thay đổi Reason hoặc định dạng JSON không tạo danh tính mới.
+         * Receive a carrier status callback
+         * @description A carrier protocol endpoint marked @ProtocolResponse; HTTP 200 keeps its own acknowledgement body and is not wrapped in ApiResponse. GHN supports a custom header in its portal; set X-Carrier-Signature to the adapter's callback secret. The value is compared in constant time before the payload is parsed and before any write. This is a callback token sent in a header, not a claim that GHN signs the body with an HMAC. A missing or wrong token, or a secret that is not configured, returns 401 Problem Details and changes nothing. A duplicate webhook is accepted with 200 without repeating history or events; an older event never reverses the status. GHN OrderCode identifies the shipment by carrier/trackingCode; the callback identity is a stable hash of OrderCode, Type, Status and Time. The same status is a no-op. Each valid change writes exactly one history row and one Shipment* outbox event. GHN uses GHN_WEBHOOK_SECRET. Fake uses FAKE_WEBHOOK_SECRET with the same callback shape, but needs no ShopID and its Status is the internal enum. Status is part of the identity so two different statuses with the same timestamp stay distinct; a change to Reason or to the JSON formatting does not create a new identity.
          */
         post: operations["receiveCarrierWebhook"];
         delete?: never;
@@ -251,7 +251,7 @@ export interface components {
         FakeStatusWebhook: {
             OrderCode: string;
             /**
-             * @description Loại callback GHN.
+             * @description GHN callback type.
              * @enum {string}
              */
             Type: "create" | "switch_status" | "update_weight" | "update_cod" | "update_fee" | "update_payment_type" | "cod" | "update_partial_return";
@@ -265,12 +265,12 @@ export interface components {
         };
         UpdateShipmentStatusRequest: {
             status: components["schemas"]["ShipmentStatus"];
-            /** @description Lý do được chuẩn hóa và lưu cùng lịch sử. */
+            /** @description Reason, normalized and stored with the history. */
             reason?: string | null;
         };
         OverrideShipmentStatusRequest: {
             status: components["schemas"]["ShipmentStatus"];
-            /** @description Lý do bắt buộc; chuỗi chỉ có khoảng trắng không hợp lệ. */
+            /** @description Required reason; a whitespace-only string is invalid. */
             reason: string;
         };
         ShipmentTrackingEntryResponse: {
@@ -295,21 +295,21 @@ export interface components {
             page: components["schemas"]["ShipmentPageInfo"];
         };
         GhnStatusWebhook: {
-            /** @description Shop GHN gửi callback; phải khớp shopId đã cấu hình trong adapter. */
+            /** @description GHN shop that sends the callback; must match the shopId configured in the adapter. */
             ShopID: number;
             OrderCode: string;
             /**
-             * @description Loại callback GHN.
+             * @description GHN callback type.
              * @enum {string}
              */
             Type: "create" | "switch_status" | "update_weight" | "update_cod" | "update_fee" | "update_payment_type" | "cod" | "update_partial_return";
-            /** @description Trạng thái GHN được ánh xạ sang đúng một ShipmentStatus nội bộ. */
+            /** @description GHN status, mapped to exactly one internal ShipmentStatus. */
             Status: string;
             /** Format: date-time */
             Time: string;
-            /** @description Lý do carrier nếu có; được chuẩn hóa trước khi lưu. */
+            /** @description Carrier reason, if any; normalized before it is stored. */
             Reason?: string | null;
-            /** @description Mô tả carrier nếu không có Reason; được chuẩn hóa trước khi lưu. */
+            /** @description Carrier description when there is no Reason; normalized before it is stored. */
             Description?: string | null;
         } & {
             [key: string]: unknown;
@@ -323,21 +323,21 @@ export interface components {
         CreateShipmentRequest: {
             /**
              * Format: uuid
-             * @description UUID seller order PAID tại commerce; không cần OrderPaid đã được giao tới shipment-service.
+             * @description UUID of a seller order that is PAID in commerce; OrderPaid does not need to have reached shipment-service.
              */
             orderId: string;
             /**
              * Format: uuid
-             * @description Chọn kho cho shipment mới. Bỏ trống dùng kho tin cậy trong snapshot hoặc kho mặc định đã cấu hình. Đổi sang kho khác cần pickup tin cậy cấu hình cho kho đó; thiếu kho/pickup trả 404 SHIPMENT_WAREHOUSE_NOT_FOUND. Nếu shipment đã tồn tại, giá trị gửi phải khớp kho đã lưu, nếu không trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
+             * @description Chooses the warehouse for a new shipment. Empty uses the trusted warehouse in the snapshot or the configured default warehouse. Switching to another warehouse needs a trusted pickup configured for it; a missing warehouse or pickup returns 404 SHIPMENT_WAREHOUSE_NOT_FOUND. If the shipment already exists, the value sent must match the stored warehouse, otherwise 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
              */
             warehouseId?: string | null;
             /**
-             * @description Chọn carrier đã đăng ký cho shipment mới; bỏ trống dùng lựa chọn từ snapshot hoặc cấu hình shipping. Carrier chưa đăng ký trả 400 SHIPMENT_INVALID_PARAMETER. Nếu shipment đã tồn tại, giá trị gửi phải bằng carrier đã lưu; khác lựa chọn trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
+             * @description Chooses a registered carrier for a new shipment; empty uses the choice from the snapshot or the shipping configuration. An unregistered carrier returns 400 SHIPMENT_INVALID_PARAMETER. If the shipment already exists, the value sent must equal the stored carrier; a different choice returns 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
              * @example FAKE
              */
             carrier?: string | null;
             /**
-             * @description Chọn dịch vụ hợp lệ cho shipment mới; bỏ trống dùng lựa chọn tin cậy hoặc mặc định của adapter. Dịch vụ không được hỗ trợ trả 422 SHIPMENT_NO_SERVICE. Nếu shipment đã tồn tại, giá trị gửi phải khớp lựa chọn đã lưu; khác lựa chọn trả 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
+             * @description Chooses a valid service for a new shipment; empty uses the trusted choice or the adapter default. An unsupported service returns 422 SHIPMENT_NO_SERVICE. If the shipment already exists, the value sent must match the stored choice; a different choice returns 409 SHIPMENT_IDEMPOTENCY_CONFLICT.
              * @example STANDARD
              */
             serviceType?: string | null;
@@ -355,12 +355,12 @@ export interface components {
             buyerId: string;
             carrier: string;
             serviceType: string | null;
-            /** @description Null khi carrier chưa cấp mã; fake cấp mã ổn định theo shipment.id đã lưu. */
+            /** @description Null until the carrier assigns a code; fake assigns a stable code from the stored shipment.id. */
             trackingCode: string | null;
             status: components["schemas"]["ShipmentStatus"];
-            /** @description Phí VND đóng băng từ snapshot OrderPaid hoặc snapshot PAID của commerce; API serialize thành JSON number. */
+            /** @description VND fee frozen from the OrderPaid snapshot or the commerce PAID snapshot; serialized as a JSON number. */
             shippingFee: number;
-            /** @description Snapshot recipient, items, parcel và pickupAddress từ OrderPaid hoặc snapshot PAID của commerce. Đây là snapshot của đơn, độc lập với DTO quote #201; không tự đổi mã legacy thành mã GHN v3. Parcel có thể null; thiếu parcel hoặc địa chỉ người nhận hợp lệ vẫn chờ chuẩn bị ở PENDING_TRACKING. PickupAddress còn trống có thể bổ sung từ cấu hình của đúng warehouse khi tạo hoặc retry; default pickup chỉ dùng cho default-warehouse-id. GHN/FAKE suy ra serviceType còn trống từ parcel đã chốt; không tự tạo parcel/người nhận hoặc thay các lựa chọn dispatch đã lưu. */
+            /** @description Snapshot of recipient, items, parcel and pickupAddress from OrderPaid or the commerce PAID snapshot. It is the order's snapshot, independent of the #201 quote DTO; legacy codes are not converted to GHN v3 codes. Parcel can be null; a missing parcel or valid recipient address keeps waiting for preparation in PENDING_TRACKING. An empty PickupAddress can be filled from the configuration of the same warehouse on creation or retry; the default pickup is used only for default-warehouse-id. GHN/FAKE derive an empty serviceType from the final parcel; parcel and recipient data are never invented and stored dispatch choices are never replaced. */
             shippingInfo: {
                 [key: string]: unknown;
             };
@@ -387,7 +387,7 @@ export interface components {
             carrier: string;
             trackingCode: string | null;
             status: components["schemas"]["ShipmentStatus"];
-            /** @description Các trạng thái đã lưu theo createdAt tăng dần, sau đó id; không tạo mốc giả khi rỗng. */
+            /** @description Stored statuses by createdAt ascending, then id; no fake entries when empty. */
             history: components["schemas"]["ShipmentHistoryResponse"][];
         };
         ShipmentTrackingEnvelope: {
@@ -446,12 +446,12 @@ export interface components {
             /** Format: int64 */
             cancelled: number;
             /**
-             * @description Phân số 0..1, 4 chữ số thập phân
+             * @description Fraction 0..1, 4 decimal places
              * @example 0.9231
              */
             successRate: number | null;
             /**
-             * @description Số giờ trung bình, 1 chữ số thập phân
+             * @description Average hours, 1 decimal place
              * @example 52.4
              */
             averageDeliveryHours: number | null;
@@ -495,21 +495,21 @@ export interface components {
             /** @enum {string} */
             code: "GHN" | "FAKE";
             name: string;
-            /** @description Adapter mặc định do registry chọn. */
+            /** @description Default adapter chosen by the registry. */
             isDefault: boolean;
-            /** @description Trạng thái đủ điều kiện thử gọi theo circuit breaker; false khi OPEN/FORCED_OPEN. Không thực hiện probe mạng và không bảo đảm sức khỏe GHN tại thời điểm đọc. */
+            /** @description Whether the circuit breaker allows a trial call; false when OPEN/FORCED_OPEN. No network probe is made and GHN's health at read time is not guaranteed. */
             available: boolean;
         };
         LocalityResponse: {
             /**
-             * @description Mã _id của danh mục GHN v3 hai cấp, biểu diễn bằng chuỗi số nguyên dương chuẩn; không dùng ProvinceID/WardCode của hệ cũ.
+             * @description The two-level GHN v3 catalog _id as a canonical positive integer string; the legacy ProvinceID/WardCode is not used.
              * @example 1003646
              */
             code: string;
             name: string;
         };
         /**
-         * @description STANDARD cho kiện dưới 20.000 gram, ánh xạ GHN service_type_id=2. HEAVY cho kiện từ 20.000 gram, ánh xạ GHN service_type_id=5. Fake dùng cùng ngưỡng. ID số của GHN chỉ dùng nội bộ adapter.
+         * @description STANDARD for parcels under 20,000 grams, mapped to GHN service_type_id=2. HEAVY for parcels from 20,000 grams, mapped to GHN service_type_id=5. Fake uses the same threshold. GHN's numeric IDs are used only inside the adapter.
          * @example STANDARD
          * @enum {string}
          */
@@ -519,22 +519,22 @@ export interface components {
             carrier: "GHN" | "FAKE";
             serviceType: components["schemas"]["ShippingServiceType"];
             /**
-             * @description Phí khách phải trả sau khi áp dụng FREE_SHIPPING_THRESHOLD, đơn vị VND.
+             * @description Fee the customer pays after FREE_SHIPPING_THRESHOLD, in VND.
              * @example 35000
              */
             fee: number;
             /**
              * Format: date-time
-             * @description Thời điểm dự kiến giao hàng có múi giờ, từ expected_delivery_time của preview hợp lệ.
+             * @description Estimated delivery time with a time zone, from expected_delivery_time of a valid preview.
              * @example 2026-11-13T16:59:59Z
              */
             estimatedDeliveryAt: string;
             /**
-             * @description Tên hiển thị của hãng vận chuyển.
+             * @description Display name of the carrier.
              * @example Giao Hàng Nhanh
              */
             carrierName?: string;
-            /** @description true cho lựa chọn đứng đầu theo SHIPPING_CARRIER_STRATEGY. */
+            /** @description true for the first option under SHIPPING_CARRIER_STRATEGY. */
             recommended?: boolean;
         };
         ShippingQuoteRequest: {
@@ -543,37 +543,37 @@ export interface components {
             parcel: components["schemas"]["ParcelRequest"];
             /**
              * Format: uuid
-             * @description UUID kho có mapping lấy hàng đã cấu hình; bỏ trống hoặc null dùng kho mặc định.
+             * @description UUID of a warehouse with a configured pickup mapping; empty or null uses the default warehouse.
              */
             warehouseId?: string | null;
-            /** @description Địa chỉ lấy hàng của kho riêng seller do Commerce đọc từ Inventory. Có giá trị thì thay cho mapping theo warehouseId và địa chỉ lấy hàng của nền tảng; bỏ trống giữ cách chọn cũ. */
+            /** @description Pickup address of the seller's own warehouse, which Commerce reads from Inventory. When set, it replaces the warehouseId mapping and the platform pickup address; empty keeps the previous selection. */
             pickupAddress?: {
                 provinceCode: string;
                 wardCode: string;
                 line1: string;
             } | null;
             /**
-             * @description Giá trị khai bảo hiểm, đơn vị VND nguyên; bỏ trống hoặc null gửi 0. Không tự dùng subtotal, không tự cắt ngưỡng hoặc làm tròn. Giá trị âm, có phần lẻ hoặc vượt 5.000.000 trả 400 SHIPMENT_VALIDATION_FAILED.
+             * @description Declared insurance value in whole VND; empty or null sends 0. The subtotal is never used in its place, and the value is never capped or rounded. A negative, fractional or above 5,000,000 value returns 400 SHIPMENT_VALIDATION_FAILED.
              * @default 0
              * @example 200000
              */
             insuranceValue: number | null;
             /**
-             * @description Bỏ trống, null hoặc true giữ chính sách miễn phí theo subtotal Catalog. False trả phí carrier gốc đã kiểm tra; Commerce dùng cho đơn đấu giá rồi áp dụng ngưỡng theo giá đấu thắng. Cờ này chỉ bỏ trợ phí, không nhận giá hoặc subtotal do client khai và không bỏ qua kiểm tra carrier/ETA.
+             * @description Empty, null or true keeps the free-shipping policy based on the Catalog subtotal. False returns the checked raw carrier fee; Commerce uses it for auction orders and then applies the threshold to the winning bid. This flag only drops the subsidy; it accepts no client-declared price or subtotal and does not skip the carrier/ETA checks.
              * @default true
              */
             applyFreeShipping: boolean | null;
         };
         ShippingAddressRequest: {
-            /** @description Mã _id tỉnh/thành phố trong danh mục GHN v3. */
+            /** @description Province/city _id in the GHN v3 catalog. */
             provinceCode: string;
-            /** @description Mã _id phường/xã đang hoạt động, thuộc provinceCode trong danh mục GHN v3. */
+            /** @description _id of an active ward that belongs to provinceCode in the GHN v3 catalog. */
             wardCode: string;
-            /** @description Dòng địa chỉ giao hàng; dùng tên line1 trong public request. */
+            /** @description Delivery address line; named line1 in the public request. */
             line1: string;
             recipientName: string;
             /**
-             * @description Số điện thoại người nhận thật; số nội địa bắt đầu bằng 0 hoặc dạng +84.
+             * @description Real recipient phone number; domestic numbers start with 0 or +84.
              * @example 0901234567
              */
             recipientPhone: string;
@@ -584,24 +584,24 @@ export interface components {
             quantity: number;
         };
         ParcelRequest: {
-            /** @description Khối lượng kiện đã đóng gói, đơn vị gram. */
+            /** @description Packed parcel weight in grams. */
             weightGrams: number;
-            /** @description Chiều dài kiện, đơn vị cm. */
+            /** @description Parcel length in cm. */
             lengthCm: number;
-            /** @description Chiều rộng kiện, đơn vị cm. */
+            /** @description Parcel width in cm. */
             widthCm: number;
-            /** @description Chiều cao kiện, đơn vị cm. */
+            /** @description Parcel height in cm. */
             heightCm: number;
         };
         PageInfo: {
             /** @enum {integer} */
             number: 0;
-            /** @description max(1, số phần tử). */
+            /** @description max(1, number of items). */
             size: number;
             /** Format: int64 */
             totalElements: number;
             /**
-             * @description Bằng 0 khi danh sách rỗng, ngược lại bằng 1.
+             * @description 0 when the list is empty, otherwise 1.
              * @enum {integer}
              */
             totalPages: 0 | 1;
@@ -616,7 +616,7 @@ export interface components {
             instance: string;
             /** @enum {string} */
             code: "SHIPMENT_INVALID_SIGNATURE" | "SHIPMENT_INVALID_TRANSITION" | "SHIPMENT_UNSUPPORTED_CARRIER" | "SHIPMENT_INVALID_WEBHOOK" | "SHIPMENT_CARRIER_CANCELLATION_REJECTED" | "SHIPMENT_INVALID_CARRIER_STATUS" | "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_IDEMPOTENCY_KEY_REQUIRED" | "SHIPMENT_IDEMPOTENCY_CONFLICT" | "SHIPMENT_ORDER_NOT_FOUND" | "SHIPMENT_ORDER_NOT_PAID" | "SHIPMENT_INVALID_ORDER_SNAPSHOT" | "SHIPMENT_COMMERCE_UNAVAILABLE" | "SHIPMENT_NOT_FOUND" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_UNAUTHENTICATED" | "UNAUTHENTICATED" | "SHIPMENT_FORBIDDEN" | "FORBIDDEN" | "SHIPMENT_WAREHOUSE_NOT_FOUND" | "SHIPMENT_SKU_NOT_FOUND" | "SHIPMENT_METHOD_NOT_ALLOWED" | "SHIPMENT_NOT_ACCEPTABLE" | "SHIPMENT_UNSUPPORTED_MEDIA_TYPE" | "SHIPMENT_NO_SERVICE" | "RATE_LIMITED" | "SHIPMENT_INTERNAL_ERROR" | "INTERNAL_ERROR" | "SHIPMENT_INVALID_CARRIER_RESPONSE" | "SHIPMENT_INVALID_CATALOG_RESPONSE" | "SHIPMENT_CARRIER_UNAVAILABLE" | "SHIPMENT_CIRCUIT_OPEN" | "SHIPMENT_CARRIER_CONFIGURATION_ERROR" | "SHIPMENT_CATALOG_UNAVAILABLE" | "SERVICE_UNAVAILABLE" | "GATEWAY_TIMEOUT";
-            /** @description Chỉ xuất hiện khi yêu cầu có trace đang hoạt động. */
+            /** @description Present only when the request has an active trace. */
             traceId?: string;
             errors?: {
                 field: string;
@@ -626,7 +626,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Chuyển trạng thái không hợp lệ hoặc carrier từ chối hủy booking trước pickup. */
+        /** @description Invalid transition, or the carrier rejected cancelling the booking before pickup. */
         ShipmentMutationConflict: {
             headers: {
                 [name: string]: unknown;
@@ -640,7 +640,7 @@ export interface components {
                 };
             };
         };
-        /** @description Trạng thái đích xung đột quy tắc chuyển trạng thái hiện tại. */
+        /** @description The target status conflicts with the current transition rules. */
         InvalidShipmentTransition: {
             headers: {
                 [name: string]: unknown;
@@ -654,7 +654,7 @@ export interface components {
                 };
             };
         };
-        /** @description Callback token thiếu, sai hoặc adapter chưa cấu hình secret; không ghi dữ liệu. */
+        /** @description Callback token missing or wrong, or the adapter has no secret configured; nothing is written. */
         InvalidCarrierSignature: {
             headers: {
                 [name: string]: unknown;
@@ -668,7 +668,7 @@ export interface components {
                 };
             };
         };
-        /** @description Trạng thái carrier chưa có trong bảng ánh xạ nội bộ. */
+        /** @description The carrier status is not in the internal mapping table. */
         InvalidCarrierStatus: {
             headers: {
                 [name: string]: unknown;
@@ -682,7 +682,7 @@ export interface components {
                 };
             };
         };
-        /** @description Carrier chưa đăng ký hoặc nội dung callback không hợp lệ. */
+        /** @description Unregistered carrier or invalid callback body. */
         CarrierWebhookBadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -696,7 +696,7 @@ export interface components {
                 };
             };
         };
-        /** @description Khóa idempotency, body, UUID/enum, carrier chưa đăng ký hoặc phân trang không hợp lệ. */
+        /** @description Invalid idempotency key, body, UUID/enum, unregistered carrier or pagination. */
         ShipmentBadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -710,7 +710,7 @@ export interface components {
                 };
             };
         };
-        /** @description Đơn không tồn tại tại commerce, hoặc kho/pickup cần chọn chưa được cấu hình. */
+        /** @description The order does not exist in commerce, or the chosen warehouse/pickup is not configured. */
         ManualOrderNotFound: {
             headers: {
                 [name: string]: unknown;
@@ -721,7 +721,7 @@ export interface components {
                  *       "type": "urn:problem:domain-error",
                  *       "title": "Not Found",
                  *       "status": 404,
-                 *       "detail": "Không tìm thấy đơn hàng",
+                 *       "detail": "Order not found",
                  *       "instance": "/api/v1/shipments",
                  *       "code": "SHIPMENT_ORDER_NOT_FOUND"
                  *     }
@@ -734,7 +734,7 @@ export interface components {
                 };
             };
         };
-        /** @description Commerce trả snapshot thiếu/sai hoặc không khớp orderId; không ghi shipment. */
+        /** @description Commerce returned a missing, invalid or mismatched snapshot for orderId; no shipment is written. */
         InvalidOrderSnapshot: {
             headers: {
                 [name: string]: unknown;
@@ -745,7 +745,7 @@ export interface components {
                  *       "type": "urn:problem:domain-error",
                  *       "title": "Bad Gateway",
                  *       "status": 502,
-                 *       "detail": "Snapshot đơn hàng không hợp lệ",
+                 *       "detail": "Invalid order snapshot",
                  *       "instance": "/api/v1/shipments",
                  *       "code": "SHIPMENT_INVALID_ORDER_SNAPSHOT"
                  *     }
@@ -758,7 +758,7 @@ export interface components {
                 };
             };
         };
-        /** @description Commerce timeout, circuit mở, lỗi kết nối hoặc lỗi upstream khác; gateway routing cũng có thể trả SERVICE_UNAVAILABLE. */
+        /** @description Commerce timeout, open circuit, connection error or another upstream error; gateway routing can also return SERVICE_UNAVAILABLE. */
         CommerceUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -769,7 +769,7 @@ export interface components {
                  *       "type": "urn:problem:domain-error",
                  *       "title": "Service Unavailable",
                  *       "status": 503,
-                 *       "detail": "Dịch vụ đơn hàng hiện không khả dụng",
+                 *       "detail": "The order service is unavailable",
                  *       "instance": "/api/v1/shipments",
                  *       "code": "SHIPMENT_COMMERCE_UNAVAILABLE"
                  *     }
@@ -782,7 +782,7 @@ export interface components {
                 };
             };
         };
-        /** @description Khóa idempotency đã dùng cho yêu cầu khác, shipment đã gắn key khác, lựa chọn khác với shipment hiện có, hoặc commerce xác nhận đơn chưa PAID. Không tạo shipment bằng dữ liệu buyer/address do client tự khai. */
+        /** @description The idempotency key was used for another request, the shipment already has another key, a choice differs from the existing shipment, or commerce confirms the order is not PAID. A shipment is never created from buyer or address data the client declares. */
         ShipmentConflict: {
             headers: {
                 [name: string]: unknown;
@@ -796,7 +796,7 @@ export interface components {
                 };
             };
         };
-        /** @description Shipment không tồn tại hoặc không thuộc buyer đang truy cập. */
+        /** @description The shipment does not exist or does not belong to the current buyer. */
         ShipmentNotFound: {
             headers: {
                 [name: string]: unknown;
@@ -807,7 +807,7 @@ export interface components {
                  *       "type": "urn:problem:domain-error",
                  *       "title": "Not Found",
                  *       "status": 404,
-                 *       "detail": "Không tìm thấy tài nguyên được yêu cầu",
+                 *       "detail": "The requested resource was not found",
                  *       "instance": "/api/v1/shipments/00000000-0000-4000-8000-000000000040",
                  *       "code": "SHIPMENT_NOT_FOUND"
                  *     }
@@ -820,7 +820,7 @@ export interface components {
                 };
             };
         };
-        /** @description Dữ liệu, địa chỉ, mã địa giới hoặc cấu trúc JSON không hợp lệ. Mỗi field lỗi có field, code và detail. */
+        /** @description Invalid data, address, locality code or JSON structure. Each failing field has field, code and detail. */
         InvalidRequest: {
             headers: {
                 [name: string]: unknown;
@@ -834,10 +834,10 @@ export interface components {
                 };
             };
         };
-        /** @description Thiếu JWT hoặc JWT không hợp lệ; public endpoint chỉ trả 401 khi có token không hợp lệ được gửi kèm. Dịch vụ dùng SHIPMENT_UNAUTHENTICATED; gateway có thể trả UNAUTHENTICATED. */
+        /** @description The JWT is missing or invalid; a public endpoint returns 401 only when an invalid token is sent. The service uses SHIPMENT_UNAUTHENTICATED; the gateway can return UNAUTHENTICATED. */
         Unauthenticated: {
             headers: {
-                /** @description Yêu cầu Bearer token hợp lệ. */
+                /** @description Requires a valid bearer token. */
                 "WWW-Authenticate"?: "Bearer";
                 [name: string]: unknown;
             };
@@ -850,7 +850,7 @@ export interface components {
                 };
             };
         };
-        /** @description JWT thiếu quyền yêu cầu của operation; vai trò ADMIN không thay thế quyền này. */
+        /** @description The JWT lacks the privilege the operation requires; the ADMIN role does not replace it. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -864,7 +864,7 @@ export interface components {
                 };
             };
         };
-        /** @description WarehouseId không có trong cấu hình lấy hàng, hoặc SKU không tồn tại. */
+        /** @description WarehouseId is not in the pickup configuration, or the SKU does not exist. */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -878,10 +878,10 @@ export interface components {
                 };
             };
         };
-        /** @description Phương thức HTTP không được hỗ trợ tại đường dẫn này. */
+        /** @description HTTP method not supported on this path. */
         MethodNotAllowed: {
             headers: {
-                /** @description Các phương thức được hỗ trợ. */
+                /** @description Supported methods. */
                 Allow?: string;
                 [name: string]: unknown;
             };
@@ -894,7 +894,7 @@ export interface components {
                 };
             };
         };
-        /** @description Không thể trả nội dung theo định dạng Accept được yêu cầu. */
+        /** @description The response cannot be returned in the requested Accept format. */
         NotAcceptable: {
             headers: {
                 [name: string]: unknown;
@@ -908,7 +908,7 @@ export interface components {
                 };
             };
         };
-        /** @description Nội dung POST không dùng định dạng JSON được hỗ trợ. */
+        /** @description The POST body is not in a supported JSON format. */
         UnsupportedMediaType: {
             headers: {
                 [name: string]: unknown;
@@ -922,7 +922,7 @@ export interface components {
                 };
             };
         };
-        /** @description Nhà vận chuyển không cung cấp dịch vụ phù hợp cho tuyến hoặc kiện hàng. */
+        /** @description The carrier offers no suitable service for the route or parcel. */
         NoService: {
             headers: {
                 [name: string]: unknown;
@@ -936,10 +936,10 @@ export interface components {
                 };
             };
         };
-        /** @description Gateway giới hạn số yêu cầu; giữ Retry-After khi có. */
+        /** @description The gateway rate limits requests; keeps Retry-After when present. */
         RateLimited: {
             headers: {
-                /** @description Thời gian chờ khi gateway cung cấp. */
+                /** @description Wait time when the gateway provides it. */
                 "Retry-After"?: string;
                 [name: string]: unknown;
             };
@@ -952,7 +952,7 @@ export interface components {
                 };
             };
         };
-        /** @description Lỗi xử lý bất ngờ; không trả stack trace hoặc thông tin bí mật. */
+        /** @description Unexpected processing error; no stack trace or secrets are returned. */
         InternalError: {
             headers: {
                 [name: string]: unknown;
@@ -966,7 +966,7 @@ export interface components {
                 };
             };
         };
-        /** @description Carrier hoặc catalog trả dữ liệu không hợp lệ, thiếu fee/ETA hoặc sai envelope. */
+        /** @description The carrier or catalog returned invalid data, a missing fee/ETA or a wrong envelope. */
         BadUpstream: {
             headers: {
                 [name: string]: unknown;
@@ -980,7 +980,7 @@ export interface components {
                 };
             };
         };
-        /** @description Nhà vận chuyển trả danh sách địa giới không hợp lệ hoặc sai envelope. */
+        /** @description The carrier returned an invalid locality list or a wrong envelope. */
         CarrierBadUpstream: {
             headers: {
                 [name: string]: unknown;
@@ -994,7 +994,7 @@ export interface components {
                 };
             };
         };
-        /** @description Gateway chưa tìm thấy hoặc không kết nối được shipment-service. */
+        /** @description The gateway has not found or cannot reach shipment-service. */
         RoutingUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -1008,7 +1008,7 @@ export interface components {
                 };
             };
         };
-        /** @description Nhà vận chuyển không khả dụng, hết deadline, breaker mở hoặc cấu hình carrier thiếu/sai. Gateway có thể trả SERVICE_UNAVAILABLE trước khi tới dịch vụ. */
+        /** @description The carrier is unavailable, the deadline passed, the breaker is open, or the carrier configuration is missing or wrong. The gateway can return SERVICE_UNAVAILABLE before reaching the service. */
         CarrierUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -1022,7 +1022,7 @@ export interface components {
                 };
             };
         };
-        /** @description Nhà vận chuyển/catalog không khả dụng, hết deadline, breaker mở hoặc cấu hình carrier thiếu/sai. Gateway có thể trả SERVICE_UNAVAILABLE trước khi tới dịch vụ. */
+        /** @description The carrier or catalog is unavailable, the deadline passed, the breaker is open, or the carrier configuration is missing or wrong. The gateway can return SERVICE_UNAVAILABLE before reaching the service. */
         Unavailable: {
             headers: {
                 [name: string]: unknown;
@@ -1036,7 +1036,7 @@ export interface components {
                 };
             };
         };
-        /** @description Gateway không nhận được phản hồi từ dịch vụ trong thời gian cho phép. */
+        /** @description The gateway got no response from the service in time. */
         GatewayTimeout: {
             headers: {
                 [name: string]: unknown;
@@ -1061,13 +1061,13 @@ export interface operations {
     listShipments: {
         parameters: {
             query?: {
-                /** @description Chỉ số trang bắt đầu từ 0. */
+                /** @description Page index starting at 0. */
                 page?: number;
-                /** @description Số phần tử tối đa mỗi trang. */
+                /** @description Maximum items per page. */
                 size?: number;
-                /** @description Lọc theo UUID đơn; vẫn áp dụng quyền sở hữu. */
+                /** @description Filter by order UUID; ownership still applies. */
                 orderId?: string;
-                /** @description Lọc theo trạng thái shipment nội bộ. */
+                /** @description Filter by internal shipment status. */
                 status?: components["schemas"]["ShipmentStatus"];
             };
             header?: never;
@@ -1076,7 +1076,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Shipment nhìn thấy được và thông tin phân trang. */
+            /** @description Visible shipments and pagination details. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1114,7 +1114,7 @@ export interface operations {
             query?: never;
             header: {
                 /**
-                 * @description Khóa ổn định cho cùng yêu cầu tạo; không tái dùng cho nội dung khác.
+                 * @description Stable key for the same create request; do not reuse it for a different body.
                  * @example manual-order-0001
                  */
                 "Idempotency-Key": string;
@@ -1133,11 +1133,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Shipment mới hoặc kết quả của yêu cầu idempotent đã xử lý. */
+            /** @description The new shipment, or the result of an idempotent request that was already processed. */
             201: {
                 headers: {
                     /**
-                     * @description Đường dẫn đọc shipment đã tạo.
+                     * @description Path to read the created shipment.
                      * @example /api/v1/shipments/00000000-0000-4000-8000-000000000040
                      */
                     Location?: string;
@@ -1168,14 +1168,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description UUID shipment, không phải UUID order. */
+                /** @description Shipment UUID, not the order UUID. */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Shipment nhìn thấy được. */
+            /** @description The visible shipment. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1201,14 +1201,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description UUID shipment, không phải UUID order. */
+                /** @description Shipment UUID, not the order UUID. */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Tracking hiện tại và lịch sử trạng thái theo thời gian. */
+            /** @description Current tracking and status history over time. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1265,7 +1265,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Danh sách kết quả và thông tin một trang logic. */
+            /** @description Results and details of one logical page. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1287,9 +1287,9 @@ export interface operations {
     getCarrierPerformance: {
         parameters: {
             query: {
-                /** @description Mốc bắt đầu, ISO-8601 có offset, tính cả mốc này */
+                /** @description Start time, ISO-8601 with offset, inclusive */
                 from: string;
-                /** @description Mốc kết thúc, ISO-8601 có offset, không tính mốc này */
+                /** @description End time, ISO-8601 with offset, exclusive */
                 to: string;
             };
             header?: never;
@@ -1298,7 +1298,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Một dòng cho mỗi carrier. */
+            /** @description One row per carrier. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1323,7 +1323,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Danh sách kết quả và thông tin một trang logic. */
+            /** @description Results and details of one logical page. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1346,7 +1346,7 @@ export interface operations {
         parameters: {
             query: {
                 /**
-                 * @description Mã _id tỉnh/thành phố từ danh mục GHN v3; không dùng mã tỉnh của hệ ba cấp.
+                 * @description GHN v3 province/city _id; the three-level province code is not used.
                  * @example 1000001
                  */
                 provinceCode: string;
@@ -1357,7 +1357,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Danh sách kết quả và thông tin một trang logic. */
+            /** @description Results and details of one logical page. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1366,7 +1366,7 @@ export interface operations {
                     "application/json": components["schemas"]["LocalityListResponse"];
                 };
             };
-            /** @description Thiếu, rỗng, sai định dạng hoặc không tồn tại provinceCode. GHN trả data=null cho province_id không hợp lệ cũng được đổi thành lỗi địa giới 400. */
+            /** @description provinceCode is missing, empty, malformed or unknown. data=null from GHN for an invalid province_id is also turned into a 400 locality error. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1399,7 +1399,7 @@ export interface operations {
                  *       "toAddress": {
                  *         "provinceCode": "1000001",
                  *         "wardCode": "1003646",
-                 *         "line1": "Địa chỉ giao hàng đã xác minh",
+                 *         "line1": "Verified delivery address",
                  *         "recipientName": "Nguyễn Văn A",
                  *         "recipientPhone": "0901234567"
                  *       },
@@ -1423,7 +1423,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Danh sách kết quả và thông tin một trang logic. */
+            /** @description Results and details of one logical page. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1450,21 +1450,21 @@ export interface operations {
     getShipmentHistory: {
         parameters: {
             query?: {
-                /** @description Chỉ số trang bắt đầu từ 0. */
+                /** @description Page index starting at 0. */
                 page?: number;
-                /** @description Số dòng lịch sử tối đa mỗi trang. */
+                /** @description Maximum history rows per page. */
                 size?: number;
             };
             header?: never;
             path: {
-                /** @description UUID của shipment. */
+                /** @description Shipment UUID. */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Lịch sử đã lưu và thông tin phân trang. */
+            /** @description Stored history and pagination details. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1478,7 +1478,7 @@ export interface operations {
                      *         {
                      *           "id": "00000000-0000-4000-8000-000000000041",
                      *           "status": "IN_TRANSIT",
-                     *           "description": "Carrier xác nhận đang vận chuyển",
+                     *           "description": "Carrier confirmed the parcel is in transit",
                      *           "source": "CARRIER_WEBHOOK",
                      *           "carrierEventId": "GHN:GHN-12345:switch_status:2026-11-11T10:00:00Z",
                      *           "changedBy": "00000000-0000-0000-0000-000000000000",
@@ -1513,7 +1513,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description UUID của shipment. */
+                /** @description Shipment UUID. */
                 id: string;
             };
             cookie?: never;
@@ -1523,14 +1523,14 @@ export interface operations {
                 /**
                  * @example {
                  *       "status": "IN_TRANSIT",
-                 *       "reason": "Đã đối chiếu carrier"
+                 *       "reason": "Checked with the carrier"
                  *     }
                  */
                 "application/json": components["schemas"]["UpdateShipmentStatusRequest"];
             };
         };
         responses: {
-            /** @description Shipment sau thay đổi hoặc kết quả no-op. */
+            /** @description The shipment after the change, or the no-op result. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1559,7 +1559,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description UUID của shipment. */
+                /** @description Shipment UUID. */
                 id: string;
             };
             cookie?: never;
@@ -1569,14 +1569,14 @@ export interface operations {
                 /**
                  * @example {
                  *       "status": "IN_TRANSIT",
-                 *       "reason": "Support xác nhận kiện hàng đang vận chuyển"
+                 *       "reason": "Support confirmed the parcel is in transit"
                  *     }
                  */
                 "application/json": components["schemas"]["OverrideShipmentStatusRequest"];
             };
         };
         responses: {
-            /** @description Shipment sau thay đổi hoặc kết quả no-op. */
+            /** @description The shipment after the change, or the no-op result. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1606,7 +1606,7 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Namespace carrier; GHN nhận callback OrderCode/Status/Type/Time.
+                 * @description Carrier namespace; GHN sends OrderCode/Status/Type/Time callbacks.
                  * @example ghn
                  */
                 carrier: string;
@@ -1619,7 +1619,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Callback đã xử lý, cùng trạng thái hoặc bản giao lại đã được nhận trước đó. */
+            /** @description Callback processed, same status, or a redelivery that was already received. */
             200: {
                 headers: {
                     [name: string]: unknown;

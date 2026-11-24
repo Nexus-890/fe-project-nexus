@@ -82,7 +82,7 @@ exports.createOperationsFixture = ({ ok, problem, list, bodyOf, randomUUID }) =>
       if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to || to - from > 366 * 86400000) { problem(res, 400, "Invalid statistics period", "SHIPMENT_INVALID_PERIOD"); return true; }
       list(res, [
         { carrier: "GHN", name: "Giao Hàng Nhanh", shipments: 12, delivered: 9, failed: 1, inProgress: 1, cancelled: 1, successRate: 0.9, averageDeliveryHours: 52.4, onTimeRate: 0.7778 },
-        { carrier: "FAKE", name: "Nhà vận chuyển giả lập", shipments: 0, delivered: 0, failed: 0, inProgress: 0, cancelled: 0, successRate: null, averageDeliveryHours: null, onTimeRate: null },
+        { carrier: "FAKE", name: "Simulated carrier", shipments: 0, delivered: 0, failed: 0, inProgress: 0, cancelled: 0, successRate: null, averageDeliveryHours: null, onTimeRate: null },
       ], url); return true;
     }
     if (path === "/v1/shipments") {

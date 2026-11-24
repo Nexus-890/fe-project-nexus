@@ -6,7 +6,7 @@ import { getCarrierPerformance } from "../service/supportOperationsService";
 import type { ServiceRequestOptions } from "../types/commonRequestType";
 
 const ghn = { carrier: "GHN", name: "Giao Hàng Nhanh", shipments: 5, delivered: 2, failed: 1, inProgress: 1, cancelled: 1, successRate: 0.6667, averageDeliveryHours: 36, onTimeRate: 0.5 };
-const idle = { carrier: "FAKE", name: "Nhà vận chuyển giả lập", shipments: 0, delivered: 0, failed: 0, inProgress: 0, cancelled: 0, successRate: null, averageDeliveryHours: null, onTimeRate: null };
+const idle = { carrier: "FAKE", name: "Simulated carrier", shipments: 0, delivered: 0, failed: 0, inProgress: 0, cancelled: 0, successRate: null, averageDeliveryHours: null, onTimeRate: null };
 const from = "2026-11-01T00:00:00.000+07:00", to = "2026-11-19T23:59:59.999+07:00";
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
 const fixture = (data: unknown) => {

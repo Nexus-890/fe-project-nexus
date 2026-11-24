@@ -272,7 +272,7 @@ const server = http.createServer(async (req, res) => {
       return problem(res, 400, "VALIDATION_FAILED", "All shipping fields are required.", invalid.map((field) => ({ field: `shippingAddress.${field}`, code: "VALIDATION_NOT_BLANK", detail: "This field is required." })));
     const ghnFee = options.nullShippingFee ? null : address.wardCode === "20309" ? 45000 : 30000;
     const shippingOptions = options.multiCarrier && ghnFee !== null ? [
-      { carrier: "FAKE", carrierName: "Nhà vận chuyển giả lập", fee: 22000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
+      { carrier: "FAKE", carrierName: "Simulated carrier", fee: 22000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
       { carrier: "GHN", carrierName: "Giao Hàng Nhanh", fee: ghnFee, estimatedDeliveryAt: "2026-11-21T10:00:00Z", recommended: false },
     ] : undefined;
     const selected = shippingOptions && (shippingOptions.find((option) => option.carrier === body.carrier) || shippingOptions[0]);

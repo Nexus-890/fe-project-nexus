@@ -190,7 +190,7 @@ test("preview rejects malformed amounts and totals that cannot be reconciled", a
 
 test("preview sends the chosen carrier, parses every shipping option and rejects options that do not reconcile", async () => {
   const options = [
-    { carrier: "FAKE", carrierName: "Nhà vận chuyển giả lập", fee: 30000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
+    { carrier: "FAKE", carrierName: "Simulated carrier", fee: 30000, estimatedDeliveryAt: "2026-11-24T10:00:00Z", recommended: true },
     { carrier: "GHN", carrierName: "Giao Hàng Nhanh", fee: 45000, estimatedDeliveryAt: "2026-11-21T10:00:00+07:00", recommended: false },
   ];
   let body: unknown = envelope({ ...preview, shippingOptions: options, selectedCarrier: "FAKE" });
@@ -208,7 +208,7 @@ test("preview sends the chosen carrier, parses every shipping option and rejects
     assert.equal((sent[0] as { carrier?: string }).carrier, "FAKE");
     assert.equal(result.selectedCarrier, "FAKE");
     assert.deepEqual(result.shippingOptions?.map((option) => [option.carrier, option.carrierName, option.fee, option.recommended]),
-      [["FAKE", "Nhà vận chuyển giả lập", "30000.00", true], ["GHN", "Giao Hàng Nhanh", "45000.00", false]]);
+      [["FAKE", "Simulated carrier", "30000.00", true], ["GHN", "Giao Hàng Nhanh", "45000.00", false]]);
     await getCheckoutPreview(destination, { context });
     assert.equal("carrier" in (sent[1] as object), false);
     body = envelope(preview);
