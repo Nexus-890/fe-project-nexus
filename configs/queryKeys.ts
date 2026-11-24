@@ -68,6 +68,10 @@ export const queryKeys = {
     manualPayoutCapabilities: (sessionId: number) => ["manual-payouts", sessionId, "capabilities"] as const,
     manualPayout: (sessionId: number, id: string) => ["manual-payouts", sessionId, "detail", id] as const,
   },
+  dashboard: {
+    orders: (sessionId: number, scope: string, days: number) => ["dashboard", sessionId, "orders", scope, days] as const,
+    queue: (sessionId: number, name: string) => ["dashboard", sessionId, "queue", name] as const,
+  },
   seller: {
     all: (sessionId: number) => ["seller", sessionId] as const,
     products: (sessionId: number, page: number) => ["seller", sessionId, "products", page] as const,

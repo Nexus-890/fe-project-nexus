@@ -525,6 +525,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/manage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize orders across sellers for the backoffice dashboard
+         * @description Requires ORDER.LIST and ADMIN or SUPPORT_STAFF. Summarizes every seller's orders unless sellerId is supplied. The window covers whole calendar days in Asia/Ho_Chi_Minh from today minus days-1 up to the end of today; from is inclusive and to exclusive. Orders are grouped by createdAt. statuses lists every order status, zeros included. daily has one entry per day in the window, zeros included. revenue sums totalAmount of orders whose status is PAID, SHIPPED, DELIVERED or COMPLETED; paidOrderCount counts the same orders. days outside 1 to 90 returns 400 COMMERCE_INVALID_ORDER_FILTER.
+         */
+        get: operations["getManagedOrderSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/sales/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize the current seller's orders for the seller dashboard
+         * @description Requires ORDER.LIST and SELLER. Summarizes only orders whose seller_id equals the validated JWT subject. The window covers whole calendar days in Asia/Ho_Chi_Minh from today minus days-1 up to the end of today; from is inclusive and to exclusive. Orders are grouped by createdAt. statuses lists every order status, zeros included. daily has one entry per day in the window, zeros included. revenue sums totalAmount of orders whose status is PAID, SHIPPED, DELIVERED or COMPLETED; paidOrderCount counts the same orders. days outside 1 to 90 returns 400 COMMERCE_INVALID_ORDER_FILTER.
+         */
+        get: operations["getSalesOrderSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/groups/{id}": {
         parameters: {
             query?: never;
@@ -1455,6 +1495,55 @@ export interface components {
             /** @default response success */
             message: string;
             data: components["schemas"]["Order"];
+        };
+        OrderSummaryEnvelope: {
+            /** @default 0 */
+            code: number;
+            /** @default response success */
+            message: string;
+            data: components["schemas"]["OrderSummary"];
+        };
+        OrderSummary: {
+            /**
+             * Format: date-time
+             * @description Inclusive start of the first day.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description Exclusive end of today.
+             */
+            to: string;
+            /**
+             * @description Zone used to cut days.
+             * @example Asia/Ho_Chi_Minh
+             */
+            timeZone: string;
+            /** Format: int64 */
+            orderCount: number;
+            /**
+             * Format: int64
+             * @description Orders in PAID, SHIPPED, DELIVERED or COMPLETED.
+             */
+            paidOrderCount: number;
+            /** @description Sum of totalAmount of the paid orders, in VND. */
+            revenue: number;
+            statuses: components["schemas"]["OrderSummaryStatusCount"][];
+            daily: components["schemas"]["OrderSummaryDay"][];
+        };
+        OrderSummaryStatusCount: {
+            status: components["schemas"]["OrderStatus"];
+            /** Format: int64 */
+            count: number;
+        };
+        OrderSummaryDay: {
+            /** Format: date */
+            date: string;
+            /** Format: int64 */
+            orderCount: number;
+            /** Format: int64 */
+            paidOrderCount: number;
+            revenue: number;
         };
         OrderListResponse: {
             /** @default 0 */
@@ -5761,6 +5850,323 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            /** @description INVALID_PARAMETER, COMMERCE_INVALID_ORDER_FILTER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "COMMERCE_INVALID_ORDER_FILTER";
+                    };
+                };
+            };
+            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description FORBIDDEN, COMMERCE_FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description RATE_LIMITED. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the gateway limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description GATEWAY_TIMEOUT. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getManagedOrderSummary: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional seller to summarize.
+                 * @example 68000000-0000-4000-8000-000000000003
+                 */
+                sellerId?: string;
+                /**
+                 * @description Number of calendar days in Asia/Ho_Chi_Minh ending today, from 1 to 90.
+                 * @example 30
+                 */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Order counts and revenue for the window. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderSummaryEnvelope"];
+                };
+            };
+            /** @description INVALID_PARAMETER, COMMERCE_INVALID_ORDER_FILTER. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 400;
+                        /** @enum {string} */
+                        code?: "INVALID_PARAMETER" | "COMMERCE_INVALID_ORDER_FILTER";
+                    };
+                };
+            };
+            /** @description UNAUTHENTICATED, COMMERCE_UNAUTHENTICATED. */
+            401: {
+                headers: {
+                    /** @description Bearer challenge for security failures; domain failures may omit it. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 401;
+                        /** @enum {string} */
+                        code?: "UNAUTHENTICATED" | "COMMERCE_UNAUTHENTICATED";
+                    };
+                };
+            };
+            /** @description FORBIDDEN, COMMERCE_FORBIDDEN. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 403;
+                        /** @enum {string} */
+                        code?: "FORBIDDEN" | "COMMERCE_FORBIDDEN";
+                    };
+                };
+            };
+            /** @description METHOD_NOT_ALLOWED. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 405;
+                        /** @enum {string} */
+                        code?: "METHOD_NOT_ALLOWED";
+                    };
+                };
+            };
+            /** @description NOT_ACCEPTABLE. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 406;
+                        /** @enum {string} */
+                        code?: "NOT_ACCEPTABLE";
+                    };
+                };
+            };
+            /** @description RATE_LIMITED. */
+            429: {
+                headers: {
+                    /** @description Present when supplied by the gateway limiter. */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 429;
+                        /** @enum {string} */
+                        code?: "RATE_LIMITED";
+                    };
+                };
+            };
+            /** @description INTERNAL_ERROR. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 500;
+                        /** @enum {string} */
+                        code?: "INTERNAL_ERROR";
+                    };
+                };
+            };
+            /** @description SERVICE_UNAVAILABLE. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 503;
+                        /** @enum {string} */
+                        code?: "SERVICE_UNAVAILABLE";
+                    };
+                };
+            };
+            /** @description GATEWAY_TIMEOUT. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        /** @enum {integer} */
+                        status?: 504;
+                        /** @enum {string} */
+                        code?: "GATEWAY_TIMEOUT";
+                    };
+                };
+            };
+        };
+    };
+    getSalesOrderSummary: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Number of calendar days in Asia/Ho_Chi_Minh ending today, from 1 to 90.
+                 * @example 30
+                 */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Order counts and revenue for the window. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderSummaryEnvelope"];
                 };
             };
             /** @description INVALID_PARAMETER, COMMERCE_INVALID_ORDER_FILTER. */
