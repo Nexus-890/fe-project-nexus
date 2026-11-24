@@ -229,7 +229,7 @@ for (const withHistory of [false, true]) {
 }
 
 test("shop profile and masked default bank release automatic payouts after verification", async ({ page, browser, request }) => {
-  await signIn(page, request, "SELLER", "/backoffice/payouts");
+  await signIn(page, request, "SELLER", "/backoffice/bank-accounts");
   await page.getByLabel("Company name", { exact: true }).fill("Chung Audio Shop");
   await page.getByLabel("Contact phone", { exact: true }).fill("0909876543");
   await page.getByRole("button", { name: "Save shop profile", exact: true }).click();
@@ -251,6 +251,8 @@ test("shop profile and masked default bank release automatic payouts after verif
   await request.post(`${api}/test/payouts/order-completed`, { data: completion });
   await page.reload();
   await expect(page.getByLabel("Company name", { exact: true })).toHaveValue("Chung Audio Shop");
+  await page.goto("/backoffice/payouts");
+  await expect(page.getByRole("button", { name: "Add bank account", exact: true })).toHaveCount(0);
   await expect(page.getByRole("table", { name: "Your payout history", exact: true })).toContainText("On hold");
   await screenshot(page, "seller-automatic-payout-on-hold");
   const context = await browser.newContext();
@@ -277,6 +279,7 @@ test("shop profile and masked default bank release automatic payouts after verif
     await expect(page.getByRole("button", { name: "Retry payout", exact: true })).toHaveCount(0);
     await screenshot(page, "seller-payout-detail-history");
     // Changing bank details resets verification but cannot change the sent payout snapshot.
+    await page.goto("/backoffice/bank-accounts");
     await page.getByRole("button", { name: "Edit bank account", exact: true }).last().click();
     await page.getByLabel("Account holder name", { exact: true }).fill("CHUNG AUDIO UPDATED");
     await page.getByLabel("Account number", { exact: true }).fill("000055558888");
