@@ -13,7 +13,7 @@ test("back-office access uses the flat JWT roles and never privileges or nested 
 
 test("role menu and direct-route guards agree for seller, admin, support and mixed roles", () => {
   assert.deepEqual(backofficeMenu(["SELLER"]).map((item) => item.label), ["Vouchers", "Products", "Auctions", "Sales", "Warehouse", "Bank accounts", "Payout history"]);
-  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Users", "Orders", "Payments", "Manual payouts", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
+  assert.deepEqual(backofficeMenu(["SUPPORT_STAFF"]).map((item) => item.label), ["Reputation", "Rating disputes", "Notification deliveries", "Users", "Orders", "Payments", "Manual payouts", "Refunds", "Shipments", "Auctions", "Event Logs", "System Health"]);
   assert.ok(backofficeMenu(["ADMIN"]).some((item) => item.href === "/backoffice/stock"));
   assert.equal(canAccessBackofficePath("/backoffice/stock", ["SELLER"]), false);
   assert.equal(canAccessBackofficePath("/backoffice/warehouse", ["SELLER"]), true);
@@ -110,13 +110,14 @@ test("role landing preserves allowed return destinations and replaces forbidden 
   assert.equal(resolveRoleLanding("https://outside.example", ["BUYER"]), "/");
 });
 
-test("Admin-only audit, moderation and delivery routes reject every role combination without ADMIN", () => {
+test("audit and seller applications need ADMIN while reputation, disputes and deliveries also open to Support", () => {
   const roles = ["BUYER", "SELLER", "ADMIN", "SUPPORT_STAFF"] as const;
   for (let mask = 0; mask < 16; mask++) {
     const selected = roles.filter((_role, index) => mask & 1 << index);
-    const allowed = selected.includes("ADMIN");
     const fallback = hasBackofficeAccess(selected) ? "/backoffice" : "/";
     for (const path of ["/backoffice/audit-logs", "/backoffice/seller-applications", "/backoffice/reputations", "/backoffice/rating-disputes", "/backoffice/notification-deliveries"]) {
+      const staffRead = !path.includes("audit-logs") && !path.includes("seller-applications");
+      const allowed = selected.includes("ADMIN") || staffRead && selected.includes("SUPPORT_STAFF");
       assert.equal(canAccessBackofficePath(path, selected), allowed, `${selected.join(",") || "anonymous"}: ${path}`);
       assert.equal(canAccessBackofficePath(`${path}/?view=admin`, selected), allowed);
       assert.equal(backofficeMenu(selected).some((item) => item.href === path), allowed);

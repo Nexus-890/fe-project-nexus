@@ -32,13 +32,14 @@ function DeliveryDetail({ id, close }: { id: string; close: () => void }) {
 
 function AdminNotificationDeliveriesPage() {
   const auth = useAuth();
-  const authorized = readBackofficeRoles(auth.accessToken).includes("ADMIN");
+  const roles = readBackofficeRoles(auth.accessToken);
+  const authorized = roles.includes("ADMIN") || roles.includes("SUPPORT_STAFF");
   const [filters, setFilters] = useState<NotificationDeliveryFilters>({ page: 0, size: 20 });
   const [filterError, setFilterError] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const deliveries = useApiQuery({ queryKey: queryKeys.notification.deliveries(auth.sessionId, filters), meta: { requiresAuth: true },
     service: (signal) => getNotificationDeliveries(filters, { context: auth.requestContext, signal }) }, { enabled: authorized });
-  if (!authorized) return <AdminEmptyState title="Administrator access required" description="Only administrators can inspect notification deliveries." />;
+  if (!authorized) return <AdminEmptyState title="Staff access required" description="Only administrators and support staff can inspect notification deliveries." />;
   return <section aria-label="Notification deliveries" className="min-w-0 space-y-6">
     <AdminPageHeader title="Notification deliveries" description="Inspect delivery status, retry schedules and individual attempts."><Button variant="outline" disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>Refresh deliveries</Button></AdminPageHeader>
     <form onSubmit={(event) => {

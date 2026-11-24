@@ -13,7 +13,8 @@ import { readBackofficeRoles } from "./backofficeAccess";
 function AdminRatingDisputesContent() {
   const auth = useAuth();
   const roles = readBackofficeRoles(auth.accessToken);
-  const allowed = roles.includes("ADMIN");
+  const canResolve = roles.includes("ADMIN");
+  const allowed = canResolve || roles.includes("SUPPORT_STAFF");
   const [status, setStatus] = useState("PENDING");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<RatingDispute | null>(null);
@@ -31,10 +32,10 @@ function AdminRatingDisputesContent() {
     mutation.mutate({ id: selected.id, body: { status: data.get("decision") === "APPROVED" ? "APPROVED" : "REJECTED", reason: String(data.get("reason") ?? "").trim() } });
   };
   if (!allowed) return <AdminEmptyState title="Rating dispute management is restricted" />;
-  return <div className="space-y-5"><AdminPageHeader title="Rating disputes" description="Review disputed ratings. Approved disputes remove the rating from reputation calculations." />
+  return <div className="space-y-5"><AdminPageHeader title="Rating disputes" description={canResolve ? "Review disputed ratings. Approved disputes remove the rating from reputation calculations." : "View disputed ratings and their decisions. Only administrators can resolve disputes."} />
     <label className="inline-grid gap-1 text-sm">Dispute status<select className={adminSelectClass} value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); setSelected(null); mutation.reset(); }}><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="">All statuses</option></select></label>
     {feedback && <p role="status" className="text-sm text-success">{feedback}</p>}
-    {selected && <form key={selected.id} onSubmit={submit} className="space-y-3 rounded-sm border border-border bg-muted p-4" aria-label="Resolve rating dispute">
+    {canResolve && selected && <form key={selected.id} onSubmit={submit} className="space-y-3 rounded-sm border border-border bg-muted p-4" aria-label="Resolve rating dispute">
       <h2 className="font-semibold">Review dispute</h2><p className="whitespace-pre-wrap break-words text-sm">{selected.reason}</p>
       <label className="grid gap-1 text-sm">Decision<select name="decision" className={adminSelectClass} disabled={mutation.isPending}><option value="REJECTED">Reject and keep rating</option><option value="APPROVED">Approve and hide rating</option></select></label>
       <label className="grid gap-1 text-sm">Decision reason<textarea name="reason" required maxLength={1000} rows={3} className={adminInputClass} disabled={mutation.isPending} /></label>
@@ -46,7 +47,7 @@ function AdminRatingDisputesContent() {
         <p className="whitespace-pre-wrap break-words text-muted-foreground">{row.ratingComment || "No rating comment"}</p><p className="whitespace-pre-wrap break-words"><strong>Dispute reason:</strong> {row.reason}</p>
         <p className="text-xs text-muted-foreground">Submitted <time dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleString()}</time></p>
         {row.resolutionReason && <p className="whitespace-pre-wrap break-words"><strong>Decision reason:</strong> {row.resolutionReason}</p>}
-        {row.status === "PENDING" && <Button variant="outline" disabled={mutation.isPending} onClick={() => { setSelected(row); mutation.reset(); setFeedback(""); }}>Review dispute<span className="sr-only"> {row.id}</span></Button>}
+        {canResolve && row.status === "PENDING" && <Button variant="outline" disabled={mutation.isPending} onClick={() => { setSelected(row); mutation.reset(); setFeedback(""); }}>Review dispute<span className="sr-only"> {row.id}</span></Button>}
       </li>)}</ul>}<AdminPagination page={rows.data.page} onPageChange={(number) => { setPage(number); setSelected(null); }} />
     </>}
   </div>;
