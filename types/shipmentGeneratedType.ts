@@ -830,7 +830,7 @@ export interface components {
                     /** @enum {integer} */
                     status?: 400;
                     /** @enum {string} */
-                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_INVALID_PERIOD";
+                    code?: "SHIPMENT_INVALID_REQUEST" | "SHIPMENT_VALIDATION_FAILED" | "SHIPMENT_INVALID_REQUEST_BODY" | "SHIPMENT_INVALID_PARAMETER" | "SHIPMENT_INVALID_ADDRESS" | "SHIPMENT_PICKUP_ADDRESS_CONFLICT" | "SHIPMENT_INVALID_PERIOD";
                 };
             };
         };

@@ -322,7 +322,7 @@ export interface paths {
         get: operations["getOwnWarehouse"];
         /**
          * Create or rename the seller's own warehouse
-         * @description Creates the caller's warehouse when it does not exist yet, then stores the name, address and pickup area. Code, status and owner are not request fields. A blank address is stored as null. With provinceCode and wardCode the address is the house number and street carriers collect from; without them orders ship from the platform pickup. The gateway requires a valid token; the service requires the SELLER role.
+         * @description Creates the caller's warehouse when it does not exist yet, then stores the name, address and pickup area. Code, status and owner are not request fields. A blank address is stored as null. With provinceCode and wardCode the address is the house number and street carriers collect from; without them orders ship from the platform pickup. A new or changed pickup is checked with the carrier through shipment-service before anything is saved: the ward must belong to the province and the carrier must accept the street for that ward. An unchanged pickup is not checked again. The gateway requires a valid token; the service requires the SELLER role.
          */
         put: operations["updateOwnWarehouse"];
         post?: never;
@@ -2576,7 +2576,35 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description INVENTORY_INVALID_PICKUP_ADDRESS. The detail says why: the carrier does not accept this house number and street for the selected ward, the ward does not belong to the province, or the carrier does not collect from the ward. Nothing is saved. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "urn:problem:domain-error",
+                     *       "title": "Unprocessable Entity",
+                     *       "status": 422,
+                     *       "detail": "The carrier does not accept this house number and street for the selected ward",
+                     *       "instance": "/api/v1/warehouses/me",
+                     *       "code": "INVENTORY_INVALID_PICKUP_ADDRESS"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             500: components["responses"]["InternalError"];
+            /** @description INVENTORY_PICKUP_CHECK_UNAVAILABLE. shipment-service or the carrier could not check the pickup; nothing is saved and the seller can retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getWarehouse: {
