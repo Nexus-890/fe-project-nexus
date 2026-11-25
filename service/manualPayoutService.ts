@@ -5,8 +5,8 @@ import type { ServiceRequestOptions } from "../types/commonRequestType";
 import { payoutStatuses } from "../types/payoutType";
 import { disputeStatuses, receiptStatuses } from "../types/payoutReceiptType";
 import {
-  evidenceContentTypes, manualAttemptStates, manualCapabilityActions, manualCaseKinds, manualPayoutActions, manualResolutionOutcomes, maxEvidenceBytes, maxEvidenceFiles,
-  type DisputeReviewInput, type ManualAttempt, type ManualCase, type ManualCommand, type ManualConfirmationInput, type ManualEvidence, type ManualHistoryEntry,
+  bankMatchOutcomes, evidenceContentTypes, manualAttemptStates, manualCapabilityActions, manualCaseKinds, manualPayoutActions, manualResolutionOutcomes, maxEvidenceBytes, maxEvidenceFiles,
+  type DisputeReviewInput, type ManualAttempt, type ManualBankMatch, type ManualCase, type ManualCommand, type ManualConfirmationInput, type ManualEvidence, type ManualHistoryEntry,
   type ManualPayout, type ManualPayoutAction, type ManualPayoutCapabilities, type ManualPayoutFilters, type ManualProblemInput, type ManualRecipient, type ManualResolutionCommand,
 } from "../types/manualPayoutType";
 
@@ -40,6 +40,13 @@ const parseCapabilities = (value: unknown): ManualPayoutCapabilities => {
     canExecute: actions.includes("EXECUTE"), canReconcile: actions.includes("RECONCILE") };
 };
 
+const parseBankMatch = (value: unknown): ManualBankMatch => {
+  if (!isRecord(value) || !noSensitive(value) || value.provider !== "SEPAY" || !text(value.transactionId, 64) ||
+    !nullable(value.amount, (entry): entry is string => typeof entry === "string" && /^\d{1,17}\.\d{2}$/.test(entry)) || !nullable(value.transferredAt, instant) ||
+    !oneOf(bankMatchOutcomes, value.outcome) || !Number.isSafeInteger(value.transfers) || Number(value.transfers) < 1)
+    return fail("Invalid bank transfer match");
+  return { provider: "SEPAY", transactionId: value.transactionId, amount: value.amount, transferredAt: value.transferredAt, outcome: value.outcome, transfers: Number(value.transfers) };
+};
 const parseAttempt = (value: unknown): ManualAttempt => {
   if (!isRecord(value) || !noSensitive(value) || !isUuid(value.id) || !Number.isSafeInteger(value.attemptNo) || Number(value.attemptNo) < 1 || !oneOf(manualAttemptStates, value.state) ||
     !version(value.version) || !isUuid(value.claimedBy) || !instant(value.claimExpiresAt) || !nullable(value.qrExpiresAt, instant) || !nullable(value.reference, (entry): entry is string => text(entry, 120)) ||
@@ -48,7 +55,8 @@ const parseAttempt = (value: unknown): ManualAttempt => {
   if (value.state === "QR_ISSUED" && (value.reference === null || value.qrExpiresAt === null)) fail("An issued QR needs a fixed reference and deadline");
   if (value.receiptStatus === "CONFIRMED" && value.sellerConfirmedAt === null) fail("A confirmed receipt needs its confirmation time");
   return { id: value.id, attemptNo: Number(value.attemptNo), state: value.state, version: Number(value.version), claimedBy: value.claimedBy, claimExpiresAt: value.claimExpiresAt,
-    qrExpiresAt: value.qrExpiresAt, reference: value.reference, receiptStatus: value.receiptStatus, receiptVersion: Number(value.receiptVersion), sellerConfirmedAt: value.sellerConfirmedAt };
+    qrExpiresAt: value.qrExpiresAt, reference: value.reference, receiptStatus: value.receiptStatus, receiptVersion: Number(value.receiptVersion), sellerConfirmedAt: value.sellerConfirmedAt,
+    ...(value.bankMatch === undefined || value.bankMatch === null ? {} : { bankMatch: parseBankMatch(value.bankMatch) }) };
 };
 const parseEvidence = (value: unknown): ManualEvidence => {
   if (!isRecord(value) || !noSensitive(value) || !isUuid(value.id) || !oneOf(evidenceContentTypes, value.contentType) || !Number.isSafeInteger(value.size) ||
@@ -79,7 +87,7 @@ const attemptActions: readonly ManualPayoutAction[] = ["ISSUE_QR", "READ_QR", "R
 
 export const parseManualPayout = (value: unknown): ManualPayout => {
   if (!isRecord(value) || !noSensitive(value) || !isUuid(value.id) || !isUuid(value.orderId) || !isUuid(value.sellerId) || !oneOf(payoutStatuses, value.status) || value.executionMode !== "MANUAL" ||
-    !(value.confirmationSource === null || value.confirmationSource === "MANUAL_STAFF_CONFIRMED") || typeof value.currency !== "string" || !/^[A-Z]{3}$/.test(value.currency) || !version(value.version) ||
+    !(value.confirmationSource === null || value.confirmationSource === "MANUAL_STAFF_CONFIRMED" || value.confirmationSource === "BANK_VERIFIED") || typeof value.currency !== "string" || !/^[A-Z]{3}$/.test(value.currency) || !version(value.version) ||
     !nullable(value.blockedReason, (entry): entry is string => text(entry, 300)) || !Array.isArray(value.allowedActions) || !instant(value.serverTime) || !instant(value.createdAt) ||
     !instant(value.updatedAt) || !Array.isArray(value.evidence) || !Array.isArray(value.cases) || !Array.isArray(value.history))
     return fail("Invalid manual payout");
@@ -100,7 +108,7 @@ export const parseManualPayout = (value: unknown): ManualPayout => {
   if (has("RETRY") && !["FAILED", "RETURNED"].includes(value.status)) fail("Only a failed or returned payout can be retried");
   if (has("RESOLVE") && !openCases.length) fail("Reconciliation needs an open case");
   if (has("REVIEW_DISPUTE") && !openSellerDispute) fail("Dispute review needs an open seller case");
-  if (value.status === "SUCCEEDED" && value.confirmationSource !== "MANUAL_STAFF_CONFIRMED") fail("Manual success must stay staff-confirmed");
+  if (value.status === "SUCCEEDED" && value.confirmationSource === null) fail("Manual success needs a staff or bank confirmation");
   return { id: value.id, orderId: value.orderId, sellerId: value.sellerId, status: value.status, executionMode: "MANUAL", confirmationSource: value.confirmationSource,
     orderAmount, shippingFee, platformFee, netAmount, currency: value.currency, version: Number(value.version), blockedReason: value.blockedReason, allowedActions,
     serverTime: value.serverTime, createdAt: value.createdAt, updatedAt: value.updatedAt, currentAttempt, evidence, cases, history, recipient: parseRecipient(value.recipient),

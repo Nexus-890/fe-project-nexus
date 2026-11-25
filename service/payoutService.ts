@@ -43,7 +43,7 @@ export const parseSellerPayout = (value: unknown): SellerPayout => {
     throw createInvalidResponseError("Payout amount breakdown does not balance");
   const executionMode = value.executionMode === undefined ? "AUTO" : value.executionMode;
   const confirmationSource = value.confirmationSource ?? null;
-  if (executionMode !== "AUTO" && executionMode !== "MANUAL" || ![null, "MANUAL_STAFF_CONFIRMED", "PROVIDER_CONFIRMED", "SIMULATED"].includes(confirmationSource as string | null))
+  if (executionMode !== "AUTO" && executionMode !== "MANUAL" || ![null, "MANUAL_STAFF_CONFIRMED", "BANK_VERIFIED", "PROVIDER_CONFIRMED", "SIMULATED"].includes(confirmationSource as string | null))
     throw createInvalidResponseError("Invalid payout execution mode");
   if (["SUCCEEDED", "RETURNED"].includes(value.status) &&
     (Number(value.attemptCount) < 1 || value.recipientAccountLast4 === null || executionMode === "AUTO" && !text(value.providerReference, 200)))

@@ -32,6 +32,8 @@ export type ManualPayoutCapabilities = {
 };
 export type ManualRecipient = NonNullable<Schemas["ManualPayoutView"]["recipient"]>;
 export type ManualEvidence = Schemas["ManualPayoutEvidenceView"];
+export const bankMatchOutcomes = ["CONFIRMED", "VERIFIED", "RECORDED", "REVIEW_REQUIRED"] as const satisfies readonly Schemas["ManualPayoutBankMatchView"]["outcome"][];
+export type ManualBankMatch = Schemas["ManualPayoutBankMatchView"];
 export type ManualAttempt = Omit<NonNullable<Schemas["ManualPayoutAttemptView"]>, "state" | "receiptStatus"> & { state: ManualAttemptState; receiptStatus: ReceiptStatus };
 export type ManualCase = Omit<Schemas["ManualPayoutCaseView"], "status" | "explanation"> & { status: DisputeStatus; explanation: string };
 export type ManualHistoryEntry = Schemas["ManualPayoutHistoryView"];
@@ -41,7 +43,7 @@ export type ManualPayout = {
   sellerId: string;
   status: PayoutStatus;
   executionMode: "MANUAL";
-  confirmationSource: "MANUAL_STAFF_CONFIRMED" | null;
+  confirmationSource: "MANUAL_STAFF_CONFIRMED" | "BANK_VERIFIED" | null;
   orderAmount: string;
   shippingFee: string;
   platformFee: string;

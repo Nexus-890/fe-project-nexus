@@ -99,7 +99,7 @@ test("claim race, QR, evidence, staff confirmation, seller dispute, Admin correc
   await adminPanel.getByRole("button", { name: "Record completed transfer", exact: true }).click();
   const confirm = admin.getByRole("dialog", { name: "Record completed transfer" });
   await confirm.getByLabel("Platform source account").selectOption({ label: "Nexus payout account VCB 8899" });
-  await confirm.getByLabel(/Transferred amount/).fill("95.000");
+  await expect(confirm.getByLabel(/Transferred amount/)).toHaveValue("95.000");
   await confirm.getByLabel("Bank transfer reference").fill("FT26322001");
   await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(0));
   await confirm.getByRole("checkbox", { name: /^Evidence 1/ }).check();
@@ -246,7 +246,7 @@ test("Admin closes a post-success staff exception as sent without a second payme
   await panel.getByRole("button", { name: "Record completed transfer", exact: true }).click();
   const confirm = support.getByRole("dialog", { name: "Record completed transfer" });
   await confirm.getByLabel("Platform source account").selectOption({ label: "Nexus payout account VCB 8899" });
-  await confirm.getByLabel(/Transferred amount/).fill("95.000");
+  await expect(confirm.getByLabel(/Transferred amount/)).toHaveValue("95.000");
   await confirm.getByLabel("Bank transfer reference").fill("FT26322002");
   await confirm.getByLabel(/Transferred at/).fill(vietnamMinutesAgo(0));
   await confirm.getByRole("checkbox", { name: /^Evidence 1/ }).check();

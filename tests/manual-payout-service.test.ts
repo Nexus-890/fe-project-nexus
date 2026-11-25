@@ -80,6 +80,13 @@ test("manual view keeps exact decimal strings and refuses unsafe or inconsistent
   const succeeded = { ...issued, status: "SUCCEEDED", confirmationSource: "MANUAL_STAFF_CONFIRMED", allowedActions: [], currentAttempt: { ...issued.currentAttempt, state: "SUCCEEDED", receiptStatus: "AWAITING_CONFIRMATION" } };
   assert.equal(parseManualPayout(succeeded).confirmationSource, "MANUAL_STAFF_CONFIRMED");
   assert.throws(() => parseManualPayout({ ...succeeded, confirmationSource: null }), invalid);
+  const bankMatch = { provider: "SEPAY", transactionId: "92704", amount: "95000.00", transferredAt: at, outcome: "CONFIRMED", transfers: 1 };
+  const verified = parseManualPayout({ ...succeeded, confirmationSource: "BANK_VERIFIED", currentAttempt: { ...succeeded.currentAttempt, bankMatch } });
+  assert.equal(verified.confirmationSource, "BANK_VERIFIED"); assert.deepEqual(verified.currentAttempt?.bankMatch, bankMatch);
+  assert.equal(parseManualPayout(succeeded).currentAttempt?.bankMatch, undefined);
+  for (const bad of [{ provider: "VCB" }, { amount: 95000 }, { outcome: "UNMATCHED" }, { transfers: 0 }, { accountNumber: "0000000002" }])
+    assert.throws(() => parseManualPayout({ ...succeeded, currentAttempt: { ...succeeded.currentAttempt, bankMatch: { ...bankMatch, ...bad } } }), invalid);
+  assert.throws(() => parseManualPayout({ ...succeeded, confirmationSource: "PROVIDER_CONFIRMED" }), invalid);
   const step = { id: evidenceId, event: "MANUAL_CONFIRMED", attemptId, caseId: null, actorId: staffId, actorRole: "SUPPORT_STAFF", reason: null, occurredAt: at };
   assert.equal(parseManualPayout({ ...succeeded, history: [step] }).history[0].event, "MANUAL_CONFIRMED");
   assert.deepEqual(parseManualPayout({ ...succeeded, history: [{ ...step, id: caseId, occurredAt: "2026-11-18T02:00:00Z" }, step] }).history.map((entry) => entry.id), [caseId, evidenceId]);

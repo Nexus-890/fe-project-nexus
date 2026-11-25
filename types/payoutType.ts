@@ -24,7 +24,7 @@ export type SellerPayout = {
   createdAt: string;
   simulated: boolean;
   executionMode: "AUTO" | "MANUAL";
-  confirmationSource: "MANUAL_STAFF_CONFIRMED" | "PROVIDER_CONFIRMED" | "SIMULATED" | null;
+  confirmationSource: "MANUAL_STAFF_CONFIRMED" | "BANK_VERIFIED" | "PROVIDER_CONFIRMED" | "SIMULATED" | null;
   manual: SellerManualReceipt | null;
 };
 export type PayoutHistoryEntry = {

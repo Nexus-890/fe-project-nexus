@@ -11,7 +11,7 @@ export interface paths {
         put?: never;
         /**
          * Confirm a payable checkout from a verified SePay callback
-         * @description Public at the gateway and payment service; no bearer token is required. Before parsing JSON or querying payment_db, verifies HMAC-SHA256 over the ASCII timestamp, one dot byte and the original request body bytes. Missing, malformed, stale or invalid signature/timestamp headers return 401. The absolute timestamp skew must be at most 300 seconds. A nonempty normalized code takes precedence over content, even if that code has no matching session. Otherwise content is normalized and looked up exactly first; only if that fails is one configured leading bank prefix (for example SEVQR) removed for another exact lookup. Normalization trims, uppercases using Locale.ROOT and removes Unicode whitespace. The remaining memo must be 1-32 uppercase ASCII letters/digits for an exact payment_sessions.memo_code lookup. There is no arbitrary substring matching. Missing, invalid or unknown memos are accepted with one WARN naming the normalized memo. Unmatched memos return 200 without financial effects. Outgoing transfers are acknowledged without funding a checkout. Matched incoming transfers require a positive provider transaction id and a nonnegative transferAmount within numeric(19,2) bounds. The provider id is stored as txnReference and globally deduplicated by a durable sepay:{id} identity. A duplicate returns 200 and creates no further transaction or event, including concurrent deliveries. When the amount equals the still-payable session total and the complete instruction plan is payable, one transaction atomically stores a NORMAL/SUCCESS receipt, marks the session and instructions PAID, links funded_transaction_id, writes one CheckoutPaymentConfirmed and applies pending paid-order cancellation refunds. Otherwise a valid incoming receipt is UNRECONCILED with a WARN and no CheckoutPaymentConfirmed. The payment outbox relay keys CheckoutPaymentConfirmed by orderGroupId while retaining sessionId as the envelope aggregate. Commerce validates the complete plan and commits group/order PAID, history and one OrderPaid per eligible order asynchronously. Neither service changes inventory in this flow. HTTP 200 acknowledges receipt; it does not await commerce processing. The native SePay acknowledgement is exempt from ApiResponse using @ProtocolResponse.
+         * @description Public at the gateway and payment service; no bearer token is required. Before parsing JSON or querying payment_db, verifies HMAC-SHA256 over the ASCII timestamp, one dot byte and the original request body bytes. Missing, malformed, stale or invalid signature/timestamp headers return 401. The absolute timestamp skew must be at most 300 seconds. A nonempty normalized code takes precedence over content, even if that code has no matching session. Otherwise content is normalized and looked up exactly first; only if that fails is one configured leading bank prefix (for example SEVQR) removed for another exact lookup. Normalization trims, uppercases using Locale.ROOT and removes Unicode whitespace. The remaining memo must be 1-32 uppercase ASCII letters/digits for an exact payment_sessions.memo_code lookup. There is no arbitrary substring matching. Missing, invalid or unknown memos are accepted with one WARN naming the normalized memo. Unmatched memos return 200 without financial effects. Outgoing transfers never fund a checkout; they reconcile manual payouts instead. An outgoing transfer from the payout source account whose code, content or description carries an attempt reference (NXP plus 20 hex, any case) is applied once per SePay id: an exact-amount transfer inside the QR window settles a QR_ISSUED attempt with confirmationSource BANK_VERIFIED, a staff-confirmed attempt is marked bank-verified, and a wrong amount, late, early or repeated transfer moves the attempt to UNKNOWN or opens a STAFF_EXCEPTION case. Every outgoing transfer is recorded with its outcome. Matched incoming transfers require a positive provider transaction id and a nonnegative transferAmount within numeric(19,2) bounds. The provider id is stored as txnReference and globally deduplicated by a durable sepay:{id} identity. A duplicate returns 200 and creates no further transaction or event, including concurrent deliveries. When the amount equals the still-payable session total and the complete instruction plan is payable, one transaction atomically stores a NORMAL/SUCCESS receipt, marks the session and instructions PAID, links funded_transaction_id, writes one CheckoutPaymentConfirmed and applies pending paid-order cancellation refunds. Otherwise a valid incoming receipt is UNRECONCILED with a WARN and no CheckoutPaymentConfirmed. The payment outbox relay keys CheckoutPaymentConfirmed by orderGroupId while retaining sessionId as the envelope aggregate. Commerce validates the complete plan and commits group/order PAID, history and one OrderPaid per eligible order asynchronously. Neither service changes inventory in this flow. HTTP 200 acknowledges receipt; it does not await commerce processing. The native SePay acknowledgement is exempt from ApiResponse using @ProtocolResponse.
          */
         post: operations["receiveSepayWebhook"];
         delete?: never;
@@ -537,7 +537,7 @@ export interface paths {
         put?: never;
         /**
          * Record an external transfer attestation
-         * @description Owning executor with valid QR_ISSUED attempt only. Requires exact frozen amount, configured source account, bank reference/time and bound proof. Atomically records one PAYOUT, history and outbox event, SUCCEEDED and AWAITING_CONFIRMATION. Confirmation source is MANUAL_STAFF_CONFIRMED, never BANK_VERIFIED. Bank-reference uniqueness is scoped by source account, bank business date and bank reference. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
+         * @description Owning executor with valid QR_ISSUED attempt only. Requires exact frozen amount, configured source account, bank reference/time and bound proof. Atomically records one PAYOUT, history and outbox event, SUCCEEDED and AWAITING_CONFIRMATION. Confirmation source is MANUAL_STAFF_CONFIRMED. BANK_VERIFIED is set only by SePay outgoing-transfer reconciliation, which needs no proof upload. Bank-reference uniqueness is scoped by source account, bank business date and bank reference. Requires a UUID Idempotency-Key and the relevant expected version. Exact replay returns 200 with the original result and creates no duplicate financial movement; changed context conflicts. GET never performs this operation.
          */
         post: operations["confirmManualPayoutTransfer"];
         delete?: never;
@@ -962,7 +962,7 @@ export interface components {
             updatedAt: string;
             /** @enum {string} */
             executionMode: "AUTO" | "MANUAL";
-            /** @description MANUAL_STAFF_CONFIRMED records staff attestation, not bank credit. */
+            /** @description MANUAL_STAFF_CONFIRMED records staff attestation, not bank credit. BANK_VERIFIED means the SePay outgoing transaction of the payout source account matched the attempt reference and amount. */
             confirmationSource: string | null;
             /** @description Sanitized current manual attempt receipt/dispute actions; null for AUTO payouts. */
             manual?: {
@@ -987,7 +987,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            event: "CREATED" | "HELD" | "RELEASED" | "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "RECONCILED" | "RETRIED" | "RETURNED" | "MANUAL_CLAIMED" | "QR_ISSUED" | "CLAIM_RELEASED" | "MANUAL_CONFIRMED" | "MANUAL_PROBLEM" | "MANUAL_RESOLVED" | "RECEIPT_CONFIRMED" | "RECEIPT_DISPUTED" | "DISPUTE_REVIEWED" | "CONFIRMATION_CORRECTED" | "READINESS_CHECKED" | "EVIDENCE_UPLOADED";
+            event: "CREATED" | "HELD" | "RELEASED" | "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "RECONCILED" | "RETRIED" | "RETURNED" | "MANUAL_CLAIMED" | "QR_ISSUED" | "CLAIM_RELEASED" | "MANUAL_CONFIRMED" | "MANUAL_PROBLEM" | "MANUAL_RESOLVED" | "RECEIPT_CONFIRMED" | "RECEIPT_DISPUTED" | "DISPUTE_REVIEWED" | "CONFIRMATION_CORRECTED" | "READINESS_CHECKED" | "EVIDENCE_UPLOADED" | "BANK_MATCHED" | "BANK_MISMATCH";
             /** Format: int64 */
             eventSeq: number;
             /** @enum {string|null} */
@@ -1081,7 +1081,21 @@ export interface components {
             receiptVersion: number;
             /** Format: date-time */
             sellerConfirmedAt: string | null;
+            bankMatch?: components["schemas"]["ManualPayoutBankMatchView"];
         } | null;
+        /** @description First SePay outgoing transfer matched to this attempt. Staff detail only; absent when none matched and in queue rows and seller projections. */
+        ManualPayoutBankMatchView: {
+            /** @enum {string} */
+            provider: "SEPAY";
+            transactionId: string;
+            amount: string | null;
+            /** Format: date-time */
+            transferredAt: string | null;
+            /** @enum {string} */
+            outcome: "CONFIRMED" | "VERIFIED" | "RECORDED" | "REVIEW_REQUIRED";
+            /** @description Matched transfers for the attempt; more than one means a possible double payment. */
+            transfers: number;
+        };
         /** @description Sanitized private-file metadata. No public URL, signed URL, storage object key, bank account or secret is returned. */
         ManualPayoutEvidenceView: {
             /** Format: uuid */
@@ -1134,7 +1148,7 @@ export interface components {
             /** @enum {string} */
             executionMode: "MANUAL";
             /** @enum {string|null} */
-            confirmationSource: "MANUAL_STAFF_CONFIRMED" | null;
+            confirmationSource: "MANUAL_STAFF_CONFIRMED" | "BANK_VERIFIED" | null;
             /**
              * @description Exact fixed-two-decimal string. Execution requires a positive whole-VND amount within the configured supported limit; never rounded.
              * @example 95000.00
