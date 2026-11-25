@@ -314,8 +314,13 @@ test("seller sets up their one warehouse, then renames it, and staff cannot open
   const ward = page.getByLabel("Ward or commune", { exact: true });
   await expect(ward.locator("option").nth(1)).toBeAttached();
   await ward.selectOption({ index: 1 });
+  const wardName = (await ward.locator("option:checked").textContent())?.trim();
+  const provinceName = (await province.locator("option:checked").textContent())?.trim();
+  const fullAddress = `12 Nguyen Thi Thap, ${wardName}, ${provinceName}`;
+  await expect(page.getByTestId("warehouse-pickup-preview")).toHaveText(`Carriers pick up at: ${fullAddress}`);
   await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
   await expect(page.getByText("From this warehouse", { exact: true })).toBeVisible();
+  await expect(page.getByText(fullAddress, { exact: true })).toBeVisible();
   await screenshot(page, "seller-warehouse");
   const picked = (await (await request.get(`${api}/test/own-warehouses`)).json()).data[ids.SELLER];
   expect(picked.provinceCode).toMatch(/^[1-9][0-9]*$/);
@@ -326,6 +331,7 @@ test("seller sets up their one warehouse, then renames it, and staff cannot open
   await expect(page.getByLabel("Ward or commune", { exact: true })).toHaveValue(picked.wardCode);
   await page.getByLabel("Warehouse name", { exact: true }).fill("Thu Duc warehouse");
   await page.getByLabel("Province or city", { exact: true }).selectOption("");
+  await expect(page.getByTestId("warehouse-pickup-preview")).toHaveCount(0);
   await page.getByLabel("House number and street", { exact: true }).fill(" ");
   await page.getByRole("button", { name: "Save warehouse", exact: true }).click();
   await expect(page.getByText("Thu Duc warehouse", { exact: true })).toBeVisible();

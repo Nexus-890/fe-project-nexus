@@ -12,6 +12,16 @@ import type { OwnWarehouseInput, Warehouse } from "../types/adminCatalogType";
 
 type SaveOperation = { body: OwnWarehouseInput; sessionId: number; controller: AbortController };
 
+function usePickupAddress(address: string | null | undefined, provinceCode: string | null | undefined, wardCode: string | null | undefined) {
+  const provinces = useApiQuery({ queryKey: queryKeys.shipping.provinces(), service: (signal) => getPublicProvinces({ signal }) }, { staleTime: Infinity });
+  const wards = useApiQuery({ queryKey: queryKeys.shipping.wards(provinceCode ?? ""), service: (signal) => getPublicWards(provinceCode ?? "", { signal }) },
+    { enabled: Boolean(provinceCode), staleTime: Infinity });
+  const line = address?.trim();
+  const provinceName = provinces.data?.find((province) => province.code === provinceCode)?.name;
+  const wardName = wards.data?.find((ward) => ward.code === wardCode)?.name;
+  return { provinces, wards, full: line && wardName && provinceName ? `${line}, ${wardName}, ${provinceName}` : null };
+}
+
 function OwnWarehouseForm({ warehouse }: { warehouse: Warehouse | null }) {
   const auth = useAuth();
   const [name, setName] = useState(warehouse?.name ?? "");
@@ -19,9 +29,7 @@ function OwnWarehouseForm({ warehouse }: { warehouse: Warehouse | null }) {
   const [provinceCode, setProvinceCode] = useState(warehouse?.provinceCode ?? "");
   const [wardCode, setWardCode] = useState(warehouse?.wardCode ?? "");
   const [saved, setSaved] = useState(false);
-  const provinces = useApiQuery({ queryKey: queryKeys.shipping.provinces(), service: (signal) => getPublicProvinces({ signal }) }, { staleTime: Infinity });
-  const wards = useApiQuery({ queryKey: queryKeys.shipping.wards(provinceCode), service: (signal) => getPublicWards(provinceCode, { signal }) },
-    { enabled: Boolean(provinceCode), staleTime: Infinity });
+  const { provinces, wards, full: pickupAddress } = usePickupAddress(address, provinceCode, wardCode);
   const pickupStarted = Boolean(provinceCode || wardCode);
   const pickupIncomplete = pickupStarted && (!provinceCode || !wardCode || !address.trim());
   const pending = useRef<AbortController | null>(null);
@@ -57,6 +65,8 @@ function OwnWarehouseForm({ warehouse }: { warehouse: Warehouse | null }) {
           </div>
           <input aria-label="House number and street" required={pickupStarted} maxLength={pickupStarted ? 255 : 500} value={address} onChange={(event) => setAddress(event.target.value)}
             autoComplete="address-line1" placeholder="House number and street" aria-describedby="warehouse-pickup-help" className={sellerInput} />
+          {pickupAddress && <p data-testid="warehouse-pickup-preview" aria-live="polite" className="break-words rounded-sm bg-muted px-3 py-2.5 text-sm">
+            <span className="text-muted-foreground">Carriers pick up at: </span>{pickupAddress}</p>}
           {pickupStarted && pickupIncomplete && <p className="text-xs text-danger">Choose a province, a ward and enter the house number and street, or clear the province to ship from the platform pickup.</p>}
         </fieldset>
         <button type="submit" disabled={pickupIncomplete} className={sellerPrimary}>{mutation.isPending ? "Saving warehouse…" : "Save warehouse"}</button>
@@ -65,6 +75,19 @@ function OwnWarehouseForm({ warehouse }: { warehouse: Warehouse | null }) {
       {saved && <p role="status" className="text-sm text-success">Warehouse saved.</p>}
     </form>
   </SellerPanel>;
+}
+
+function WarehouseSummary({ warehouse }: { warehouse: Warehouse }) {
+  const { full } = usePickupAddress(warehouse.address, warehouse.provinceCode, warehouse.wardCode);
+  const fromWarehouse = Boolean(warehouse.provinceCode && warehouse.wardCode);
+  return <dl className="space-y-4 text-sm">
+    <div className="flex items-center gap-2"><WarehouseIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="font-medium">{warehouse.name}</span></div>
+    <div><dt className="text-xs text-muted-foreground">Code</dt><dd className="mt-1 break-all font-mono text-xs">{warehouse.code}</dd></div>
+    <div><dt className="text-xs text-muted-foreground">Status</dt><dd className={`mt-1 ${warehouse.status === "ACTIVE" ? "text-success" : "text-muted-foreground"}`}>{warehouse.status}</dd></div>
+    <div><dt className="text-xs text-muted-foreground">Address</dt><dd className="mt-1 break-words">{(fromWarehouse && full) || warehouse.address || "—"}</dd></div>
+    <div><dt className="text-xs text-muted-foreground">Carrier pickup</dt><dd className="mt-1 break-words">{fromWarehouse ? "From this warehouse" : "Platform pickup address"}</dd></div>
+    {warehouse.status !== "ACTIVE" && <p role="status" className="text-xs text-muted-foreground">An administrator has paused this warehouse, so new stock cannot be received until it is Active again.</p>}
+  </dl>;
 }
 
 function SellerWarehousePage() {
@@ -76,14 +99,7 @@ function SellerWarehousePage() {
     <SellerHeading title="Warehouse" description="Every seller has one warehouse. Stock you add to your SKUs is received here and orders reserve from it." />
     {query.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading warehouse…</p> : query.error ? <SellerError error={query.error} retry={() => void query.refetch()} /> : <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)]">
       <OwnWarehouseForm warehouse={warehouse} />
-      <SellerPanel title="Summary">{warehouse ? <dl className="space-y-4 text-sm">
-        <div className="flex items-center gap-2"><WarehouseIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="font-medium">{warehouse.name}</span></div>
-        <div><dt className="text-xs text-muted-foreground">Code</dt><dd className="mt-1 break-all font-mono text-xs">{warehouse.code}</dd></div>
-        <div><dt className="text-xs text-muted-foreground">Status</dt><dd className={`mt-1 ${warehouse.status === "ACTIVE" ? "text-success" : "text-muted-foreground"}`}>{warehouse.status}</dd></div>
-        <div><dt className="text-xs text-muted-foreground">Address</dt><dd className="mt-1 break-words">{warehouse.address || "—"}</dd></div>
-        <div><dt className="text-xs text-muted-foreground">Carrier pickup</dt><dd className="mt-1 break-words">{warehouse.provinceCode && warehouse.wardCode ? "From this warehouse" : "Platform pickup address"}</dd></div>
-        {warehouse.status !== "ACTIVE" && <p role="status" className="text-xs text-muted-foreground">An administrator has paused this warehouse, so new stock cannot be received until it is Active again.</p>}
-      </dl> : <p role="status" className="text-sm text-muted-foreground">No warehouse yet. Save its name here, or add stock to a SKU and it is created for you.</p>}</SellerPanel>
+      <SellerPanel title="Summary">{warehouse ? <WarehouseSummary warehouse={warehouse} /> : <p role="status" className="text-sm text-muted-foreground">No warehouse yet. Save its name here, or add stock to a SKU and it is created for you.</p>}</SellerPanel>
     </div>}
   </>;
 }
