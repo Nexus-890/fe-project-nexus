@@ -60,6 +60,7 @@ export type ManualPayout = {
   cases: ManualCase[];
   history: ManualHistoryEntry[];
   recipient: ManualRecipient | null;
+  sellerDefaultRecipient: ManualRecipient | null;
   openCases: ManualCase[];
   openSellerDispute: ManualCase | null;
   needsReview: boolean;

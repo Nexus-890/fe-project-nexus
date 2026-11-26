@@ -28,7 +28,7 @@ const publicProduct = (product) => withPrice({ ...product, skus: product.skus.ma
 const ownWarehouse = (sellerId) => ownWarehouses[sellerId] ||= { id: randomUUID(), code: `SELLER-${sellerId.replaceAll("-", "").toUpperCase()}`, name: "Seller warehouse", address: null, status: "ACTIVE", sellerId, provinceCode: null, wardCode: null };
 const getCart = (id) => carts[id] ||= { id: randomUUID(), userId: id, status: "ACTIVE", items: [] };
 const fixtureOptions = { ok, problem, list, bodyOf, randomUUID, seller, origin, findProduct: (id) => products.find((product) => product.id === id), getOfferAuctionStatus: () => offerFixture.auctionStatus,
-  getBankAccounts: () => sellerAccountsFixture.accounts, verifyBank: (sellerId) => sellerAccountsFixture.verifyDefault(sellerId), onVerified: (account) => payoutFixture.releaseHeld(account) };
+  getBankAccounts: () => sellerAccountsFixture.accounts, verifyBank: (sellerId) => sellerAccountsFixture.verifyDefault(sellerId), switchBank: (sellerId, accountLast4) => sellerAccountsFixture.switchDefault(sellerId, accountLast4), onVerified: (account) => payoutFixture.releaseHeld(account) };
 const auctionFixture = require("./auctions.js").createAuctionFixture(fixtureOptions);
 const offerFixture = require("./offers.js").createOfferFixture(fixtureOptions);
 const sellerAccountsFixture = require("./sellerAccounts.js").createSellerAccountsFixture(fixtureOptions);

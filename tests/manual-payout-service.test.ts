@@ -67,6 +67,9 @@ test("manual view keeps exact decimal strings and refuses unsafe or inconsistent
   assert.equal(parseManualPayout(pending).netAmount, "95000.00");
   assert.equal(parseManualPayout(pending).recipient?.bankCode, "970436");
   assert.equal(parseManualPayout({ ...pending, recipient: undefined }).recipient, null);
+  assert.equal(parseManualPayout(pending).sellerDefaultRecipient, null);
+  assert.equal(parseManualPayout({ ...pending, sellerDefaultRecipient: { bankCode: "970436", holderName: "NGUYEN VAN A", accountLast4: "5678" } }).sellerDefaultRecipient?.accountLast4, "5678");
+  assert.throws(() => parseManualPayout({ ...pending, sellerDefaultRecipient: { bankCode: "970436", holderName: "NGUYEN VAN A", accountLast4: "000012345678" } }));
   assert.equal(parseManualPayout(claimed).currentAttempt?.reference, reference);
   const parsed = parseManualPayout(unknown);
   assert.equal(parsed.openCases.length, 1); assert.equal(parsed.needsReview, true); assert.equal(parsed.openSellerDispute, null);

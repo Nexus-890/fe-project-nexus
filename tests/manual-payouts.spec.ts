@@ -235,6 +235,52 @@ test("an expired QR becomes uncertain, paused new work hides claim and QR, readi
   await layouts(admin, "admin-paused");
 });
 
+test("a seller bank switch after the QR walks Admin through not sent and retry to a QR for the new account", async ({ browser, request }) => {
+  const payout = await seed(request);
+  const admin = await staff(browser, request, "ADMIN");
+  const panel = await open(admin, payout.id, "Ready to claim");
+  await panel.getByRole("button", { name: "Claim this payout", exact: true }).click();
+  await panel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
+  await expect(panel.getByRole("img", { name: /Transfer QR for reference/ })).toBeVisible();
+  await request.post(`${api}/api/test/manual-payouts/bank-change`, { data: { payoutId: payout.id, accountLast4: "5678" } });
+  await panel.getByRole("button", { name: "Refresh payout", exact: true }).click();
+  const steps = panel.getByRole("status", { name: "Seller changed the receiving account" });
+  await expect(steps).toContainText("The issued QR pays 970436 · DEMO SELLER · •••• 4321");
+  await expect(steps).toContainText("The seller's default is now 970436 · DEMO SELLER · •••• 5678");
+  await expect(steps.locator("[aria-current=step]")).toContainText("Check the banking app");
+  await expect(panel.getByRole("region", { name: "Receiving account" })).toContainText("Seller's default is now");
+  await expect(panel.getByRole("button", { name: "Issue transfer QR", exact: true })).toHaveCount(0);
+  await layouts(admin, "admin-bank-switch-unknown");
+
+  await panel.getByLabel(/Add evidence/).setInputFiles({ name: "bank-app.png", mimeType: "image/png", buffer: png });
+  await expect(panel.getByRole("region", { name: "Transfer evidence" }).getByText(/^Evidence 1/)).toBeVisible();
+  const reconcile = panel.getByRole("region", { name: "Reconciliation", exact: true });
+  await reconcile.getByRole("button", { name: "Record reconciled outcome", exact: true }).click();
+  const resolve = admin.getByRole("dialog", { name: "Record reconciled outcome" });
+  await resolve.getByLabel("Outcome").selectOption("CONFIRMED_NOT_SENT");
+  await resolve.getByLabel("Reason").fill("Seller switched account; bank app shows no transfer.");
+  await resolve.getByRole("checkbox", { name: /^Evidence 1/ }).check();
+  await resolve.getByRole("button", { name: "Record outcome", exact: true }).click();
+  await expect(resolve).toHaveCount(0);
+  await expect(panel.getByText("Recorded as not sent. Next: authorize a retry.", { exact: true })).toBeVisible();
+  await expect(steps.locator("[aria-current=step]")).toHaveText("Authorize retry on this payout.");
+
+  await reconcile.getByRole("button", { name: "Authorize retry on this payout", exact: true }).click();
+  const retry = admin.getByRole("dialog", { name: "Authorize retry" });
+  await expect(retry).toContainText("The next claim pays the seller's new default account •••• 5678.");
+  await retry.getByLabel("Authorization reason").fill("Nothing was sent; pay the new account.");
+  await retry.getByRole("button", { name: "Authorize retry", exact: true }).click();
+  await expect(retry).toHaveCount(0);
+  await expect(steps).toHaveCount(0);
+  await expect(panel.getByRole("region", { name: "Receiving account" })).toContainText("•••• 5678");
+  await panel.getByRole("button", { name: "Claim this payout", exact: true }).click();
+  await panel.getByRole("button", { name: "Issue transfer QR", exact: true }).click();
+  await expect(panel.getByText("Attempt 2 · qr issued", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("region", { name: "Receiving account" })).toContainText("•••• 5678");
+  const state = await evidence(request);
+  expect(state.transactions.filter((entry) => entry.payoutId === payout.id)).toEqual([]);
+});
+
 test("Admin closes a post-success staff exception as sent without a second payment", async ({ browser, request }) => {
   const payout = await seed(request);
   const support = await staff(browser, request, "SUPPORT_STAFF");

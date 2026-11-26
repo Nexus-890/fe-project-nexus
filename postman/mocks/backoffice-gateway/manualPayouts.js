@@ -4,7 +4,7 @@
  */
 const zlib = require("node:zlib");
 
-function createManualPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, payouts, getBankAccounts = () => [], verifyBank = () => {} }) {
+function createManualPayoutFixture({ ok, problem, list, bodyOf, randomUUID, seller, payouts, getBankAccounts = () => [], verifyBank = () => {}, switchBank = () => {} }) {
   const system = "00000000-0000-0000-0000-000000000000";
   const base = "/v1/payments/manual-payouts";
   const sources = [{ id: "platform-main", alias: "Nexus payout account VCB 8899" }];
@@ -107,12 +107,15 @@ function createManualPayoutFixture({ ok, problem, list, bodyOf, randomUUID, sell
     const attempt = latest(row);
     const { bankId, bankVersion, ...recipient } = row.manual.recipient || {};
     const proofVisible = attempt && (attempt.claimedBy === actor.id || actor.admin && row.manual.cases.length > 0);
+    const defaultBank = verifiedBank(row.sellerId);
+    const changed = full && attempt && defaultBank && !["PENDING", "ON_HOLD"].includes(row.status) && (defaultBank.id !== bankId || defaultBank.version !== bankVersion);
     return { id: row.id, orderId: row.orderId, sellerId: row.sellerId, status: row.status, executionMode: "MANUAL", confirmationSource: row.confirmationSource,
       orderAmount: row.orderAmount, shippingFee: row.shippingFee, platformFee: row.platformFee, netAmount: row.netAmount, currency: row.currency, version: row.version,
       blockedReason: row.status === "SUCCEEDED" ? null : row.manual.blockedReason, allowedActions: actions(row, actor), serverTime: new Date(now()).toISOString(), createdAt: row.createdAt, updatedAt: row.updatedAt,
       currentAttempt: attemptView(attempt), evidence: full && proofVisible ? attempt.evidence.map(({ uploader, ...file }) => file) : [],
       cases: [...row.manual.cases].reverse().map(({ attemptId, reportedBy, ...entry }) => ({ ...entry, explanation: full ? entry.explanation : "" })),
-      history: full ? [...row.manual.history].reverse() : [], ...(row.manual.recipient ? { recipient } : {}) };
+      history: full ? [...row.manual.history].reverse() : [], ...(row.manual.recipient ? { recipient } : {}),
+      ...(changed ? { sellerDefaultRecipient: { bankCode: defaultBank.bankCode, holderName: defaultBank.accountHolderName, accountLast4: defaultBank.accountLast4 } } : {}) };
   }
 
   function receipt(row) {
@@ -203,6 +206,7 @@ function createManualPayoutFixture({ ok, problem, list, bodyOf, randomUUID, sell
     if (route === "/test/manual-payouts/bank-change" && req.method === "POST") {
       const row = payouts.rows().find((entry) => entry.id === bodyOf(req).payoutId), attempt = row && latest(row);
       if (!row) return reject(res, 404, "Payout missing", "MANUAL_PAYOUT_NOT_FOUND");
+      if (bodyOf(req).accountLast4) switchBank(row.sellerId, bodyOf(req).accountLast4);
       if (attempt?.state === "QR_ISSUED") uncertain(row, attempt, { id: system, role: "SYSTEM" }, "Reviewed bank changed after QR issuance");
       return respond(res, { status: row.status });
     }

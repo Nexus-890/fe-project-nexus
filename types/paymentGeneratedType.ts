@@ -1188,12 +1188,18 @@ export interface components {
             cases: components["schemas"]["ManualPayoutCaseView"][];
             /** @description Empty in queue rows; immutable history is loaded by the detail endpoint and filtered for the current actor. */
             history: components["schemas"]["ManualPayoutHistoryView"][];
-            /** @description Masked recipient: current attempt frozen destination when an attempt exists; otherwise the currently reviewed bank, or null. Bank changes do not silently replace an issued destination. No full account number or ciphertext. */
+            /** @description Masked recipient: the current attempt's frozen destination while that attempt is in progress or awaiting reconciliation; while the payout is PENDING or ON_HOLD, the currently reviewed default bank the next claim will use, or null. Bank changes do not silently replace an issued destination. No full account number or ciphertext. */
             recipient?: {
                 bankCode: string;
                 accountLast4: string;
                 holderName: string;
             } | null;
+            /** @description Detail only. The seller's current reviewed default bank when it differs from the current attempt's frozen destination (the seller switched or edited the account after the claim). Omitted otherwise. The issued QR keeps paying the frozen destination; the new account is used only after the attempt is reconciled as not sent and an admin authorizes a retry. */
+            sellerDefaultRecipient?: {
+                bankCode: string;
+                accountLast4: string;
+                holderName: string;
+            };
         };
         ManualPayoutCapabilities: {
             enabled: boolean;

@@ -4,7 +4,7 @@ import { useState } from "react";
 import ManualPayoutDialog from "./ManualPayoutDialog";
 import { sellerButton, sellerInput } from "./SellerUi";
 import { emptyTransferFacts, evidenceLabel, parseResolutionForm, parseRetryForm, parseReviewForm, qrIssuedAt, resolutionNeedsFacts, resolutionOutcomes, type TransferFacts } from "../features/manualPayoutSchema";
-import type { DisputeReviewInput, ManualCase, ManualPayout, ManualResolutionInput, SourceAccount } from "../types/manualPayoutType";
+import type { DisputeReviewInput, ManualCase, ManualPayout, ManualRecipient, ManualResolutionInput, SourceAccount } from "../types/manualPayoutType";
 import { MoneyInput, groupedVnd } from "./moneyInput";
 
 type Dialog = "resolve" | "review" | "retry" | null;
@@ -28,6 +28,26 @@ const outcomeLabels: Record<string, string> = {
   CONFIRMED_RETURNED: "The bank returned the transfer",
   CONFIRMATION_RECORDED_IN_ERROR: "Staff recorded Completed without a transfer (correction)",
 };
+const masked = (recipient: ManualRecipient) => `${recipient.bankCode} · ${recipient.holderName} · •••• ${recipient.accountLast4}`;
+
+function BankChangeSteps({ payout }: { payout: ManualPayout }) {
+  const next = payout.sellerDefaultRecipient;
+  const current = payout.status === "UNKNOWN" ? 0 : payout.status === "FAILED" && payout.currentAttempt?.state === "NOT_SENT" ? 2 : -1;
+  if (!next || !payout.recipient || current < 0) return null;
+  const reference = payout.currentAttempt?.reference ?? "this attempt";
+  const steps = [
+    `Check the banking app for reference ${reference}. If money already went to •••• ${payout.recipient.accountLast4}, record "Bank app shows the transfer was sent" and stop here.`,
+    `If nothing was sent, upload a screenshot of the banking app as proof, then Record reconciled outcome and choose "Bank app shows no transfer was sent". This closes every open case on this attempt.`,
+    "Authorize retry on this payout.",
+    `Claim the payout again. The new QR pays •••• ${next.accountLast4}.`,
+  ];
+  return <div role="status" aria-label="Seller changed the receiving account" className="mt-3 rounded-sm border border-warning/40 bg-background p-3 text-sm">
+    <p className="font-medium">The seller changed the receiving account after this QR was issued.</p>
+    <p className="mt-1">The issued QR pays <span className="font-mono">{masked(payout.recipient)}</span>. The seller&apos;s default is now <span className="font-mono">{masked(next)}</span>. This attempt cannot issue a new QR, and refreshing does not switch the account.</p>
+    <ol className="mt-2 list-decimal space-y-1 pl-5">{steps.map((step, index) => <li key={step} aria-current={index === current ? "step" : undefined} className={index < current ? "text-muted-foreground line-through" : index === current ? "font-medium" : ""}>{step}</li>)}</ol>
+  </div>;
+}
+
 const caseLabel = (entry: ManualCase) => `${entry.kind === "SELLER_DISPUTE" ? "Seller case" : "Staff exception"} ${entry.id.slice(0, 8)} · ${entry.status.replaceAll("_", " ").toLowerCase()} · ${entry.reason.replaceAll("_", " ").toLowerCase()}`;
 
 function ManualPayoutReconciliationPanel({ payout, canReconcile, sourceAccounts, serverNow, pending, error, resolve, review, retry, dialog, setDialog }: Props) {
@@ -52,6 +72,8 @@ function ManualPayoutReconciliationPanel({ payout, canReconcile, sourceAccounts,
     <h3 className="text-sm font-semibold">Reconciliation</h3>
     {payout.openCases.length > 0 && <ul className="mt-3 grid gap-2 text-sm">{payout.openCases.map((entry) => <li key={entry.id}><p>{caseLabel(entry)}</p>{entry.explanation && <p className="mt-1 break-words text-xs text-muted-foreground">{entry.explanation}</p>}</li>)}</ul>}
     {payout.status === "UNKNOWN" && <p className="mt-3 text-sm">The transfer outcome is unknown. Check the bank app for this exact reference before choosing an outcome. Do not transfer again.</p>}
+    <BankChangeSteps payout={payout} />
+    {payout.status === "FAILED" && attempt?.state === "NOT_SENT" && !payout.sellerDefaultRecipient && has("RETRY") && <p role="status" className="mt-3 text-sm font-medium">Recorded as not sent. Next: authorize a retry. The payout goes back to Ready to claim, and the next claim uses the seller&apos;s current default account.</p>}
     {payout.status === "FAILED" && attempt?.state === "CONFIRMATION_CORRECTED" && <p role="status" className="mt-3 text-sm font-medium">Staff confirmation corrected — awaiting authorized retry. This is an accounting correction, not a bank return.</p>}
     {!canReconcile ? <p className="mt-3 text-sm text-muted-foreground">Only an administrator can resolve, correct or authorize a retry. You can add information through a problem report on your own attempt.</p> :
       <div className="mt-4 flex flex-wrap gap-3">
@@ -82,7 +104,7 @@ function ManualPayoutReconciliationPanel({ payout, canReconcile, sourceAccounts,
       {proofPicker(decision === "TRANSFER_EVIDENCE_PROVIDED")}
     </ManualPayoutDialog>}
     {canReconcile && dialog === "retry" && <ManualPayoutDialog title="Authorize retry" submitLabel="Authorize retry" pending={pending} error={localError || error} onClose={() => setDialog(null)}
-      description="The same payout returns to the queue and a new attempt gets a new reference. Authorize only after the earlier attempt is reconciled as not sent, returned or corrected."
+      description={<>The same payout returns to the queue and a new attempt gets a new reference. Authorize only after the earlier attempt is reconciled as not sent, returned or corrected.{payout.sellerDefaultRecipient && <> The next claim pays the seller&apos;s new default account <span className="font-mono text-foreground">•••• {payout.sellerDefaultRecipient.accountLast4}</span>.</>}</>}
       onSubmit={() => { const parsed = parseRetryForm(reason); if (!parsed.ok) { setLocalError(parsed.error); return; } setLocalError(""); retry(parsed.value); }}>
       <label className="grid gap-2 text-xs">Authorization reason<textarea className={sellerInput} rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
     </ManualPayoutDialog>}

@@ -112,6 +112,7 @@ export const parseManualPayout = (value: unknown): ManualPayout => {
   return { id: value.id, orderId: value.orderId, sellerId: value.sellerId, status: value.status, executionMode: "MANUAL", confirmationSource: value.confirmationSource,
     orderAmount, shippingFee, platformFee, netAmount, currency: value.currency, version: Number(value.version), blockedReason: value.blockedReason, allowedActions,
     serverTime: value.serverTime, createdAt: value.createdAt, updatedAt: value.updatedAt, currentAttempt, evidence, cases, history, recipient: parseRecipient(value.recipient),
+    sellerDefaultRecipient: parseRecipient(value.sellerDefaultRecipient),
     openCases, openSellerDispute, needsReview: value.status === "UNKNOWN" || openCases.length > 0 };
 };
 
