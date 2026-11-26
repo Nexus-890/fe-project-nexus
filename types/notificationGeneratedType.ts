@@ -53,7 +53,7 @@ export interface paths {
         };
         /**
          * List delivery status across users
-         * @description ADMIN plus NOTIFICATION.VIEW. Newest createdAt and id first; from inclusive, to exclusive. errorCode matches any attempt; lastErrorCode is latest attempt. No email address or raw provider error exposed.
+         * @description ADMIN or SUPPORT_STAFF plus NOTIFICATION.VIEW, read-only. Newest createdAt and id first; from inclusive, to exclusive. errorCode matches any attempt; lastErrorCode is latest attempt. No email address or raw provider error exposed.
          */
         get: operations["listAdminNotificationDeliveries"];
         put?: never;
@@ -71,7 +71,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** View delivery attempts as admin */
+        /** View delivery attempts as staff */
         get: operations["getNotificationDelivery"];
         put?: never;
         post?: never;

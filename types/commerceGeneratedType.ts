@@ -1528,8 +1528,20 @@ export interface components {
             paidOrderCount: number;
             /** @description Sum of totalAmount of the paid orders, in VND. */
             revenue: number;
+            /** @description Present only in the caller's seller sales summary; omitted in managed summaries. */
+            profit?: components["schemas"]["SellerProfit"];
             statuses: components["schemas"]["OrderSummaryStatusCount"][];
             daily: components["schemas"]["OrderSummaryDay"][];
+        };
+        SellerProfit: {
+            /** @description Recorded unit costs times quantity for fully covered paid orders. */
+            costOfGoods: number;
+            /** @description Subtotal minus seller-funded voucher discounts minus cost of goods. May be negative; null when all paid orders lack costs. Excludes shipping, tax, fees and operating expenses. */
+            grossProfit: number | null;
+            /** Format: int64 */
+            coveredOrderCount: number;
+            /** Format: int64 */
+            missingCostOrderCount: number;
         };
         OrderSummaryStatusCount: {
             status: components["schemas"]["OrderStatus"];

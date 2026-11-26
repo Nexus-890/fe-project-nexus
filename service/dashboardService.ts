@@ -20,6 +20,16 @@ const parseDay = (value: unknown): OrderSummaryDay => {
   return { date: value.date, orderCount: value.orderCount, paidOrderCount: value.paidOrderCount, revenue: money(value.revenue) };
 };
 
+const parseProfit = (value: unknown, paid: number): OrderSummaryReport["profit"] => {
+  if (!isRecord(value) || !count(value.coveredOrderCount) || !count(value.missingCostOrderCount) ||
+    value.coveredOrderCount + value.missingCostOrderCount !== paid ||
+    (value.grossProfit !== null && (typeof value.grossProfit !== "number" || !Number.isFinite(value.grossProfit))) ||
+    (value.grossProfit === null && (value.coveredOrderCount !== 0 || value.missingCostOrderCount === 0)))
+    return fail("Invalid seller profit summary");
+  return { costOfGoods: money(value.costOfGoods), grossProfit: value.grossProfit === null ? null :
+    value.grossProfit.toFixed(2), coveredOrderCount: value.coveredOrderCount, missingCostOrderCount: value.missingCostOrderCount };
+};
+
 export const parseOrderSummary = (value: unknown, days: number): OrderSummaryReport => {
   if (!isRecord(value) || !instant(value.from) || !instant(value.to) || typeof value.timeZone !== "string" || !value.timeZone ||
     !count(value.orderCount) || !count(value.paidOrderCount) || value.paidOrderCount > value.orderCount ||
@@ -38,12 +48,14 @@ export const parseOrderSummary = (value: unknown, days: number): OrderSummaryRep
     daily.reduce((sum, day) => sum + day.orderCount, 0) !== value.orderCount)
     return fail("Order summary totals do not add up");
   return { from: value.from, to: value.to, timeZone: value.timeZone, orderCount: value.orderCount, paidOrderCount: value.paidOrderCount,
-    revenue: money(value.revenue), statuses, daily };
+    revenue: money(value.revenue), ...(value.profit == null ? {} : { profit: parseProfit(value.profit, value.paidOrderCount) }), statuses, daily };
 };
 
 export const getOrderSummary = async (scope: OrderSummaryScope, days: DashboardRange, options: ServiceRequestOptions = {}): Promise<OrderSummaryReport> => {
   if (!dashboardRanges.includes(days)) fail("Invalid dashboard range");
   const path = scope === "managed" ? "/api/v1/orders/manage/summary" : "/api/v1/orders/sales/summary";
   const { data } = await requestApi<unknown>("GET", path, undefined, { ...options, auth: true, params: { days } });
-  return parseOrderSummary(data, days);
+  const report = parseOrderSummary(data, days);
+  if (scope === "sales" && !report.profit) fail("Missing seller profit summary");
+  return report;
 };

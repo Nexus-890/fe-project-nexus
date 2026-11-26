@@ -12,6 +12,7 @@ const summary = (count = 7) => {
   daily[count - 1] = { ...daily[count - 1], orderCount: 3, paidOrderCount: 2, revenue: 350000 };
   return { from: "2026-11-18T00:00:00+07:00", to: "2026-11-25T00:00:00+07:00", timeZone: "Asia/Ho_Chi_Minh",
     orderCount: 3, paidOrderCount: 2, revenue: 350000,
+    profit: { costOfGoods: 200000, grossProfit: -5000, coveredOrderCount: 1, missingCostOrderCount: 1 },
     statuses: statuses.map((status) => ({ status, count: status === "PAID" ? 2 : status === "PENDING" ? 1 : 0 })), daily };
 };
 const invalid = (error: unknown) => isApiError(error) && error.kind === "invalid-response";
@@ -52,4 +53,17 @@ test("summaries whose days, statuses or totals disagree fail strict parsing", as
     { ...base, statuses: base.statuses.map((entry) => entry.status === "PAID" ? { ...entry, status: "LOST" } : entry) },
     { ...base, from: "2026-11-18" },
   ]) await assert.rejects(getOrderSummary("managed", 7, { context: { fetch: reply(bad) } }), invalid);
+});
+
+test("seller profit preserves losses and rejects missing or inconsistent cost coverage", async () => {
+  const report = await getOrderSummary("sales", 7, { context: { fetch: reply(summary()) } });
+  assert.equal(report.profit?.grossProfit, "-5000.00");
+  assert.equal(report.profit?.missingCostOrderCount, 1);
+  for (const profit of [undefined, { costOfGoods: -1, grossProfit: 0, coveredOrderCount: 2, missingCostOrderCount: 0 },
+    { costOfGoods: 0, grossProfit: 0, coveredOrderCount: 1, missingCostOrderCount: 0 },
+    { costOfGoods: 0, grossProfit: null, coveredOrderCount: 1, missingCostOrderCount: 1 }])
+    await assert.rejects(getOrderSummary("sales", 7, { context: { fetch: reply({ ...summary(), profit }) } }), invalid);
+  const missing = await getOrderSummary("sales", 7, { context: { fetch: reply({ ...summary(),
+    profit: { costOfGoods: 0, grossProfit: null, coveredOrderCount: 0, missingCostOrderCount: 2 } }) } });
+  assert.equal(missing.profit?.grossProfit, null);
 });

@@ -1,5 +1,25 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
+    "/internal/v1/catalog/sku-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read private unit costs for Commerce order creation
+         * @description Direct service API, not routed by gateway. Requires CATALOG.COST.READ, service_account=true and azp=nexus-commerce-service. Returns identity and nullable current SKU cost; never exposed in public SKU/order responses. Missing SKU fails the entire batch.
+         */
+        post: operations["getOrderSkuCosts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories": {
         parameters: {
             query?: never;
@@ -750,6 +770,73 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getOrderSkuCosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    skuIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Private costs, including explicit null for an unknown cost. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example 0 */
+                        code: number;
+                        message: string;
+                        data: {
+                            /** Format: uuid */
+                            skuId: string;
+                            /** Format: uuid */
+                            productId: string;
+                            /** Format: uuid */
+                            sellerId: string;
+                            unitCostPrice: number | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Empty/oversized batch or invalid UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Commerce machine identity or cost authority missing. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CATALOG_SKU_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listFlatCategories: {
         parameters: {
             query?: {

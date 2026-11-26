@@ -65,6 +65,13 @@ function OrderOverview({ scope, title, description, queues }: { scope: OrderSumm
         <DashboardStat label="Paid orders" value={report.paidOrderCount.toLocaleString("vi-VN")} hint={report.orderCount ? `${Math.round(report.paidOrderCount / report.orderCount * 100)}% of orders` : "No orders yet"} />
         <DashboardStat label="Average paid order" value={formatDashboardAmount(average)} />
       </div>
+      {scope === "sales" && report.profit && <div className="grid gap-3 sm:grid-cols-2">
+        <DashboardStat label="Estimated gross profit" value={report.profit.grossProfit === null ? "Not enough cost data" : formatDashboardAmount(report.profit.grossProfit)}
+          hint={report.profit.missingCostOrderCount > 0 ? `${report.profit.coveredOrderCount} orders included; ${report.profit.missingCostOrderCount} paid orders lack cost data` : "Goods revenue minus seller-funded discounts and recorded costs"} />
+        <DashboardStat label="Cost of goods" value={formatDashboardAmount(report.profit.costOfGoods)}
+          hint={`${report.profit.coveredOrderCount} of ${report.paidOrderCount} paid orders have complete costs`} />
+        <p className="text-xs text-muted-foreground sm:col-span-2">Excludes shipping, tax, platform fees and operating expenses.</p>
+      </div>}
       <div className="grid gap-6 rounded-lg border border-border bg-card p-4 lg:grid-cols-[2fr_1fr] sm:p-6">
         <DailyRevenueChart days={report.daily} />
         <OrderStatusBreakdown statuses={report.statuses} />

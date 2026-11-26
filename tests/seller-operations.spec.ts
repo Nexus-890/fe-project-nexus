@@ -434,3 +434,33 @@ test("admin needs-action filters and payout retries preserve one request key", a
   await expect(page.getByRole("button", { name: "Retry payout", exact: true })).toHaveCount(0);
   await screenshot(page, "admin-payout-needs-action-unknown");
 });
+
+test("seller dashboard shows snapshotted profit, losses and missing cost coverage", async ({ page, request }) => {
+  let mode: "partial" | "missing" | "empty" = "partial";
+  await page.route("**/api/v1/orders/sales/summary?*", async route => {
+    const count = Number(new URL(route.request().url()).searchParams.get("days"));
+    const daily = Array.from({length: count}, (_, index) => ({ date: new Date(Date.UTC(2026,10,26-count+1+index)).toISOString().slice(0,10), orderCount: 0, paidOrderCount: 0, revenue: 0 }));
+    const paid = mode === "empty" ? 0 : 2;
+    daily[count-1] = {...daily[count-1], orderCount: paid, paidOrderCount: paid, revenue: paid ? 100000 : 0};
+    const profit = mode === "partial" ? { costOfGoods: 120000, grossProfit: -20000, coveredOrderCount: 1, missingCostOrderCount: 1 } :
+      { costOfGoods: 0, grossProfit: mode === "missing" ? null : 0, coveredOrderCount: 0, missingCostOrderCount: paid };
+    await route.fulfill({json:{code:0,message:"response success",data:{from:"2026-10-28T00:00:00+07:00",to:"2026-11-27T00:00:00+07:00",timeZone:"Asia/Ho_Chi_Minh",orderCount:paid,paidOrderCount:paid,revenue:paid?100000:0,
+      statuses:["PENDING","PAID","SHIPPED","DELIVERED","COMPLETED","CANCELED","REFUND_REQUESTED","REFUNDED"].map(status=>({status,count:status==="PAID"?paid:0})),daily,profit}}});
+  });
+  await signIn(page, request, "SELLER", "/backoffice");
+  const shop = page.getByRole("region",{name:"Your shop"});
+  await expect(shop.getByText("Estimated gross profit",{exact:true})).toBeVisible();
+  await expect(shop.getByText("−20.000 ₫",{exact:true})).toBeVisible();
+  await expect(shop.getByText("1 orders included; 1 paid orders lack cost data")).toBeVisible();
+  await shop.getByRole("button",{name:"7 days",exact:true}).click();
+  await expect(shop.getByRole("button",{name:"7 days",exact:true})).toHaveAttribute("aria-pressed","true");
+  await screenshot(page,"seller-profit-dashboard");
+  mode="missing";
+  await shop.getByRole("button",{name:"Refresh dashboard",exact:true}).click();
+  await expect(shop.getByText("Not enough cost data",{exact:true})).toBeVisible();
+  mode="empty";
+  await expect(shop.getByRole("button",{name:"Refresh dashboard",exact:true})).toBeEnabled();
+  await shop.getByRole("button",{name:"Refresh dashboard",exact:true}).click();
+  await expect(shop.getByText("Not enough cost data",{exact:true})).toHaveCount(0);
+  await expect(shop.getByText("0 of 0 paid orders have complete costs")).toBeVisible();
+});

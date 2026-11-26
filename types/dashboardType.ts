@@ -21,5 +21,6 @@ export type OrderSummaryReport = {
   paidOrderCount: number;
   revenue: string;
   statuses: { status: OrderStatus; count: number }[];
+  profit?: { costOfGoods: string; grossProfit: string | null; coveredOrderCount: number; missingCostOrderCount: number };
   daily: OrderSummaryDay[];
 };

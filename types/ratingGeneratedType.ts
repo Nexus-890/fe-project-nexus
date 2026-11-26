@@ -96,7 +96,7 @@ export interface paths {
         };
         /**
          * List current and historical restrictions
-         * @description ADMIN with USER.REPUTATION.VIEW may read any target. BUYER or SELLER with REPUTATION.VIEW may read only their own subject. Results include revoked and expired restrictions with a computed active flag.
+         * @description ADMIN or SUPPORT_STAFF with USER.REPUTATION.VIEW may read any target. BUYER or SELLER with REPUTATION.VIEW may read only their own subject. Results include revoked and expired restrictions with a computed active flag.
          */
         get: operations["listReputationRestrictions"];
         put?: never;
@@ -160,7 +160,7 @@ export interface paths {
         };
         /**
          * Read disputes for administrative review
-         * @description Requires ADMIN and USER.REPUTATION.VIEW. Ordered newest first.
+         * @description Requires ADMIN or SUPPORT_STAFF and USER.REPUTATION.VIEW. Ordered newest first.
          */
         get: operations["listRatingDisputes"];
         put?: never;

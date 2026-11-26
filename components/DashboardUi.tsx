@@ -7,7 +7,9 @@ import { formatVND } from "./formatPrice";
 import { ORDER_STATUS_LABELS } from "./OrderStatusBadge";
 import type { OrderSummaryDay, OrderSummaryReport } from "../types/dashboardType";
 
-export const formatDashboardAmount = (amount: string): string => formatVND(amount.replace(/\.0+$/, "")) ?? amount;
+export const formatDashboardAmount = (amount: string): string => amount.startsWith("-")
+  ? `−${formatVND(amount.slice(1).replace(/\.0+$/, "")) ?? amount.slice(1)}`
+  : formatVND(amount.replace(/\.0+$/, "")) ?? amount;
 export const formatDashboardDay = (date: string): string => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 
 export function DashboardStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
