@@ -95,6 +95,11 @@ function createSellerAccountsFixture({ ok, problem, list, bodyOf, randomUUID, se
   }
   reset();
   return { reset, handle, get accounts() { return accounts.map(safe); }, getSellerAccounts: (sellerId) => accounts.filter((row) => row.sellerId === sellerId).map(safe),
-    verifyDefault: (sellerId) => accounts.filter((row) => row.sellerId === sellerId && row.isDefault).forEach((row) => { row.verificationStatus = "VERIFIED"; row.version++; }) };
+    verifyDefault: (sellerId) => accounts.filter((row) => row.sellerId === sellerId && row.isDefault).forEach((row) => { row.verificationStatus = "VERIFIED"; row.version++; }),
+    switchDefault: (sellerId, accountLast4) => {
+      const current = accounts.find((row) => row.sellerId === sellerId && row.isDefault);
+      if (current) { current.isDefault = false; current.version++; }
+      accounts.push({ ...current, id: randomUUID(), sellerId, accountLast4, verificationStatus: "VERIFIED", isDefault: true, active: true, version: 0, createdAt: new Date().toISOString() });
+    } };
 }
 module.exports = { createSellerAccountsFixture };
