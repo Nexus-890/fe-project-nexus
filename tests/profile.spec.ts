@@ -420,7 +420,16 @@ test("reputation shows the own score and penalty history pages through every sco
   const reputation = page.locator("#reputation");
   await expect(reputation.getByLabel("Reputation score 62 out of 100")).toBeVisible();
   await expect(reputation.getByText("Trusted", { exact: true })).toBeVisible();
-  await expect(reputation.getByRole("meter", { name: "Reputation score" })).toHaveAttribute("aria-valuenow", "62");
+  const meter = reputation.getByRole("meter", { name: "Reputation score" });
+  await expect(meter).toHaveAttribute("aria-valuenow", "62");
+  const thresholds = reputation.getByRole("list", { name: "Reputation thresholds" });
+  const track = (await meter.boundingBox())!;
+  const fill = (await meter.locator(":scope > div").boundingBox())!;
+  const trusted = (await thresholds.getByText("Trusted 60").boundingBox())!;
+  const topSeller = (await thresholds.getByText("Top Seller 80").boundingBox())!;
+  expect(fill.width / track.width).toBeCloseTo(0.62, 2);
+  expect((trusted.x + trusted.width / 2 - track.x) / track.width).toBeCloseTo(0.60, 2);
+  expect((topSeller.x + topSeller.width / 2 - track.x) / track.width).toBeCloseTo(0.80, 2);
   for (const [label, value] of [["Transactions", "9"], ["Successful", "7"], ["Failed", "1"], ["Auctions won", "2"], ["Avg rating", "4.3"]]) {
     await expect(reputation.locator("dl > div", { has: page.getByText(label, { exact: true }) }).locator("dd")).toHaveText(value);
   }

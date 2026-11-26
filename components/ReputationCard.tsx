@@ -49,9 +49,10 @@ export function ReputationCard({ reputation, error, onRetry }: ReputationCardPro
                   className="h-1.5 overflow-hidden rounded-full bg-secondary">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${reputation.score}%` }} />
                 </div>
-                <ul className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <ul aria-label="Reputation thresholds" className="relative mt-1 h-9 text-xs text-muted-foreground lg:h-4">
                   {REPUTATION_LEVELS.map(({ label, score }) => (
-                    <li key={label} className="last:text-right">
+                    <li key={label} style={{ left: `${score}%` }}
+                      className="absolute top-0 -translate-x-1/2 whitespace-nowrap first:translate-x-0 last:top-5 lg:last:top-0">
                       {label} <span className="font-mono">{score}</span>
                     </li>
                   ))}
