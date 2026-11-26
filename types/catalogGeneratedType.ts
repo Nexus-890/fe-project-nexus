@@ -1,19 +1,19 @@
 /** Generated from delivered OpenAPI. Run npm run generate:types; do not edit. */
 export interface paths {
-    "/internal/v1/catalog/sku-costs": {
+    "/internal/v1/catalog/skus/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Read private unit costs for Commerce order creation
-         * @description Direct service API, not routed by gateway. Requires CATALOG.COST.READ, service_account=true and azp=nexus-commerce-service. Returns identity and nullable current SKU cost; never exposed in public SKU/order responses. Missing SKU fails the entire batch.
+         * Read SKU selling price and private cost together for order creation
+         * @description Direct service API, not routed by gateway. Requires CATALOG.COST.READ, service_account=true and azp=nexus-commerce-service. Returns SKU metadata and costPrice in one read; an omitted costPrice means unknown. Public SKU/order responses do not expose the cost. Existing auction snapshots may read the cost of an inactive SKU; normal checkout still validates SKU/product availability.
          */
-        post: operations["getOrderSkuCosts"];
+        get: operations["getOrderSku"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -508,7 +508,7 @@ export interface components {
             /** @description Current persisted SKU status string, initially ACTIVE. This issue does not restrict the existing string column to a new enum. */
             status: string;
             shippingParcel?: components["schemas"]["ShippingParcel"];
-            /** @description Seller purchase cost for one unit. Returned only to the owning seller or an admin: on SKU create/update and on GET /api/v1/products/mine/{id}. Public reads omit it. Absent when the seller has not entered a cost. */
+            /** @description Seller purchase cost for one unit. Returned to the owning seller/admin on SKU writes and owner detail, or to the authorized Commerce machine through GET /internal/v1/catalog/skus/{id}. Public reads omit it. Absent when the seller has not entered a cost. */
             costPrice?: number;
         };
         /**
@@ -770,22 +770,18 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getOrderSkuCosts: {
+    getOrderSku: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    skuIds: string[];
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Private costs, including explicit null for an unknown cost. */
+            /** @description SKU metadata, selling price and optional private costPrice. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -795,19 +791,11 @@ export interface operations {
                         /** @example 0 */
                         code: number;
                         message: string;
-                        data: {
-                            /** Format: uuid */
-                            skuId: string;
-                            /** Format: uuid */
-                            productId: string;
-                            /** Format: uuid */
-                            sellerId: string;
-                            unitCostPrice: number | null;
-                        }[];
+                        data: components["schemas"]["Sku"];
                     };
                 };
             };
-            /** @description Empty/oversized batch or invalid UUID. */
+            /** @description Invalid UUID. */
             400: {
                 headers: {
                     [name: string]: unknown;
