@@ -39,7 +39,11 @@ function OrderRow({ order }: { order: OrderSummary }) {
         <OrderStatusBadge status={order.status} />
       </td>
       <td className="col-span-2 min-w-0 xl:px-4 xl:py-4 xl:text-right">
-        {order.status === "PENDING" && (order.orderGroupId ? (
+        {order.status === "PENDING" && (order.awaitingShippingAddress ? (
+          <Link href={`/order/${encodeURIComponent(order.orderId)}`} className={`${actionStyle} w-full xl:w-auto xl:whitespace-nowrap`}>
+            Confirm address
+          </Link>
+        ) : order.orderGroupId ? (
           <Link href={`/checkout/payment/${encodeURIComponent(order.orderGroupId)}`} prefetch={false} className={`${actionStyle} w-full xl:w-auto xl:whitespace-nowrap`}>
             Pay Now
           </Link>

@@ -13,6 +13,7 @@ import ConfirmReceiptDialog from "../components/ConfirmReceiptDialog";
 import ReceiptIssueDialog from "../components/ReceiptIssueDialog";
 import OrderRating from "./OrderRating";
 import OrderInvoiceButton from "./OrderInvoiceButton";
+import AuctionWinnerCheckout from "./AuctionWinnerCheckout";
 import { queryKeys } from "../configs/queryKeys";
 import { useApiMutation, useApiQuery } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
@@ -61,6 +62,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
   const client = useQueryClient();
   const [reason, setReason] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [addressOpenedAt, setAddressOpenedAt] = useState<number | null>(null);
   const [reasonError, setReasonError] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
@@ -203,7 +205,8 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
         {!result && receipt.error && (!receiptOpen || current.status !== "DELIVERED") && <p role="alert" className="text-sm text-danger">{receipt.error.detail || receipt.error.title}</p>}
         {!result && <OrderRating key={current.orderId} order={current} />}
         <div className="mt-6 flex flex-wrap gap-3">
-          {current.orderGroupId && pending && <Link href={`/checkout/payment/${encodeURIComponent(current.orderGroupId)}`} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">Pay now</Link>}
+          {current.orderGroupId && pending && !current.awaitingShippingAddress && <Link href={`/checkout/payment/${encodeURIComponent(current.orderGroupId)}`} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">Pay now</Link>}
+          {pending && current.awaitingShippingAddress && auth.user?.id === current.userId && <button type="button" aria-expanded={addressOpenedAt !== null} onClick={() => setAddressOpenedAt(Date.now())} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">Confirm address and pay</button>}
           {result && <Link href={`/order/${encodeURIComponent(current.orderId)}`} className="inline-flex min-h-11 items-center rounded-sm bg-primary px-5 text-sm font-medium text-primary-foreground">View Order</Link>}
           <Link href="/" className={buttonClass}>Continue Shopping</Link>
           {!result && current.status === "COMPLETED" && auth.user?.id === current.userId && <OrderInvoiceButton orderId={current.orderId} orderNumber={current.orderNumber} />}
@@ -213,6 +216,7 @@ function OrderContents({ orderId, result }: { orderId: string; result: boolean }
             setCancelOpen((open) => !open);
           }} className={`${buttonClass} text-danger`} disabled={cancellation.isPending}>Cancel order</button>}
         </div>
+        {addressOpenedAt !== null && pending && current.awaitingShippingAddress && <div className="mt-6"><AuctionWinnerCheckout key={current.orderId} orderId={current.orderId} currency="VND" paymentDueAt={null} serverNow={addressOpenedAt} idPrefix={`order-${current.orderId}`} /></div>}
         {cancelOpen && current.canCancel && <form id="cancel-order-form" className="mt-6 rounded-sm border border-border bg-card p-5" onSubmit={(event) => {
           event.preventDefault();
           if (cancellation.isPending) return;

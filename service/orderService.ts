@@ -46,11 +46,14 @@ export const parseOrderSummary = (value: unknown): OrderSummary => {
     (value.orderGroupId != null && !isUuid(value.orderGroupId))
   ) throw createInvalidResponseError("Invalid order");
   const totalAmount = parseAmount(value.totalAmount);
+  const awaitingShippingAddress = value.orderType === "AUCTION" && value.status === "PENDING" &&
+    (typeof value.recipientName !== "string" || !value.recipientName.trim());
   return {
     orderId: value.orderId, orderNumber: value.orderNumber,
     createdAt: value.createdAt, status: value.status, totalAmount, breakdown: parseBreakdown(value),
     ...(value.vouchers === undefined ? {} : { vouchers: parseOrderVouchers(value.vouchers) }),
     orderGroupId: value.orderGroupId == null ? null : value.orderGroupId as string,
+    ...(awaitingShippingAddress ? { awaitingShippingAddress: true as const } : {}),
   };
 };
 

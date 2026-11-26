@@ -19,6 +19,8 @@ export type OrderSummary = Pick<
   vouchers?: components["schemas"]["OrderVoucher"][];
   /** Older order responses can predate the group identifier added in #138. */
   orderGroupId: string | null;
+  /** A won auction order has no shipping address until the winner confirms one; payment starts only after that. */
+  awaitingShippingAddress?: true;
 };
 
 export type OrderGroup = Pick<

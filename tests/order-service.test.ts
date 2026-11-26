@@ -97,6 +97,15 @@ test("delivered orders remain readable without a group id and never substitute a
   ]) assert.throws(() => parseOrderSummary(value), invalidResponse);
 });
 
+test("order summary flags a pending auction order that still needs a shipping address", () => {
+  const auction = { ...order, status: "PENDING", orderType: "AUCTION", recipientName: null };
+  assert.equal(parseOrderSummary(auction).awaitingShippingAddress, true);
+  assert.equal(parseOrderSummary({ ...auction, recipientName: "  " }).awaitingShippingAddress, true);
+  assert.equal(parseOrderSummary({ ...auction, recipientName: "Nguyen Van A" }).awaitingShippingAddress, undefined);
+  assert.equal(parseOrderSummary({ ...auction, orderType: "STANDARD" }).awaitingShippingAddress, undefined);
+  assert.equal(parseOrderSummary({ ...auction, status: "CANCELED" }).awaitingShippingAddress, undefined);
+});
+
 test("order summary keeps the price parts that add up to the total", () => {
   const priced = { ...order, subtotal: 129100.25, shippingFee: 20900, discountAmount: 0, taxAmount: 0 };
   assert.deepEqual(parseOrderSummary(priced).breakdown, {
